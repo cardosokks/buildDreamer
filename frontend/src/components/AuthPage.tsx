@@ -15,14 +15,16 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  const API_URL = import.meta.env.API_URL || 'http://localhost:5000';
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setLoading(true);
 
     const url = isLogin 
-      ? `${API_URL}:${PORT}/api/auth/login`
-      : `${API_URL}:${PORT}/api/auth/signup`;
+      ? `${API_URL}/api/auth/login`
+      : `${API_URL}/api/auth/signup`;
     
       //? '/api/auth/login'
       //: '/api/auth/signup';
