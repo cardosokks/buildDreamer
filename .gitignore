@@ -1,0 +1,5 @@
+/backend/node_modules
+/backend/.agents
+/backend/.claude
+/backend/.windsurf
+/frontend/node_modules
