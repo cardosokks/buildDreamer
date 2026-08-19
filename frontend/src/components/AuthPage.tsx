@@ -15,7 +15,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const API_URL = import.meta.env.API_URL || 'http://krokante:5000';
+  const API_URL = import.meta.env.API_URL || 'http://localhost:5000';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
