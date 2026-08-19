@@ -21,8 +21,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
     setLoading(true);
 
     const url = isLogin 
-      ? `${API_URL}/api/auth/login`
-      : `${API_URL}/api/auth/signup`;
+      ? `${API_URL}:${PORT}/api/auth/login`
+      : `${API_URL}:${PORT}/api/auth/signup`;
     
       //? '/api/auth/login'
       //: '/api/auth/signup';
