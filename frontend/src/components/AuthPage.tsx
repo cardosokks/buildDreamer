@@ -21,8 +21,10 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
     setLoading(true);
 
     const url = isLogin 
-      ? 'http://localhost:5000/api/auth/login' 
-      : 'http://localhost:5000/api/auth/signup';
+      ? '/api/auth/login'
+      : '/api/auth/signup';
+      //? 'http://localhost:5000/api/auth/login' 
+      //: 'http://localhost:5000/api/auth/signup';
 
     const body = isLogin 
       ? { email, password } 
