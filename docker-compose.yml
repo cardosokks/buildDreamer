@@ -3,7 +3,6 @@ version: '3.8'
 services:
   postgres:
     image: postgres:15-alpine
-    container_name: builder-postgres
     restart: always
     environment:
       POSTGRES_USER: builder_user
@@ -18,7 +17,6 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: builder-backend
     restart: always
     ports:
       - "5000:5000"
@@ -34,7 +32,6 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: builder-frontend
     restart: always
     ports:
       - "3001:80"
