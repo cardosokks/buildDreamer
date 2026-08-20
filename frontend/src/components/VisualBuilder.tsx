@@ -78,8 +78,18 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
   // Code editor modal state
   const [showCodeModal, setShowCodeModal] = useState(false);
 
-  // Navbar size switcher state ('compact' | 'normal' | 'large')
+  // Navbar size and minimize states
   const [navbarSize, setNavbarSize] = useState<'compact' | 'normal' | 'large'>('normal');
+  const [navbarMinimized, setNavbarMinimized] = useState(false);
+
+  // Panel widths and resize states
+  const [leftSidebarWidth, setLeftSidebarWidth] = useState(280);
+  const [rightPanelWidth, setRightPanelWidth] = useState(320);
+  const [isResizingLeft, setIsResizingLeft] = useState(false);
+  const [isResizingRight, setIsResizingRight] = useState(false);
+
+  // Topbar dropdown menu state
+  const [showBuilderMenu, setShowBuilderMenu] = useState(false);
 
   // Background AI Job Status Polling
   const [jobStatus, setJobStatus] = useState<'pending' | 'processing' | 'completed' | 'failed'>('completed');
@@ -123,6 +133,33 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  // Panel drag resizing effect
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (isResizingLeft) {
+        const newW = Math.max(200, Math.min(500, e.clientX));
+        setLeftSidebarWidth(newW);
+      } else if (isResizingRight) {
+        const newW = Math.max(240, Math.min(600, window.innerWidth - e.clientX));
+        setRightPanelWidth(newW);
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsResizingLeft(false);
+      setIsResizingRight(false);
+    };
+
+    if (isResizingLeft || isResizingRight) {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+    }
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizingLeft, isResizingRight]);
 
   // Export Modal state
   const [showExportModal, setShowExportModal] = useState(false);
@@ -579,33 +616,37 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
       )}
       
       {/* Top Navbar */}
-      <header className={`border-b border-slate-900 bg-slate-950 flex items-center justify-between px-4 z-20 shrink-0 transition-all duration-200 ${
-        navbarSize === 'compact' ? 'h-10 text-xs' : navbarSize === 'large' ? 'h-18' : 'h-14'
+      <header className={`border-b border-slate-900 bg-slate-950 flex items-center justify-between px-3 sm:px-4 z-20 shrink-0 transition-all duration-300 ${
+        navbarMinimized ? 'h-7 py-0 overflow-hidden' : navbarSize === 'compact' ? 'h-10 text-xs' : navbarSize === 'large' ? 'h-18' : 'h-14'
       }`}>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           <button 
             onClick={onBack}
-            className="p-1.5 hover:bg-slate-900 text-slate-400 hover:text-white rounded-lg transition-colors cursor-pointer"
+            className="p-1 hover:bg-slate-900 text-slate-400 hover:text-white rounded-lg transition-colors cursor-pointer"
             title="Voltar ao Dashboard"
           >
-            <ArrowLeft className="w-5 h-5" />
+            <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" />
           </button>
           
           <button 
             onClick={() => setShowSidebar(!showSidebar)}
-            className={`p-1.5 rounded-lg transition-all cursor-pointer ${showSidebar ? 'bg-purple-650 text-purple-400 hover:bg-slate-900' : 'bg-slate-900 text-slate-550 hover:text-white'}`}
+            className={`p-1 sm:p-1.5 rounded-lg transition-all cursor-pointer ${showSidebar ? 'bg-purple-650 text-purple-400 hover:bg-slate-900' : 'bg-slate-900 text-slate-550 hover:text-white'}`}
             title="Alternar Painel Lateral"
           >
-            <PanelLeftClose className="w-5 h-5" />
+            <PanelLeftClose className="w-4 h-4 sm:w-5 sm:h-5" />
           </button>
 
-          <span className="font-bold text-white tracking-wide">{project?.name || 'Carregando...'}</span>
-          <span className="text-xs text-slate-500">/</span>
-          <span className="text-xs text-slate-400 font-medium">{activePage?.name}</span>
+          {!navbarMinimized && (
+            <div className="flex items-center gap-1.5 truncate">
+              <span className="font-bold text-white tracking-wide text-xs sm:text-sm truncate">{project?.name || 'Carregando...'}</span>
+              <span className="text-xs text-slate-500">/</span>
+              <span className="text-xs text-slate-400 font-medium truncate">{activePage?.name}</span>
+            </div>
+          )}
         </div>
 
         {/* Navbar Size and Viewport Control wrapper */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 sm:gap-4">
           {/* Navbar Size Control */}
           <div className="flex items-center gap-1.5">
             <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Tamanho Barra:</span>
@@ -645,43 +686,16 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
 
       {/* Action controls */}
       <div className="flex items-center gap-2">
-          {/* View Modes */}
-          <button 
-            onClick={() => {
-              setViewMode('visual');
-              setShowCodeModal(true);
-            }}
-            className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer bg-slate-900 text-slate-400 hover:text-white border border-slate-800`}
-            title="Abrir Editor de Código em Modal Flutuante"
-          >
-            <Code2 className="w-3.5 h-3.5" />
-            Código (Modal)
-          </button>
-
-          <button 
-            onClick={() => setShowStylesPanel(!showStylesPanel)}
-            className={`p-2 rounded-xl transition-all cursor-pointer mr-1 ${showStylesPanel ? 'bg-purple-650 text-purple-400 hover:bg-slate-900' : 'bg-slate-900 text-slate-550 hover:text-white'}`}
-            title="Alternar Painel de Estilos"
-          >
-            <Sliders className="w-4 h-4" />
-          </button>
-
-          <button 
-            onClick={() => setShowHistoryModal(true)}
-            className={`p-2 rounded-xl transition-all cursor-pointer mr-1 bg-slate-900 text-slate-450 hover:text-white hover:bg-slate-850`}
-            title="Histórico de Versões do Site"
-          >
-            <History className="w-4 h-4" />
-          </button>
-
+          {/* Chat AI toggle */}
           <button 
             onClick={() => setShowChat(!showChat)}
-            className={`p-2 rounded-xl transition-all cursor-pointer mr-2 ${showChat ? 'bg-purple-600 text-white' : 'bg-slate-900 text-slate-400 hover:text-white'}`}
+            className={`p-2 rounded-xl transition-all cursor-pointer ${showChat ? 'bg-purple-600 text-white shadow-md shadow-purple-600/30' : 'bg-slate-900 text-slate-400 hover:text-white'}`}
             title="Chat com IA"
           >
             <MessageSquare className="w-4 h-4" />
           </button>
 
+          {/* Quick Preview Button */}
           <button 
             onClick={() => {
               if (!activePage) return;
@@ -705,20 +719,73 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
               const url = URL.createObjectURL(blob);
               window.open(url, '_blank');
             }}
-            className="flex items-center gap-1.5 px-3 py-2 bg-slate-900 border border-slate-800 hover:bg-slate-850 hover:text-white font-semibold text-xs text-slate-300 rounded-xl transition-all cursor-pointer mr-1"
+            className="hidden sm:flex items-center gap-1.5 px-3 py-2 bg-slate-900 border border-slate-800 hover:bg-slate-850 hover:text-white font-semibold text-xs text-slate-300 rounded-xl transition-all cursor-pointer"
             title="Visualizar em Nova Aba"
           >
             <ExternalLink className="w-3.5 h-3.5" />
             Visualizar
           </button>
 
+          {/* Export Project Button */}
           <button 
-            className="flex items-center gap-1.5 px-4 py-2 bg-purple-600 hover:bg-purple-500 font-semibold text-xs text-white rounded-xl transition-all cursor-pointer"
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-purple-600 hover:bg-purple-500 font-semibold text-xs text-white rounded-xl transition-all cursor-pointer shadow-md shadow-purple-600/20"
             onClick={() => setShowExportModal(true)}
           >
             <Download className="w-3.5 h-3.5" />
             Exportar
           </button>
+
+          {/* Unified Options Dropdown Menu */}
+          <div className="relative">
+            <button 
+              onClick={() => setShowBuilderMenu(!showBuilderMenu)}
+              className="p-2 bg-slate-900 border border-slate-800 hover:border-purple-500/40 rounded-xl text-slate-400 hover:text-white transition-all cursor-pointer shadow-sm"
+              title="Mais opções e ferramentas"
+            >
+              <Sliders className="w-4 h-4 text-purple-400" />
+            </button>
+
+            {showBuilderMenu && (
+              <div 
+                className="absolute right-0 mt-2 w-56 bg-[#0f0b18] border border-purple-500/30 rounded-2xl shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-150 backdrop-blur-xl"
+                onClick={() => setShowBuilderMenu(false)}
+              >
+                <div className="p-3 border-b border-slate-850 bg-purple-950/20">
+                  <p className="text-xs font-semibold text-white">Ferramentas de Edição</p>
+                  <p className="text-[10px] text-slate-400 font-mono">Real Premise Studio</p>
+                </div>
+
+                <div className="p-1.5 space-y-1">
+                  <button
+                    onClick={() => { setShowBuilderMenu(false); setShowStylesPanel(!showStylesPanel); }}
+                    className="w-full flex items-center justify-between px-3 py-2 text-xs text-slate-300 hover:text-white hover:bg-purple-900/30 rounded-xl transition-all cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Sliders className="w-4 h-4 text-purple-400" />
+                      Painel de Estilos
+                    </div>
+                    <span className="text-[10px] text-slate-500 font-mono">{showStylesPanel ? 'ON' : 'OFF'}</span>
+                  </button>
+
+                  <button
+                    onClick={() => { setShowBuilderMenu(false); setShowCodeModal(true); }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-slate-300 hover:text-white hover:bg-purple-900/30 rounded-xl transition-all cursor-pointer"
+                  >
+                    <Code2 className="w-4 h-4 text-pink-400" />
+                    Editor de Código
+                  </button>
+
+                  <button
+                    onClick={() => { setShowBuilderMenu(false); setShowHistoryModal(true); }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-slate-300 hover:text-white hover:bg-purple-900/30 rounded-xl transition-all cursor-pointer"
+                  >
+                    <History className="w-4 h-4 text-indigo-400" />
+                    Histórico de Versões
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
@@ -726,64 +793,78 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
       <div className="flex-1 flex overflow-hidden">
         {project && activePage ? (
           <>
-            {/* Sidebar (Pages & Layers) */}
+            {/* Sidebar (Pages & Layers) with Draggable Resize Handle */}
             {showSidebar && (
-              <Sidebar
-                pages={project.pages}
-                activePageId={activePageId}
-                onSelectPage={(id) => {
-                  setActivePageId(id);
-                  setSelectedSelector(null);
-                  setSelectedPath(null);
-                }}
-                onCreatePage={handleCreatePage}
-                onDuplicatePage={handleDuplicatePage}
-                onDeletePage={handleDeletePage}
-                layers={layers}
-                onSelectLayer={(selector, path) => {
-                  setSelectedSelector(selector);
-                  setSelectedPath(path);
-                  
-                  // Extract element attributes and styles to populate PropertiesPanel
-                  const doc = parseDocFromHtml(activePage.html);
-                  const root = doc.getElementById('canvas-root') || doc.body;
-                  const el = getElementByPath(root, path);
-                  if (el) {
-                    const attrs: Record<string, string> = {
-                      _tag: el.tagName.toLowerCase(),
-                      _textContent: el.childElementCount === 0 ? (el.textContent || '') : '',
-                      _hasChildren: el.childElementCount > 0 ? 'true' : 'false'
-                    };
-                    for (let i = 0; i < el.attributes.length; i++) {
-                      const attr = el.attributes[i];
-                      attrs[attr.name] = attr.value;
-                    }
-                    setSelectedAttrs(attrs);
-
-                    const styles: Record<string, string> = {};
-                    if (el instanceof HTMLElement) {
-                      for (let i = 0; i < el.style.length; i++) {
-                        const styleName = el.style[i];
-                        styles[styleName] = el.style.getPropertyValue(styleName);
+              <div 
+                style={{ width: `${leftSidebarWidth}px` }} 
+                className="relative shrink-0 flex flex-col h-full overflow-hidden select-none"
+              >
+                <Sidebar
+                  pages={project.pages}
+                  activePageId={activePageId}
+                  onSelectPage={(id) => {
+                    setActivePageId(id);
+                    setSelectedSelector(null);
+                    setSelectedPath(null);
+                  }}
+                  onCreatePage={handleCreatePage}
+                  onDuplicatePage={handleDuplicatePage}
+                  onDeletePage={handleDeletePage}
+                  layers={layers}
+                  onSelectLayer={(selector, path) => {
+                    setSelectedSelector(selector);
+                    setSelectedPath(path);
+                    
+                    // Extract element attributes and styles to populate PropertiesPanel
+                    const doc = parseDocFromHtml(activePage.html);
+                    const root = doc.getElementById('canvas-root') || doc.body;
+                    const el = getElementByPath(root, path);
+                    if (el) {
+                      const attrs: Record<string, string> = {
+                        _tag: el.tagName.toLowerCase(),
+                        _textContent: el.childElementCount === 0 ? (el.textContent || '') : '',
+                        _hasChildren: el.childElementCount > 0 ? 'true' : 'false'
+                      };
+                      for (let i = 0; i < el.attributes.length; i++) {
+                        const attr = el.attributes[i];
+                        attrs[attr.name] = attr.value;
                       }
+                      setSelectedAttrs(attrs);
+
+                      const styles: Record<string, string> = {};
+                      if (el instanceof HTMLElement) {
+                        for (let i = 0; i < el.style.length; i++) {
+                          const styleName = el.style[i];
+                          styles[styleName] = el.style.getPropertyValue(styleName);
+                        }
+                      }
+                      setSelectedStyles(styles);
+                    } else {
+                      setSelectedAttrs({});
+                      setSelectedStyles({});
                     }
-                    setSelectedStyles(styles);
-                  } else {
-                    setSelectedAttrs({});
-                    setSelectedStyles({});
-                  }
-                }}
-                onDeleteElement={handleDeleteElement}
-                onDuplicateElement={handleDuplicateElement}
-                onMoveElement={handleMoveElement}
-                onWrapElement={handleWrapElement}
-                onAddChildElement={handleAddChildElement}
-                selectedPath={selectedPath}
-              />
+                  }}
+                  onDeleteElement={handleDeleteElement}
+                  onDuplicateElement={handleDuplicateElement}
+                  onMoveElement={handleMoveElement}
+                  onWrapElement={handleWrapElement}
+                  onAddChildElement={handleAddChildElement}
+                  selectedPath={selectedPath}
+                />
+                
+                {/* Left Drag Resize Divider */}
+                <div
+                  onMouseDown={() => setIsResizingLeft(true)}
+                  className="absolute -right-1 top-0 bottom-0 w-2.5 cursor-col-resize z-30 group flex items-center justify-center hover:bg-purple-500/20 transition-all"
+                  title="Arrastar para redimensionar barra de páginas e camadas"
+                >
+                  <div className="w-0.5 h-8 rounded-full bg-slate-800 group-hover:bg-purple-400 transition-colors" />
+                </div>
+              </div>
             )}
 
             {/* Main Interactive Canvas Area */}
-            <main className="flex-1 p-2 md:p-6 flex justify-center items-center overflow-auto bg-slate-950/20">
+            <main className="flex-1 p-2 md:p-6 flex justify-center items-center overflow-auto bg-slate-950/20 min-w-0">
               <div 
                 className="transition-all duration-300 max-w-full h-full flex items-center justify-center"
                 style={{
@@ -808,16 +889,30 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
               </div>
             </main>
 
-            {/* Properties Control Panel (Condicional) */}
+            {/* Properties Control Panel with Draggable Resize Handle */}
             {showStylesPanel && (
-              <PropertiesPanel
-                selectedSelector={selectedSelector}
-                selectedPath={selectedPath}
-                selectedStyles={selectedStyles}
-                selectedAttrs={selectedAttrs}
-                onStyleChange={handleStyleChange}
-                onAttrChange={handleAttrChange}
-              />
+              <div 
+                style={{ width: `${rightPanelWidth}px` }} 
+                className="relative shrink-0 flex flex-col h-full overflow-hidden select-none"
+              >
+                {/* Right Drag Resize Divider */}
+                <div
+                  onMouseDown={() => setIsResizingRight(true)}
+                  className="absolute -left-1 top-0 bottom-0 w-2.5 cursor-col-resize z-30 group flex items-center justify-center hover:bg-purple-500/20 transition-all"
+                  title="Arrastar para redimensionar painel de estilos"
+                >
+                  <div className="w-0.5 h-8 rounded-full bg-slate-800 group-hover:bg-purple-400 transition-colors" />
+                </div>
+
+                <PropertiesPanel
+                  selectedSelector={selectedSelector}
+                  selectedPath={selectedPath}
+                  selectedStyles={selectedStyles}
+                  selectedAttrs={selectedAttrs}
+                  onStyleChange={handleStyleChange}
+                  onAttrChange={handleAttrChange}
+                />
+              </div>
             )}
 
             {/* Chat Panel AI */}

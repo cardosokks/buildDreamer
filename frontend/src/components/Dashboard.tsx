@@ -15,7 +15,14 @@ import {
   Globe,
   Phone,
   Star,
-  Users
+  Users,
+  ChevronUp,
+  ChevronDown,
+  Minimize2,
+  Maximize2,
+  Menu,
+  X,
+  GripVertical
 } from 'lucide-react';
 
 import { SettingsModal } from './SettingsModal';
@@ -55,6 +62,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ onSelectProject }) => {
   
   // Tab layout selection: 'general' | 'projects' | 'leads'
   const [activeTab, setActiveTab] = useState<'general' | 'projects' | 'leads'>('general');
+
+  // Accessibility & UX Customization States
+  const [navbarMinimized, setNavbarMinimized] = useState(false);
+  const [navbarSize, setNavbarSize] = useState<'compact' | 'normal' | 'large'>('normal');
+  const [sidebarWidth, setSidebarWidth] = useState(256); // 256px default (w-64)
+  const [isResizingSidebar, setIsResizingSidebar] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // User Profile Dropdown state
+  const [showUserDropdown, setShowUserDropdown] = useState(false);
 
   // Leads state variables
   const [leadQuery, setLeadQuery] = useState('');
@@ -97,6 +114,28 @@ export const Dashboard: React.FC<DashboardProps> = ({ onSelectProject }) => {
   useEffect(() => {
     fetchProjects();
   }, [token]);
+
+  // Sidebar drag resizing listener
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizingSidebar) return;
+      const newWidth = Math.max(180, Math.min(480, e.clientX));
+      setSidebarWidth(newWidth);
+    };
+
+    const handleMouseUp = () => {
+      setIsResizingSidebar(false);
+    };
+
+    if (isResizingSidebar) {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+    }
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizingSidebar]);
 
   // Lead search method
   const handleSearchLeads = async (e: React.FormEvent) => {
@@ -210,44 +249,177 @@ export const Dashboard: React.FC<DashboardProps> = ({ onSelectProject }) => {
 
   return (
     <div className="min-h-screen bg-[#07020d] text-slate-100 font-sans flex flex-col">
-      {/* Top Navbar */}
-      <header className="border-b border-slate-900 bg-[#0f0b18]/80 backdrop-blur-md sticky top-0 z-30 shrink-0 shadow-[0_4px_30px_rgba(0,0,0,0.4)]">
-        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+      {/* Top Navbar with Size and Minimized State Toggle */}
+      <header className={`border-b border-slate-900 bg-[#0f0b18]/90 backdrop-blur-md sticky top-0 z-30 shrink-0 shadow-[0_4px_30px_rgba(0,0,0,0.4)] transition-all duration-300 ${
+        navbarMinimized ? 'h-8 py-0' : navbarSize === 'compact' ? 'h-12 py-1' : navbarSize === 'large' ? 'h-20 py-3' : 'h-16 py-2'
+      }`}>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-full flex items-center justify-between">
+          
+          {/* Logo & Mobile Menu Trigger */}
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-purple-900/30 border border-purple-500/40 rounded-lg text-purple-400 shadow-[0_0_10px_rgba(168,85,247,0.2)]">
-              <Sparkles className="w-5 h-5 animate-pulse" />
+            {/* Mobile Hamburger Toggle */}
+            <button
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="p-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-white md:hidden transition-all cursor-pointer"
+              title="Menu Lateral"
+            >
+              {mobileMenuOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
+            </button>
+
+            <div className="p-1.5 bg-purple-900/30 border border-purple-500/40 rounded-lg text-purple-400 shadow-[0_0_10px_rgba(168,85,247,0.2)]">
+              <Sparkles className="w-4 h-4 animate-pulse" />
             </div>
-            <span className="font-extrabold text-lg tracking-widest bg-gradient-to-r from-purple-400 via-pink-400 to-indigo-400 bg-clip-text text-transparent">REAL PREMISE</span>
-            <span className="px-2 py-0.5 rounded border border-purple-500/30 bg-purple-950/40 text-[9px] text-purple-300 font-mono tracking-widest shadow-[0_0_8px_rgba(168,85,247,0.15)]">PORTAL</span>
+            {!navbarMinimized && (
+              <div className="flex items-center gap-2">
+                <span className="font-extrabold text-base sm:text-lg tracking-widest bg-gradient-to-r from-purple-400 via-pink-400 to-indigo-400 bg-clip-text text-transparent">REAL PREMISE</span>
+                <span className="hidden sm:inline-block px-2 py-0.5 rounded border border-purple-500/30 bg-purple-950/40 text-[9px] text-purple-300 font-mono tracking-widest shadow-[0_0_8px_rgba(168,85,247,0.15)]">PORTAL</span>
+              </div>
+            )}
           </div>
 
-          <div className="flex items-center gap-4">
-            <div className="text-right hidden sm:block">
-              <p className="text-sm font-semibold text-white">{user?.name || 'Desenvolvedor'}</p>
-              <p className="text-xs text-slate-500">{user?.email}</p>
+          {/* Accessibility & Density Controls */}
+          <div className="flex items-center gap-2.5">
+            {/* Density Selector */}
+            {!navbarMinimized && (
+              <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 bg-slate-950 border border-slate-850 rounded-xl">
+                <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Barra:</span>
+                <select
+                  value={navbarSize}
+                  onChange={(e) => setNavbarSize(e.target.value as any)}
+                  className="bg-transparent border-none text-[10px] text-purple-300 font-mono focus:outline-none cursor-pointer"
+                >
+                  <option value="compact" className="bg-slate-900 text-white">Compacto</option>
+                  <option value="normal" className="bg-slate-900 text-white">Normal</option>
+                  <option value="large" className="bg-slate-900 text-white">Grande</option>
+                </select>
+              </div>
+            )}
+
+            {/* Minimize / Maximize Navbar Button */}
+            <button
+              onClick={() => setNavbarMinimized(!navbarMinimized)}
+              className="p-1.5 bg-slate-950 hover:bg-slate-900 border border-slate-800 text-slate-400 hover:text-white rounded-xl transition-all cursor-pointer shadow-sm"
+              title={navbarMinimized ? "Expandir Barra Superior" : "Minimizar Barra Superior"}
+            >
+              {navbarMinimized ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
+            </button>
+
+            {/* User Profile Dropdown Menu */}
+            <div className="relative">
+              <button
+                onClick={() => setShowUserDropdown(!showUserDropdown)}
+                className="flex items-center gap-2.5 p-1 pl-2.5 rounded-xl bg-purple-950/30 hover:bg-purple-900/40 border border-purple-500/25 transition-all cursor-pointer shadow-sm hover:border-purple-500/50"
+              >
+                {!navbarMinimized && (
+                  <div className="text-right hidden sm:block">
+                    <p className="text-xs font-bold text-white leading-tight">{user?.name || 'Desenvolvedor'}</p>
+                    <p className="text-[9px] text-purple-400 font-mono">{user?.email}</p>
+                  </div>
+                )}
+                <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-purple-600 to-indigo-500 flex items-center justify-center text-white font-bold text-xs shadow-md shadow-purple-500/20 border border-purple-400/30">
+                  {(user?.name || 'U').charAt(0).toUpperCase()}
+                </div>
+              </button>
+
+              {/* Dropdown Menu Popup */}
+              {showUserDropdown && (
+                <div 
+                  className="absolute right-0 mt-2 w-56 bg-[#0f0b18] border border-purple-500/30 rounded-2xl shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-150 backdrop-blur-xl"
+                  onClick={() => setShowUserDropdown(false)}
+                >
+                  <div className="p-3 border-b border-slate-850 bg-purple-950/20">
+                    <p className="text-xs font-semibold text-white truncate">{user?.name || 'Desenvolvedor'}</p>
+                    <p className="text-[10px] text-slate-400 font-mono truncate">{user?.email}</p>
+                  </div>
+
+                  <div className="p-1.5 space-y-1">
+                    <button
+                      onClick={() => { setShowUserDropdown(false); setShowSettings(true); }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-slate-300 hover:text-white hover:bg-purple-900/30 rounded-xl transition-all cursor-pointer"
+                    >
+                      <Settings className="w-4 h-4 text-purple-400" />
+                      Configurações & Chaves
+                    </button>
+
+                    <button
+                      onClick={() => { setShowUserDropdown(false); setActiveTab('leads'); }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-slate-300 hover:text-white hover:bg-purple-900/30 rounded-xl transition-all cursor-pointer"
+                    >
+                      <Users className="w-4 h-4 text-pink-400" />
+                      Buscador de Clientes
+                    </button>
+                  </div>
+
+                  <div className="p-1.5 border-t border-slate-850">
+                    <button
+                      onClick={() => { setShowUserDropdown(false); logout(); }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-red-400 hover:text-red-300 hover:bg-red-950/40 rounded-xl transition-all cursor-pointer"
+                    >
+                      <LogOut className="w-4 h-4" />
+                      Sair da Conta
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
-            <button 
-              onClick={() => setShowSettings(true)}
-              className="p-2 text-slate-400 hover:text-white hover:bg-slate-900 rounded-lg transition-colors cursor-pointer"
-              title="Configurações"
-            >
-              <Settings className="w-5 h-5" />
-            </button>
-            <button 
-              onClick={logout}
-              className="p-2 text-slate-400 hover:text-white hover:bg-slate-900 rounded-lg transition-colors cursor-pointer"
-              title="Sair"
-            >
-              <LogOut className="w-5 h-5" />
-            </button>
           </div>
         </div>
       </header>
 
-      {/* Main Body with Sidebar Layout */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Left Navigation Sidebar */}
-        <aside className="w-64 border-r border-slate-900 bg-[#0b0614] flex flex-col justify-between shrink-0 p-4 hidden md:flex">
+      {/* Main Body with Resizable Sidebar Layout */}
+      <div className="flex-1 flex overflow-hidden relative">
+        
+        {/* Mobile Navigation Drawer */}
+        {mobileMenuOpen && (
+          <div className="fixed inset-0 z-40 bg-black/80 backdrop-blur-sm md:hidden flex" onClick={() => setMobileMenuOpen(false)}>
+            <div 
+              className="w-64 bg-[#0b0614] border-r border-slate-850 h-full p-4 flex flex-col justify-between"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="space-y-2">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-850 mb-3">
+                  <span className="font-extrabold text-sm text-purple-400 tracking-wider">NAVEGAÇÃO</span>
+                  <button onClick={() => setMobileMenuOpen(false)} className="p-1 text-slate-400 hover:text-white">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+                <button
+                  onClick={() => { setActiveTab('general'); setMobileMenuOpen(false); }}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
+                    activeTab === 'general' ? 'bg-purple-900/30 text-purple-300 border border-purple-500/30' : 'text-slate-400'
+                  }`}
+                >
+                  <Sparkles className="w-4 h-4 text-purple-400" />
+                  Visão Geral
+                </button>
+                <button
+                  onClick={() => { setActiveTab('projects'); setMobileMenuOpen(false); }}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
+                    activeTab === 'projects' ? 'bg-purple-900/30 text-purple-300 border border-purple-500/30' : 'text-slate-400'
+                  }`}
+                >
+                  <Layout className="w-4 h-4 text-indigo-400" />
+                  Projetos / Sites
+                </button>
+                <button
+                  onClick={() => { setActiveTab('leads'); setMobileMenuOpen(false); }}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
+                    activeTab === 'leads' ? 'bg-purple-900/30 text-purple-300 border border-purple-500/30' : 'text-slate-400'
+                  }`}
+                >
+                  <Users className="w-4 h-4 text-pink-400" />
+                  Buscar Clientes
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Left Navigation Sidebar with Drag-to-Resize Handle */}
+        <aside 
+          style={{ width: `${sidebarWidth}px` }}
+          className="border-r border-slate-900 bg-[#0b0614] flex flex-col justify-between shrink-0 p-4 hidden md:flex relative select-none"
+        >
           <div className="space-y-1.5">
             <button
               onClick={() => setActiveTab('general')}
@@ -257,8 +429,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onSelectProject }) => {
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/40 border border-transparent'
               }`}
             >
-              <Sparkles className="w-4 h-4 text-purple-400" />
-              Visão Geral (Dashboard)
+              <Sparkles className="w-4 h-4 text-purple-400 shrink-0" />
+              <span className="truncate">Visão Geral (Dashboard)</span>
             </button>
             <button
               onClick={() => setActiveTab('projects')}
@@ -268,8 +440,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onSelectProject }) => {
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/40 border border-transparent'
               }`}
             >
-              <Layout className="w-4 h-4 text-indigo-400" />
-              Projetos / Sites
+              <Layout className="w-4 h-4 text-indigo-400 shrink-0" />
+              <span className="truncate">Projetos / Sites</span>
             </button>
             <button
               onClick={() => setActiveTab('leads')}
@@ -279,14 +451,23 @@ export const Dashboard: React.FC<DashboardProps> = ({ onSelectProject }) => {
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/40 border border-transparent'
               }`}
             >
-              <Users className="w-4 h-4 text-pink-400" />
-              Buscar Clientes (Maps)
+              <Users className="w-4 h-4 text-pink-400 shrink-0" />
+              <span className="truncate">Buscar Clientes (Maps)</span>
             </button>
           </div>
 
           <div className="p-3 bg-slate-900/30 border border-slate-800/60 rounded-xl">
             <span className="block text-[10px] text-slate-500 font-bold uppercase tracking-wider">Servidor de Deploy</span>
-            <span className="block text-xs text-purple-400 mt-1 font-mono">Real Premise Live FTP</span>
+            <span className="block text-xs text-purple-400 mt-1 font-mono truncate">Real Premise Live FTP</span>
+          </div>
+
+          {/* Draggable Resize Divider */}
+          <div
+            onMouseDown={() => setIsResizingSidebar(true)}
+            className="absolute -right-1.5 top-0 bottom-0 w-3 cursor-col-resize z-20 group flex items-center justify-center hover:bg-purple-500/20 transition-all"
+            title="Arrastar para redimensionar barra lateral"
+          >
+            <div className="w-1 h-8 rounded-full bg-slate-700 group-hover:bg-purple-400 transition-colors" />
           </div>
         </aside>
 
