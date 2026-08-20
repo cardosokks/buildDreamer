@@ -93,6 +93,9 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
 
   // Background AI Job Status Polling
   const [jobStatus, setJobStatus] = useState<'pending' | 'processing' | 'completed' | 'failed'>('completed');
+  const [activeJobModel, setActiveJobModel] = useState<string | null>(null);
+  const [jobAttempt, setJobAttempt] = useState<number>(1);
+  const [jobTotal, setJobTotal] = useState<number>(1);
   const [jobError, setJobError] = useState<string | null>(null);
 
   // History version state
@@ -203,6 +206,10 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
         if (res.ok) {
           const data = await res.json();
           setJobStatus(data.status);
+          if (data.currentModel) setActiveJobModel(data.currentModel);
+          if (data.attempt) setJobAttempt(data.attempt);
+          if (data.total) setJobTotal(data.total);
+
           if (data.status === 'completed') {
             clearInterval(interval);
             fetchProjectDetails(); // refresh details to load generated page code
@@ -578,11 +585,22 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
           <h2 className="text-2xl font-extrabold bg-gradient-to-r from-purple-400 via-pink-400 to-indigo-400 bg-clip-text text-transparent tracking-widest uppercase">
             Real Premise AI
           </h2>
-          <p className="text-sm text-slate-400 mt-2 font-medium animate-pulse">
-            {jobStatus === 'pending' ? 'Entrando na fila de geração...' : 'Escrevendo códigos (HTML/CSS) com Gemini...'}
+          <p className="text-sm text-slate-300 mt-2 font-medium animate-pulse">
+            {jobStatus === 'pending' ? 'Entrando na fila de geração...' : 'Escrevendo códigos (HTML/CSS)...'}
           </p>
-          <span className="text-[10px] text-slate-600 font-mono mt-8 border border-slate-900 rounded px-2.5 py-1 bg-slate-950/50">
-            Esta etapa pode demorar de 10 a 20 segundos
+
+          {/* Model attempt badge */}
+          {activeJobModel && (
+            <div className="mt-4 px-3 py-1.5 rounded-xl bg-purple-950/60 border border-purple-500/40 flex items-center gap-2 shadow-[0_0_15px_rgba(168,85,247,0.15)] animate-in fade-in">
+              <span className="w-2 h-2 rounded-full bg-purple-400 animate-ping" />
+              <span className="text-xs text-purple-200 font-mono">
+                Modelo: <strong className="text-white font-bold">{activeJobModel}</strong> {jobTotal > 1 ? `(${jobAttempt}/${jobTotal})` : ''}
+              </span>
+            </div>
+          )}
+
+          <span className="text-[10px] text-slate-500 font-mono mt-6 border border-slate-900 rounded-lg px-3 py-1 bg-slate-950/70">
+            Fallback automático ativo entre modelos cadastrados
           </span>
         </div>
       )}

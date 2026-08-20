@@ -7,7 +7,8 @@ export const generateAIResponse = async (
   context: { html: string; css: string; js: string },
   customApiKey?: string,
   customModel?: string,
-  registeredModels?: string[]
+  registeredModels?: string[],
+  onModelAttempt?: (model: string, index: number, total: number) => void
 ) => {
   const activeKey = customApiKey || apiKey;
 
@@ -59,7 +60,12 @@ export const generateAIResponse = async (
 
   let lastError: any = null;
 
-  for (const modelToTry of candidateModels) {
+  for (let i = 0; i < candidateModels.length; i++) {
+    const modelToTry = candidateModels[i];
+    if (onModelAttempt) {
+      onModelAttempt(modelToTry, i + 1, candidateModels.length);
+    }
+
     try {
       const response = await ai.models.generateContent({
         model: modelToTry,
@@ -88,8 +94,9 @@ export const generateAIResponse = async (
         text = text.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim();
       }
 
+      let parsed: any;
       try {
-        return JSON.parse(text);
+        parsed = JSON.parse(text);
       } catch (parseErr) {
         // Fallback: replace common invalid escape characters in large HTML/JS blobs
         const sanitized = text
@@ -101,15 +108,18 @@ export const generateAIResponse = async (
           .replace(/\\t/g, "\\t")
           .replace(/\\b/g, "\\b")
           .replace(/\\f/g, "\\f");
-        return JSON.parse(sanitized);
+        parsed = JSON.parse(sanitized);
       }
+
+      parsed._usedModel = modelToTry;
+      return parsed;
     } catch (error: any) {
-      console.warn(`Tentativa com o modelo ${modelToTry} falhou ou esgotou cota (429). Tentando próximo modelo...`, error.message);
+      console.warn(`[Cascata IA] Tentativa com o modelo ${modelToTry} (${i + 1}/${candidateModels.length}) falhou:`, error.message);
       lastError = error;
       // Continue to next candidate model
     }
   }
 
   console.error("Erro na API do Gemini em todos os modelos candidatos:", lastError);
-  throw new Error(`Erro ao gerar resposta da IA: ${lastError?.message || 'Cota esgotada em todos os modelos'}`);
+  throw new Error(`Erro ao gerar resposta da IA: ${lastError?.message || 'Cota esgotada em todos os modelos cadastrados'}`);
 };

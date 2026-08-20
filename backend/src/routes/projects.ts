@@ -6,8 +6,13 @@ import { generateAIResponse } from '../services/gemini';
 
 const router = Router();
 
-// In-memory simple queue system object mapping project ID to active processing task status
-export const projectJobsQueue: Record<string, { status: 'pending' | 'processing' | 'completed' | 'failed'; error?: string }> = {};
+export const projectJobsQueue: Record<string, { 
+  status: 'pending' | 'processing' | 'completed' | 'failed'; 
+  currentModel?: string;
+  attempt?: number;
+  total?: number;
+  error?: string;
+}> = {};
 
 // Background task worker method
 async function processAIProjectGeneration(projectId: string, prompt: string, customApiKey?: string, customModel?: string, registeredModels?: string[]) {
@@ -19,13 +24,21 @@ async function processAIProjectGeneration(projectId: string, prompt: string, cus
 
     if (!page) throw new Error("Homepage page not found in project");
 
-    // Invoke Gemini to generate full professional mockup
+    // Invoke Gemini with dynamic attempt updates
     const response = await generateAIResponse(
       prompt,
       { html: page.html, css: page.css, js: page.js },
       customApiKey,
       customModel,
-      registeredModels
+      registeredModels,
+      (model, attempt, total) => {
+        projectJobsQueue[projectId] = {
+          status: 'processing',
+          currentModel: model,
+          attempt,
+          total
+        };
+      }
     );
 
     // Save final generated code to database

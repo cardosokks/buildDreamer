@@ -14,6 +14,7 @@ interface Message {
   html?: string;
   css?: string;
   js?: string;
+  modelUsed?: string;
 }
 
 export const ChatPanel: React.FC<ChatPanelProps> = ({ pageId, onApplyChanges }) => {
@@ -92,7 +93,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ pageId, onApplyChanges }) 
         text: data.explanation || 'Alterações geradas com sucesso.',
         html: data.html,
         css: data.css,
-        js: data.js
+        js: data.js,
+        modelUsed: data._usedModel || selectedModel
       };
 
       // Read state from localStorage to ensure we don't overwrite if user swapped tabs
@@ -175,10 +177,19 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ pageId, onApplyChanges }) 
               </div>
             )}
             
-            <div className="max-w-[80%] space-y-2">
+            <div className="max-w-[80%] space-y-1.5">
               <div className={`p-3 rounded-2xl text-xs leading-relaxed ${msg.role === 'user' ? 'bg-purple-600 text-white rounded-tr-none' : 'bg-slate-900 border border-slate-800 text-slate-200 rounded-tl-none'}`}>
                 {msg.text}
               </div>
+
+              {msg.role === 'assistant' && msg.modelUsed && (
+                <div className="flex items-center gap-1.5 pl-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-purple-400" />
+                  <span className="text-[9px] text-slate-500 font-mono">
+                    Gerado via <strong className="text-purple-400">{msg.modelUsed}</strong>
+                  </span>
+                </div>
+              )}
 
               {msg.html && (
                 <div className="bg-slate-900 border border-slate-800/80 rounded-xl p-2.5 space-y-2">
@@ -214,8 +225,12 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ pageId, onApplyChanges }) 
             <div className="w-7 h-7 rounded-lg bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 shrink-0 animate-spin">
               <Sparkles className="w-4 h-4" />
             </div>
-            <div className="bg-slate-900 border border-slate-800 text-slate-400 p-3 rounded-2xl rounded-tl-none text-xs">
-              IA está analisando o contexto e gerando alterações...
+            <div className="bg-slate-900 border border-purple-500/30 text-slate-300 p-3 rounded-2xl rounded-tl-none text-xs space-y-1.5 shadow-lg shadow-purple-950/30">
+              <p className="font-medium text-white">IA processando alterações...</p>
+              <div className="flex items-center gap-1.5 text-[10px] text-purple-300 font-mono">
+                <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-ping" />
+                <span>Testando modelo: <strong>{selectedModel}</strong></span>
+              </div>
             </div>
           </div>
         )}
