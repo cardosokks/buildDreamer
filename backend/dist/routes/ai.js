@@ -24,13 +24,20 @@ router.post('/chat', async (req, res) => {
             return res.status(403).json({ error: 'Not authorized' });
         }
         // Extract client provided Gemini Key from headers if present
-        const clientGeminiKey = req.headers['x-gemini-key'];
-        // Call Gemini with current page context
+        const clientGeminiKey = (req.headers['x-gemini-key'] || req.headers['X-Gemini-Key']);
+        let registeredModels;
+        try {
+            const rawModels = (req.headers['x-gemini-models'] || req.headers['X-Gemini-Models']);
+            if (rawModels)
+                registeredModels = JSON.parse(rawModels);
+        }
+        catch { }
+        // Call Gemini with current page context and strictly registered cascade models
         const aiResponse = await (0, gemini_1.generateAIResponse)(prompt, {
             html: page.html,
             css: page.css,
             js: page.js
-        }, clientGeminiKey, model);
+        }, clientGeminiKey, model, registeredModels);
         return res.json(aiResponse);
     }
     catch (error) {

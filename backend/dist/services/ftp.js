@@ -40,7 +40,7 @@ const stream_1 = require("stream");
 function getSafeProjectName(name) {
     return name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
 }
-async function uploadSinglePageToFTP(projectName, pageSlug, html, css, js) {
+async function uploadSinglePageToFTP(projectName, pageSlug, html, css, js, isHomepage = false) {
     const safeName = getSafeProjectName(projectName);
     const client = new ftp.Client();
     client.ftp.verbose = false;
@@ -57,9 +57,16 @@ async function uploadSinglePageToFTP(projectName, pageSlug, html, css, js) {
             secure: false
         });
         const baseDir = `/projects/${safeName}`;
-        await client.ensureDir(`${baseDir}/pages`);
+        if (!isHomepage) {
+            await client.ensureDir(`${baseDir}/pages`);
+        }
+        else {
+            await client.ensureDir(baseDir);
+        }
         await client.ensureDir(`${baseDir}/css`);
         await client.ensureDir(`${baseDir}/js`);
+        // Determine correct relative prefix based on folder nesting
+        const relativePrefix = isHomepage ? "." : "..";
         // HTML boilerplate to bind CSS and JS
         const htmlContent = `<!DOCTYPE html>
 <html lang="pt-br">
@@ -67,18 +74,19 @@ async function uploadSinglePageToFTP(projectName, pageSlug, html, css, js) {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="stylesheet" href="../css/${pageSlug}.css">
+  <link rel="stylesheet" href="${relativePrefix}/css/${pageSlug}.css">
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen">
   ${html}
-  <script src="../js/${pageSlug}.js"></script>
+  <script src="${relativePrefix}/js/${pageSlug}.js"></script>
 </body>
 </html>`;
-        // Upload files from streams
-        await client.uploadFrom(stream_1.Readable.from([htmlContent]), `${baseDir}/pages/${pageSlug}.html`);
+        // Upload files to their appropriate destinations
+        const htmlDest = isHomepage ? `${baseDir}/index.html` : `${baseDir}/pages/${pageSlug}.html`;
+        await client.uploadFrom(stream_1.Readable.from([htmlContent]), htmlDest);
         await client.uploadFrom(stream_1.Readable.from([css]), `${baseDir}/css/${pageSlug}.css`);
         await client.uploadFrom(stream_1.Readable.from([js]), `${baseDir}/js/${pageSlug}.js`);
-        console.log(`FTP: Uploaded page ${pageSlug} for project ${safeName} successfully.`);
+        console.log(`FTP: Uploaded page ${pageSlug} for project ${safeName} successfully. Destination: ${htmlDest}`);
     }
     catch (error) {
         console.error(`FTP Error uploading page ${pageSlug} for project ${safeName}:`, error);
@@ -89,6 +97,6 @@ async function uploadSinglePageToFTP(projectName, pageSlug, html, css, js) {
 }
 async function uploadProjectToFTP(projectName, pages) {
     for (const page of pages) {
-        await uploadSinglePageToFTP(projectName, page.slug, page.html, page.css, page.js);
+        await uploadSinglePageToFTP(projectName, page.slug, page.html, page.css, page.js, page.isHomepage);
     }
 }

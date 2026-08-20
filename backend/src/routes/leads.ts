@@ -54,7 +54,6 @@ router.post('/search-leads', async (req: AuthenticatedRequest, res: any) => {
     // Integração Real e Gratuita com OpenStreetMap (Nominatim / Overpass)
     // Permite buscar estabelecimentos reais por cidade/bairro sem depender de chaves pagas
     try {
-      const cleanLocation = location || 'Brasil';
       const searchTerms = `${query} ${cleanLocation}`;
       const nominatimUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(searchTerms)}&format=json&addressdetails=1&limit=15`;
       
@@ -98,7 +97,6 @@ router.post('/search-leads', async (req: AuthenticatedRequest, res: any) => {
     }
 
     // Gerador Avançado com Dicionário de Nomes Comerciais Autênticos por Segmento
-    const cleanLocation = location || 'Centro';
     const segment = query.toLowerCase();
 
     // Dicionários ricos de nomes comerciais realistas brasileiros
@@ -147,7 +145,7 @@ router.post('/search-leads', async (req: AuthenticatedRequest, res: any) => {
       salao: [
         'Studio VIP Cabelo & Estética', 'Espaço Bella Mulher', 'Glamour Hair & Beauty',
         'Salão Arte & Estilo', 'Ateliê da Beleza', 'Studio Elegance',
-        'Barbearia Navalha de Ouro', 'The Barber Club', 'D'Lux Cabelereiros'
+        'Barbearia Navalha de Ouro', 'The Barber Club', 'D Lux Cabeleireiros'
       ],
       academia: [
         'Academia IronFit', 'Studio Personal Pro', 'CrossTraining Extreme',
