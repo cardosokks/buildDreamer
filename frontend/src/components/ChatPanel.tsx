@@ -85,35 +85,66 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ pageId, onApplyChanges }) 
         body: JSON.stringify({ prompt: userMessage, pageId: currentRequestPageId, model: selectedModel })
       });
 
-      if (!res.ok) throw new Error('Falha ao processar solicitação de IA');
+      if (!res.ok) throw new Error('Falha ao iniciar solicitação de IA');
       
-      const data = await res.json();
-      const assistantMessage: Message = { 
-        role: 'assistant', 
-        text: data.explanation || 'Alterações geradas com sucesso.',
-        html: data.html,
-        css: data.css,
-        js: data.js,
-        modelUsed: data._usedModel || selectedModel
-      };
+      const { jobId } = await res.json();
 
-      // Read state from localStorage to ensure we don't overwrite if user swapped tabs
-      const freshStored = localStorage.getItem(`chat_history_${currentRequestPageId}`);
-      const freshMessages = freshStored ? JSON.parse(freshStored) : updatedMessages;
-      const finalMessages = [...freshMessages, assistantMessage];
+      // Polling do Job de IA em background para evitar Timeout
+      const pollInterval = setInterval(async () => {
+        try {
+          const statusRes = await fetch(`${API_URL}/api/ai/jobs/${jobId}/status`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
 
-      localStorage.setItem(`chat_history_${currentRequestPageId}`, JSON.stringify(finalMessages));
-      
-      // If we are still on the same page, update current component state
-      if (pageId === currentRequestPageId) {
-        setMessages(finalMessages);
-      }
+          if (statusRes.ok) {
+            const jobData = await statusRes.json();
 
-      // Apply changes directly automatically (eliminates manual button dependency)
-      if (data.html) {
-        onApplyChanges(data.html, data.css || '', data.js || '', currentRequestPageId);
-      }
+            if (jobData.status === 'completed' && jobData.result) {
+              clearInterval(pollInterval);
+              setLoading(false);
+
+              const assistantMessage: Message = { 
+                role: 'assistant', 
+                text: jobData.result.explanation || 'Alterações geradas com sucesso.',
+                html: jobData.result.html,
+                css: jobData.result.css,
+                js: jobData.result.js,
+                modelUsed: jobData.result._usedModel || jobData.currentModel || selectedModel
+              };
+
+              const freshStored = localStorage.getItem(`chat_history_${currentRequestPageId}`);
+              const freshMessages = freshStored ? JSON.parse(freshStored) : updatedMessages;
+              const finalMessages = [...freshMessages, assistantMessage];
+
+              localStorage.setItem(`chat_history_${currentRequestPageId}`, JSON.stringify(finalMessages));
+              if (pageId === currentRequestPageId) {
+                setMessages(finalMessages);
+              }
+
+              if (jobData.result.html) {
+                onApplyChanges(jobData.result.html, jobData.result.css || '', jobData.result.js || '', currentRequestPageId);
+              }
+            } else if (jobData.status === 'failed') {
+              clearInterval(pollInterval);
+              setLoading(false);
+
+              const errorMessage: Message = { role: 'assistant', text: `Erro: ${jobData.error || 'Falha ao processar alterações'}` };
+              const freshStored = localStorage.getItem(`chat_history_${currentRequestPageId}`);
+              const freshMessages = freshStored ? JSON.parse(freshStored) : updatedMessages;
+              const finalMessages = [...freshMessages, errorMessage];
+
+              localStorage.setItem(`chat_history_${currentRequestPageId}`, JSON.stringify(finalMessages));
+              if (pageId === currentRequestPageId) {
+                setMessages(finalMessages);
+              }
+            }
+          }
+        } catch (pollErr) {
+          console.error("Erro no polling do chat IA:", pollErr);
+        }
+      }, 2000);
     } catch (err: any) {
+      setLoading(false);
       const errorMessage: Message = { role: 'assistant', text: `Erro: ${err.message}` };
       const freshStored = localStorage.getItem(`chat_history_${currentRequestPageId}`);
       const freshMessages = freshStored ? JSON.parse(freshStored) : updatedMessages;
@@ -123,8 +154,6 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ pageId, onApplyChanges }) 
       if (pageId === currentRequestPageId) {
         setMessages(finalMessages);
       }
-    } finally {
-      setLoading(false);
     }
   };
 

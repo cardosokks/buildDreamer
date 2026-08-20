@@ -1,11 +1,46 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.aiRouter = void 0;
+exports.aiRouter = exports.aiChatJobsQueue = void 0;
 const express_1 = require("express");
 const gemini_1 = require("../services/gemini");
 const db_1 = require("../db");
 const router = (0, express_1.Router)();
-// Process AI request and return patch/commands
+// In-memory queue system for AI chat modifications
+exports.aiChatJobsQueue = {};
+// Background worker for chat edits
+async function processAIChatJob(jobId, prompt, pageId, clientGeminiKey, model, registeredModels) {
+    exports.aiChatJobsQueue[jobId] = { status: 'processing', currentModel: model || 'gemini-2.5-flash' };
+    try {
+        const page = await db_1.prisma.page.findUnique({
+            where: { id: pageId }
+        });
+        if (!page)
+            throw new Error('Página não encontrada');
+        const aiResponse = await (0, gemini_1.generateAIResponse)(prompt, {
+            html: page.html,
+            css: page.css,
+            js: page.js
+        }, clientGeminiKey, model, registeredModels, (currentModel) => {
+            exports.aiChatJobsQueue[jobId] = {
+                status: 'processing',
+                currentModel
+            };
+        });
+        exports.aiChatJobsQueue[jobId] = {
+            status: 'completed',
+            result: aiResponse,
+            currentModel: aiResponse._usedModel || model
+        };
+    }
+    catch (error) {
+        console.error(`Erro ao processar job de IA ${jobId}:`, error);
+        exports.aiChatJobsQueue[jobId] = {
+            status: 'failed',
+            error: error.message || 'Erro ao processar alterações da IA'
+        };
+    }
+}
+// Process AI request and start background job
 router.post('/chat', async (req, res) => {
     try {
         const { prompt, pageId, model } = req.body;
@@ -32,17 +67,24 @@ router.post('/chat', async (req, res) => {
                 registeredModels = JSON.parse(rawModels);
         }
         catch { }
-        // Call Gemini with current page context and strictly registered cascade models
-        const aiResponse = await (0, gemini_1.generateAIResponse)(prompt, {
-            html: page.html,
-            css: page.css,
-            js: page.js
-        }, clientGeminiKey, model, registeredModels);
-        return res.json(aiResponse);
+        const jobId = `chat-job-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        exports.aiChatJobsQueue[jobId] = { status: 'pending', currentModel: model || 'gemini-2.5-flash' };
+        // Disparar processamento assíncrono em background sem prender o HTTP request
+        processAIChatJob(jobId, prompt, pageId, clientGeminiKey, model, registeredModels);
+        return res.status(202).json({ jobId, status: 'pending' });
     }
     catch (error) {
         console.error("Erro na rota /api/ai/chat:", error);
         return res.status(500).json({ error: error.message });
     }
+});
+// Poll AI Chat Job status
+router.get('/jobs/:jobId/status', (req, res) => {
+    const jobId = req.params.jobId;
+    const job = exports.aiChatJobsQueue[jobId];
+    if (!job) {
+        return res.status(404).json({ error: 'Job não encontrado ou expirado' });
+    }
+    return res.json(job);
 });
 exports.aiRouter = router;
