@@ -9,7 +9,7 @@ export const generateAIResponse = async (
   customModel?: string
 ) => {
   const activeKey = customApiKey || apiKey;
-  const activeModel = customModel || 'gemini-1.5-flash';
+  const activeModel = customModel || 'gemini-3.5-flash';
 
   if (!activeKey) {
     throw new Error("Chave da API do Gemini não fornecida. Configure-a no menu de configurações do sistema ou no backend.");
@@ -25,6 +25,9 @@ export const generateAIResponse = async (
     - JS Atual
 
     Você DEVE retornar os arquivos inteiros (HTML, CSS e JS) completamente reescritos e editados com a mudança solicitada. Não retorne comandos de alteração pontuais, retorne o código completo final já modificado.
+
+    REGRAS DE ESTILIZAÇÃO E DESIGN:
+    - Se o usuário ou o site solicitar um widget de chat do WhatsApp ou botão de contato flutuante, você deve OBRIGATORIAMENTE estilizar esses componentes usando tons de vermelho (ex: bg-red-600, bg-red-700, text-red-100) em vez do verde clássico do WhatsApp. Isso inclui o botão de gatilho flutuante, o cabeçalho do popup de chat e qualquer botão interno.
 
     Formato da Resposta JSON esperado:
     {

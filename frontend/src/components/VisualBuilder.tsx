@@ -58,7 +58,9 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
 
   // Element Selection State
   const [selectedSelector, setSelectedSelector] = useState<string | null>(null);
+  const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [selectedStyles, setSelectedStyles] = useState<Record<string, string>>({});
+  const [selectedAttrs, setSelectedAttrs] = useState<Record<string, string>>({});
 
   // Monaco Editor View Toggle
   const [viewMode, setViewMode] = useState<'split' | 'visual' | 'code'>('visual');
@@ -86,8 +88,32 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
     css: string;
     js: string;
   }
-  const [versionHistory, setVersionHistory] = useState<Record<string, VersionSnapshot[]>>({});
+  const [versionHistory, setVersionHistory] = useState<Record<string, VersionSnapshot[]>>(() => {
+    try {
+      const stored = localStorage.getItem(`version_history_${projectId}`);
+      const parsed = stored ? JSON.parse(stored) : {};
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch {
+      return {};
+    }
+  });
   const [showHistoryModal, setShowHistoryModal] = useState(false);
+
+  useEffect(() => {
+    if (Object.keys(versionHistory).length > 0) {
+      localStorage.setItem(`version_history_${projectId}`, JSON.stringify(versionHistory));
+    }
+  }, [versionHistory, projectId]);
+
+  // Export Modal state
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportOptions, setExportOptions] = useState({
+    pages: true,
+    css: true,
+    js: true,
+    docker: true,
+    readme: true
+  });
 
   const fetchProjectDetails = async () => {
     try {
@@ -204,14 +230,129 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
     savePageCode(pageIdToUpdate, { html, css, js });
   };
 
+  // Helper: get element by path index e.g. "0.1.2" in body children
+  const getElementByPath = (root: Element, path: string): Element | null => {
+    const parts = path.split('.').map(Number);
+    let current: Element | null = root;
+    for (const idx of parts) {
+      if (!current) return null;
+      const childNodes: Element[] = Array.from(current.children);
+      current = childNodes[idx] ?? null;
+    }
+    return current;
+  };
+
+  const parseDocFromHtml = (html: string) => {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+    return doc;
+  };
+
+  const serializeBodyContent = (doc: Document): string => {
+    return doc.body.innerHTML;
+  };
+
   const handleStyleChange = (property: string, value: string) => {
-    if (!activePage || !selectedSelector) return;
-    
-    // Trigger local update visually (in production we will patch the HTML/CSS and sync to state)
+    if (!activePage || !selectedPath) return;
+
+    // Update local state immediately
     setSelectedStyles(prev => ({ ...prev, [property]: value }));
 
-    // Real update logic will follow in Phase 4 / Phase 16 (CSS parser integration)
-    console.log(`Applying style change: ${property} = ${value} to ${selectedSelector}`);
+    // Apply style to the real HTML via DOMParser
+    const doc = parseDocFromHtml(activePage.html);
+    const root = doc.getElementById('canvas-root') || doc.body;
+    const el = getElementByPath(root, selectedPath);
+    if (el && el instanceof HTMLElement) {
+      const cssProp = property.replace(/-([a-z])/g, (_, l) => l.toUpperCase()) as any;
+      el.style[cssProp] = value;
+      const newHtml = serializeBodyContent(doc);
+      handleCodeChange('html', newHtml);
+    }
+  };
+
+  const handleAttrChange = (attr: string, value: string) => {
+    if (!activePage || !selectedPath) return;
+    setSelectedAttrs(prev => ({ ...prev, [attr]: value }));
+
+    const doc = parseDocFromHtml(activePage.html);
+    const root = doc.getElementById('canvas-root') || doc.body;
+    const el = getElementByPath(root, selectedPath);
+    if (el) {
+      if (attr === '_tag') return; // internal meta
+      if (attr === '_textContent') {
+        // Only update text content when element has no child elements
+        if (el.childElementCount === 0) {
+          el.textContent = value;
+        }
+      } else if (attr === '_hasChildren') {
+        return; // read-only meta
+      } else {
+        el.setAttribute(attr, value);
+      }
+      const newHtml = serializeBodyContent(doc);
+      handleCodeChange('html', newHtml);
+    }
+  };
+
+  // Delete element by path
+  const handleDeleteElement = (path: string) => {
+    if (!activePage) return;
+    const doc = parseDocFromHtml(activePage.html);
+    const root = doc.getElementById('canvas-root') || doc.body;
+    const el = getElementByPath(root, path);
+    if (el) {
+      el.parentElement?.removeChild(el);
+      const newHtml = serializeBodyContent(doc);
+      handleCodeChange('html', newHtml);
+      if (selectedPath === path) { setSelectedSelector(null); setSelectedPath(null); }
+    }
+  };
+
+  // Duplicate element by path
+  const handleDuplicateElement = (path: string) => {
+    if (!activePage) return;
+    const doc = parseDocFromHtml(activePage.html);
+    const root = doc.getElementById('canvas-root') || doc.body;
+    const el = getElementByPath(root, path);
+    if (el && el.parentElement) {
+      const clone = el.cloneNode(true) as Element;
+      el.parentElement.insertBefore(clone, el.nextSibling);
+      const newHtml = serializeBodyContent(doc);
+      handleCodeChange('html', newHtml);
+    }
+  };
+
+  // Move element: drag sourcePath into targetPath container
+  const handleMoveElement = (sourcePath: string, targetPath: string) => {
+    if (!activePage || sourcePath === targetPath) return;
+    // Prevent moving into own descendant
+    if (targetPath.startsWith(sourcePath + '.')) return;
+    const doc = parseDocFromHtml(activePage.html);
+    const root = doc.getElementById('canvas-root') || doc.body;
+    const srcEl = getElementByPath(root, sourcePath);
+    const tgtEl = getElementByPath(root, targetPath);
+    if (srcEl && tgtEl && srcEl.parentElement) {
+      srcEl.parentElement.removeChild(srcEl);
+      tgtEl.appendChild(srcEl);
+      const newHtml = serializeBodyContent(doc);
+      handleCodeChange('html', newHtml);
+      setSelectedPath(null); setSelectedSelector(null);
+    }
+  };
+
+  // Wrap element in a new <div>
+  const handleWrapElement = (path: string) => {
+    if (!activePage) return;
+    const doc = parseDocFromHtml(activePage.html);
+    const root = doc.getElementById('canvas-root') || doc.body;
+    const el = getElementByPath(root, path);
+    if (el && el.parentElement) {
+      const wrapper = doc.createElement('div');
+      el.parentElement.insertBefore(wrapper, el);
+      wrapper.appendChild(el);
+      const newHtml = serializeBodyContent(doc);
+      handleCodeChange('html', newHtml);
+    }
   };
 
   const handleCreatePage = async () => {
@@ -277,7 +418,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
         return {
           tag: node.tagName.toLowerCase(),
           id: node.id || undefined,
-          className: node.className || undefined,
+          className: (typeof node.className === 'string' ? node.className : node.getAttribute('class')) || undefined,
           children: children.length > 0 ? children : undefined
         };
       };
@@ -438,28 +579,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
 
           <button 
             className="flex items-center gap-1.5 px-4 py-2 bg-purple-600 hover:bg-purple-500 font-semibold text-xs text-white rounded-xl transition-all cursor-pointer"
-            onClick={async () => {
-              try {
-                const response = await fetch(`http://localhost:5000/api/export/${projectId}`, {
-                  headers: {
-                    'Authorization': `Bearer ${token}`
-                  }
-                });
-                if (!response.ok) throw new Error('Falha ao exportar ZIP');
-                
-                // Trigger download
-                const blob = await response.blob();
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `projeto-${project?.name.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'site'}.zip`;
-                document.body.appendChild(a);
-                a.click();
-                a.remove();
-              } catch (err: any) {
-                alert(err.message);
-              }
-            }}
+            onClick={() => setShowExportModal(true)}
           >
             <Download className="w-3.5 h-3.5" />
             Exportar
@@ -479,12 +599,21 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
                 onSelectPage={(id) => {
                   setActivePageId(id);
                   setSelectedSelector(null);
+                  setSelectedPath(null);
                 }}
                 onCreatePage={handleCreatePage}
                 onDuplicatePage={handleDuplicatePage}
                 onDeletePage={handleDeletePage}
                 layers={layers}
-                onSelectLayer={(selector) => setSelectedSelector(selector)}
+                onSelectLayer={(selector, path) => {
+                  setSelectedSelector(selector);
+                  setSelectedPath(path);
+                }}
+                onDeleteElement={handleDeleteElement}
+                onDuplicateElement={handleDuplicateElement}
+                onMoveElement={handleMoveElement}
+                onWrapElement={handleWrapElement}
+                selectedPath={selectedPath}
               />
             )}
 
@@ -502,9 +631,12 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
                   html={activePage.html}
                   css={activePage.css}
                   js={activePage.js}
-                  onElementSelect={(selector, styles) => {
+                  onElementSelect={(selector, styles, attrs, elementPath) => {
                     setSelectedSelector(selector);
                     setSelectedStyles(styles);
+                    setSelectedAttrs(attrs || {});
+                    // Use index-based path from canvas click
+                    setSelectedPath(elementPath || null);
                   }}
                 />
               </div>
@@ -514,8 +646,11 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
             {showStylesPanel && (
               <PropertiesPanel
                 selectedSelector={selectedSelector}
+                selectedPath={selectedPath}
                 selectedStyles={selectedStyles}
+                selectedAttrs={selectedAttrs}
                 onStyleChange={handleStyleChange}
+                onAttrChange={handleAttrChange}
               />
             )}
 
@@ -611,6 +746,141 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
                         </div>
                       ))
                     )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Modal de Exportação Seletiva */}
+            {showExportModal && (
+              <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-6">
+                <div className="w-full max-w-md bg-slate-900 border border-slate-850 rounded-2xl flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                  <div className="px-5 py-3.5 bg-slate-950 border-b border-slate-850 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Download className="w-4 h-4 text-purple-400" />
+                      <span className="font-semibold text-sm text-white">Opções de Exportação</span>
+                    </div>
+                    <button
+                      onClick={() => setShowExportModal(false)}
+                      className="text-slate-400 hover:text-white text-lg font-bold"
+                    >
+                      &times;
+                    </button>
+                  </div>
+
+                  <div className="p-6 space-y-4">
+                    <p className="text-xs text-slate-400">Selecione quais diretórios e arquivos deseja incluir na sua exportação:</p>
+                    
+                    <div className="space-y-3">
+                      <label className="flex items-center gap-3 p-3 bg-slate-950/40 border border-slate-850 rounded-xl hover:border-slate-850 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={exportOptions.pages}
+                          onChange={(e) => setExportOptions({ ...exportOptions, pages: e.target.checked })}
+                          className="w-4 h-4 text-purple-600 bg-slate-900 border-slate-800 rounded focus:ring-purple-500"
+                        />
+                        <div>
+                          <div className="text-xs font-bold text-white">pages/</div>
+                          <div className="text-[10px] text-slate-500">Arquivos HTML estruturados com conteúdo das páginas</div>
+                        </div>
+                      </label>
+
+                      <label className="flex items-center gap-3 p-3 bg-slate-950/40 border border-slate-850 rounded-xl hover:border-slate-850 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={exportOptions.css}
+                          onChange={(e) => setExportOptions({ ...exportOptions, css: e.target.checked })}
+                          className="w-4 h-4 text-purple-600 bg-slate-900 border-slate-800 rounded focus:ring-purple-500"
+                        />
+                        <div>
+                          <div className="text-xs font-bold text-white">css/</div>
+                          <div className="text-[10px] text-slate-500">Folhas de estilo correspondentes para cada página</div>
+                        </div>
+                      </label>
+
+                      <label className="flex items-center gap-3 p-3 bg-slate-950/40 border border-slate-850 rounded-xl hover:border-slate-850 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={exportOptions.js}
+                          onChange={(e) => setExportOptions({ ...exportOptions, js: e.target.checked })}
+                          className="w-4 h-4 text-purple-600 bg-slate-900 border-slate-800 rounded focus:ring-purple-500"
+                        />
+                        <div>
+                          <div className="text-xs font-bold text-white">js/</div>
+                          <div className="text-[10px] text-slate-500">Arquivos JavaScript com interatividades programadas</div>
+                        </div>
+                      </label>
+
+                      <label className="flex items-center gap-3 p-3 bg-slate-950/40 border border-slate-850 rounded-xl hover:border-slate-850 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={exportOptions.docker}
+                          onChange={(e) => setExportOptions({ ...exportOptions, docker: e.target.checked })}
+                          className="w-4 h-4 text-purple-600 bg-slate-900 border-slate-800 rounded focus:ring-purple-500"
+                        />
+                        <div>
+                          <div className="text-xs font-bold text-white">Dockerfile & docker-compose.yml</div>
+                          <div className="text-[10px] text-slate-500">Configuração de container pronta para rodar em produção</div>
+                        </div>
+                      </label>
+
+                      <label className="flex items-center gap-3 p-3 bg-slate-950/40 border border-slate-850 rounded-xl hover:border-slate-850 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={exportOptions.readme}
+                          onChange={(e) => setExportOptions({ ...exportOptions, readme: e.target.checked })}
+                          className="w-4 h-4 text-purple-600 bg-slate-900 border-slate-800 rounded focus:ring-purple-500"
+                        />
+                        <div>
+                          <div className="text-xs font-bold text-white">README.md</div>
+                          <div className="text-[10px] text-slate-500">Guia de introdução rápida do projeto</div>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="px-5 py-3.5 bg-slate-950 border-t border-slate-850 flex justify-end gap-3">
+                    <button
+                      onClick={() => setShowExportModal(false)}
+                      className="px-4 py-2 bg-slate-900 border border-slate-850 hover:bg-slate-850 hover:text-white rounded-xl text-xs font-semibold text-slate-350 cursor-pointer transition-all"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      onClick={async () => {
+                        try {
+                          const queryParams = new URLSearchParams({
+                            pages: exportOptions.pages.toString(),
+                            css: exportOptions.css.toString(),
+                            js: exportOptions.js.toString(),
+                            docker: exportOptions.docker.toString(),
+                            readme: exportOptions.readme.toString()
+                          }).toString();
+
+                          const response = await fetch(`http://localhost:5000/api/export/${projectId}?${queryParams}`, {
+                            headers: {
+                              'Authorization': `Bearer ${token}`
+                            }
+                          });
+                          if (!response.ok) throw new Error('Falha ao exportar ZIP');
+                          
+                          const blob = await response.blob();
+                          const url = window.URL.createObjectURL(blob);
+                          const a = document.createElement('a');
+                          a.href = url;
+                          a.download = `projeto-${project?.name.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'site'}.zip`;
+                          document.body.appendChild(a);
+                          a.click();
+                          a.remove();
+                          setShowExportModal(false);
+                        } catch (err: any) {
+                          alert(err.message);
+                        }
+                      }}
+                      className="px-4 py-2 bg-purple-600 hover:bg-purple-500 rounded-xl text-xs font-semibold text-white cursor-pointer transition-all"
+                    >
+                      Baixar ZIP
+                    </button>
                   </div>
                 </div>
               </div>

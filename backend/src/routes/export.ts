@@ -27,12 +27,19 @@ router.get('/:projectId', async (req: AuthenticatedRequest, res: any) => {
       return res.status(404).json({ error: 'Project not found' });
     }
 
+    // Read URL query params
+    const includePages = req.query.pages === undefined ? true : req.query.pages === 'true';
+    const includeCss = req.query.css === undefined ? true : req.query.css === 'true';
+    const includeJs = req.query.js === undefined ? true : req.query.js === 'true';
+    const includeDocker = req.query.docker === undefined ? true : req.query.docker === 'true';
+    const includeReadme = req.query.readme === undefined ? true : req.query.readme === 'true';
+
     const zip = new JSZip();
 
-    // Create folder structure inside ZIP
-    const pagesFolder = zip.folder("pages");
-    const cssFolder = zip.folder("css");
-    const jsFolder = zip.folder("js");
+    // Create folder structure inside ZIP condicionalmente
+    const pagesFolder = includePages ? zip.folder("pages") : null;
+    const cssFolder = includeCss ? zip.folder("css") : null;
+    const jsFolder = includeJs ? zip.folder("js") : null;
     
     // Add pages and assets
     project.pages.forEach(page => {
@@ -48,41 +55,45 @@ router.get('/:projectId', async (req: AuthenticatedRequest, res: any) => {
           <meta charset="UTF-8">
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
           <title>${page.title || page.name}</title>
-          <link rel="stylesheet" href="../css/${cssFilename}">
+          ${includeCss ? `<link rel="stylesheet" href="../css/${cssFilename}">` : ''}
         </head>
         <body>
           ${page.html}
-          <script src="../js/${jsFilename}"></script>
+          ${includeJs ? `<script src="../js/${jsFilename}"></script>` : ''}
         </body>
         </html>
       `;
 
-      if (pagesFolder) pagesFolder.file(filename, htmlContent);
-      if (cssFolder) cssFolder.file(cssFilename, page.css);
-      if (jsFolder) jsFolder.file(jsFilename, page.js);
+      if (includePages && pagesFolder) pagesFolder.file(filename, htmlContent);
+      if (includeCss && cssFolder) cssFolder.file(cssFilename, page.css);
+      if (includeJs && jsFolder) jsFolder.file(jsFilename, page.js);
     });
 
     // Add general configuration files
-    zip.file("README.md", `# ${project.name}\n\nSite exportado do construtor de sites AI Website Builder.\n`);
+    if (includeReadme) {
+      zip.file("README.md", `# ${project.name}\n\nSite exportado do construtor de sites AI Website Builder.\n`);
+    }
     
     // Add Docker support inside ZIP
-    zip.file("Dockerfile", `
-      FROM nginx:alpine
-      COPY ./pages /usr/share/nginx/html
-      COPY ./css /usr/share/nginx/css
-      COPY ./js /usr/share/nginx/js
-      EXPOSE 80
-      CMD ["nginx", "-g", "daemon off;"]
-    `);
+    if (includeDocker) {
+      zip.file("Dockerfile", `
+        FROM nginx:alpine
+        ${includePages ? 'COPY ./pages /usr/share/nginx/html' : ''}
+        ${includeCss ? 'COPY ./css /usr/share/nginx/css' : ''}
+        ${includeJs ? 'COPY ./js /usr/share/nginx/js' : ''}
+        EXPOSE 80
+        CMD ["nginx", "-g", "daemon off;"]
+      `);
 
-    zip.file("docker-compose.yml", `
-      version: '3.8'
-      services:
-        web:
-          build: .
-          ports:
-            - "8080:80"
-    `);
+      zip.file("docker-compose.yml", `
+        version: '3.8'
+        services:
+          web:
+            build: .
+            ports:
+              - "8080:80"
+      `);
+    }
 
     // Generate zip content buffer
     const content = await zip.generateAsync({ type: "nodebuffer" });

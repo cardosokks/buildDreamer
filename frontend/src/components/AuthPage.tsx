@@ -22,15 +22,10 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
     setError(null);
     setLoading(true);
 
+    const baseUrl = 'http://localhost:5000';
     const url = isLogin 
-      ? '/api/auth/login'
-      : '/api/auth/signup';
-
-     // ? `${API_URL}/api/auth/login`
-     // : `${API_URL}/api/auth/signup`;
-    
-      // ? 'http://localhost:5000/api/auth/login' 
-      // : 'http://localhost:5000/api/auth/signup';
+      ? `${baseUrl}/api/auth/login`
+      : `${baseUrl}/api/auth/signup`;
 
     const body = isLogin 
       ? { email, password } 

@@ -1,62 +1,61 @@
-import { Router } from 'express';
-import { prisma } from '../db';
-import { AuthenticatedRequest } from '../middleware/auth';
-import { uploadProjectToFTP } from '../services/ftp';
-
-const router = Router();
-
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.projectRouter = void 0;
+const express_1 = require("express");
+const db_1 = require("../db");
+const ftp_1 = require("../services/ftp");
+const router = (0, express_1.Router)();
 // List Projects
-router.get('/', async (req: AuthenticatedRequest, res: any) => {
-  try {
-    const userId = req.userId as string;
-    const projects = await prisma.project.findMany({
-      where: {
-        members: {
-          some: {
-            userId
-          }
-        }
-      },
-      include: {
-        pages: {
-          select: {
-            id: true
-          }
-        }
-      }
-    });
-    return res.json(projects);
-  } catch (error: any) {
-    return res.status(500).json({ error: error.message });
-  }
-});
-
-// Create Project
-router.post('/', async (req: AuthenticatedRequest, res: any) => {
-  try {
-    const { name, description } = req.body;
-    if (!name) {
-      return res.status(400).json({ error: 'Project name is required' });
+router.get('/', async (req, res) => {
+    try {
+        const userId = req.userId;
+        const projects = await db_1.prisma.project.findMany({
+            where: {
+                members: {
+                    some: {
+                        userId
+                    }
+                }
+            },
+            include: {
+                pages: {
+                    select: {
+                        id: true
+                    }
+                }
+            }
+        });
+        return res.json(projects);
     }
-
-    const userId = req.userId as string;
-    const project = await prisma.project.create({
-      data: {
-        name,
-        description,
-        members: {
-          create: {
-            userId,
-            role: 'OWNER'
-          }
-        },
-        pages: {
-          create: {
-            name: 'Home',
-            slug: 'index',
-            title: 'Home',
-            isHomepage: true,
-            html: `<div class="min-h-screen bg-slate-900 text-white flex flex-col justify-center items-center">
+    catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
+});
+// Create Project
+router.post('/', async (req, res) => {
+    try {
+        const { name, description } = req.body;
+        if (!name) {
+            return res.status(400).json({ error: 'Project name is required' });
+        }
+        const userId = req.userId;
+        const project = await db_1.prisma.project.create({
+            data: {
+                name,
+                description,
+                members: {
+                    create: {
+                        userId,
+                        role: 'OWNER'
+                    }
+                },
+                pages: {
+                    create: {
+                        name: 'Home',
+                        slug: 'index',
+                        title: 'Home',
+                        isHomepage: true,
+                        html: `<div class="min-h-screen bg-slate-900 text-white flex flex-col justify-center items-center">
   <h1 class="text-4xl font-bold mb-4">Bem-vindo ao seu novo site</h1>
   <p class="text-slate-400">Edite este site usando o painel visual ou solicitando mudanças ao Gemini.</p>
 </div>
@@ -93,8 +92,8 @@ router.post('/', async (req: AuthenticatedRequest, res: any) => {
     </div>
   </div>
 </div>`,
-            css: 'body { margin: 0; font-family: sans-serif; }',
-            js: `const btn = document.getElementById("wa-btn");
+                        css: 'body { margin: 0; font-family: sans-serif; }',
+                        js: `const btn = document.getElementById("wa-btn");
 const chat = document.getElementById("wa-chat");
 const close = document.getElementById("wa-close");
 if (btn && chat && close) {
@@ -105,80 +104,74 @@ if (btn && chat && close) {
     chat.classList.add("hidden");
   });
 }`
-          }
+                    }
+                }
+            },
+            include: {
+                pages: true
+            }
+        });
+        // Upload to FTP background
+        try {
+            await (0, ftp_1.uploadProjectToFTP)(project.name, project.pages);
         }
-      },
-      include: {
-        pages: true
-      }
-    });
-
-    // Upload to FTP background
-    try {
-      await uploadProjectToFTP(project.name, project.pages);
-    } catch (ftpErr) {
-      console.error("Failed to upload newly created project to FTP:", ftpErr);
+        catch (ftpErr) {
+            console.error("Failed to upload newly created project to FTP:", ftpErr);
+        }
+        return res.status(201).json(project);
     }
-
-    return res.status(201).json(project);
-  } catch (error: any) {
-    return res.status(500).json({ error: error.message });
-  }
+    catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
 });
-
 // Get Project Details & Pages
-router.get('/:id', async (req: AuthenticatedRequest, res: any) => {
-  try {
-    const id = req.params.id as string;
-    const userId = req.userId as string;
-    const project = await prisma.project.findFirst({
-      where: {
-        id,
-        members: {
-          some: {
-            userId
-          }
+router.get('/:id', async (req, res) => {
+    try {
+        const id = req.params.id;
+        const userId = req.userId;
+        const project = await db_1.prisma.project.findFirst({
+            where: {
+                id,
+                members: {
+                    some: {
+                        userId
+                    }
+                }
+            },
+            include: {
+                pages: true,
+                assets: true
+            }
+        });
+        if (!project) {
+            return res.status(404).json({ error: 'Project not found' });
         }
-      },
-      include: {
-        pages: true,
-        assets: true
-      }
-    });
-
-    if (!project) {
-      return res.status(404).json({ error: 'Project not found' });
+        return res.json(project);
     }
-
-    return res.json(project);
-  } catch (error: any) {
-    return res.status(500).json({ error: error.message });
-  }
+    catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
 });
-
 // Delete Project
-router.delete('/:id', async (req: AuthenticatedRequest, res: any) => {
-  try {
-    const id = req.params.id as string;
-    const userId = req.userId as string;
-
-    const membership = await prisma.projectMember.findFirst({
-      where: {
-        projectId: id,
-        userId: userId,
-        role: 'OWNER'
-      }
-    });
-
-    if (!membership) {
-      return res.status(403).json({ error: 'Only the project owner can delete this project' });
+router.delete('/:id', async (req, res) => {
+    try {
+        const id = req.params.id;
+        const userId = req.userId;
+        const membership = await db_1.prisma.projectMember.findFirst({
+            where: {
+                projectId: id,
+                userId: userId,
+                role: 'OWNER'
+            }
+        });
+        if (!membership) {
+            return res.status(403).json({ error: 'Only the project owner can delete this project' });
+        }
+        await db_1.prisma.project.delete({ where: { id } });
+        return res.json({ message: 'Project deleted successfully' });
     }
-
-    await prisma.project.delete({ where: { id } });
-    return res.json({ message: 'Project deleted successfully' });
-  } catch (error: any) {
-    return res.status(500).json({ error: error.message });
-  }
+    catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
 });
-
-export const projectRouter = router;
+exports.projectRouter = router;

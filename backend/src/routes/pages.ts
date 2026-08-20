@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../db';
 import { AuthenticatedRequest } from '../middleware/auth';
+import { uploadSinglePageToFTP } from '../services/ftp';
 
 const router = Router();
 
@@ -33,8 +34,18 @@ router.post('/projects/:projectId/pages', async (req: AuthenticatedRequest, res:
         css: css || '',
         js: js || '',
         projectId
+      },
+      include: {
+        project: true
       }
     });
+
+    // Upload to FTP
+    try {
+      await uploadSinglePageToFTP(page.project.name, page.slug, page.html, page.css, page.js);
+    } catch (ftpErr) {
+      console.error("Failed to upload new page to FTP:", ftpErr);
+    }
 
     return res.status(201).json(page);
   } catch (error: any) {
@@ -84,6 +95,13 @@ router.put('/pages/:id', async (req: AuthenticatedRequest, res: any) => {
         isHomepage: isHomepage !== undefined ? isHomepage : page.isHomepage
       }
     });
+
+    // FTP Upload on Save
+    try {
+      await uploadSinglePageToFTP(page.project.name, updatedPage.slug, updatedPage.html, updatedPage.css, updatedPage.js);
+    } catch (ftpErr) {
+      console.error("Failed to upload page changes to FTP:", ftpErr);
+    }
 
     return res.json(updatedPage);
   } catch (error: any) {
