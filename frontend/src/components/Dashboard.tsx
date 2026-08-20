@@ -647,12 +647,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ onSelectProject }) => {
                     <span className="text-xs text-slate-350">
                       💡 Região ativa para busca: <strong className="text-purple-400 font-semibold">{leadLocation || 'Perto de mim'}</strong>
                     </span>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5 flex-wrap">
                       {[
                         { name: 'São Paulo', coords: '-23.5505,-46.6333' },
                         { name: 'Rio de Janeiro', coords: '-22.9068,-43.1729' },
+                        { name: 'Brasília', coords: '-15.7975,-47.8919' },
                         { name: 'Belo Horizonte', coords: '-19.9173,-43.9345' },
-                        { name: 'Curitiba', coords: '-25.4290,-49.2671' }
+                        { name: 'Curitiba', coords: '-25.4290,-49.2671' },
+                        { name: 'Salvador', coords: '-12.9777,-38.5016' },
+                        { name: 'Porto Alegre', coords: '-30.0346,-51.2177' },
+                        { name: 'Goiânia', coords: '-16.6869,-49.2648' }
                       ].map(loc => (
                         <button
                           key={loc.name}
@@ -665,7 +669,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onSelectProject }) => {
                               iframe.src = `https://maps.google.com/maps?q=${loc.coords}&t=&z=12&ie=UTF8&iwloc=&output=embed`;
                             }
                           }}
-                          className="px-2.5 py-1 bg-purple-900/30 border border-purple-500/25 hover:bg-purple-900/60 rounded-lg text-[10px] text-purple-300 font-medium transition-all cursor-pointer"
+                          className={`px-2.5 py-1 rounded-lg text-[10px] font-medium transition-all cursor-pointer ${leadLocation === loc.name ? 'bg-purple-600 text-white font-bold' : 'bg-purple-900/30 border border-purple-500/25 hover:bg-purple-900/60 text-purple-300'}`}
                         >
                           {loc.name}
                         </button>
