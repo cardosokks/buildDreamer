@@ -81,6 +81,10 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
   // Navbar size switcher state ('compact' | 'normal' | 'large')
   const [navbarSize, setNavbarSize] = useState<'compact' | 'normal' | 'large'>('normal');
 
+  // Background AI Job Status Polling
+  const [jobStatus, setJobStatus] = useState<'pending' | 'processing' | 'completed' | 'failed'>('completed');
+  const [jobError, setJobError] = useState<string | null>(null);
+
   // History version state
   interface VersionSnapshot {
     timestamp: string;
@@ -105,6 +109,20 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
       localStorage.setItem(`version_history_${projectId}`, JSON.stringify(versionHistory));
     }
   }, [versionHistory, projectId]);
+
+  // Detect screen size on load/resize to automatically collapse sidebars on smaller resolutions
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth < 1024) {
+        setShowSidebar(false);
+        setShowStylesPanel(false);
+        setShowChat(false);
+      }
+    };
+    handleResize(); // run initially
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Export Modal state
   const [showExportModal, setShowExportModal] = useState(false);
@@ -134,6 +152,38 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
       alert(err.message);
     }
   };
+
+  // Poll status of AI Generation background job for this project
+  useEffect(() => {
+    let interval: any;
+    const checkJobStatus = async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/projects/jobs/${projectId}/status`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setJobStatus(data.status);
+          if (data.status === 'completed') {
+            clearInterval(interval);
+            fetchProjectDetails(); // refresh details to load generated page code
+          } else if (data.status === 'failed') {
+            setJobError(data.error || 'Erro na geração de mockup da IA');
+            clearInterval(interval);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch job queue status:', err);
+      }
+    };
+
+    checkJobStatus(); // run immediately
+    interval = setInterval(checkJobStatus, 3000); // check status every 3 seconds
+
+    return () => clearInterval(interval);
+  }, [projectId, token]);
 
   useEffect(() => {
     fetchProjectDetails();
@@ -479,7 +529,54 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
   const layers = activePage ? parseHtmlToLayers(activePage.html) : [];
 
   return (
-    <div className="h-full w-full bg-slate-950 flex flex-col font-sans text-slate-100 overflow-hidden">
+    <div className="h-full w-full bg-slate-950 flex flex-col font-sans text-slate-100 overflow-hidden relative">
+      
+      {/* Background AI mockup generation progress overlay status screen */}
+      {(jobStatus === 'pending' || jobStatus === 'processing') && (
+        <div className="absolute inset-0 bg-slate-950/95 backdrop-blur-md z-50 flex flex-col items-center justify-center p-6 animate-in fade-in duration-300">
+          <div className="relative w-24 h-24 mb-6">
+            <div className="absolute inset-0 rounded-full border-4 border-purple-500/10 border-t-purple-500 animate-spin shadow-[0_0_15px_var(--neon-purple-glow)]" />
+            <Sparkles className="absolute inset-0 m-auto w-8 h-8 text-purple-400 animate-pulse" />
+          </div>
+          <h2 className="text-2xl font-extrabold bg-gradient-to-r from-purple-400 via-pink-400 to-indigo-400 bg-clip-text text-transparent tracking-widest uppercase">
+            Real Premise AI
+          </h2>
+          <p className="text-sm text-slate-400 mt-2 font-medium animate-pulse">
+            {jobStatus === 'pending' ? 'Entrando na fila de geração...' : 'Escrevendo códigos (HTML/CSS) com Gemini...'}
+          </p>
+          <span className="text-[10px] text-slate-600 font-mono mt-8 border border-slate-900 rounded px-2.5 py-1 bg-slate-950/50">
+            Esta etapa pode demorar de 10 a 20 segundos
+          </span>
+        </div>
+      )}
+
+      {jobStatus === 'failed' && (
+        <div className="absolute inset-0 bg-slate-950/95 backdrop-blur-md z-50 flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-300">
+          <div className="p-4 bg-red-950/40 border border-red-500/30 text-red-400 rounded-full mb-6">
+            <svg className="w-12 h-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <h2 className="text-xl font-bold text-white mb-2">Erro de Geração</h2>
+          <p className="text-sm text-slate-400 max-w-md mb-6 leading-relaxed">
+            {jobError || 'Não foi possível completar a geração do site. Verifique sua chave do Gemini e tente novamente.'}
+          </p>
+          <div className="flex gap-4">
+            <button
+              onClick={onBack}
+              className="px-5 py-2.5 bg-slate-900 hover:bg-slate-850 text-xs font-semibold text-slate-350 border border-slate-800 rounded-xl transition-all cursor-pointer"
+            >
+              Voltar ao Dashboard
+            </button>
+            <button
+              onClick={() => { setJobStatus('completed'); setJobError(null); fetchProjectDetails(); }}
+              className="px-5 py-2.5 bg-purple-700 hover:bg-purple-650 text-xs font-semibold text-white rounded-xl transition-all cursor-pointer"
+            >
+              Forçar Acesso ao Editor
+            </button>
+          </div>
+        </div>
+      )}
       
       {/* Top Navbar */}
       <header className={`border-b border-slate-900 bg-slate-950 flex items-center justify-between px-4 z-20 shrink-0 transition-all duration-200 ${
@@ -686,9 +783,9 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
             )}
 
             {/* Main Interactive Canvas Area */}
-            <main className="flex-1 p-6 flex justify-center items-center overflow-auto bg-slate-950/20">
+            <main className="flex-1 p-2 md:p-6 flex justify-center items-center overflow-auto bg-slate-950/20">
               <div 
-                className="transition-all duration-300"
+                className="transition-all duration-300 max-w-full h-full flex items-center justify-center"
                 style={{
                   width: viewport === 'mobile' ? '375px' : viewport === 'tablet' ? '768px' : '100%',
                   height: '100%'

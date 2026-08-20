@@ -59,16 +59,16 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
         
         {/* Header / Logo */}
         <div className="text-center mb-8">
-          <div className="inline-flex p-3 rounded-xl bg-purple-500/10 border border-purple-500/20 mb-4 text-purple-400">
+          <div className="inline-flex p-3 rounded-xl bg-purple-900/35 border border-purple-500/50 mb-4 text-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.3)] animate-pulse">
             <Lock className="w-8 h-8" />
           </div>
-          <h2 className="text-2xl font-bold tracking-tight text-white">
-            {isLogin ? 'Bem-vindo de volta' : 'Criar sua conta'}
+          <h2 className="text-3xl font-extrabold tracking-wider bg-gradient-to-r from-purple-400 via-pink-400 to-indigo-400 bg-clip-text text-transparent">
+            REAL PREMISE
           </h2>
           <p className="text-sm text-slate-400 mt-2">
             {isLogin 
-              ? 'Entre para acessar seus projetos de sites.' 
-              : 'Comece a construir sites profissionais com inteligência artificial.'}
+              ? 'Entre para acessar seus projetos no seu portal.' 
+              : 'Comece a construir sites profissionais em minutos.'}
           </p>
         </div>
 
@@ -132,7 +132,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3 bg-purple-600 hover:bg-purple-500 active:bg-purple-700 disabled:bg-purple-800/50 text-white font-medium rounded-xl transition-all flex items-center justify-center text-sm shadow-lg shadow-purple-600/25 hover:shadow-purple-600/35 cursor-pointer"
+            className="w-full py-3 bg-purple-700 hover:bg-purple-600 active:bg-purple-800 disabled:bg-purple-900/50 text-white font-semibold rounded-xl transition-all flex items-center justify-center text-sm shadow-[0_0_15px_rgba(168,85,247,0.35)] hover:shadow-[0_0_20px_rgba(168,85,247,0.55)] cursor-pointer"
           >
             {loading ? 'Processando...' : isLogin ? 'Entrar' : 'Cadastrar'}
           </button>

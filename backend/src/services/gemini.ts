@@ -56,10 +56,31 @@ export const generateAIResponse = async (
     });
 
     let text = response.text || '{}';
-    // Remove markdown codeblock tags if returned by the LLM
-    text = text.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim();
     
-    return JSON.parse(text);
+    // Extract strictly the JSON object between first { and last } to avoid trailing commentary or tokens
+    const firstBrace = text.indexOf('{');
+    const lastBrace = text.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+      text = text.slice(firstBrace, lastBrace + 1);
+    } else {
+      text = text.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim();
+    }
+
+    try {
+      return JSON.parse(text);
+    } catch (parseErr) {
+      // Fallback: replace common invalid escape characters in large HTML/JS blobs
+      const sanitized = text
+        .replace(/\\n/g, "\\n")
+        .replace(/\\'/g, "\\'")
+        .replace(/\\"/g, '\\"')
+        .replace(/\\&/g, "\\&")
+        .replace(/\\r/g, "\\r")
+        .replace(/\\t/g, "\\t")
+        .replace(/\\b/g, "\\b")
+        .replace(/\\f/g, "\\f");
+      return JSON.parse(sanitized);
+    }
   } catch (error: any) {
     console.error("Erro na API do Gemini:", error);
     throw new Error(`Erro ao gerar resposta da IA: ${error.message}`);
