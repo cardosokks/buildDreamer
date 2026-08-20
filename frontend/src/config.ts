@@ -1,1 +1,1 @@
-export const API_URL = import.meta.env.VITE_API_URL || (typeof window !== 'undefined' ? (window.location.origin.includes('localhost') ? 'http://localhost:5000' : window.location.origin) : 'http://localhost:5000');
+export const API_URL = import.meta.env.VITE_API_URL || '';
