@@ -49,6 +49,7 @@ interface SidebarProps {
   onDuplicateElement: (path: string) => void;
   onMoveElement: (sourcePath: string, targetPath: string) => void;
   onWrapElement: (path: string) => void;
+  onAddChildElement?: (parentPath: string, tag: string, text?: string) => void;
   selectedPath?: string | null;
 }
 
@@ -95,10 +96,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onDuplicateElement,
   onMoveElement,
   onWrapElement,
+  onAddChildElement,
   selectedPath,
 }) => {
   const [pagesCollapsed, setPagesCollapsed] = useState(false);
   const [layersCollapsed, setLayersCollapsed] = useState(false);
+  const [showAddMenuPath, setShowAddMenuPath] = useState<string | null>(null);
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set(['0', '1', '2']));
   const [menuOpenPath, setMenuOpenPath] = useState<string | null>(null);
   const [dragSource, setDragSource] = useState<string | null>(null);
@@ -204,10 +207,47 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {menuOpenPath === path && (
             <div
               ref={menuRef}
-              className="relative z-50"
+              className="relative z-50 animate-in fade-in slide-in-from-top-1 duration-150"
               style={{ paddingLeft: `${depth * 10 + 24}px` }}
             >
               <div className="bg-slate-800 border border-slate-700 rounded-lg shadow-2xl py-1 text-xs w-44 mb-1">
+                {onAddChildElement && (
+                  <div className="relative">
+                    <button
+                      onClick={() => setShowAddMenuPath(showAddMenuPath === path ? null : path)}
+                      className="w-full flex items-center justify-between px-3 py-2 hover:bg-slate-700 text-slate-200 cursor-pointer transition-colors"
+                    >
+                      <span className="flex items-center gap-2">
+                        <Plus className="w-3.5 h-3.5 text-purple-400" /> Adicionar Filho
+                      </span>
+                      <ChevronRight className="w-3 h-3 text-slate-500" />
+                    </button>
+                    {showAddMenuPath === path && (
+                      <div className="absolute left-full top-0 ml-1 bg-slate-850 border border-slate-750 rounded-lg shadow-2xl py-1 w-32 z-50">
+                        {[
+                          { tag: 'div', label: 'Container (div)' },
+                          { tag: 'h1', label: 'Título (h1)', txt: 'Título' },
+                          { tag: 'p', label: 'Parágrafo (p)', txt: 'Texto aqui...' },
+                          { tag: 'button', label: 'Botão', txt: 'Clique Aqui' },
+                          { tag: 'a', label: 'Link (a)', txt: 'Link' },
+                          { tag: 'img', label: 'Imagem (img)' }
+                        ].map(item => (
+                          <button
+                            key={item.tag}
+                            onClick={() => {
+                              onAddChildElement(path, item.tag, item.txt);
+                              setShowAddMenuPath(null);
+                              setMenuOpenPath(null);
+                            }}
+                            className="w-full text-left px-3 py-1.5 hover:bg-slate-700 text-slate-300 hover:text-white cursor-pointer transition-colors"
+                          >
+                            {item.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
                 <button
                   onClick={() => { onDuplicateElement(path); setMenuOpenPath(null); }}
                   className="w-full flex items-center gap-2 px-3 py-2 hover:bg-slate-700 text-slate-200 cursor-pointer transition-colors"

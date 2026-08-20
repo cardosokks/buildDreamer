@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 
 import { SettingsModal } from './SettingsModal';
+import { API_URL } from '../config';
 
 interface Project {
   id: string;
@@ -56,7 +57,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onSelectProject }) => {
 
   const fetchProjects = async () => {
     try {
-      const res = await fetch('http://localhost:5000/api/projects', {
+      const res = await fetch(`${API_URL}/api/projects`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -89,7 +90,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onSelectProject }) => {
         finalDesc = `Segmento: ${segment}. Estilo: ${visualStyle}. ${newProjectDesc}`;
       }
 
-      const res = await fetch('http://localhost:5000/api/projects', {
+      const res = await fetch(`${API_URL}/api/projects`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -125,7 +126,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onSelectProject }) => {
     if (!confirm('Deseja realmente deletar este projeto? Esta ação é irreversível.')) return;
 
     try {
-      const res = await fetch(`http://localhost:5000/api/projects/${id}`, {
+      const res = await fetch(`${API_URL}/api/projects/${id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`

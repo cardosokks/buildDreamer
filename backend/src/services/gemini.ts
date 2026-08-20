@@ -55,7 +55,10 @@ export const generateAIResponse = async (
       }
     });
 
-    const text = response.text || '{}';
+    let text = response.text || '{}';
+    // Remove markdown codeblock tags if returned by the LLM
+    text = text.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim();
+    
     return JSON.parse(text);
   } catch (error: any) {
     console.error("Erro na API do Gemini:", error);

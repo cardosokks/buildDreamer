@@ -43,30 +43,45 @@ router.get('/:projectId', async (req: AuthenticatedRequest, res: any) => {
     
     // Add pages and assets
     project.pages.forEach(page => {
-      const filename = `${page.slug}.html`;
+      const isHome = page.isHomepage;
+      
+      // Determine file structure path
+      // Homepage will be exported as index.html in the root
+      // Other pages will go into the pages/ folder e.g. pages/about.html
+      const filename = isHome ? "index.html" : `pages/${page.slug}.html`;
+      
+      // Paths for CSS and JS outputs
       const cssFilename = `${page.slug}.css`;
       const jsFilename = `${page.slug}.js`;
+      
+      // Relative path helper from HTML location to CSS/JS directories
+      const relativePrefix = isHome ? "." : "..";
 
       // Static index.html boilerplate to bind page files
-      const htmlContent = `
-        <!DOCTYPE html>
-        <html lang="pt-br">
-        <head>
-          <meta charset="UTF-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>${page.title || page.name}</title>
-          ${includeCss ? `<link rel="stylesheet" href="../css/${cssFilename}">` : ''}
-        </head>
-        <body>
-          ${page.html}
-          ${includeJs ? `<script src="../js/${jsFilename}"></script>` : ''}
-        </body>
-        </html>
-      `;
+      const htmlContent = `<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${page.title || page.name}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  ${includeCss ? `<link rel="stylesheet" href="${relativePrefix}/css/${cssFilename}">` : ''}
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen">
+  ${page.html}
+  ${includeJs ? `<script src="${relativePrefix}/js/${jsFilename}"></script>` : ''}
+</body>
+</html>`;
 
-      if (includePages && pagesFolder) pagesFolder.file(filename, htmlContent);
-      if (includeCss && cssFolder) cssFolder.file(cssFilename, page.css);
-      if (includeJs && jsFolder) jsFolder.file(jsFilename, page.js);
+      if (includePages) {
+        zip.file(filename, htmlContent);
+      }
+      if (includeCss && cssFolder) {
+        cssFolder.file(cssFilename, page.css);
+      }
+      if (includeJs && jsFolder) {
+        jsFolder.file(jsFilename, page.js);
+      }
     });
 
     // Add general configuration files
@@ -76,23 +91,20 @@ router.get('/:projectId', async (req: AuthenticatedRequest, res: any) => {
     
     // Add Docker support inside ZIP
     if (includeDocker) {
-      zip.file("Dockerfile", `
-        FROM nginx:alpine
-        ${includePages ? 'COPY ./pages /usr/share/nginx/html' : ''}
-        ${includeCss ? 'COPY ./css /usr/share/nginx/css' : ''}
-        ${includeJs ? 'COPY ./js /usr/share/nginx/js' : ''}
-        EXPOSE 80
-        CMD ["nginx", "-g", "daemon off;"]
-      `);
+      zip.file("Dockerfile", `FROM nginx:alpine
+${includePages ? 'COPY index.html /usr/share/nginx/html/' : ''}
+${includePages ? 'COPY pages/ /usr/share/nginx/html/pages/' : ''}
+${includeCss ? 'COPY css/ /usr/share/nginx/html/css/' : ''}
+${includeJs ? 'COPY js/ /usr/share/nginx/html/js/' : ''}
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]`);
 
-      zip.file("docker-compose.yml", `
-        version: '3.8'
-        services:
-          web:
-            build: .
-            ports:
-              - "8080:80"
-      `);
+      zip.file("docker-compose.yml", `version: '3.8'
+services:
+  web:
+    build: .
+    ports:
+      - "8080:80"`);
     }
 
     // Generate zip content buffer

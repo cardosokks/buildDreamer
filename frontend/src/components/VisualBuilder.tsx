@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { API_URL } from '../config';
 import { Sidebar } from './Sidebar';
 import { Canvas } from './Canvas';
 import { PropertiesPanel } from './PropertiesPanel';
@@ -117,7 +118,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
 
   const fetchProjectDetails = async () => {
     try {
-      const res = await fetch(`http://localhost:5000/api/projects/${projectId}`, {
+      const res = await fetch(`${API_URL}/api/projects/${projectId}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -159,7 +160,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
 
   const savePageCode = async (pageId: string, updates: Partial<Page>) => {
     try {
-      const res = await fetch(`http://localhost:5000/api/pages/${pageId}`, {
+      const res = await fetch(`${API_URL}/api/pages/${pageId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -182,6 +183,9 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
     }
   };
 
+  // Debounced API save implementation to prevent API overload on typing/sliders
+  const [saveTimeout, setSaveTimeout] = useState<any>(null);
+
   const handleCodeChange = (type: 'html' | 'css' | 'js', value: string) => {
     if (!activePage) return;
     
@@ -194,9 +198,20 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
       };
     });
 
-    // 2. Persist in database
-    savePageCode(activePage.id, { [type]: value });
+    // 2. Debounce persisting in database (1000ms delay)
+    if (saveTimeout) clearTimeout(saveTimeout);
+    const timeout = setTimeout(() => {
+      savePageCode(activePage.id, { [type]: value });
+    }, 1000);
+    setSaveTimeout(timeout);
   };
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (saveTimeout) clearTimeout(saveTimeout);
+    };
+  }, [saveTimeout]);
 
   const handleApplyAIChanges = (html: string, css: string, js: string, targetPageId?: string) => {
     const pageIdToUpdate = targetPageId || activePage?.id;
@@ -355,13 +370,36 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
     }
   };
 
+  // Add child element to a tag in canvas root
+  const handleAddChildElement = (parentPath: string, tag: string, text?: string) => {
+    if (!activePage) return;
+    const doc = parseDocFromHtml(activePage.html);
+    const root = doc.getElementById('canvas-root') || doc.body;
+    const parentEl = getElementByPath(root, parentPath);
+    if (parentEl) {
+      const newEl = doc.createElement(tag);
+      if (text) {
+        newEl.textContent = text;
+      }
+      // Apply some basic styling for visual visibility
+      if (tag === 'div') {
+        newEl.style.minHeight = '50px';
+        newEl.style.padding = '10px';
+        newEl.style.border = '1px dashed #4b5563'; // gray-600
+      }
+      parentEl.appendChild(newEl);
+      const newHtml = serializeBodyContent(doc);
+      handleCodeChange('html', newHtml);
+    }
+  };
+
   const handleCreatePage = async () => {
     const name = prompt('Nome da página:');
     if (!name) return;
     const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
 
     try {
-      const res = await fetch(`http://localhost:5000/api/projects/${projectId}/pages`, {
+      const res = await fetch(`${API_URL}/api/projects/${projectId}/pages`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -385,7 +423,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
   const handleDeletePage = async (id: string) => {
     if (!confirm('Excluir esta página?')) return;
     try {
-      const res = await fetch(`http://localhost:5000/api/pages/${id}`, {
+      const res = await fetch(`${API_URL}/api/pages/${id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -608,11 +646,41 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
                 onSelectLayer={(selector, path) => {
                   setSelectedSelector(selector);
                   setSelectedPath(path);
+                  
+                  // Extract element attributes and styles to populate PropertiesPanel
+                  const doc = parseDocFromHtml(activePage.html);
+                  const root = doc.getElementById('canvas-root') || doc.body;
+                  const el = getElementByPath(root, path);
+                  if (el) {
+                    const attrs: Record<string, string> = {
+                      _tag: el.tagName.toLowerCase(),
+                      _textContent: el.childElementCount === 0 ? (el.textContent || '') : '',
+                      _hasChildren: el.childElementCount > 0 ? 'true' : 'false'
+                    };
+                    for (let i = 0; i < el.attributes.length; i++) {
+                      const attr = el.attributes[i];
+                      attrs[attr.name] = attr.value;
+                    }
+                    setSelectedAttrs(attrs);
+
+                    const styles: Record<string, string> = {};
+                    if (el instanceof HTMLElement) {
+                      for (let i = 0; i < el.style.length; i++) {
+                        const styleName = el.style[i];
+                        styles[styleName] = el.style.getPropertyValue(styleName);
+                      }
+                    }
+                    setSelectedStyles(styles);
+                  } else {
+                    setSelectedAttrs({});
+                    setSelectedStyles({});
+                  }
                 }}
                 onDeleteElement={handleDeleteElement}
                 onDuplicateElement={handleDuplicateElement}
                 onMoveElement={handleMoveElement}
                 onWrapElement={handleWrapElement}
+                onAddChildElement={handleAddChildElement}
                 selectedPath={selectedPath}
               />
             )}
@@ -631,6 +699,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
                   html={activePage.html}
                   css={activePage.css}
                   js={activePage.js}
+                  highlightPath={selectedPath}
                   onElementSelect={(selector, styles, attrs, elementPath) => {
                     setSelectedSelector(selector);
                     setSelectedStyles(styles);
@@ -857,7 +926,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
                             readme: exportOptions.readme.toString()
                           }).toString();
 
-                          const response = await fetch(`http://localhost:5000/api/export/${projectId}?${queryParams}`, {
+                          const response = await fetch(`${API_URL}/api/export/${projectId}?${queryParams}`, {
                             headers: {
                               'Authorization': `Bearer ${token}`
                             }

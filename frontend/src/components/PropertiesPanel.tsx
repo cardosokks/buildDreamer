@@ -101,10 +101,14 @@ const UnitInput: React.FC<{
   placeholder?: string;
 }> = ({ label, prop, value, onChange, placeholder }) => {
   const units = ['px', '%', 'rem', 'em', 'vw', 'vh', 'auto'];
-  // Parse number and unit
-  const match = value.match(/^(-?[\d.]+)(.*)$/);
-  const num = match ? match[1] : '';
-  const unit = match ? (match[2] || 'px') : 'px';
+  
+  // Clean value to extract numeric representation and unit
+  const strVal = String(value || '').trim();
+  const isAuto = strVal === 'auto';
+  
+  const match = strVal.match(/^([\d.-]+)(.*)$/);
+  const num = isAuto ? '' : (match ? match[1] : strVal);
+  const unit = isAuto ? 'auto' : (match ? (match[2] || 'px') : 'px');
 
   return (
     <div>
@@ -114,18 +118,30 @@ const UnitInput: React.FC<{
           type="text"
           className={`${inputCls} flex-1`}
           placeholder={placeholder || '—'}
-          value={value}
-          onChange={e => onChange(prop, e.target.value)}
+          disabled={isAuto}
+          value={num}
+          onChange={e => {
+            const v = e.target.value;
+            if (v === '') {
+              onChange(prop, '');
+            } else {
+              onChange(prop, `${v}${unit === 'auto' ? 'px' : unit}`);
+            }
+          }}
         />
         <select
           className="bg-slate-900 border border-slate-800 rounded-lg px-1 py-1.5 text-[10px] text-slate-400 cursor-pointer focus:outline-none"
           value={unit}
           onChange={e => {
-            const newVal = e.target.value === 'auto' ? 'auto' : `${num || '0'}${e.target.value}`;
-            onChange(prop, newVal);
+            const selectedUnit = e.target.value;
+            if (selectedUnit === 'auto') {
+              onChange(prop, 'auto');
+            } else {
+              onChange(prop, `${num || '0'}${selectedUnit}`);
+            }
           }}
         >
-          {units.map(u => <option key={u}>{u}</option>)}
+          {units.map(u => <option key={u} value={u}>{u}</option>)}
         </select>
       </div>
     </div>

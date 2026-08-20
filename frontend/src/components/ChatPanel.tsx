@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Sparkles, Send, Bot, User, Check, X, Code } from 'lucide-react';
+import { API_URL } from '../config';
 
 interface ChatPanelProps {
   pageId: string;
@@ -66,7 +67,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ pageId, onApplyChanges }) 
     const currentRequestPageId = pageId; // lock pageId at send time
 
     try {
-      const res = await fetch('http://localhost:5000/api/ai/chat', {
+      const res = await fetch(`${API_URL}/api/ai/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

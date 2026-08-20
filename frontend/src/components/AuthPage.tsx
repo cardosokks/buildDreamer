@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Lock, Mail, User, ShieldAlert } from 'lucide-react';
+import { API_URL } from '../config';
 
 interface AuthPageProps {
   onSuccess: () => void;
@@ -15,17 +16,14 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const API_URL = import.meta.env.API_URL || 'http://localhost:5000';
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setLoading(true);
 
-    const baseUrl = 'http://localhost:5000';
     const url = isLogin 
-      ? `${baseUrl}/api/auth/login`
-      : `${baseUrl}/api/auth/signup`;
+      ? `${API_URL}/api/auth/login`
+      : `${API_URL}/api/auth/signup`;
 
     const body = isLogin 
       ? { email, password } 

@@ -42,7 +42,7 @@ router.post('/projects/:projectId/pages', async (req: AuthenticatedRequest, res:
 
     // Upload to FTP
     try {
-      await uploadSinglePageToFTP(page.project.name, page.slug, page.html, page.css, page.js);
+      await uploadSinglePageToFTP(page.project.name, page.slug, page.html, page.css, page.js, page.isHomepage);
     } catch (ftpErr) {
       console.error("Failed to upload new page to FTP:", ftpErr);
     }
@@ -98,7 +98,7 @@ router.put('/pages/:id', async (req: AuthenticatedRequest, res: any) => {
 
     // FTP Upload on Save
     try {
-      await uploadSinglePageToFTP(page.project.name, updatedPage.slug, updatedPage.html, updatedPage.css, updatedPage.js);
+      await uploadSinglePageToFTP(page.project.name, updatedPage.slug, updatedPage.html, updatedPage.css, updatedPage.js, updatedPage.isHomepage);
     } catch (ftpErr) {
       console.error("Failed to upload page changes to FTP:", ftpErr);
     }
