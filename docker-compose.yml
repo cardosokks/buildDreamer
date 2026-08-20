@@ -39,8 +39,6 @@ services:
     restart: always
     expose:
       - "80"
-    ports:
-      - "${FRONTEND_PORT:-3001}:80"
     depends_on:
       - backend
 
