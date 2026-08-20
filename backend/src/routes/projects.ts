@@ -10,7 +10,7 @@ const router = Router();
 export const projectJobsQueue: Record<string, { status: 'pending' | 'processing' | 'completed' | 'failed'; error?: string }> = {};
 
 // Background task worker method
-async function processAIProjectGeneration(projectId: string, prompt: string, customApiKey?: string) {
+async function processAIProjectGeneration(projectId: string, prompt: string, customApiKey?: string, customModel?: string, registeredModels?: string[]) {
   projectJobsQueue[projectId] = { status: 'processing' };
   try {
     const page = await prisma.page.findFirst({
@@ -23,7 +23,9 @@ async function processAIProjectGeneration(projectId: string, prompt: string, cus
     const response = await generateAIResponse(
       prompt,
       { html: page.html, css: page.css, js: page.js },
-      customApiKey
+      customApiKey,
+      customModel,
+      registeredModels
     );
 
     // Save final generated code to database
@@ -139,11 +141,17 @@ router.post('/', async (req: AuthenticatedRequest, res: any) => {
     // If generated using AI prompt, enqueue background job to build mockup
     if (isAIPrompt || description?.includes('Segmento:')) {
       const clientGeminiKey = (req.headers['x-gemini-key'] || req.headers['X-Gemini-Key']) as string || process.env.GEMINI_API_KEY;
+      let registeredModels: string[] | undefined;
+      try {
+        const rawModels = (req.headers['x-gemini-models'] || req.headers['X-Gemini-Models']) as string;
+        if (rawModels) registeredModels = JSON.parse(rawModels);
+      } catch {}
+
       const aiPromptMessage = `Gere um mockup completo e profissional de site para a empresa "${name}". Descrição detalhada do negócio: ${description}. Crie uma paleta elegante, seções funcionais (Hero, Serviços, Contato, FAQ) e um design moderno responsivo.`;
       
       // Enqueue job immediately on process memory thread
       projectJobsQueue[project.id] = { status: 'pending' };
-      processAIProjectGeneration(project.id, aiPromptMessage, clientGeminiKey);
+      processAIProjectGeneration(project.id, aiPromptMessage, clientGeminiKey, undefined, registeredModels);
     }
 
     // Upload to FTP background

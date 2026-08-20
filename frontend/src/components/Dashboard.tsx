@@ -193,12 +193,20 @@ export const Dashboard: React.FC<DashboardProps> = ({ onSelectProject }) => {
         finalDesc = `Segmento: ${segment}. Estilo: ${visualStyle}. ${newProjectDesc}`;
       }
 
+      // Get registered custom models from user settings
+      let registeredModelIds: string[] = [];
+      try {
+        const stored = localStorage.getItem('custom_gemini_models');
+        if (stored) registeredModelIds = JSON.parse(stored).map((m: any) => m.id);
+      } catch {}
+
       const res = await fetch(`${API_URL}/api/projects`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Gemini-Key': localStorage.getItem('gemini_api_key') || ''
+          'X-Gemini-Key': localStorage.getItem('gemini_api_key') || '',
+          'X-Gemini-Models': JSON.stringify(registeredModelIds)
         },
         body: JSON.stringify({ 
           name: finalName, 

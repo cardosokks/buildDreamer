@@ -6,16 +6,29 @@ export const generateAIResponse = async (
   prompt: string, 
   context: { html: string; css: string; js: string },
   customApiKey?: string,
-  customModel?: string
+  customModel?: string,
+  registeredModels?: string[]
 ) => {
   const activeKey = customApiKey || apiKey;
-  const activeModel = customModel || 'gemini-3.5-flash';
 
-  if (!activeKey) {
-    throw new Error("Chave da API do Gemini não fornecida. Configure-a no menu de configurações do sistema ou no backend.");
+  // Usa estritamente os modelos cadastrados nas configurações pelo usuário
+  let candidateModels: string[] = [];
+  if (registeredModels && Array.isArray(registeredModels) && registeredModels.length > 0) {
+    candidateModels = [...registeredModels];
+    if (customModel && !candidateModels.includes(customModel)) {
+      candidateModels.unshift(customModel);
+    }
+  } else if (customModel) {
+    candidateModels = [customModel];
+  } else {
+    candidateModels = [
+      'gemini-2.5-flash',
+      'gemini-2.5-pro',
+      'gemini-2.0-flash',
+      'gemini-1.5-flash',
+      'gemini-1.5-pro'
+    ];
   }
-
-  const ai = new GoogleGenAI({ apiKey: activeKey });
 
   const systemPrompt = `
     Você é um assistente de desenvolvimento web especialista em frontend.
@@ -38,51 +51,65 @@ export const generateAIResponse = async (
     }
   `;
 
-  try {
-    const response = await ai.models.generateContent({
-      model: activeModel,
-      contents: [
-        { role: 'system', parts: [{ text: systemPrompt }] },
-        { 
-          role: 'user', 
-          parts: [
-            { text: `Contexto do site:\nHTML: ${context.html}\nCSS: ${context.css}\nJS: ${context.js}\n\nPedido do Usuário: ${prompt}` }
-          ] 
-        }
-      ],
-      config: {
-        responseMimeType: 'application/json'
-      }
-    });
-
-    let text = response.text || '{}';
-    
-    // Extract strictly the JSON object between first { and last } to avoid trailing commentary or tokens
-    const firstBrace = text.indexOf('{');
-    const lastBrace = text.lastIndexOf('}');
-    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-      text = text.slice(firstBrace, lastBrace + 1);
-    } else {
-      text = text.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim();
-    }
-
-    try {
-      return JSON.parse(text);
-    } catch (parseErr) {
-      // Fallback: replace common invalid escape characters in large HTML/JS blobs
-      const sanitized = text
-        .replace(/\\n/g, "\\n")
-        .replace(/\\'/g, "\\'")
-        .replace(/\\"/g, '\\"')
-        .replace(/\\&/g, "\\&")
-        .replace(/\\r/g, "\\r")
-        .replace(/\\t/g, "\\t")
-        .replace(/\\b/g, "\\b")
-        .replace(/\\f/g, "\\f");
-      return JSON.parse(sanitized);
-    }
-  } catch (error: any) {
-    console.error("Erro na API do Gemini:", error);
-    throw new Error(`Erro ao gerar resposta da IA: ${error.message}`);
+  if (!activeKey) {
+    throw new Error("Chave da API do Gemini não fornecida. Configure-a no menu de configurações do sistema ou no backend.");
   }
+
+  const ai = new GoogleGenAI({ apiKey: activeKey });
+
+  let lastError: any = null;
+
+  for (const modelToTry of candidateModels) {
+    try {
+      const response = await ai.models.generateContent({
+        model: modelToTry,
+        contents: [
+          { role: 'system', parts: [{ text: systemPrompt }] },
+          { 
+            role: 'user', 
+            parts: [
+              { text: `Contexto do site:\nHTML: ${context.html}\nCSS: ${context.css}\nJS: ${context.js}\n\nPedido do Usuário: ${prompt}` }
+            ] 
+          }
+        ],
+        config: {
+          responseMimeType: 'application/json'
+        }
+      });
+
+      let text = response.text || '{}';
+      
+      // Extract strictly the JSON object between first { and last } to avoid trailing commentary or tokens
+      const firstBrace = text.indexOf('{');
+      const lastBrace = text.lastIndexOf('}');
+      if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+        text = text.slice(firstBrace, lastBrace + 1);
+      } else {
+        text = text.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim();
+      }
+
+      try {
+        return JSON.parse(text);
+      } catch (parseErr) {
+        // Fallback: replace common invalid escape characters in large HTML/JS blobs
+        const sanitized = text
+          .replace(/\\n/g, "\\n")
+          .replace(/\\'/g, "\\'")
+          .replace(/\\"/g, '\\"')
+          .replace(/\\&/g, "\\&")
+          .replace(/\\r/g, "\\r")
+          .replace(/\\t/g, "\\t")
+          .replace(/\\b/g, "\\b")
+          .replace(/\\f/g, "\\f");
+        return JSON.parse(sanitized);
+      }
+    } catch (error: any) {
+      console.warn(`Tentativa com o modelo ${modelToTry} falhou ou esgotou cota (429). Tentando próximo modelo...`, error.message);
+      lastError = error;
+      // Continue to next candidate model
+    }
+  }
+
+  console.error("Erro na API do Gemini em todos os modelos candidatos:", lastError);
+  throw new Error(`Erro ao gerar resposta da IA: ${lastError?.message || 'Cota esgotada em todos os modelos'}`);
 };

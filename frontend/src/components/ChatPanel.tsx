@@ -67,12 +67,19 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ pageId, onApplyChanges }) 
     const currentRequestPageId = pageId; // lock pageId at send time
 
     try {
+      let registeredModelIds: string[] = [];
+      try {
+        const stored = localStorage.getItem('custom_gemini_models');
+        if (stored) registeredModelIds = JSON.parse(stored).map((m: any) => m.id);
+      } catch {}
+
       const res = await fetch(`${API_URL}/api/ai/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'x-gemini-key': localGeminiKey
+          'x-gemini-key': localGeminiKey,
+          'x-gemini-models': JSON.stringify(registeredModelIds)
         },
         body: JSON.stringify({ prompt: userMessage, pageId: currentRequestPageId, model: selectedModel })
       });

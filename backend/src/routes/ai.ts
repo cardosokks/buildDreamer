@@ -29,14 +29,19 @@ router.post('/chat', async (req: AuthenticatedRequest, res: any) => {
     }
 
     // Extract client provided Gemini Key from headers if present
-    const clientGeminiKey = req.headers['x-gemini-key'] as string;
+    const clientGeminiKey = (req.headers['x-gemini-key'] || req.headers['X-Gemini-Key']) as string;
+    let registeredModels: string[] | undefined;
+    try {
+      const rawModels = (req.headers['x-gemini-models'] || req.headers['X-Gemini-Models']) as string;
+      if (rawModels) registeredModels = JSON.parse(rawModels);
+    } catch {}
 
-    // Call Gemini with current page context
+    // Call Gemini with current page context and strictly registered cascade models
     const aiResponse = await generateAIResponse(prompt, {
       html: page.html,
       css: page.css,
       js: page.js
-    }, clientGeminiKey, model);
+    }, clientGeminiKey, model, registeredModels);
 
     return res.json(aiResponse);
   } catch (error: any) {
