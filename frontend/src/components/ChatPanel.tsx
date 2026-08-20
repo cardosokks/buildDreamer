@@ -46,7 +46,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ pageId, onApplyChanges }) 
       const parsed = JSON.parse(stored);
       if (parsed.length > 0) return parsed[0].id;
     }
-    return 'gemini-1.5-flash';
+    return 'gemini-2.5-flash';
   };
 
   const [selectedModel, setSelectedModel] = useState(getInitialModel());
