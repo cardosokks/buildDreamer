@@ -715,7 +715,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
 
   useEffect(() => {
     checkNgrokStatus();
-    const interval = setInterval(checkNgrokStatus, 8000);
+    const interval = setInterval(checkNgrokStatus, 3000);
     return () => clearInterval(interval);
   }, [checkNgrokStatus]);
 
