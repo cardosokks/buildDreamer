@@ -40,30 +40,101 @@ const db_1 = require("../db");
 const router = (0, express_1.Router)();
 // In-memory queue system for AI chat modifications
 exports.aiChatJobsQueue = {};
-// Background worker for chat edits
-async function processAIChatJob(jobId, prompt, pageId, clientGeminiKey, model, registeredModels, clientProxyUrl) {
-    exports.aiChatJobsQueue[jobId] = { status: 'processing', currentModel: model || 'gemini-2.5-flash' };
+// Background worker for chat edits (suporta single-page ou todas as páginas)
+async function processAIChatJob(jobId, prompt, pageId, applyToAll, clientGeminiKey, model, registeredModels, clientProxyUrl) {
+    exports.aiChatJobsQueue[jobId] = {
+        status: 'processing',
+        currentModel: model || 'gemini-2.5-flash',
+        scope: applyToAll ? 'all' : 'single'
+    };
     try {
         const page = await db_1.prisma.page.findUnique({
-            where: { id: pageId }
+            where: { id: pageId },
+            include: { project: { include: { pages: true } } }
         });
         if (!page)
             throw new Error('Página não encontrada');
-        const aiResponse = await (0, gemini_1.generateAIResponse)(prompt, {
-            html: page.html,
-            css: page.css,
-            js: page.js
-        }, clientGeminiKey, model, registeredModels, (currentModel) => {
+        // Se applyToAll for true, processa iterativamente ou em lote todas as páginas do projeto
+        if (applyToAll && page.project?.pages && page.project.pages.length > 1) {
+            const allPages = page.project.pages;
+            const updatedPages = [];
+            for (let i = 0; i < allPages.length; i++) {
+                const p = allPages[i];
+                exports.aiChatJobsQueue[jobId] = {
+                    status: 'processing',
+                    currentModel: `${model || 'gemini-2.5-flash'} (Página ${i + 1}/${allPages.length}: ${p.name})`,
+                    scope: 'all'
+                };
+                const pagePrompt = `
+          Estamos aplicando uma alteração global em todas as páginas do site.
+          Página atual sendo editada: "${p.name}" (slug: /${p.slug})
+          Instrução do usuário: "${prompt}"
+        `;
+                const aiResponse = await (0, gemini_1.generateAIResponse)(pagePrompt, {
+                    html: p.html,
+                    css: p.css,
+                    js: p.js
+                }, clientGeminiKey, model, registeredModels, undefined, clientProxyUrl);
+                // Atualizar no banco de dados
+                await db_1.prisma.page.update({
+                    where: { id: p.id },
+                    data: {
+                        html: aiResponse.html || p.html,
+                        css: aiResponse.css || p.css,
+                        js: aiResponse.js || p.js
+                    }
+                });
+                updatedPages.push({
+                    id: p.id,
+                    name: p.name,
+                    slug: p.slug,
+                    html: aiResponse.html || p.html,
+                    css: aiResponse.css || p.css,
+                    js: aiResponse.js || p.js
+                });
+            }
+            const activeUpdated = updatedPages.find(p => p.id === pageId) || updatedPages[0];
             exports.aiChatJobsQueue[jobId] = {
-                status: 'processing',
-                currentModel
+                status: 'completed',
+                scope: 'all',
+                result: {
+                    explanation: `Alteração aplicada com sucesso em todas as ${updatedPages.length} páginas do site!`,
+                    html: activeUpdated.html,
+                    css: activeUpdated.css,
+                    js: activeUpdated.js,
+                    updatedPages
+                }
             };
-        }, clientProxyUrl);
-        exports.aiChatJobsQueue[jobId] = {
-            status: 'completed',
-            result: aiResponse,
-            currentModel: aiResponse._usedModel || model
-        };
+        }
+        else {
+            // Alteração na página individual ativa
+            const aiResponse = await (0, gemini_1.generateAIResponse)(prompt, {
+                html: page.html,
+                css: page.css,
+                js: page.js
+            }, clientGeminiKey, model, registeredModels, (currentModel) => {
+                exports.aiChatJobsQueue[jobId] = {
+                    status: 'processing',
+                    currentModel,
+                    scope: 'single'
+                };
+            }, clientProxyUrl);
+            // Persiste automaticamente a alteração no banco
+            await db_1.prisma.page.update({
+                where: { id: page.id },
+                data: {
+                    html: aiResponse.html || page.html,
+                    css: aiResponse.css || page.css,
+                    js: aiResponse.js || page.js
+                }
+            });
+            exports.aiChatJobsQueue[jobId] = {
+                status: 'completed',
+                scope: 'single',
+                result: aiResponse,
+                currentModel: aiResponse._usedModel || model
+            };
+        }
     }
     catch (error) {
         console.error(`Erro ao processar job de IA ${jobId}:`, error);
@@ -76,7 +147,7 @@ async function processAIChatJob(jobId, prompt, pageId, clientGeminiKey, model, r
 // Process AI request and start background job
 router.post('/chat', async (req, res) => {
     try {
-        const { prompt, pageId, model } = req.body;
+        const { prompt, pageId, model, applyToAll } = req.body;
         if (!prompt || !pageId) {
             return res.status(400).json({ error: 'Prompt and pageId are required' });
         }
@@ -91,7 +162,9 @@ router.post('/chat', async (req, res) => {
         if (!isMember) {
             return res.status(403).json({ error: 'Not authorized' });
         }
-        // Extract client provided Gemini Key & Proxy from headers if present
+        // Detectar intenção de aplicar a todas as páginas via prompt ou checkbox
+        const hasGlobalIntent = applyToAll === true ||
+            /todas as p[áa]ginas|em todo o site|globalmente|em todas|todas páginas|navbar de todas/i.test(prompt);
         const clientGeminiKey = (req.headers['x-gemini-key'] || req.headers['X-Gemini-Key']);
         const clientProxyUrl = (req.headers['x-proxy-url'] || req.headers['X-Proxy-Url']) || process.env.AI_PROXY_URL;
         let registeredModels;
@@ -102,10 +175,14 @@ router.post('/chat', async (req, res) => {
         }
         catch { }
         const jobId = `chat-job-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        exports.aiChatJobsQueue[jobId] = { status: 'pending', currentModel: model || 'gemini-2.5-flash' };
-        // Disparar processamento assíncrono em background sem prender o HTTP request
-        processAIChatJob(jobId, prompt, pageId, clientGeminiKey, model, registeredModels, clientProxyUrl);
-        return res.status(202).json({ jobId, status: 'pending' });
+        exports.aiChatJobsQueue[jobId] = {
+            status: 'pending',
+            currentModel: model || 'gemini-2.5-flash',
+            scope: hasGlobalIntent ? 'all' : 'single'
+        };
+        // Disparar processamento assíncrono em background
+        processAIChatJob(jobId, prompt, pageId, hasGlobalIntent, clientGeminiKey, model, registeredModels, clientProxyUrl);
+        return res.status(202).json({ jobId, status: 'pending', scope: hasGlobalIntent ? 'all' : 'single' });
     }
     catch (error) {
         console.error("Erro na rota /api/ai/chat:", error);
@@ -129,33 +206,27 @@ router.get('/models', async (req, res) => {
         if (!clientGeminiKey) {
             return res.status(400).json({ error: 'Chave do Gemini não configurada' });
         }
-        // Call Google Gemini Models list endpoint directly with proxy support
         const fetchOptions = {};
-        if (clientProxyUrl) {
+        if (clientProxyUrl && clientProxyUrl.startsWith('http')) {
             const { ProxyAgent } = await Promise.resolve().then(() => __importStar(require('undici')));
             fetchOptions.dispatcher = new ProxyAgent(clientProxyUrl);
         }
-        const { fetch: undiciFetch } = await Promise.resolve().then(() => __importStar(require('undici')));
-        const response = await undiciFetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${clientGeminiKey}`, fetchOptions);
-        if (!response.ok) {
-            const errBody = await response.text();
-            return res.status(response.status).json({ error: `Erro na API do Gemini: ${errBody}` });
+        const resApi = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${clientGeminiKey}`, fetchOptions);
+        if (!resApi.ok) {
+            const errTxt = await resApi.text();
+            return res.status(resApi.status).json({ error: errTxt });
         }
-        const data = await response.json();
-        const geminiModels = (data.models || [])
-            .filter((m) => m.name && m.supportedGenerationMethods && m.supportedGenerationMethods.includes('generateContent'))
-            .map((m) => {
-            const id = m.name.replace('models/', '');
-            return {
-                id,
-                name: m.displayName || id,
-                description: m.description
-            };
-        });
-        return res.json({ models: geminiModels });
+        const data = await resApi.json();
+        const models = (data.models || [])
+            .filter((m) => m.supportedGenerationMethods?.includes('generateContent'))
+            .map((m) => ({
+            id: m.name.replace('models/', ''),
+            name: m.displayName || m.name.replace('models/', ''),
+            description: m.description
+        }));
+        return res.json({ models });
     }
     catch (error) {
-        console.error("Erro ao buscar modelos do Gemini:", error);
         return res.status(500).json({ error: error.message });
     }
 });

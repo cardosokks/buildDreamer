@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Sparkles, Send, Bot, User, Check, Play, Undo2, RotateCcw, Copy, ExternalLink, Code2 } from 'lucide-react';
+import { Sparkles, Send, Bot, User, Check, Play, Undo2, RotateCcw, Copy, ExternalLink, Code2, Globe } from 'lucide-react';
 import { API_URL } from '../config';
 
 interface ChatPanelProps {
@@ -8,6 +8,7 @@ interface ChatPanelProps {
   onApplyChanges: (html: string, css: string, js: string, targetPageId?: string) => void;
   onUndo?: () => void;
   canUndo?: boolean;
+  onReloadAllPages?: () => void;
 }
 
 interface Message {
@@ -18,9 +19,10 @@ interface Message {
   js?: string;
   modelUsed?: string;
   applied?: boolean;
+  scope?: 'single' | 'all';
 }
 
-export const ChatPanel: React.FC<ChatPanelProps> = ({ pageId, onApplyChanges, onUndo, canUndo }) => {
+export const ChatPanel: React.FC<ChatPanelProps> = ({ pageId, onApplyChanges, onUndo, canUndo, onReloadAllPages }) => {
   const { token } = useAuth();
   
   const [messages, setMessages] = useState<Message[]>(() => {
@@ -28,13 +30,14 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ pageId, onApplyChanges, on
     return stored ? JSON.parse(stored) : [
       {
         role: 'assistant',
-        text: 'Olá! Sou o seu AI Copilot e Arquiteto Frontend. Peça qualquer alteração ("mude o título para azul", "adicione uma seção de depoimentos", "crie um card com efeito glassmorphism") e gerarei o código perfeito para seu site!'
+        text: 'Olá! Sou o seu AI Copilot e Arquiteto Frontend. Peça qualquer alteração ("adicione botão WhatsApp", "mude a cor da navbar em todas as páginas", "crie tabela de preços") e aplicarei imediatamente!'
       }
     ];
   });
   
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [applyToAllPages, setApplyToAllPages] = useState(false);
   const [activeJobModel, setActiveJobModel] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -59,9 +62,10 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ pageId, onApplyChanges, on
       } catch {}
     }
     return [
-      { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash (Recomendado)' },
+      { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash' },
       { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash' },
-      { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro' }
+      { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro' },
+      { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash' }
     ];
   });
 
@@ -76,7 +80,6 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ pageId, onApplyChanges, on
     return 'gemini-2.5-flash';
   });
 
-  // Atualiza a lista de modelos se o usuário alterar no SettingsModal
   useEffect(() => {
     const loadStoredModels = () => {
       const stored = localStorage.getItem('custom_gemini_models');
@@ -95,8 +98,6 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ pageId, onApplyChanges, on
     loadStoredModels();
   }, []);
 
-
-
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || loading) return;
@@ -112,6 +113,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ pageId, onApplyChanges, on
 
     const localGeminiKey = localStorage.getItem('gemini_api_key') || '';
     const currentRequestPageId = pageId;
+    const shouldApplyToAll = applyToAllPages;
 
     try {
       let registeredModelIds: string[] = [];
@@ -129,7 +131,12 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ pageId, onApplyChanges, on
           'x-gemini-models': JSON.stringify(registeredModelIds),
           'x-proxy-url': localStorage.getItem('ai_proxy_url') || ''
         },
-        body: JSON.stringify({ prompt: userMessage, pageId: currentRequestPageId, model: selectedModel })
+        body: JSON.stringify({ 
+          prompt: userMessage, 
+          pageId: currentRequestPageId, 
+          model: selectedModel,
+          applyToAll: shouldApplyToAll
+        })
       });
 
       if (!res.ok) throw new Error('Falha ao iniciar solicitação de IA');
@@ -158,7 +165,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ pageId, onApplyChanges, on
                 css: jobData.result.css,
                 js: jobData.result.js,
                 modelUsed: jobData.result._usedModel || jobData.currentModel || selectedModel,
-                applied: true
+                applied: true,
+                scope: jobData.scope
               };
 
               const freshStored = localStorage.getItem(`chat_history_${currentRequestPageId}`);
@@ -170,7 +178,12 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ pageId, onApplyChanges, on
                 setMessages(finalMessages);
               }
 
-              // Auto-aplica as alterações imediatamente no Canvas
+              // Se a alteração foi em todas as páginas, recarrega o projeto inteiro
+              if (jobData.scope === 'all' && onReloadAllPages) {
+                onReloadAllPages();
+              }
+
+              // Auto-aplica as alterações imediatamente no Canvas atual
               if (jobData.result.html) {
                 onApplyChanges(jobData.result.html, jobData.result.css || '', jobData.result.js || '', currentRequestPageId);
               }
@@ -199,7 +212,6 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ pageId, onApplyChanges, on
       const freshStored = localStorage.getItem(`chat_history_${currentRequestPageId}`);
       const freshMessages = freshStored ? JSON.parse(freshStored) : updatedMessages;
       const finalMessages = [...freshMessages, errorMessage];
-
       localStorage.setItem(`chat_history_${currentRequestPageId}`, JSON.stringify(finalMessages));
       if (pageId === currentRequestPageId) {
         setMessages(finalMessages);
@@ -207,47 +219,41 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ pageId, onApplyChanges, on
     }
   };
 
-
-
   return (
-    <aside className="w-80 border-l border-slate-900 bg-[#090410] flex flex-col h-full shrink-0 shadow-2xl select-none">
-      {/* Header com Seletor de Modelos */}
-      <div className="p-3.5 border-b border-slate-900/80 space-y-2.5 shrink-0 bg-slate-950/60">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <div className="p-1.5 rounded-lg bg-purple-500/20 text-purple-400 border border-purple-500/30">
-              <Sparkles className="w-4 h-4" />
-            </div>
-            <div>
-              <span className="text-xs font-bold text-white tracking-wide block">AI Copilot</span>
-              <span className="text-[10px] text-slate-500 font-mono">Webflow & v0 Style</span>
-            </div>
+    <aside className="w-80 bg-slate-950 border-l border-slate-900 flex flex-col h-full z-20 shrink-0">
+      {/* Header */}
+      <div className="p-3.5 border-b border-slate-900 flex items-center justify-between bg-slate-950/80 backdrop-blur">
+        <div className="flex items-center gap-2">
+          <div className="p-1.5 bg-gradient-to-tr from-purple-600 to-indigo-600 rounded-lg text-white shadow-sm shadow-purple-500/20">
+            <Sparkles className="w-4 h-4" />
           </div>
+          <div>
+            <h3 className="font-bold text-xs text-white">AI Copilot</h3>
+            <p className="text-[10px] text-purple-400">Arquiteto Frontend</p>
+          </div>
+        </div>
 
-          {/* Undo Action Button */}
+        <div className="flex items-center gap-1.5">
           {canUndo && onUndo && (
             <button
               onClick={onUndo}
-              className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 text-[11px] font-medium transition-all border border-slate-800 cursor-pointer"
-              title="Desfazer última alteração"
+              className="flex items-center gap-1 px-2 py-1 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 rounded-lg text-[10px] font-semibold transition-all cursor-pointer"
+              title="Desfazer última alteração de IA"
             >
-              <Undo2 className="w-3.5 h-3.5 text-purple-400" />
+              <Undo2 className="w-3 h-3" />
               Desfazer
             </button>
           )}
-        </div>
 
-        {/* Seletor de Modelo Configurado */}
-        <div className="flex items-center gap-1.5 bg-slate-900/90 border border-slate-800/80 rounded-xl px-2 py-1">
-          <span className="text-[10px] font-bold uppercase text-purple-400 font-mono shrink-0">Modelo:</span>
+          {/* Model Selector Dropdown */}
           <select
             value={selectedModel}
             onChange={(e) => setSelectedModel(e.target.value)}
-            className="w-full bg-transparent text-[11px] font-medium text-white focus:outline-none cursor-pointer truncate"
+            className="bg-slate-900 border border-slate-800 text-[10px] text-purple-300 font-mono rounded-lg px-2 py-1 focus:outline-none focus:border-purple-500 cursor-pointer"
           >
-            {availableModels.map((m) => (
+            {availableModels.map(m => (
               <option key={m.id} value={m.id} className="bg-slate-950 text-white">
-                {m.name || m.id}
+                {m.name}
               </option>
             ))}
           </select>
@@ -255,27 +261,29 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ pageId, onApplyChanges, on
       </div>
 
       {/* Messages Feed */}
-      <div className="flex-1 overflow-y-auto p-3.5 space-y-3.5 min-h-0">
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {messages.map((msg, idx) => (
           <div
             key={idx}
-            className={`flex flex-col gap-1.5 ${msg.role === 'user' ? 'items-end' : 'items-start'} animate-in fade-in slide-in-from-bottom-2 duration-150`}
+            className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
           >
-            <div className="flex items-center gap-1.5 px-1 text-[10px] text-slate-500 font-medium">
-              {msg.role === 'user' ? (
+            <div className="flex items-center gap-1.5 mb-1 px-1">
+              {msg.role === 'assistant' ? (
                 <>
-                  <span>Você</span>
-                  <User className="w-3 h-3 text-purple-400" />
+                  <Bot className="w-3.5 h-3.5 text-purple-400" />
+                  <span className="text-[10px] font-bold text-purple-300 font-mono">
+                    Copilot {msg.modelUsed ? `(${msg.modelUsed})` : ''}
+                  </span>
+                  {msg.scope === 'all' && (
+                    <span className="text-[9px] px-1.5 py-0.2 rounded bg-indigo-950 text-indigo-300 border border-indigo-500/30 font-bold">
+                      Todas as Páginas
+                    </span>
+                  )}
                 </>
               ) : (
                 <>
-                  <Bot className="w-3 h-3 text-cyan-400" />
-                  <span>AI Copilot</span>
-                  {msg.modelUsed && (
-                    <span className="text-[9px] px-1.5 py-0.2 bg-purple-950/80 border border-purple-500/30 text-purple-300 rounded font-mono">
-                      {msg.modelUsed}
-                    </span>
-                  )}
+                  <span className="text-[10px] font-bold text-slate-400">Você</span>
+                  <User className="w-3.5 h-3.5 text-slate-400" />
                 </>
               )}
             </div>
@@ -327,8 +335,19 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ pageId, onApplyChanges, on
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input Form */}
-      <form onSubmit={handleSend} className="p-3 border-t border-slate-900/80 bg-slate-950/80">
+      {/* Input Form com Toggle "Aplicar em Todas as Páginas" */}
+      <form onSubmit={handleSend} className="p-3 border-t border-slate-900/80 bg-slate-950/80 space-y-2">
+        <label className="flex items-center gap-2 text-[11px] text-slate-400 hover:text-white cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={applyToAllPages}
+            onChange={(e) => setApplyToAllPages(e.target.checked)}
+            className="rounded bg-slate-900 border-slate-700 text-purple-600 focus:ring-0 cursor-pointer"
+          />
+          <Globe className="w-3.5 h-3.5 text-indigo-400" />
+          <span>Aplicar alteração em <strong>todas as páginas</strong></span>
+        </label>
+
         <div className="relative">
           <textarea
             rows={2}

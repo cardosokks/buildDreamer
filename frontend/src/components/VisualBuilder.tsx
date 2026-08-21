@@ -1204,6 +1204,17 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
             onApplyChanges={handleApplyAIChanges}
             onUndo={handleUndo}
             canUndo={undoStack.length > 0}
+            onReloadAllPages={async () => {
+              try {
+                const res = await fetch(`${API_URL}/api/projects/${projectId}`, {
+                  headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (res.ok) {
+                  const data = await res.json();
+                  setProject(data);
+                }
+              } catch {}
+            }}
           />
         )}
       </div>
