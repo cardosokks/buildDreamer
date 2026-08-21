@@ -109,12 +109,53 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
     }
   }, [initialTab]);
 
-  // Accessibility & UX Customization States
-  const [navbarMinimized, setNavbarMinimized] = useState(false);
-  const [navbarSize, setNavbarSize] = useState<'compact' | 'normal' | 'large'>('normal');
-  const [sidebarWidth, setSidebarWidth] = useState(256); // 256px default (w-64)
+  // Accessibility & UX Customization States (Persistência no LocalStorage)
+  const [navbarMinimized, setNavbarMinimized] = useState<boolean>(() => {
+    try {
+      const stored = localStorage.getItem('rp_navbar_minimized');
+      return stored !== null ? JSON.parse(stored) : false;
+    } catch {
+      return false;
+    }
+  });
+
+  const [navbarSize, setNavbarSize] = useState<'compact' | 'normal' | 'large'>(() => {
+    try {
+      const stored = localStorage.getItem('rp_navbar_size');
+      if (stored === 'compact' || stored === 'normal' || stored === 'large') return stored;
+    } catch {}
+    return 'normal';
+  });
+
+  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
+    try {
+      const stored = localStorage.getItem('rp_sidebar_width');
+      if (stored) return Number(stored);
+    } catch {}
+    return 256;
+  });
+
   const [isResizingSidebar, setIsResizingSidebar] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // Efeitos para sincronizar preferências de interface com o LocalStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('rp_navbar_minimized', JSON.stringify(navbarMinimized));
+    } catch {}
+  }, [navbarMinimized]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('rp_navbar_size', navbarSize);
+    } catch {}
+  }, [navbarSize]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('rp_sidebar_width', sidebarWidth.toString());
+    } catch {}
+  }, [sidebarWidth]);
 
   // User Profile Dropdown state
   const [showUserDropdown, setShowUserDropdown] = useState(false);
@@ -130,13 +171,37 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
   const [leadsList, setLeadsList] = useState<Lead[]>([]);
   const [loadingLeads, setLoadingLeads] = useState(false);
   
-  // Paginação e Modo de Visualização (Lista Compacta vs Cards)
+  // Paginação e Modo de Visualização (Persistência no LocalStorage)
   const [currentPage, setCurrentPage] = useState(1);
   const [leadsPerPage, setLeadsPerPage] = useState(10);
-  const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
+  const [viewMode, setViewMode] = useState<'table' | 'cards'>(() => {
+    try {
+      const stored = localStorage.getItem('rp_leads_view_mode');
+      if (stored === 'table' || stored === 'cards') return stored;
+    } catch {}
+    return 'table';
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('rp_leads_view_mode', viewMode);
+    } catch {}
+  }, [viewMode]);
 
   // Modo de Visualização e Paginação para Leads Salvos
-  const [savedViewMode, setSavedViewMode] = useState<'table' | 'cards'>('table');
+  const [savedViewMode, setSavedViewMode] = useState<'table' | 'cards'>(() => {
+    try {
+      const stored = localStorage.getItem('rp_saved_leads_view_mode');
+      if (stored === 'table' || stored === 'cards') return stored;
+    } catch {}
+    return 'table';
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('rp_saved_leads_view_mode', savedViewMode);
+    } catch {}
+  }, [savedViewMode]);
   const [savedCurrentPage, setSavedCurrentPage] = useState(1);
   const [savedPerPage, setSavedPerPage] = useState(10);
 

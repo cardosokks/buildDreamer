@@ -78,10 +78,51 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
   const [selectedStyles, setSelectedStyles] = useState<Record<string, string>>({});
   const [selectedAttrs, setSelectedAttrs] = useState<Record<string, string>>({});
 
-  // Layout Panels
-  const [showSidebar, setShowSidebar] = useState(true);
-  const [showStylesPanel, setShowStylesPanel] = useState(true);
-  const [showChat, setShowChat] = useState(true);
+  // Layout Panels (Persistência no LocalStorage)
+  const [showSidebar, setShowSidebar] = useState<boolean>(() => {
+    try {
+      const stored = localStorage.getItem('vb_show_sidebar');
+      return stored !== null ? JSON.parse(stored) : true;
+    } catch {
+      return true;
+    }
+  });
+
+  const [showStylesPanel, setShowStylesPanel] = useState<boolean>(() => {
+    try {
+      const stored = localStorage.getItem('vb_show_styles_panel');
+      return stored !== null ? JSON.parse(stored) : true;
+    } catch {
+      return true;
+    }
+  });
+
+  const [showChat, setShowChat] = useState<boolean>(() => {
+    try {
+      const stored = localStorage.getItem('vb_show_chat');
+      return stored !== null ? JSON.parse(stored) : true;
+    } catch {
+      return true;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('vb_show_sidebar', JSON.stringify(showSidebar));
+    } catch {}
+  }, [showSidebar]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('vb_show_styles_panel', JSON.stringify(showStylesPanel));
+    } catch {}
+  }, [showStylesPanel]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('vb_show_chat', JSON.stringify(showChat));
+    } catch {}
+  }, [showChat]);
 
   // Modais
   const [showCodeModal, setShowCodeModal] = useState(false);
