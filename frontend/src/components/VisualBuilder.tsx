@@ -429,13 +429,37 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
     if (el) {
       if (attr === '_tag') return;
       if (attr === '_textContent') {
-        if (el.childElementCount <= 1) el.textContent = value;
+        el.innerHTML = value;
       } else {
         el.setAttribute(attr, value);
       }
       const newHtml = serializeBodyContent(doc);
       handleCodeChange('html', newHtml);
     }
+  };
+
+  // Move element up or down among siblings
+  const handleMoveElementDirection = (path: string, direction: 'up' | 'down') => {
+    if (!activePage || !path) return;
+    const doc = parseDocFromHtml(activePage.html);
+    const root = doc.getElementById('canvas-root') || doc.body;
+    const el = getElementByPath(root, path);
+    if (!el || !el.parentElement) return;
+
+    const parent = el.parentElement;
+    const siblings = Array.from(parent.children);
+    const currentIndex = siblings.indexOf(el);
+
+    if (direction === 'up' && currentIndex > 0) {
+      parent.insertBefore(el, siblings[currentIndex - 1]);
+    } else if (direction === 'down' && currentIndex < siblings.length - 1) {
+      parent.insertBefore(el, siblings[currentIndex + 1].nextSibling);
+    } else {
+      return;
+    }
+
+    const newHtml = serializeBodyContent(doc);
+    handleCodeChange('html', newHtml);
   };
 
   // Element Delete
@@ -1241,6 +1265,9 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
                   setSelectedPath(path);
                 }}
                 onInlineContentChange={handleInlineTextChange}
+                onDeleteElement={handleDeleteElement}
+                onDuplicateElement={handleDuplicateElement}
+                onMoveElementDirection={handleMoveElementDirection}
               />
             )}
           </div>
@@ -1255,6 +1282,8 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
             selectedAttrs={selectedAttrs}
             onStyleChange={handleStyleChange}
             onAttrChange={handleAttrChange}
+            onDeleteElement={handleDeleteElement}
+            onDuplicateElement={handleDuplicateElement}
             pageSeo={{
               title: activePage?.seoTitle || activePage?.name || '',
               description: activePage?.seoDescription || '',

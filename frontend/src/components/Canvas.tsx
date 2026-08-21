@@ -9,6 +9,10 @@ interface CanvasProps {
   zoom?: number;
   onElementSelect: (selector: string, styles: Record<string, string>, attrs: Record<string, string>, elementPath: string) => void;
   onInlineContentChange?: (elementPath: string, newText: string) => void;
+  onDeleteElement?: (elementPath: string) => void;
+  onDuplicateElement?: (elementPath: string) => void;
+  onMoveElementDirection?: (elementPath: string, direction: 'up' | 'down') => void;
+  onSelectParentElement?: (elementPath: string) => void;
 }
 
 export const Canvas: React.FC<CanvasProps> = ({
@@ -19,7 +23,11 @@ export const Canvas: React.FC<CanvasProps> = ({
   hoverPath,
   zoom = 100,
   onElementSelect,
-  onInlineContentChange
+  onInlineContentChange,
+  onDeleteElement,
+  onDuplicateElement,
+  onMoveElementDirection,
+  onSelectParentElement
 }) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
@@ -52,15 +60,16 @@ export const Canvas: React.FC<CanvasProps> = ({
             font-family: 'Outfit', sans-serif;
           }
 
-          /* ─── Selection Overlay Box (Positioned Absolutely Outside The Elements) ─── */
+          /* Selection Box Overlay */
           #studio-selection-box {
             position: absolute;
             display: none;
             border: 2px solid #a855f7;
             pointer-events: none;
-            z-index: 999999;
+            z-index: 999990;
             box-sizing: border-box;
-            transition: all 0.05s ease-out;
+            border-radius: 4px;
+            box-shadow: 0 0 0 1px rgba(168,85,247,0.3);
           }
 
           #studio-hover-box {
@@ -68,33 +77,69 @@ export const Canvas: React.FC<CanvasProps> = ({
             display: none;
             border: 2px dashed #06b6d4;
             pointer-events: none;
-            z-index: 999998;
+            z-index: 999980;
             box-sizing: border-box;
+            border-radius: 4px;
+          }
+
+          /* Floating Quick Action Toolbar (WordPress / Elementor Style) */
+          #studio-quick-toolbar {
+            position: absolute;
+            display: none;
+            z-index: 999999;
+            pointer-events: auto;
+            background: #0f0b18;
+            border: 1px solid #7e22ce;
+            border-radius: 8px;
+            padding: 3px 6px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            align-items: center;
+            gap: 4px;
+            font-family: sans-serif;
           }
 
           #studio-tag-badge {
-            position: absolute;
-            top: -22px;
-            left: -2px;
-            background: #a855f7;
+            background: #9333ea;
             color: #ffffff;
             font-family: monospace;
             font-size: 10px;
             font-weight: 700;
             padding: 2px 6px;
             border-radius: 4px;
-            pointer-events: none;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
             text-transform: lowercase;
-            white-space: nowrap;
+            margin-right: 4px;
+          }
+
+          .studio-tool-btn {
+            background: #1e1630;
+            border: 1px solid #3b285a;
+            color: #e2e8f0;
+            border-radius: 4px;
+            padding: 3px 6px;
+            font-size: 10px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            transition: all 0.15s;
+          }
+          .studio-tool-btn:hover {
+            background: #9333ea;
+            color: #ffffff;
+          }
+          .studio-tool-btn.danger:hover {
+            background: #ef4444;
+            border-color: #ef4444;
+            color: #ffffff;
           }
 
           /* Inline Editing State */
           [contenteditable="true"] {
             outline: 2px solid #22c55e !important;
-            outline-offset: 2px !important;
+            outline-offset: 3px !important;
             cursor: text !important;
             min-width: 1ch;
+            border-radius: 2px;
           }
 
           ${css}
@@ -105,21 +150,31 @@ export const Canvas: React.FC<CanvasProps> = ({
           ${html}
         </div>
 
-        <!-- Overlays rendered at body level so they NEVER corrupt innerHTML -->
-        <div id="studio-selection-box">
-          <div id="studio-tag-badge">div</div>
-        </div>
+        <!-- Overlays -->
+        <div id="studio-selection-box"></div>
         <div id="studio-hover-box"></div>
+
+        <!-- Floating Quick Toolbar -->
+        <div id="studio-quick-toolbar">
+          <span id="studio-tag-badge">div</span>
+          <button type="button" class="studio-tool-btn" id="btn-parent" title="Selecionar Elemento Pai">▲ Pai</button>
+          <button type="button" class="studio-tool-btn" id="btn-move-up" title="Mover para Cima">↑ Cima</button>
+          <button type="button" class="studio-tool-btn" id="btn-move-down" title="Mover para Baixo">↓ Baixo</button>
+          <button type="button" class="studio-tool-btn" id="btn-duplicate" title="Duplicar">📋 Duplicar</button>
+          <button type="button" class="studio-tool-btn danger" id="btn-delete" title="Excluir Elemento">🗑️ Excluir</button>
+        </div>
 
         <script>
           let currentSelected = null;
           const selectionBox = document.getElementById('studio-selection-box');
-          const tagBadge = document.getElementById('studio-tag-badge');
           const hoverBox = document.getElementById('studio-hover-box');
+          const quickToolbar = document.getElementById('studio-quick-toolbar');
+          const tagBadge = document.getElementById('studio-tag-badge');
 
           function updateOverlayPosition() {
             if (!currentSelected || !currentSelected.isConnected) {
               if (selectionBox) selectionBox.style.display = 'none';
+              if (quickToolbar) quickToolbar.style.display = 'none';
               return;
             }
             const rect = currentSelected.getBoundingClientRect();
@@ -132,12 +187,25 @@ export const Canvas: React.FC<CanvasProps> = ({
             selectionBox.style.width = rect.width + 'px';
             selectionBox.style.height = rect.height + 'px';
 
+            // Position quick toolbar right above the element
+            if (quickToolbar) {
+              quickToolbar.style.display = 'flex';
+              let toolTop = rect.top + scrollY - 36;
+              if (toolTop < 5) toolTop = rect.bottom + scrollY + 8;
+              let toolLeft = rect.left + scrollX;
+              if (toolLeft + 250 > window.innerWidth) toolLeft = window.innerWidth - 260;
+              if (toolLeft < 5) toolLeft = 5;
+
+              quickToolbar.style.top = toolTop + 'px';
+              quickToolbar.style.left = toolLeft + 'px';
+            }
+
             const tag = currentSelected.tagName.toLowerCase();
             const id = currentSelected.id ? '#' + currentSelected.id : '';
             const cls = currentSelected.className && typeof currentSelected.className === 'string'
               ? '.' + currentSelected.className.split(' ').filter(c => !c.startsWith('studio-'))[0]
               : '';
-            tagBadge.textContent = tag + id + (cls ? cls.slice(0, 15) : '');
+            tagBadge.textContent = tag + id + (cls ? cls.slice(0, 12) : '');
           }
 
           function removeSelection() {
@@ -146,6 +214,7 @@ export const Canvas: React.FC<CanvasProps> = ({
               currentSelected = null;
             }
             if (selectionBox) selectionBox.style.display = 'none';
+            if (quickToolbar) quickToolbar.style.display = 'none';
           }
 
           function getIndexPath(target) {
@@ -163,7 +232,7 @@ export const Canvas: React.FC<CanvasProps> = ({
           }
 
           function selectElement(target) {
-            if (!target || target === document.body || target === document.documentElement || target.id === 'canvas-root' || target.id === 'studio-selection-box' || target.id === 'studio-hover-box' || target.id === 'studio-tag-badge') return;
+            if (!target || target === document.body || target === document.documentElement || target.id === 'canvas-root' || target.id === 'studio-selection-box' || target.id === 'studio-hover-box' || target.id === 'studio-quick-toolbar' || target.closest('#studio-quick-toolbar')) return;
 
             removeSelection();
             currentSelected = target;
@@ -191,7 +260,7 @@ export const Canvas: React.FC<CanvasProps> = ({
             // Extract Attributes
             const attrs = {
               _tag: target.tagName.toLowerCase(),
-              _textContent: target.childElementCount === 0 ? (target.textContent || '') : '',
+              _textContent: target.childElementCount === 0 ? (target.textContent || '') : (target.innerText || ''),
               _hasChildren: target.childElementCount > 0 ? 'true' : 'false',
             };
             ['id', 'class', 'href', 'src', 'alt', 'target', 'placeholder', 'type', 'name', 'value'].forEach(a => {
@@ -246,26 +315,67 @@ export const Canvas: React.FC<CanvasProps> = ({
             }, '*');
           }
 
-          // Reposition selection on resize or scroll
+          // Toolbar Button Actions
+          document.getElementById('btn-delete').addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (!currentSelected) return;
+            const path = getIndexPath(currentSelected);
+            window.parent.postMessage({ type: 'ACTION_DELETE_ELEMENT', path }, '*');
+            removeSelection();
+          });
+
+          document.getElementById('btn-duplicate').addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (!currentSelected) return;
+            const path = getIndexPath(currentSelected);
+            window.parent.postMessage({ type: 'ACTION_DUPLICATE_ELEMENT', path }, '*');
+          });
+
+          document.getElementById('btn-move-up').addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (!currentSelected) return;
+            const path = getIndexPath(currentSelected);
+            window.parent.postMessage({ type: 'ACTION_MOVE_ELEMENT_DIRECTION', path, direction: 'up' }, '*');
+          });
+
+          document.getElementById('btn-move-down').addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (!currentSelected) return;
+            const path = getIndexPath(currentSelected);
+            window.parent.postMessage({ type: 'ACTION_MOVE_ELEMENT_DIRECTION', path, direction: 'down' }, '*');
+          });
+
+          document.getElementById('btn-parent').addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (!currentSelected) return;
+            const parent = currentSelected.parentElement;
+            if (parent && parent.id !== 'canvas-root' && parent !== document.body) {
+              selectElement(parent);
+            }
+          });
+
+          // Reposition on resize or scroll
           window.addEventListener('resize', updateOverlayPosition);
           window.addEventListener('scroll', updateOverlayPosition);
 
-          // Single click -> Select bounding box
+          // Click selection
           document.body.addEventListener('click', (e) => {
             if (e.target && e.target.getAttribute('contenteditable') === 'true') {
-              return; // Allow typing
+              return;
             }
+            if (e.target.closest('#studio-quick-toolbar')) return;
             e.preventDefault();
             e.stopPropagation();
             selectElement(e.target);
           });
 
-          // Double click -> Inline Content Editable for Text
+          // Double Click: Smart Inline Text Editing (Support for simple and compound/nested texts)
           document.body.addEventListener('dblclick', (e) => {
+            if (e.target.closest('#studio-quick-toolbar')) return;
             e.preventDefault();
             e.stopPropagation();
             const target = e.target;
-            if (target && target.childElementCount === 0) {
+            if (target && target.id !== 'canvas-root' && target !== document.body) {
               target.setAttribute('contenteditable', 'true');
               target.focus();
 
@@ -276,17 +386,18 @@ export const Canvas: React.FC<CanvasProps> = ({
                 window.parent.postMessage({
                   type: 'INLINE_TEXT_CHANGED',
                   path,
-                  text: target.innerText || target.textContent
+                  text: target.innerHTML || target.textContent
                 }, '*');
+                updateOverlayPosition();
               };
               target.addEventListener('blur', onBlur);
             }
           });
 
-          // Hover feedback
+          // Hover
           document.body.addEventListener('mouseover', (e) => {
             const t = e.target;
-            if (t && t !== document.body && t !== document.documentElement && t.id !== 'canvas-root' && t.id !== 'studio-selection-box' && t.id !== 'studio-hover-box') {
+            if (t && t !== document.body && t !== document.documentElement && t.id !== 'canvas-root' && t.id !== 'studio-selection-box' && t.id !== 'studio-hover-box' && !t.closest('#studio-quick-toolbar')) {
               const rect = t.getBoundingClientRect();
               const scrollX = window.scrollX || window.pageXOffset || 0;
               const scrollY = window.scrollY || window.pageYOffset || 0;
@@ -301,7 +412,7 @@ export const Canvas: React.FC<CanvasProps> = ({
             if (hoverBox) hoverBox.style.display = 'none';
           });
 
-          // Window Message Dispatcher
+          // Incoming messages
           window.addEventListener('message', (msg) => {
             if (!msg.data) return;
 
@@ -352,7 +463,6 @@ export const Canvas: React.FC<CanvasProps> = ({
             }
           });
 
-          // Inject user JavaScript securely
           try {
             ${js}
           } catch(err) {
@@ -387,7 +497,7 @@ export const Canvas: React.FC<CanvasProps> = ({
     iframe.contentWindow?.postMessage({ type: 'HOVER_ELEMENT', path: hoverPath ?? null }, '*');
   }, [hoverPath]);
 
-  // Handle Incoming Iframe Messages
+  // Handle Incoming Messages
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
       if (event.data?.type === 'ELEMENT_SELECTED') {
@@ -401,11 +511,20 @@ export const Canvas: React.FC<CanvasProps> = ({
       if (event.data?.type === 'INLINE_TEXT_CHANGED' && onInlineContentChange) {
         onInlineContentChange(event.data.path, event.data.text);
       }
+      if (event.data?.type === 'ACTION_DELETE_ELEMENT' && onDeleteElement) {
+        onDeleteElement(event.data.path);
+      }
+      if (event.data?.type === 'ACTION_DUPLICATE_ELEMENT' && onDuplicateElement) {
+        onDuplicateElement(event.data.path);
+      }
+      if (event.data?.type === 'ACTION_MOVE_ELEMENT_DIRECTION' && onMoveElementDirection) {
+        onMoveElementDirection(event.data.path, event.data.direction);
+      }
     };
 
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [onElementSelect, onInlineContentChange]);
+  }, [onElementSelect, onInlineContentChange, onDeleteElement, onDuplicateElement, onMoveElementDirection]);
 
   const scale = zoom / 100;
 

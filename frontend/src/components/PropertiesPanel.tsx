@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Settings,
   ChevronDown,
@@ -7,10 +7,6 @@ import {
   AlignCenter,
   AlignRight,
   AlignJustify,
-  Bold,
-  Italic,
-  Underline,
-  Strikethrough,
   Move,
   Maximize2,
   Box,
@@ -18,26 +14,15 @@ import {
   Type,
   Palette,
   Square,
-  Wind,
-  Zap,
+  Sparkles,
   Code,
-  FileText,
   Globe,
   Search,
   Share2,
   Tag,
-  Plus,
-  X,
-  Link,
-  Image,
-  Sliders,
-  Sparkles,
-  Eye,
-  Lock,
-  Unlock,
-  Radio,
-  SlidersHorizontal,
-  Activity
+  Trash2,
+  Copy,
+  Edit3
 } from 'lucide-react';
 
 const rgbToHex = (color: string): string => {
@@ -73,6 +58,8 @@ interface PropertiesPanelProps {
   selectedAttrs: Record<string, string>;
   onStyleChange: (property: string, value: string) => void;
   onAttrChange: (attr: string, value: string) => void;
+  onDeleteElement?: (path: string) => void;
+  onDuplicateElement?: (path: string) => void;
   pageSeo?: {
     title?: string;
     description?: string;
@@ -192,91 +179,6 @@ const ColorInput: React.FC<{
   );
 };
 
-const BoxModelVisualizer: React.FC<{
-  styles: Record<string, string>;
-  onChange: (p: string, v: string) => void;
-}> = ({ styles, onChange }) => {
-  return (
-    <div className="bg-[#05010a] border border-slate-800/80 rounded-xl p-3 select-none text-center">
-      <span className="text-[9px] uppercase font-bold text-slate-500 mb-1 block">Margin & Padding (Box Model)</span>
-      <div className="bg-purple-950/20 border border-dashed border-purple-500/40 rounded-lg p-2 relative">
-        <span className="text-[8px] text-purple-400 font-mono absolute top-0.5 left-1.5">MARGIN</span>
-        <div className="grid grid-cols-3 gap-1 items-center max-w-[200px] mx-auto my-1">
-          <div />
-          <input
-            type="text"
-            placeholder="0"
-            value={styles['margin-top'] || ''}
-            onChange={e => onChange('margin-top', e.target.value)}
-            className="w-12 h-6 bg-slate-900 border border-slate-800 text-[10px] text-center text-white rounded mx-auto"
-          />
-          <div />
-          <input
-            type="text"
-            placeholder="0"
-            value={styles['margin-left'] || ''}
-            onChange={e => onChange('margin-left', e.target.value)}
-            className="w-12 h-6 bg-slate-900 border border-slate-800 text-[10px] text-center text-white rounded"
-          />
-          
-          {/* Inner Padding Container */}
-          <div className="bg-cyan-950/30 border border-dashed border-cyan-500/40 rounded p-1.5 relative">
-            <span className="text-[8px] text-cyan-400 font-mono block">PAD</span>
-            <input
-              type="text"
-              placeholder="0"
-              value={styles['padding-top'] || ''}
-              onChange={e => onChange('padding-top', e.target.value)}
-              className="w-10 h-5 bg-slate-900 border border-slate-800 text-[9px] text-center text-white rounded mx-auto mb-1 block"
-            />
-            <div className="flex items-center justify-between gap-1">
-              <input
-                type="text"
-                placeholder="0"
-                value={styles['padding-left'] || ''}
-                onChange={e => onChange('padding-left', e.target.value)}
-                className="w-8 h-5 bg-slate-900 border border-slate-800 text-[9px] text-center text-white rounded"
-              />
-              <div className="w-3 h-3 rounded-full bg-purple-500/40 mx-auto" />
-              <input
-                type="text"
-                placeholder="0"
-                value={styles['padding-right'] || ''}
-                onChange={e => onChange('padding-right', e.target.value)}
-                className="w-8 h-5 bg-slate-900 border border-slate-800 text-[9px] text-center text-white rounded"
-              />
-            </div>
-            <input
-              type="text"
-              placeholder="0"
-              value={styles['padding-bottom'] || ''}
-              onChange={e => onChange('padding-bottom', e.target.value)}
-              className="w-10 h-5 bg-slate-900 border border-slate-800 text-[9px] text-center text-white rounded mx-auto mt-1 block"
-            />
-          </div>
-
-          <input
-            type="text"
-            placeholder="0"
-            value={styles['margin-right'] || ''}
-            onChange={e => onChange('margin-right', e.target.value)}
-            className="w-12 h-6 bg-slate-900 border border-slate-800 text-[10px] text-center text-white rounded"
-          />
-          <div />
-          <input
-            type="text"
-            placeholder="0"
-            value={styles['margin-bottom'] || ''}
-            onChange={e => onChange('margin-bottom', e.target.value)}
-            className="w-12 h-6 bg-slate-900 border border-slate-800 text-[10px] text-center text-white rounded mx-auto"
-          />
-          <div />
-        </div>
-      </div>
-    </div>
-  );
-};
-
 export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   selectedSelector,
   selectedPath,
@@ -284,20 +186,49 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   selectedAttrs,
   onStyleChange,
   onAttrChange,
+  onDeleteElement,
+  onDuplicateElement,
   pageSeo,
   onPageSeoChange,
 }) => {
   const [panelTab, setPanelTab] = useState<'styles' | 'attrs' | 'seo'>('styles');
   const [newClassInput, setNewClassInput] = useState('');
 
+  // SEO Local States with Debounce to prevent lag/freezing
+  const [localSeoTitle, setLocalSeoTitle] = useState(pageSeo?.title || '');
+  const [localSeoDesc, setLocalSeoDesc] = useState(pageSeo?.description || '');
+  const [localSeoOgImage, setLocalSeoOgImage] = useState(pageSeo?.ogImage || '');
+
+  useEffect(() => {
+    setLocalSeoTitle(pageSeo?.title || '');
+    setLocalSeoDesc(pageSeo?.description || '');
+    setLocalSeoOgImage(pageSeo?.ogImage || '');
+  }, [pageSeo?.title, pageSeo?.description, pageSeo?.ogImage]);
+
+  // Debounced save for SEO
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      if (onPageSeoChange && localSeoTitle !== (pageSeo?.title || '')) {
+        onPageSeoChange('title', localSeoTitle);
+      }
+    }, 600);
+    return () => clearTimeout(handler);
+  }, [localSeoTitle]);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      if (onPageSeoChange && localSeoDesc !== (pageSeo?.description || '')) {
+        onPageSeoChange('description', localSeoDesc);
+      }
+    }, 600);
+    return () => clearTimeout(handler);
+  }, [localSeoDesc]);
+
   const get = (prop: string) => cleanComputedValue(selectedStyles[prop] || '', prop);
   const S = (p: string, v: string) => onStyleChange(p, v);
 
   const display = get('display') || 'block';
   const isFlex = display === 'flex';
-  const isGrid = display === 'grid';
-  const position = get('position') || 'static';
-  const isPositioned = position !== 'static';
 
   const classList = (selectedAttrs['class'] || '').split(' ').filter(Boolean);
 
@@ -317,12 +248,11 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const tag = selectedAttrs['_tag'] || 'div';
   const isImage = tag === 'img';
   const isLink = tag === 'a';
-  const isButton = tag === 'button';
   const isInput = ['input', 'textarea', 'select'].includes(tag);
 
   return (
     <aside className="w-72 border-l border-slate-900 bg-[#090410] flex flex-col h-full shrink-0 select-none shadow-2xl">
-      {/* Panel Top Tabs (Estilos vs Atributos HTML vs SEO) */}
+      {/* Panel Top Tabs */}
       <div className="flex border-b border-slate-900 bg-slate-950/60 p-1 gap-1">
         <button
           onClick={() => setPanelTab('styles')}
@@ -370,8 +300,8 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             <input
               type="text"
               placeholder="Ex: Minha Empresa | Soluções em Tecnologia"
-              value={pageSeo?.title || ''}
-              onChange={(e) => onPageSeoChange && onPageSeoChange('title', e.target.value)}
+              value={localSeoTitle}
+              onChange={(e) => setLocalSeoTitle(e.target.value)}
               className={inputCls}
             />
           </div>
@@ -381,8 +311,8 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             <textarea
               rows={3}
               placeholder="Breve resumo do seu site para atrair cliques nos resultados de busca do Google."
-              value={pageSeo?.description || ''}
-              onChange={(e) => onPageSeoChange && onPageSeoChange('description', e.target.value)}
+              value={localSeoDesc}
+              onChange={(e) => setLocalSeoDesc(e.target.value)}
               className={`${inputCls} resize-none`}
             />
           </div>
@@ -396,8 +326,11 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             <input
               type="text"
               placeholder="https://exemplo.com/banner-social.jpg"
-              value={pageSeo?.ogImage || ''}
-              onChange={(e) => onPageSeoChange && onPageSeoChange('ogImage', e.target.value)}
+              value={localSeoOgImage}
+              onChange={(e) => {
+                setLocalSeoOgImage(e.target.value);
+                if (onPageSeoChange) onPageSeoChange('ogImage', e.target.value);
+              }}
               className={inputCls}
             />
           </div>
@@ -406,27 +339,50 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           <div className="mt-4 p-3.5 bg-slate-950 border border-slate-800 rounded-xl space-y-1.5">
             <span className="text-[9px] uppercase font-bold text-slate-500 block">Prévia no Google Search</span>
             <div className="text-[11px] text-blue-400 font-medium truncate">
-              {pageSeo?.title || 'Título da Sua Página'}
+              {localSeoTitle || 'Título da Sua Página'}
             </div>
             <div className="text-[10px] text-emerald-400 truncate">
               https://seusite.com.br
             </div>
             <div className="text-[10px] text-slate-400 line-clamp-2 leading-tight">
-              {pageSeo?.description || 'Adicione uma descrição para visualizar a prévia nos buscadores.'}
+              {localSeoDesc || 'Adicione uma descrição para visualizar a prévia nos buscadores.'}
             </div>
           </div>
         </div>
       ) : !selectedSelector ? (
         <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
           <Settings className="w-8 h-8 text-slate-700 mx-auto mb-2 animate-pulse" />
-          <p className="text-xs text-slate-500 italic">Selecione um elemento no canvas<br />para inspecionar propriedades</p>
+          <p className="text-xs text-slate-500 italic">Selecione um elemento no canvas<br />ou na árvore DOM para editar</p>
         </div>
       ) : panelTab === 'attrs' ? (
-        /* PAINEL DE ATRIBUTOS HTML */
+        /* PAINEL DE ATRIBUTOS HTML & CONTEÚDO */
         <div className="flex-1 overflow-y-auto p-3.5 space-y-3.5">
-          <div className="p-2.5 bg-slate-950/80 border border-slate-800 rounded-xl flex items-center gap-2">
-            <Tag className="w-4 h-4 text-purple-400" />
-            <span className="text-xs font-bold text-white font-mono">{tag}</span>
+          <div className="p-2.5 bg-slate-950/80 border border-slate-800 rounded-xl flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Tag className="w-4 h-4 text-purple-400" />
+              <span className="text-xs font-bold text-white font-mono">{tag}</span>
+            </div>
+            {selectedPath && onDeleteElement && (
+              <button
+                onClick={() => onDeleteElement(selectedPath)}
+                className="p-1 text-red-400 hover:bg-red-500/20 rounded transition-colors"
+                title="Excluir Elemento"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          {/* Edição de Texto / Conteúdo do Elemento */}
+          <div>
+            <Label>Texto / Conteúdo Interno</Label>
+            <textarea
+              rows={3}
+              placeholder="Digite o texto deste elemento..."
+              value={selectedAttrs['_textContent'] || ''}
+              onChange={e => onAttrChange('_textContent', e.target.value)}
+              className={`${inputCls} resize-none`}
+            />
           </div>
 
           <div>
@@ -501,27 +457,12 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                   className={inputCls}
                 />
               </div>
-              <div>
-                <Label>Tipo (Type)</Label>
-                <select
-                  value={selectedAttrs['type'] || 'text'}
-                  onChange={e => onAttrChange('type', e.target.value)}
-                  className={selectCls}
-                >
-                  <option value="text">Texto</option>
-                  <option value="email">E-mail</option>
-                  <option value="password">Senha</option>
-                  <option value="number">Número</option>
-                  <option value="tel">Telefone</option>
-                </select>
-              </div>
             </div>
           )}
         </div>
       ) : (
         /* PAINEL DE ESTILOS & INSPECTOR */
         <div className="flex-1 overflow-y-auto">
-          {/* Header do Elemento Selecionado */}
           <div className="px-3.5 py-2.5 border-b border-slate-900 flex items-center justify-between gap-2 shrink-0 bg-slate-950/60">
             <div className="flex items-center gap-2 min-w-0">
               <Tag className="w-3.5 h-3.5 text-purple-400 shrink-0" />
@@ -529,51 +470,59 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                 {selectedAttrs['_tag'] || 'div'}
               </span>
             </div>
-            {selectedAttrs['id'] && (
-              <span className="text-[10px] text-cyan-400 font-mono bg-cyan-950/50 border border-cyan-500/30 px-1.5 py-0.5 rounded">
-                #{selectedAttrs['id']}
-              </span>
-            )}
+            <div className="flex items-center gap-1">
+              {selectedPath && onDuplicateElement && (
+                <button
+                  onClick={() => onDuplicateElement(selectedPath)}
+                  className="p-1 text-slate-400 hover:text-white rounded hover:bg-slate-800"
+                  title="Duplicar Elemento"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                </button>
+              )}
+              {selectedPath && onDeleteElement && (
+                <button
+                  onClick={() => onDeleteElement(selectedPath)}
+                  className="p-1 text-red-400 hover:bg-red-500/20 rounded"
+                  title="Excluir Elemento"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
           </div>
 
           {/* CLASSES TAILWIND TAGS */}
           <Section title="Classes Tailwind & CSS" icon={<Code className="w-3 h-3 text-cyan-400" />} defaultOpen={true}>
-            <div className="flex flex-wrap gap-1 mb-2">
-              {classList.map((cls, idx) => (
+            <form onSubmit={handleAddClass} className="flex gap-1">
+              <input
+                type="text"
+                placeholder="+ class (ex: p-4 rounded-xl)"
+                value={newClassInput}
+                onChange={e => setNewClassInput(e.target.value)}
+                className={`${inputCls} flex-1`}
+              />
+              <button type="submit" className="px-2.5 py-1 bg-purple-600 hover:bg-purple-500 text-white text-[10px] font-bold rounded-lg cursor-pointer">
+                Add
+              </button>
+            </form>
+            <div className="flex flex-wrap gap-1 mt-2">
+              {classList.map(cls => (
                 <span
-                  key={idx}
-                  className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-950/60 border border-purple-500/40 rounded text-[10px] text-purple-200 font-mono"
+                  key={cls}
+                  className="inline-flex items-center gap-1 bg-purple-950/40 border border-purple-500/30 text-purple-300 text-[10px] font-mono px-2 py-0.5 rounded"
                 >
                   {cls}
                   <button
+                    type="button"
                     onClick={() => handleRemoveClass(cls)}
-                    className="hover:text-red-400 cursor-pointer"
+                    className="hover:text-red-400 cursor-pointer ml-0.5"
                   >
-                    <X className="w-2.5 h-2.5" />
+                    ×
                   </button>
                 </span>
               ))}
             </div>
-            <form onSubmit={handleAddClass} className="flex gap-1">
-              <input
-                type="text"
-                placeholder="Adicionar classe (ex: text-center, p-4)..."
-                value={newClassInput}
-                onChange={e => setNewClassInput(e.target.value)}
-                className={`${inputCls} font-mono`}
-              />
-              <button
-                type="submit"
-                className="p-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-lg cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5" />
-              </button>
-            </form>
-          </Section>
-
-          {/* BOX MODEL VISUALIZER */}
-          <Section title="Box Model" icon={<Box className="w-3 h-3 text-purple-400" />} defaultOpen={true}>
-            <BoxModelVisualizer styles={selectedStyles} onChange={S} />
           </Section>
 
           {/* LAYOUT & DISPLAY */}
