@@ -52,19 +52,27 @@ export const Canvas: React.FC<CanvasProps> = ({
             font-family: 'Outfit', sans-serif;
           }
 
-          /* ─── Selection & Hover Overlay Box System ─── */
-          .studio-hovered {
-            outline: 2px dashed #06b6d4 !important;
-            outline-offset: -2px !important;
+          /* ─── Selection Overlay Box (Positioned Absolutely Outside The Elements) ─── */
+          #studio-selection-box {
+            position: absolute;
+            display: none;
+            border: 2px solid #a855f7;
+            pointer-events: none;
+            z-index: 999999;
+            box-sizing: border-box;
+            transition: all 0.05s ease-out;
           }
 
-          .studio-selected {
-            outline: 2px solid #a855f7 !important;
-            outline-offset: -2px !important;
-            position: relative !important;
+          #studio-hover-box {
+            position: absolute;
+            display: none;
+            border: 2px dashed #06b6d4;
+            pointer-events: none;
+            z-index: 999998;
+            box-sizing: border-box;
           }
 
-          .studio-tag-badge {
+          #studio-tag-badge {
             position: absolute;
             top: -22px;
             left: -2px;
@@ -76,7 +84,6 @@ export const Canvas: React.FC<CanvasProps> = ({
             padding: 2px 6px;
             border-radius: 4px;
             pointer-events: none;
-            z-index: 999999;
             box-shadow: 0 2px 8px rgba(0,0,0,0.3);
             text-transform: lowercase;
             white-space: nowrap;
@@ -98,20 +105,47 @@ export const Canvas: React.FC<CanvasProps> = ({
           ${html}
         </div>
 
+        <!-- Overlays rendered at body level so they NEVER corrupt innerHTML -->
+        <div id="studio-selection-box">
+          <div id="studio-tag-badge">div</div>
+        </div>
+        <div id="studio-hover-box"></div>
+
         <script>
           let currentSelected = null;
-          let badgeEl = null;
+          const selectionBox = document.getElementById('studio-selection-box');
+          const tagBadge = document.getElementById('studio-tag-badge');
+          const hoverBox = document.getElementById('studio-hover-box');
+
+          function updateOverlayPosition() {
+            if (!currentSelected || !currentSelected.isConnected) {
+              if (selectionBox) selectionBox.style.display = 'none';
+              return;
+            }
+            const rect = currentSelected.getBoundingClientRect();
+            const scrollX = window.scrollX || window.pageXOffset || 0;
+            const scrollY = window.scrollY || window.pageYOffset || 0;
+
+            selectionBox.style.display = 'block';
+            selectionBox.style.top = (rect.top + scrollY) + 'px';
+            selectionBox.style.left = (rect.left + scrollX) + 'px';
+            selectionBox.style.width = rect.width + 'px';
+            selectionBox.style.height = rect.height + 'px';
+
+            const tag = currentSelected.tagName.toLowerCase();
+            const id = currentSelected.id ? '#' + currentSelected.id : '';
+            const cls = currentSelected.className && typeof currentSelected.className === 'string'
+              ? '.' + currentSelected.className.split(' ').filter(c => !c.startsWith('studio-'))[0]
+              : '';
+            tagBadge.textContent = tag + id + (cls ? cls.slice(0, 15) : '');
+          }
 
           function removeSelection() {
             if (currentSelected) {
-              currentSelected.classList.remove('studio-selected');
               currentSelected.removeAttribute('contenteditable');
-              if (badgeEl && badgeEl.parentNode) {
-                badgeEl.parentNode.removeChild(badgeEl);
-                badgeEl = null;
-              }
               currentSelected = null;
             }
+            if (selectionBox) selectionBox.style.display = 'none';
           }
 
           function getIndexPath(target) {
@@ -129,20 +163,11 @@ export const Canvas: React.FC<CanvasProps> = ({
           }
 
           function selectElement(target) {
-            if (!target || target === document.body || target === document.documentElement || target.id === 'canvas-root') return;
+            if (!target || target === document.body || target === document.documentElement || target.id === 'canvas-root' || target.id === 'studio-selection-box' || target.id === 'studio-hover-box' || target.id === 'studio-tag-badge') return;
 
             removeSelection();
             currentSelected = target;
-            target.classList.add('studio-selected');
-
-            // Attach floating tag badge
-            badgeEl = document.createElement('div');
-            badgeEl.className = 'studio-tag-badge';
-            const tag = target.tagName.toLowerCase();
-            const id = target.id ? '#' + target.id : '';
-            const cls = target.className ? '.' + target.className.split(' ').filter(c => !c.startsWith('studio-'))[0] : '';
-            badgeEl.textContent = tag + id + (cls ? cls.slice(0, 15) : '');
-            target.appendChild(badgeEl);
+            updateOverlayPosition();
 
             // Compute Selector
             const selectorParts = [];
@@ -151,7 +176,7 @@ export const Canvas: React.FC<CanvasProps> = ({
               let name = selEl.nodeName.toLowerCase();
               if (selEl.id) {
                 name += '#' + selEl.id;
-              } else if (selEl.className) {
+              } else if (selEl.className && typeof selEl.className === 'string') {
                 const cleanClasses = Array.from(selEl.classList)
                   .filter(c => !c.startsWith('studio-'))
                   .join('.');
@@ -166,8 +191,8 @@ export const Canvas: React.FC<CanvasProps> = ({
             // Extract Attributes
             const attrs = {
               _tag: target.tagName.toLowerCase(),
-              _textContent: target.childElementCount <= 1 ? (target.textContent || '') : '',
-              _hasChildren: target.childElementCount > 1 ? 'true' : 'false',
+              _textContent: target.childElementCount === 0 ? (target.textContent || '') : '',
+              _hasChildren: target.childElementCount > 0 ? 'true' : 'false',
             };
             ['id', 'class', 'href', 'src', 'alt', 'target', 'placeholder', 'type', 'name', 'value'].forEach(a => {
               const v = target.getAttribute(a);
@@ -221,8 +246,15 @@ export const Canvas: React.FC<CanvasProps> = ({
             }, '*');
           }
 
+          // Reposition selection on resize or scroll
+          window.addEventListener('resize', updateOverlayPosition);
+          window.addEventListener('scroll', updateOverlayPosition);
+
           // Single click -> Select bounding box
           document.body.addEventListener('click', (e) => {
+            if (e.target && e.target.getAttribute('contenteditable') === 'true') {
+              return; // Allow typing
+            }
             e.preventDefault();
             e.stopPropagation();
             selectElement(e.target);
@@ -233,7 +265,7 @@ export const Canvas: React.FC<CanvasProps> = ({
             e.preventDefault();
             e.stopPropagation();
             const target = e.target;
-            if (target && target.childElementCount <= 1) {
+            if (target && target.childElementCount === 0) {
               target.setAttribute('contenteditable', 'true');
               target.focus();
 
@@ -253,14 +285,20 @@ export const Canvas: React.FC<CanvasProps> = ({
 
           // Hover feedback
           document.body.addEventListener('mouseover', (e) => {
-            if (e.target && e.target !== document.body && !e.target.classList.contains('studio-selected')) {
-              e.target.classList.add('studio-hovered');
+            const t = e.target;
+            if (t && t !== document.body && t !== document.documentElement && t.id !== 'canvas-root' && t.id !== 'studio-selection-box' && t.id !== 'studio-hover-box') {
+              const rect = t.getBoundingClientRect();
+              const scrollX = window.scrollX || window.pageXOffset || 0;
+              const scrollY = window.scrollY || window.pageYOffset || 0;
+              hoverBox.style.display = 'block';
+              hoverBox.style.top = (rect.top + scrollY) + 'px';
+              hoverBox.style.left = (rect.left + scrollX) + 'px';
+              hoverBox.style.width = rect.width + 'px';
+              hoverBox.style.height = rect.height + 'px';
             }
           });
           document.body.addEventListener('mouseout', (e) => {
-            if (e.target) {
-              e.target.classList.remove('studio-hovered');
-            }
+            if (hoverBox) hoverBox.style.display = 'none';
           });
 
           // Window Message Dispatcher
@@ -288,9 +326,11 @@ export const Canvas: React.FC<CanvasProps> = ({
             }
 
             if (msg.data.type === 'HOVER_ELEMENT') {
-              document.querySelectorAll('.studio-hovered').forEach(el => el.classList.remove('studio-hovered'));
               const hoverP = msg.data.path;
-              if (!hoverP) return;
+              if (!hoverP) {
+                if (hoverBox) hoverBox.style.display = 'none';
+                return;
+              }
               const canvasRoot = document.getElementById('canvas-root') || document.body;
               const parts = String(hoverP).split('.').map(Number);
               let el = canvasRoot;
@@ -300,7 +340,14 @@ export const Canvas: React.FC<CanvasProps> = ({
                 el = kids[idx];
               }
               if (el && el !== canvasRoot) {
-                el.classList.add('studio-hovered');
+                const rect = el.getBoundingClientRect();
+                const scrollX = window.scrollX || window.pageXOffset || 0;
+                const scrollY = window.scrollY || window.pageYOffset || 0;
+                hoverBox.style.display = 'block';
+                hoverBox.style.top = (rect.top + scrollY) + 'px';
+                hoverBox.style.left = (rect.left + scrollX) + 'px';
+                hoverBox.style.width = rect.width + 'px';
+                hoverBox.style.height = rect.height + 'px';
               }
             }
           });
