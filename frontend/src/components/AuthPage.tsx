@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Lock, Mail, User, ShieldAlert } from 'lucide-react';
+import { useTheme } from '../context/ThemeContext';
+import { Lock, Mail, User, ShieldAlert, Sun, Moon } from 'lucide-react';
 import { API_URL } from '../config';
 
 interface AuthPageProps {
@@ -9,6 +10,7 @@ interface AuthPageProps {
 
 export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
   const { login } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -54,8 +56,25 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col justify-center items-center px-4 font-sans text-slate-100">
-      <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-2xl backdrop-blur-md">
+    <div className={`min-h-screen flex flex-col justify-center items-center px-4 font-sans relative transition-colors duration-200 ${
+      theme === 'light' ? 'bg-slate-50 text-slate-900' : 'bg-[#0a0c10] text-slate-100'
+    }`}>
+      {/* Botão de Tema no Canto Superior */}
+      <button
+        onClick={toggleTheme}
+        className={`absolute top-6 right-6 p-2 rounded-xl border transition-all cursor-pointer shadow-sm ${
+          theme === 'light'
+            ? 'bg-white border-slate-200 text-slate-800 hover:bg-slate-100'
+            : 'bg-slate-900 border-slate-800 text-amber-300 hover:bg-slate-800'
+        }`}
+        title={theme === 'dark' ? 'Mudar para Modo Claro' : 'Mudar para Modo Escuro'}
+      >
+        {theme === 'dark' ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-indigo-600" />}
+      </button>
+
+      <div className={`w-full max-w-md border rounded-2xl p-8 shadow-2xl backdrop-blur-md transition-colors duration-200 ${
+        theme === 'light' ? 'bg-white border-slate-200' : 'bg-[#0f1117] border-slate-800'
+      }`}>
         
         {/* Header / Logo */}
         <div className="text-center mb-8">
