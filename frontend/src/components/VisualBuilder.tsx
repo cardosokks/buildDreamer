@@ -1220,6 +1220,25 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
                 setActivePageId(newP.id);
               }
             }}
+            onRenamePage={async (id, newName) => {
+              if (!newName) return;
+              const newSlug = newName.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+              try {
+                const res = await fetch(`${API_URL}/api/pages/${id}`, {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                  body: JSON.stringify({ name: newName, slug: newSlug })
+                });
+                if (res.ok) {
+                  setProject(prev => prev ? {
+                    ...prev,
+                    pages: prev.pages.map(p => p.id === id ? { ...p, name: newName, slug: newSlug } : p)
+                  } : null);
+                }
+              } catch (e) {
+                console.error('Erro ao renomear página:', e);
+              }
+            }}
             onDuplicatePage={async (id) => {
               const pToDup = project.pages.find(p => p.id === id);
               if (!pToDup) return;

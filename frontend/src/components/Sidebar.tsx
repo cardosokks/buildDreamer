@@ -26,7 +26,10 @@ import {
   Eye,
   CornerDownRight,
   Home,
-  GripVertical
+  GripVertical,
+  Edit2,
+  Check,
+  X
 } from 'lucide-react';
 
 export interface ElementNode {
@@ -43,6 +46,7 @@ interface SidebarProps {
   activePageId: string;
   onSelectPage: (id: string) => void;
   onCreatePage: () => void;
+  onRenamePage?: (id: string, newName: string) => void;
   onDuplicatePage: (id: string) => void;
   onDeletePage: (id: string) => void;
   onSetHomepage?: (id: string) => void;
@@ -103,6 +107,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   activePageId,
   onSelectPage,
   onCreatePage,
+  onRenamePage,
   onDuplicatePage,
   onDeletePage,
   onSetHomepage,
@@ -122,6 +127,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [dragSource, setDragSource] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState<string | null>(null);
 
+  // Inline Page Renaming State
+  const [editingPageId, setEditingPageId] = useState<string | null>(null);
+  const [editingPageName, setEditingPageName] = useState('');
+
+  const startRenamePage = (id: string, currentName: string) => {
+    setEditingPageId(id);
+    setEditingPageName(currentName);
+  };
+
+  const submitRenamePage = (id: string) => {
+    if (editingPageName.trim() && onRenamePage) {
+      onRenamePage(id, editingPageName.trim());
+    }
+    setEditingPageId(null);
+    setEditingPageName('');
+  };
+
   // Context Menu State (WordPress Block Actions)
   const [contextMenu, setContextMenu] = useState<{
     visible: boolean;
@@ -130,9 +152,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
     type: 'page' | 'layer';
     idOrPath: string;
     isHomepage?: boolean;
+    pageName?: string;
   }>({ visible: false, x: 0, y: 0, type: 'layer', idOrPath: '' });
 
-  const handleContextMenu = (e: React.MouseEvent, type: 'page' | 'layer', idOrPath: string, isHomepage = false) => {
+  const handleContextMenu = (e: React.MouseEvent, type: 'page' | 'layer', idOrPath: string, isHomepage = false, pageName = '') => {
     e.preventDefault();
     e.stopPropagation();
     setContextMenu({
@@ -141,7 +164,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
       y: e.clientY,
       type,
       idOrPath,
-      isHomepage
+      isHomepage,
+      pageName
     });
   };
 
@@ -408,35 +432,77 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         {!pagesCollapsed && (
-          <div className="px-2 pb-3 space-y-0.5 max-h-36 overflow-y-auto min-h-0">
+          <div className="px-2 pb-3 space-y-0.5 max-h-40 overflow-y-auto min-h-0">
             {pages.map(page => (
               <div
                 key={page.id}
-                onContextMenu={(e) => handleContextMenu(e, 'page', page.id, page.isHomepage)}
+                onContextMenu={(e) => handleContextMenu(e, 'page', page.id, page.isHomepage, page.name)}
                 className={`flex items-center justify-between px-2 py-1.5 rounded-lg text-xs transition-all group ${
                   page.id === activePageId
-                    ? 'bg-purple-600/20 border border-purple-500/30 text-purple-300'
+                    ? 'bg-purple-600/20 border border-purple-500/30 text-purple-300 font-semibold'
                     : 'hover:bg-slate-900 border border-transparent text-slate-400 hover:text-slate-200'
                 }`}
               >
-                <button
-                  onClick={() => onSelectPage(page.id)}
-                  className="flex items-center gap-2 truncate text-left w-full cursor-pointer"
-                >
-                  <FolderOpen className="w-3.5 h-3.5 shrink-0" />
-                  <span className="truncate font-medium">{page.name}</span>
-                  {page.isHomepage && <span className="text-[9px] bg-slate-800 text-slate-400 px-1 py-0.5 rounded font-mono">HOME</span>}
-                </button>
+                {editingPageId === page.id ? (
+                  <div className="flex items-center gap-1.5 w-full" onClick={(e) => e.stopPropagation()}>
+                    <input
+                      type="text"
+                      value={editingPageName}
+                      onChange={(e) => setEditingPageName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') submitRenamePage(page.id);
+                        if (e.key === 'Escape') setEditingPageId(null);
+                      }}
+                      autoFocus
+                      className="flex-1 bg-slate-950 border border-purple-500 rounded px-1.5 py-0.5 text-xs text-white focus:outline-none"
+                    />
+                    <button
+                      onClick={() => submitRenamePage(page.id)}
+                      className="p-0.5 text-emerald-400 hover:text-emerald-300 cursor-pointer"
+                      title="Confirmar nome"
+                    >
+                      <Check className="w-3 h-3" />
+                    </button>
+                    <button
+                      onClick={() => setEditingPageId(null)}
+                      className="p-0.5 text-slate-500 hover:text-white cursor-pointer"
+                      title="Cancelar"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => onSelectPage(page.id)}
+                      className="flex items-center gap-2 truncate text-left w-full cursor-pointer min-w-0"
+                    >
+                      <FolderOpen className="w-3.5 h-3.5 shrink-0 text-purple-400" />
+                      <span className="truncate">{page.name}</span>
+                      {page.isHomepage && <span className="text-[9px] bg-slate-800 text-slate-400 px-1 py-0.5 rounded font-mono shrink-0">HOME</span>}
+                    </button>
 
-                <div className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 shrink-0 transition-opacity">
-                  <button
-                    onClick={(e) => handleContextMenu(e, 'page', page.id, page.isHomepage)}
-                    className="p-1 hover:text-white text-slate-500 rounded transition-colors cursor-pointer"
-                    title="Menu de opções"
-                  >
-                    <MoreVertical className="w-3 h-3" />
-                  </button>
-                </div>
+                    <div className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 shrink-0 transition-opacity">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          startRenamePage(page.id, page.name);
+                        }}
+                        className="p-1 hover:text-white text-slate-500 hover:bg-slate-800 rounded transition-colors cursor-pointer"
+                        title="Renomear Página"
+                      >
+                        <Edit2 className="w-3 h-3" />
+                      </button>
+                      <button
+                        onClick={(e) => handleContextMenu(e, 'page', page.id, page.isHomepage, page.name)}
+                        className="p-1 hover:text-white text-slate-500 hover:bg-slate-800 rounded transition-colors cursor-pointer"
+                        title="Opções da página"
+                      >
+                        <MoreVertical className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             ))}
           </div>
@@ -537,6 +603,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
         >
           {contextMenu.type === 'page' ? (
             <>
+              <button
+                onClick={() => {
+                  startRenamePage(contextMenu.idOrPath, contextMenu.pageName || '');
+                  closeContextMenu();
+                }}
+                className="w-full px-3 py-2 text-left text-xs text-slate-200 hover:bg-purple-600 hover:text-white flex items-center gap-2 transition-colors cursor-pointer"
+              >
+                <Edit2 className="w-3.5 h-3.5" />
+                Renomear Página
+              </button>
               <button
                 onClick={() => {
                   onDuplicatePage(contextMenu.idOrPath);
