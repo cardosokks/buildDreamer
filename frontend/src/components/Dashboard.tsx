@@ -22,7 +22,16 @@ import {
   Maximize2,
   Menu,
   X,
-  GripVertical
+  GripVertical,
+  Bookmark,
+  BookmarkCheck,
+  Sliders,
+  Plus,
+  Edit2,
+  Check,
+  SlidersHorizontal,
+  ExternalLink,
+  MessageSquare
 } from 'lucide-react';
 
 import { SettingsModal } from './SettingsModal';
@@ -56,9 +65,19 @@ interface Lead {
   needsWebsite?: boolean;
 }
 
+interface FilterPreset {
+  id: string;
+  name: string;
+  niche: string;
+  location: string;
+  onlyWithoutWebsite: boolean;
+  hasPhoneOnly: boolean;
+  minRating: number;
+}
+
 interface DashboardProps {
-  initialTab?: 'general' | 'projects' | 'leads';
-  onTabChange?: (tab: 'general' | 'projects' | 'leads') => void;
+  initialTab?: 'general' | 'projects' | 'leads' | 'saved-leads' | 'presets';
+  onTabChange?: (tab: 'general' | 'projects' | 'leads' | 'saved-leads' | 'presets') => void;
   onSelectProject: (projectId: string) => void;
 }
 
@@ -68,10 +87,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
-  // Tab layout selection: 'general' | 'projects' | 'leads'
-  const [activeTab, setActiveTabState] = useState<'general' | 'projects' | 'leads'>(initialTab);
+  // Tab layout selection: 'general' | 'projects' | 'leads' | 'saved-leads' | 'presets'
+  const [activeTab, setActiveTabState] = useState<'general' | 'projects' | 'leads' | 'saved-leads' | 'presets'>(initialTab);
 
-  const setActiveTab = (tab: 'general' | 'projects' | 'leads') => {
+  const setActiveTab = (tab: 'general' | 'projects' | 'leads' | 'saved-leads' | 'presets') => {
     setActiveTabState(tab);
     if (onTabChange) onTabChange(tab);
   };
@@ -92,12 +111,96 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
   // User Profile Dropdown state
   const [showUserDropdown, setShowUserDropdown] = useState(false);
 
-  // Leads state variables
+  // Leads search states
   const [leadQuery, setLeadQuery] = useState('');
   const [leadLocation, setLeadLocation] = useState('');
   const [onlyWithoutWebsite, setOnlyWithoutWebsite] = useState(false);
+  const [hasPhoneOnly, setHasPhoneOnly] = useState(false);
+  const [minRating, setMinRating] = useState('0');
   const [leadsList, setLeadsList] = useState<Lead[]>([]);
   const [loadingLeads, setLoadingLeads] = useState(false);
+
+  // Saved Leads State (Persistência no LocalStorage)
+  const [savedLeads, setSavedLeads] = useState<Lead[]>(() => {
+    try {
+      const stored = localStorage.getItem('builddreamer_saved_leads');
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const handleToggleSaveLead = (lead: Lead) => {
+    setSavedLeads(prev => {
+      const exists = prev.some(l => l.id === lead.id || l.name === lead.name);
+      let updated;
+      if (exists) {
+        updated = prev.filter(l => l.id !== lead.id && l.name !== lead.name);
+      } else {
+        updated = [...prev, lead];
+      }
+      localStorage.setItem('builddreamer_saved_leads', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  // Filter Presets State (CRUD de Filtros Pré-Prontos)
+  const [filterPresets, setFilterPresets] = useState<FilterPreset[]>(() => {
+    try {
+      const stored = localStorage.getItem('builddreamer_filter_presets');
+      if (stored) return JSON.parse(stored);
+    } catch {}
+    return [
+      { id: '1', name: 'Padarias Sem Site', niche: 'Padaria', location: 'Brasília DF', onlyWithoutWebsite: true, hasPhoneOnly: true, minRating: 4 },
+      { id: '2', name: 'Dentistas com Telefone', niche: 'Dentista', location: 'Formosa GO', onlyWithoutWebsite: false, hasPhoneOnly: true, minRating: 4.5 },
+      { id: '3', name: 'Restaurantes & Pizzarias', niche: 'Pizzaria', location: 'Goiânia GO', onlyWithoutWebsite: true, hasPhoneOnly: false, minRating: 0 },
+      { id: '4', name: 'Academias & Fitness', niche: 'Academia', location: 'São Paulo SP', onlyWithoutWebsite: true, hasPhoneOnly: true, minRating: 4 }
+    ];
+  });
+
+  const [presetModalOpen, setPresetModalOpen] = useState(false);
+  const [editingPresetId, setEditingPresetId] = useState<string | null>(null);
+  const [presetForm, setPresetForm] = useState<Omit<FilterPreset, 'id'>>({
+    name: '',
+    niche: '',
+    location: '',
+    onlyWithoutWebsite: true,
+    hasPhoneOnly: false,
+    minRating: 0
+  });
+
+  const handleSavePreset = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!presetForm.name || !presetForm.niche) return;
+
+    if (editingPresetId) {
+      const updated = filterPresets.map(p => p.id === editingPresetId ? { ...presetForm, id: editingPresetId } : p);
+      setFilterPresets(updated);
+      localStorage.setItem('builddreamer_filter_presets', JSON.stringify(updated));
+    } else {
+      const newPreset: FilterPreset = { ...presetForm, id: `preset-${Date.now()}` };
+      const updated = [...filterPresets, newPreset];
+      setFilterPresets(updated);
+      localStorage.setItem('builddreamer_filter_presets', JSON.stringify(updated));
+    }
+    setPresetModalOpen(false);
+    setEditingPresetId(null);
+  };
+
+  const handleDeletePreset = (id: string) => {
+    const updated = filterPresets.filter(p => p.id !== id);
+    setFilterPresets(updated);
+    localStorage.setItem('builddreamer_filter_presets', JSON.stringify(updated));
+  };
+
+  const handleApplyPreset = (preset: FilterPreset) => {
+    setLeadQuery(preset.niche);
+    setLeadLocation(preset.location);
+    setOnlyWithoutWebsite(preset.onlyWithoutWebsite);
+    setHasPhoneOnly(preset.hasPhoneOnly);
+    setMinRating(preset.minRating.toString());
+    setActiveTab('leads');
+  };
 
   // Settings modal state
   const [showSettings, setShowSettings] = useState(false);
@@ -498,16 +601,54 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
               <Layout className="w-4 h-4 text-indigo-400 shrink-0" />
               <span className="truncate">Projetos / Sites</span>
             </button>
+            
+            {/* Prospecting Section Divider */}
+            <div className="pt-3 pb-1 px-3 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+              Prospecção de Leads
+            </div>
+
             <button
               onClick={() => setActiveTab('leads')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
+              className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
                 activeTab === 'leads'
                   ? 'bg-purple-900/20 border border-purple-500/30 text-purple-300 shadow-[0_0_15px_rgba(168,85,247,0.15)]'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/40 border border-transparent'
               }`}
             >
               <Users className="w-4 h-4 text-pink-400 shrink-0" />
-              <span className="truncate">Buscar Clientes (Maps)</span>
+              <span className="truncate">Buscador de Clientes</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('saved-leads')}
+              className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
+                activeTab === 'saved-leads'
+                  ? 'bg-purple-900/20 border border-purple-500/30 text-purple-300 shadow-[0_0_15px_rgba(168,85,247,0.15)]'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/40 border border-transparent'
+              }`}
+            >
+              <Bookmark className="w-4 h-4 text-yellow-400 shrink-0" />
+              <span className="truncate flex-1 text-left">Leads Salvos</span>
+              {savedLeads.length > 0 && (
+                <span className="text-[10px] px-2 py-0.5 bg-yellow-500/20 text-yellow-300 border border-yellow-500/30 rounded-full font-mono">
+                  {savedLeads.length}
+                </span>
+              )}
+            </button>
+
+            <button
+              onClick={() => setActiveTab('presets')}
+              className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
+                activeTab === 'presets'
+                  ? 'bg-purple-900/20 border border-purple-500/30 text-purple-300 shadow-[0_0_15px_rgba(168,85,247,0.15)]'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/40 border border-transparent'
+              }`}
+            >
+              <SlidersHorizontal className="w-4 h-4 text-cyan-400 shrink-0" />
+              <span className="truncate flex-1 text-left">Filtros Pré-Prontos</span>
+              <span className="text-[10px] px-2 py-0.5 bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 rounded-full font-mono">
+                {filterPresets.length}
+              </span>
             </button>
           </div>
 
@@ -668,138 +809,56 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                 </div>
               )}
             </div>
-          ) : (
-            /* BUSCAR CLIENTES (LEADS MAPS TAB) */
+          ) : activeTab === 'saved-leads' ? (
+            /* LEADS SALVOS SUBMENU TAB */
             <div className="max-w-6xl mx-auto space-y-6">
-              <div>
-                <h1 className="text-3xl font-extrabold text-white tracking-tight flex items-center gap-2.5">
-                  <Users className="w-8 h-8 text-pink-400" />
-                  Buscador de Clientes (Google Maps Leads)
-                </h1>
-                <p className="text-slate-450 mt-1">Busque estabelecimentos comerciais sem site ativo para oferecer serviços de Web Design de forma automatizada.</p>
+              <div className="flex items-center justify-between">
+                <div>
+                  <h1 className="text-3xl font-extrabold text-white tracking-tight flex items-center gap-2.5">
+                    <Bookmark className="w-8 h-8 text-yellow-400" />
+                    Leads Salvos ({savedLeads.length})
+                  </h1>
+                  <p className="text-slate-450 mt-1">Gerencie os potenciais clientes favoritados para abordagem e criação de sites.</p>
+                </div>
+                <button
+                  onClick={() => setActiveTab('leads')}
+                  className="px-4 py-2 bg-purple-700 hover:bg-purple-600 text-white font-semibold rounded-xl text-xs transition-all flex items-center gap-2 cursor-pointer"
+                >
+                  <Search className="w-4 h-4" />
+                  Buscar Mais Leads
+                </button>
               </div>
 
-              {/* Interactive map visualization widget with OpenStreetMap and selection pointer */}
-              <div className="bg-[#0f0b18] border border-slate-850 rounded-2xl p-4 shadow-xl overflow-hidden">
-                <span className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Selecione uma Região no Mapa (Clique para Mudar a Localização)</span>
-                <div className="relative h-64 w-full rounded-xl overflow-hidden bg-slate-900 border border-slate-800">
-                  <iframe 
-                    title="Seletor de Região Leaflet"
-                    src="https://maps.google.com/maps?q=-23.5505,-46.6333&t=&z=12&ie=UTF8&iwloc=&output=embed"
-                    className="w-full h-full border-0 filter invert opacity-80 contrast-125 pointer-events-auto"
-                    allowFullScreen={true}
-                    loading="lazy"
-                  />
-                  <div className="absolute bottom-3 left-3 right-3 bg-[#07020d]/90 border border-purple-500/30 rounded-xl p-3 flex flex-wrap items-center justify-between gap-3 backdrop-blur-xs">
-                    <span className="text-xs text-slate-350">
-                      💡 Região ativa para busca: <strong className="text-purple-400 font-semibold">{leadLocation || 'Perto de mim'}</strong>
-                    </span>
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      {[
-                        { name: 'São Paulo', coords: '-23.5505,-46.6333' },
-                        { name: 'Rio de Janeiro', coords: '-22.9068,-43.1729' },
-                        { name: 'Brasília', coords: '-15.7975,-47.8919' },
-                        { name: 'Belo Horizonte', coords: '-19.9173,-43.9345' },
-                        { name: 'Curitiba', coords: '-25.4290,-49.2671' },
-                        { name: 'Salvador', coords: '-12.9777,-38.5016' },
-                        { name: 'Porto Alegre', coords: '-30.0346,-51.2177' },
-                        { name: 'Goiânia', coords: '-16.6869,-49.2648' }
-                      ].map(loc => (
-                        <button
-                          key={loc.name}
-                          type="button"
-                          onClick={() => {
-                            setLeadLocation(loc.name);
-                            // Dinamicamente atualiza o iframe do Maps com as coordenadas do local selecionado
-                            const iframe = document.querySelector('iframe[title="Seletor de Região Leaflet"]') as HTMLIFrameElement;
-                            if (iframe) {
-                              iframe.src = `https://maps.google.com/maps?q=${loc.coords}&t=&z=12&ie=UTF8&iwloc=&output=embed`;
-                            }
-                          }}
-                          className={`px-2.5 py-1 rounded-lg text-[10px] font-medium transition-all cursor-pointer ${leadLocation === loc.name ? 'bg-purple-600 text-white font-bold' : 'bg-purple-900/30 border border-purple-500/25 hover:bg-purple-900/60 text-purple-300'}`}
-                        >
-                          {loc.name}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <form onSubmit={handleSearchLeads} className="bg-[#0f0b18] border border-slate-850 rounded-2xl p-5 shadow-xl space-y-3">
-                <div className="flex flex-col md:flex-row items-center gap-4">
-                  <div className="w-full md:flex-1 relative">
-                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-slate-500" />
-                    <input 
-                      type="text"
-                      required
-                      placeholder="O que está procurando? Ex: Supermercado, Pizzaria, Dentista"
-                      value={leadQuery}
-                      onChange={(e) => setLeadQuery(e.target.value)}
-                      className="w-full pl-11 pr-4 py-3 bg-slate-950 border border-slate-850 rounded-xl focus:outline-none focus:ring-1 focus:ring-purple-500 text-sm text-white placeholder-slate-600"
-                    />
-                  </div>
-                  <div className="w-full md:w-80 relative">
-                    <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-slate-500" />
-                    <input 
-                      type="text"
-                      placeholder="Localização (ex: Formosa GO)"
-                      value={leadLocation}
-                      onChange={(e) => setLeadLocation(e.target.value)}
-                      className="w-full pl-11 pr-4 py-3 bg-slate-950 border border-slate-850 rounded-xl focus:outline-none focus:ring-1 focus:ring-purple-500 text-sm text-white placeholder-slate-600"
-                    />
-                  </div>
-                  <button
-                    type="submit"
-                    disabled={loadingLeads}
-                    className="w-full md:w-auto px-6 py-3 bg-purple-700 hover:bg-purple-650 text-white font-semibold rounded-xl text-sm transition-all shadow-[0_0_15px_rgba(168,85,247,0.3)] hover:shadow-[0_0_20px_rgba(168,85,247,0.5)] cursor-pointer"
-                  >
-                    {loadingLeads ? 'Raspando...' : 'Buscar Leads'}
-                  </button>
-                </div>
-
-                <div className="flex items-center gap-2 pt-1">
-                  <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer select-none">
-                    <input 
-                      type="checkbox"
-                      checked={onlyWithoutWebsite}
-                      onChange={(e) => setOnlyWithoutWebsite(e.target.checked)}
-                      className="w-4 h-4 rounded bg-slate-900 border-slate-700 text-purple-600 focus:ring-purple-500"
-                    />
-                    <span>Filtrar apenas estabelecimentos <strong>sem website institucional</strong> (Oportunidades quentes)</span>
-                  </label>
-                </div>
-              </form>
-
-              {/* Leads results */}
-              {loadingLeads ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {[1, 2, 3, 4].map(i => (
-                    <div key={i} className="h-32 rounded-xl bg-[#0f0b18] border border-slate-850 animate-pulse" />
-                  ))}
-                </div>
-              ) : leadsList.length === 0 ? (
-                <div className="p-12 bg-slate-900/10 border border-slate-850 rounded-2xl text-center text-slate-500 text-sm italic">
-                  Digite o nicho e cidade e clique em "Buscar Leads" para prospectar clientes reais da região.
+              {savedLeads.length === 0 ? (
+                <div className="p-16 bg-[#0f0b18] border border-slate-850 rounded-2xl text-center space-y-3">
+                  <Bookmark className="w-12 h-12 text-slate-600 mx-auto" />
+                  <h3 className="text-base font-bold text-white">Nenhum lead salvo no momento</h3>
+                  <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                    Navegue até o <strong>Buscador de Clientes</strong>, faça buscas e clique no ícone de salvar em qualquer estabelecimento para adicioná-lo aqui.
+                  </p>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {leadsList.map(lead => (
+                  {savedLeads.map(lead => (
                     <div 
                       key={lead.id}
-                      className="bg-[#0f0b18] border border-slate-850 rounded-2xl p-5 flex flex-col justify-between hover:border-purple-500/30 transition-all shadow-md"
+                      className="bg-[#0f0b18] border border-yellow-500/20 rounded-2xl p-5 flex flex-col justify-between hover:border-yellow-500/40 transition-all shadow-md"
                     >
                       <div className="space-y-2">
                         <div className="flex items-start justify-between gap-3">
                           <div>
                             <h3 className="font-bold text-white text-base leading-tight">{lead.name}</h3>
                             {lead.category && (
-                              <span className="text-[10px] text-purple-400 font-mono">{lead.category}</span>
+                              <span className="text-[10px] text-yellow-400 font-mono">{lead.category}</span>
                             )}
                           </div>
-                          <div className="flex items-center gap-1 shrink-0 bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 px-1.5 py-0.5 rounded text-[10px]">
-                            <Star className="w-3 h-3 fill-yellow-400" />
-                            {lead.rating}
-                          </div>
+                          <button
+                            onClick={() => handleToggleSaveLead(lead)}
+                            className="p-1 text-yellow-400 hover:text-red-400 transition-colors"
+                            title="Remover dos salvos"
+                          >
+                            <BookmarkCheck className="w-5 h-5 fill-yellow-400" />
+                          </button>
                         </div>
 
                         <p className="text-xs text-slate-400 flex items-center gap-1.5">
@@ -819,15 +878,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                               {lead.website}
                             </a>
                           ) : (
-                            <span className="text-red-400 font-semibold uppercase tracking-wider text-[10px] bg-red-950/30 border border-red-500/25 px-1.5 py-0.5 rounded shadow-[0_0_8px_rgba(239,68,68,0.1)]">Sem Website (Oportunidade!)</span>
+                            <span className="text-red-400 font-semibold uppercase tracking-wider text-[10px] bg-red-950/30 border border-red-500/25 px-1.5 py-0.5 rounded">Sem Website (Oportunidade!)</span>
                           )}
                         </p>
                       </div>
 
                       <div className="mt-4 pt-4 border-t border-slate-850/80 flex items-center justify-between gap-2 flex-wrap">
-                        <span className="text-[10px] text-slate-500 font-mono">
-                          {lead.source || 'Crawler Autônomo'}
-                        </span>
+                        <span className="text-[10px] text-slate-500 font-mono">Salvo na Lista</span>
                         <div className="flex items-center gap-2">
                           {lead.whatsappUrl && (
                             <a
@@ -841,9 +898,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                           )}
                           <button
                             onClick={() => handleCreateProjectFromLead(lead)}
-                            className="px-3.5 py-1.5 bg-purple-700/30 hover:bg-purple-700/60 border border-purple-500/40 text-xs font-bold text-purple-300 rounded-xl transition-all cursor-pointer"
+                            className="px-3.5 py-1.5 bg-purple-700/40 hover:bg-purple-700/80 border border-purple-500/50 text-xs font-bold text-white rounded-xl transition-all cursor-pointer shadow-sm"
                           >
-                            Criar Site Para Cliente
+                            Gerar Site com IA
                           </button>
                         </div>
                       </div>
@@ -852,9 +909,419 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                 </div>
               )}
             </div>
+          ) : activeTab === 'presets' ? (
+            /* FILTROS PRÉ-PRONTOS (CRUD DE PRESETS) */
+            <div className="max-w-5xl mx-auto space-y-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h1 className="text-3xl font-extrabold text-white tracking-tight flex items-center gap-2.5">
+                    <SlidersHorizontal className="w-8 h-8 text-cyan-400" />
+                    Filtros Pré-Prontos de Prospecção
+                  </h1>
+                  <p className="text-slate-450 mt-1">Configure modelos de busca frequentes para prospectar estabelecimentos com 1 clique.</p>
+                </div>
+                <button
+                  onClick={() => {
+                    setEditingPresetId(null);
+                    setPresetForm({
+                      name: '',
+                      niche: '',
+                      location: '',
+                      onlyWithoutWebsite: true,
+                      hasPhoneOnly: false,
+                      minRating: 0
+                    });
+                    setPresetModalOpen(true);
+                  }}
+                  className="px-4 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold rounded-xl text-xs transition-all flex items-center gap-1.5 cursor-pointer shadow-lg shadow-cyan-600/20"
+                >
+                  <Plus className="w-4 h-4" />
+                  Novo Filtro
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {filterPresets.map(preset => (
+                  <div 
+                    key={preset.id}
+                    className="bg-[#0f0b18] border border-slate-850 hover:border-cyan-500/30 rounded-2xl p-5 flex flex-col justify-between transition-all shadow-md"
+                  >
+                    <div>
+                      <div className="flex items-start justify-between gap-3 mb-2">
+                        <h3 className="font-bold text-white text-base leading-tight">{preset.name}</h3>
+                        <span className="px-2 py-0.5 bg-cyan-950/40 text-cyan-400 border border-cyan-500/30 rounded-md text-[10px] font-mono">
+                          {preset.niche}
+                        </span>
+                      </div>
+
+                      <div className="space-y-1.5 text-xs text-slate-400 mt-3">
+                        <p className="flex items-center gap-1.5">
+                          <MapPin className="w-3.5 h-3.5 text-pink-400" />
+                          <span>Localização: <strong>{preset.location || 'Brasil'}</strong></span>
+                        </p>
+                        <p className="flex items-center gap-1.5">
+                          <Globe className="w-3.5 h-3.5 text-cyan-400" />
+                          <span>Apenas sem site: <strong>{preset.onlyWithoutWebsite ? 'Sim' : 'Não'}</strong></span>
+                        </p>
+                        <p className="flex items-center gap-1.5">
+                          <Phone className="w-3.5 h-3.5 text-indigo-400" />
+                          <span>Com telefone: <strong>{preset.hasPhoneOnly ? 'Sim' : 'Qualquer'}</strong></span>
+                        </p>
+                        {preset.minRating > 0 && (
+                          <p className="flex items-center gap-1.5">
+                            <Star className="w-3.5 h-3.5 text-yellow-400" />
+                            <span>Avaliação mínima: <strong>★ {preset.minRating}</strong></span>
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="mt-5 pt-4 border-t border-slate-850 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => {
+                            setEditingPresetId(preset.id);
+                            setPresetForm({
+                              name: preset.name,
+                              niche: preset.niche,
+                              location: preset.location,
+                              onlyWithoutWebsite: preset.onlyWithoutWebsite,
+                              hasPhoneOnly: preset.hasPhoneOnly,
+                              minRating: preset.minRating
+                            });
+                            setPresetModalOpen(true);
+                          }}
+                          className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-white rounded-lg transition-colors"
+                          title="Editar preset"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDeletePreset(preset.id)}
+                          className="p-1.5 hover:bg-red-950/40 text-slate-400 hover:text-red-400 rounded-lg transition-colors"
+                          title="Excluir preset"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+
+                      <button
+                        onClick={() => handleApplyPreset(preset)}
+                        className="px-4 py-1.5 bg-cyan-600/20 hover:bg-cyan-600/40 border border-cyan-500/40 text-cyan-300 font-bold rounded-xl text-xs transition-all cursor-pointer"
+                      >
+                        Executar Busca
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            /* BUSCAR CLIENTES (LEADS CRAWLER TAB SEM MAPA PESADO) */
+            <div className="max-w-6xl mx-auto space-y-6">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <h1 className="text-3xl font-extrabold text-white tracking-tight flex items-center gap-2.5">
+                    <Users className="w-8 h-8 text-pink-400" />
+                    Buscador de Leads Autônomo
+                  </h1>
+                  <p className="text-slate-450 mt-1">Prospecte estabelecimentos comerciais locais sem website com o motor de extração Overpass e Web Index.</p>
+                </div>
+                
+                {/* Botões rápidos de atalho */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    onClick={() => setActiveTab('saved-leads')}
+                    className="px-3.5 py-2 bg-yellow-500/10 hover:bg-yellow-500/20 border border-yellow-500/30 text-yellow-300 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5"
+                  >
+                    <Bookmark className="w-3.5 h-3.5" />
+                    Ver Salvos ({savedLeads.length})
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('presets')}
+                    className="px-3.5 py-2 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5"
+                  >
+                    <SlidersHorizontal className="w-3.5 h-3.5" />
+                    Filtros Prontos
+                  </button>
+                </div>
+              </div>
+
+              {/* Formulário de Busca Avançada */}
+              <form onSubmit={handleSearchLeads} className="bg-[#0f0b18] border border-slate-850 rounded-2xl p-5 shadow-xl space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+                  <div className="md:col-span-6 relative">
+                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-slate-500" />
+                    <input 
+                      type="text"
+                      required
+                      placeholder="Nicho ou termo: Padaria, Dentista, Supermercado, Pizzaria..."
+                      value={leadQuery}
+                      onChange={(e) => setLeadQuery(e.target.value)}
+                      className="w-full pl-11 pr-4 py-3 bg-slate-950 border border-slate-800 rounded-xl focus:outline-none focus:ring-1 focus:ring-purple-500 text-sm text-white placeholder-slate-600"
+                    />
+                  </div>
+                  <div className="md:col-span-4 relative">
+                    <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-slate-500" />
+                    <input 
+                      type="text"
+                      placeholder="Cidade/Estado (Ex: Formosa GO, Brasília, São Paulo)"
+                      value={leadLocation}
+                      onChange={(e) => setLeadLocation(e.target.value)}
+                      className="w-full pl-11 pr-4 py-3 bg-slate-950 border border-slate-800 rounded-xl focus:outline-none focus:ring-1 focus:ring-purple-500 text-sm text-white placeholder-slate-600"
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <button
+                      type="submit"
+                      disabled={loadingLeads}
+                      className="w-full h-full py-3 bg-purple-700 hover:bg-purple-650 text-white font-bold rounded-xl text-sm transition-all shadow-[0_0_15px_rgba(168,85,247,0.3)] hover:shadow-[0_0_20px_rgba(168,85,247,0.5)] cursor-pointer flex items-center justify-center gap-2"
+                    >
+                      {loadingLeads ? 'Raspando...' : 'Buscar Leads'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Filtros Detalhados */}
+                <div className="pt-2 border-t border-slate-900 flex flex-wrap items-center justify-between gap-4 text-xs text-slate-400">
+                  <div className="flex flex-wrap items-center gap-5">
+                    <label className="flex items-center gap-2 cursor-pointer select-none">
+                      <input 
+                        type="checkbox"
+                        checked={onlyWithoutWebsite}
+                        onChange={(e) => setOnlyWithoutWebsite(e.target.checked)}
+                        className="w-4 h-4 rounded bg-slate-900 border-slate-700 text-purple-600 focus:ring-purple-500"
+                      />
+                      <span>Apenas <strong>Sem Website</strong> (Oportunidades)</span>
+                    </label>
+
+                    <label className="flex items-center gap-2 cursor-pointer select-none">
+                      <input 
+                        type="checkbox"
+                        checked={hasPhoneOnly}
+                        onChange={(e) => setHasPhoneOnly(e.target.checked)}
+                        className="w-4 h-4 rounded bg-slate-900 border-slate-700 text-purple-600 focus:ring-purple-500"
+                      />
+                      <span>Com <strong>Telefone/WhatsApp</strong></span>
+                    </label>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span>Avaliação Mínima:</span>
+                    <select
+                      value={minRating}
+                      onChange={(e) => setMinRating(e.target.value)}
+                      className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none"
+                    >
+                      <option value="0">Todas as notas</option>
+                      <option value="4.0">★ 4.0 ou mais</option>
+                      <option value="4.5">★ 4.5 ou mais</option>
+                      <option value="4.8">★ 4.8 ou mais</option>
+                    </select>
+                  </div>
+                </div>
+              </form>
+
+              {/* Leads results list */}
+              {loadingLeads ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {[1, 2, 3, 4].map(i => (
+                    <div key={i} className="h-36 rounded-2xl bg-[#0f0b18] border border-slate-850 animate-pulse" />
+                  ))}
+                </div>
+              ) : leadsList.length === 0 ? (
+                <div className="p-16 bg-[#0f0b18] border border-slate-850 rounded-2xl text-center space-y-3">
+                  <Search className="w-12 h-12 text-slate-600 mx-auto" />
+                  <h3 className="text-base font-bold text-white">Nenhum lead exibido</h3>
+                  <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                    Digite um nicho comercial (ex: <em>Padaria</em>, <em>Dentista</em>, <em>Oficina</em>) e uma cidade, ou use um dos nossos <strong>Filtros Prontos</strong>.
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {leadsList.map(lead => {
+                    const isSaved = savedLeads.some(l => l.id === lead.id || l.name === lead.name);
+                    return (
+                      <div 
+                        key={lead.id}
+                        className={`bg-[#0f0b18] border rounded-2xl p-5 flex flex-col justify-between transition-all shadow-md ${
+                          isSaved ? 'border-yellow-500/40 shadow-[0_0_15px_rgba(234,179,8,0.1)]' : 'border-slate-850 hover:border-purple-500/30'
+                        }`}
+                      >
+                        <div className="space-y-2">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <h3 className="font-bold text-white text-base leading-tight">{lead.name}</h3>
+                              {lead.category && (
+                                <span className="text-[10px] text-purple-400 font-mono">{lead.category}</span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <button
+                                onClick={() => handleToggleSaveLead(lead)}
+                                className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
+                                  isSaved 
+                                    ? 'bg-yellow-500/20 border-yellow-500/40 text-yellow-300' 
+                                    : 'bg-slate-900 border-slate-800 text-slate-500 hover:text-yellow-400'
+                                }`}
+                                title={isSaved ? 'Salvo nos favoritos' : 'Salvar lead para depois'}
+                              >
+                                {isSaved ? <BookmarkCheck className="w-4 h-4 fill-yellow-400" /> : <Bookmark className="w-4 h-4" />}
+                              </button>
+                              <div className="flex items-center gap-1 bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 px-1.5 py-0.5 rounded text-[10px]">
+                                <Star className="w-3 h-3 fill-yellow-400" />
+                                {lead.rating}
+                              </div>
+                            </div>
+                          </div>
+
+                          <p className="text-xs text-slate-400 flex items-center gap-1.5">
+                            <MapPin className="w-3.5 h-3.5 text-pink-400 shrink-0" />
+                            <span className="line-clamp-1">{lead.address}</span>
+                          </p>
+
+                          <p className="text-xs text-slate-400 flex items-center gap-1.5">
+                            <Phone className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                            <span>{lead.phone}</span>
+                          </p>
+
+                          <p className="text-xs flex items-center gap-1.5">
+                            <Globe className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                            {lead.website ? (
+                              <a href={lead.website} target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline line-clamp-1">
+                                {lead.website}
+                              </a>
+                            ) : (
+                              <span className="text-red-400 font-semibold uppercase tracking-wider text-[10px] bg-red-950/30 border border-red-500/25 px-1.5 py-0.5 rounded shadow-[0_0_8px_rgba(239,68,68,0.1)]">Sem Website (Oportunidade!)</span>
+                            )}
+                          </p>
+                        </div>
+
+                        <div className="mt-4 pt-4 border-t border-slate-850/80 flex items-center justify-between gap-2 flex-wrap">
+                          <span className="text-[10px] text-slate-500 font-mono">
+                            {lead.source || 'Crawler Autônomo'}
+                          </span>
+                          <div className="flex items-center gap-2">
+                            {lead.whatsappUrl && (
+                              <a
+                                href={lead.whatsappUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="px-3 py-1.5 bg-emerald-600/20 hover:bg-emerald-600/40 border border-emerald-500/40 text-emerald-400 text-xs font-bold rounded-xl transition-all"
+                              >
+                                WhatsApp
+                              </a>
+                            )}
+                            <button
+                              onClick={() => handleCreateProjectFromLead(lead)}
+                              className="px-3.5 py-1.5 bg-purple-700/30 hover:bg-purple-700/60 border border-purple-500/40 text-xs font-bold text-purple-300 rounded-xl transition-all cursor-pointer"
+                            >
+                              Criar Site Para Cliente
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           )}
         </main>
       </div>
+
+      {/* Preset Create / Edit Modal */}
+      {presetModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-lg bg-[#0f0b18] border border-cyan-500/30 rounded-2xl shadow-2xl p-6 overflow-hidden">
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                <SlidersHorizontal className="text-cyan-400 w-5 h-5" />
+                {editingPresetId ? 'Editar Filtro Pré-Pronto' : 'Novo Filtro Pré-Pronto'}
+              </h2>
+              <button onClick={() => setPresetModalOpen(false)} className="text-slate-400 hover:text-white p-1">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSavePreset} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Título do Filtro</label>
+                <input 
+                  type="text"
+                  required
+                  placeholder="Ex: Padarias Sem Site no DF"
+                  value={presetForm.name}
+                  onChange={(e) => setPresetForm(p => ({ ...p, name: e.target.value }))}
+                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Nicho / Categoria</label>
+                  <input 
+                    type="text"
+                    required
+                    placeholder="Ex: Padaria"
+                    value={presetForm.niche}
+                    onChange={(e) => setPresetForm(p => ({ ...p, niche: e.target.value }))}
+                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Localização Padrão</label>
+                  <input 
+                    type="text"
+                    placeholder="Ex: Brasília DF"
+                    value={presetForm.location}
+                    onChange={(e) => setPresetForm(p => ({ ...p, location: e.target.value }))}
+                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2 pt-2 border-t border-slate-850">
+                <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+                  <input 
+                    type="checkbox"
+                    checked={presetForm.onlyWithoutWebsite}
+                    onChange={(e) => setPresetForm(p => ({ ...p, onlyWithoutWebsite: e.target.checked }))}
+                    className="w-4 h-4 rounded bg-slate-900 border-slate-700 text-cyan-600 focus:ring-cyan-500"
+                  />
+                  <span>Apenas estabelecimentos sem website</span>
+                </label>
+
+                <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+                  <input 
+                    type="checkbox"
+                    checked={presetForm.hasPhoneOnly}
+                    onChange={(e) => setPresetForm(p => ({ ...p, hasPhoneOnly: e.target.checked }))}
+                    className="w-4 h-4 rounded bg-slate-900 border-slate-700 text-cyan-600 focus:ring-cyan-500"
+                  />
+                  <span>Apenas estabelecimentos com telefone / WhatsApp</span>
+                </label>
+              </div>
+
+              <div className="pt-4 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPresetModalOpen(false)}
+                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-semibold rounded-xl"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-cyan-600/30"
+                >
+                  Salvar Filtro
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Create Project Modal */}
       {showCreateModal && (

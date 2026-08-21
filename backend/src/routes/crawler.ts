@@ -7,7 +7,7 @@ const router = Router();
 // Endpoint de Crawler Autônomo para Busca de Estabelecimentos e Leads
 router.post('/search', async (req: AuthenticatedRequest, res: any) => {
   try {
-    const { niche, location, query, onlyWithoutWebsite, limit } = req.body;
+    const { niche, location, query, onlyWithoutWebsite, hasPhoneOnly, minRating, limit } = req.body;
     const finalNiche = niche || query;
     const finalLocation = location || 'Brasil';
 
@@ -19,7 +19,9 @@ router.post('/search', async (req: AuthenticatedRequest, res: any) => {
       niche: finalNiche,
       location: finalLocation,
       onlyWithoutWebsite: onlyWithoutWebsite === true || onlyWithoutWebsite === 'true',
-      limit: parseInt(limit || '20', 10)
+      hasPhoneOnly: hasPhoneOnly === true || hasPhoneOnly === 'true',
+      minRating: parseFloat(minRating || '0'),
+      limit: parseInt(limit || '35', 10)
     });
 
     return res.json({

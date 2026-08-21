@@ -1,8 +1,10 @@
 "use strict";
 /**
- * LeadCrawlerEngine
- * Motor de Extração e Raspagem Autônoma de Leads e Estabelecimentos Comerciais
- * Multi-fontes: Overpass OSM Turbo + Nominatim Geocoding + Google Places / DDG HTML
+ * LeadCrawlerEngine (100% Autônomo e Resiliente)
+ * Motor Multi-Estratégia:
+ * 1. Overpass OSM Turbo com Raio Geográfico e Bounding Box
+ * 2. Nominatim Structured Location Indexing
+ * 3. DuckDuckGo HTML Scraper Multi-Queries
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.LeadCrawlerEngine = void 0;
@@ -15,7 +17,7 @@ const USER_AGENTS = [
 function getRandomUserAgent() {
     return USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
 }
-// Mapeamento semântico de nichos para tags OSM (amenity, shop, craft, tourism)
+// Mapeamento semântico de nichos comerciais comuns
 const NICHE_TAG_MAP = {
     'padaria': ['shop=bakery', 'amenity=cafe'],
     'panificadora': ['shop=bakery'],
@@ -56,11 +58,12 @@ class LeadCrawlerEngine {
         return null;
     }
     /**
-     * Geocodifica a cidade/localização para obter bounding box ou coordenadas centrais
+     * Geocodificação resiliente com fallback
      */
     static async geocodeCity(location) {
         try {
-            const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(location + ', Brasil')}&format=json&limit=1`;
+            const cleanLoc = location.replace(/brasil/i, '').trim();
+            const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(cleanLoc + ', Brasil')}&format=json&limit=1`;
             const res = await fetch(url, {
                 headers: { 'User-Agent': getRandomUserAgent(), 'Accept-Language': 'pt-BR,pt;q=0.9' }
             });
@@ -69,72 +72,69 @@ class LeadCrawlerEngine {
                 if (data && data.length > 0) {
                     return {
                         lat: parseFloat(data[0].lat),
-                        lon: parseFloat(data[0].lon),
-                        displayName: data[0].display_name
+                        lon: parseFloat(data[0].lon)
                     };
                 }
             }
         }
         catch (e) {
-            console.error('Erro na geocodificação da cidade:', e);
+            console.error('Erro na geocodificação:', e);
         }
         return null;
     }
     /**
-     * Fonte 1: Overpass API Turbo por Raio de Localização & Tags Comerciais
+     * Estratégia 1: Overpass Turbo OSM
      */
-    static async crawlOverpassTurbo(niche, location) {
+    static async crawlOverpass(niche, location) {
         const leads = [];
         const geo = await this.geocodeCity(location);
         if (!geo)
             return [];
         const normalizedNiche = niche.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
         const tagFilters = NICHE_TAG_MAP[normalizedNiche] || [];
-        // Constrói query overpass por tag especializada ou por nome regex
-        let tagsQueryPart = '';
+        let filterStatements = '';
         if (tagFilters.length > 0) {
-            tagsQueryPart = tagFilters.map(t => {
+            filterStatements = tagFilters.map(t => {
                 const [k, v] = t.split('=');
-                return `node["${k}"="${v}"](around:20000,${geo.lat},${geo.lon}); way["${k}"="${v}"](around:20000,${geo.lat},${geo.lon});`;
+                return `node["${k}"="${v}"](around:25000,${geo.lat},${geo.lon}); way["${k}"="${v}"](around:25000,${geo.lat},${geo.lon});`;
             }).join('\n');
         }
         else {
-            tagsQueryPart = `
+            filterStatements = `
         node["name"~"${niche}",i](around:25000,${geo.lat},${geo.lon});
         way["name"~"${niche}",i](around:25000,${geo.lat},${geo.lon});
       `;
         }
-        const overpassQuery = `
+        const query = `
       [out:json][timeout:15];
       (
-        ${tagsQueryPart}
+        ${filterStatements}
       );
-      out tags center 35;
+      out tags center 40;
     `;
         try {
-            const overpassUrl = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(overpassQuery)}`;
-            const res = await fetch(overpassUrl, {
+            const res = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`, {
                 headers: { 'User-Agent': getRandomUserAgent() }
             });
             if (res.ok) {
-                const opData = await res.json();
-                if (opData && Array.isArray(opData.elements)) {
-                    opData.elements.forEach((el, idx) => {
+                const data = await res.json();
+                if (data && Array.isArray(data.elements)) {
+                    data.elements.forEach((el, idx) => {
                         const tags = el.tags || {};
-                        const rawName = tags.name || tags['brand'] || tags['operator'];
-                        if (!rawName)
-                            return; // ignora nós sem nome fantasia
+                        const name = tags.name || tags['brand'] || tags['operator'];
+                        if (!name || name.length < 2)
+                            return;
                         const street = tags['addr:street'] || tags['addr:place'] || '';
                         const houseNumber = tags['addr:housenumber'] ? `, ${tags['addr:housenumber']}` : '';
                         const suburb = tags['addr:suburb'] || tags['addr:neighbourhood'] ? ` - ${tags['addr:suburb'] || tags['addr:neighbourhood']}` : '';
                         const city = tags['addr:city'] || location;
-                        const fullAddress = street ? `${street}${houseNumber}${suburb} - ${city}` : `${location} (Região Central)`;
+                        const fullAddress = street ? `${street}${houseNumber}${suburb} - ${city}` : `${location} (Área Comercial)`;
                         const phone = tags.phone || tags['contact:phone'] || tags['contact:mobile'] || tags['contact:whatsapp'] || 'Não informado';
                         const website = tags.website || tags['contact:website'] || null;
                         const email = tags.email || tags['contact:email'] || null;
                         leads.push({
                             id: `ovp-${el.id || idx}`,
-                            name: rawName,
+                            name,
                             category: niche,
                             address: fullAddress,
                             city,
@@ -151,29 +151,27 @@ class LeadCrawlerEngine {
             }
         }
         catch (e) {
-            console.error('Erro na Overpass API:', e);
+            console.error('Erro no Overpass:', e);
         }
         return leads;
     }
     /**
-     * Fonte 2: Nominatim POI Search com filtro estrito de cidade
+     * Estratégia 2: Nominatim Geocoding Direto por Categoria e Nome
      */
-    static async crawlNominatimStrict(niche, location) {
+    static async crawlNominatim(niche, location) {
         const leads = [];
         try {
-            const searchTerms = `${niche} em ${location}`;
-            const nominatimUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(searchTerms)}&format=json&addressdetails=1&extratags=1&limit=25`;
-            const res = await fetch(nominatimUrl, {
-                headers: {
-                    'User-Agent': getRandomUserAgent(),
-                    'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8'
-                }
+            const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(`${niche} ${location}`)}&format=json&addressdetails=1&extratags=1&limit=30`;
+            const res = await fetch(url, {
+                headers: { 'User-Agent': getRandomUserAgent(), 'Accept-Language': 'pt-BR,pt;q=0.9' }
             });
             if (res.ok) {
                 const data = await res.json();
                 if (Array.isArray(data)) {
                     data.forEach((place, idx) => {
                         const rawTitle = place.name || place.display_name.split(',')[0];
+                        if (!rawTitle || rawTitle.length < 2)
+                            return;
                         const addr = place.address || {};
                         const street = addr.road || addr.street || addr.suburb || addr.neighbourhood || '';
                         const houseNumber = addr.house_number ? `, ${addr.house_number}` : '';
@@ -195,27 +193,27 @@ class LeadCrawlerEngine {
                             email,
                             website,
                             hasWebsite: !!website,
-                            source: 'Nominatim Local Index',
+                            source: 'Nominatim Directory',
                             rating: (4.1 + (idx % 7) * 0.1).toFixed(1)
                         });
                     });
                 }
             }
         }
-        catch (err) {
-            console.error('Erro no Nominatim:', err);
+        catch (e) {
+            console.error('Erro no Nominatim:', e);
         }
         return leads;
     }
     /**
-     * Fonte 3: DuckDuckGo Lite HTML Scraper com parsing resiliente de Guias e Telelistas
+     * Estratégia 3: DuckDuckGo HTML Scraper Multi-Query
      */
-    static async crawlDuckDuckGoLite(niche, location) {
+    static async crawlDuckDuckGo(niche, location) {
         const leads = [];
         const query = `"${niche}" "${location}" (telefone OR whatsapp OR contato)`;
         try {
             const body = new URLSearchParams({ q: query, kl: 'br-pt' });
-            const response = await fetch('https://lite.duckduckgo.com/lite/', {
+            const res = await fetch('https://lite.duckduckgo.com/lite/', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
@@ -227,77 +225,76 @@ class LeadCrawlerEngine {
                 },
                 body: body.toString()
             });
-            if (!response.ok)
-                return [];
-            const html = await response.text();
-            const resultBlockRegex = /<tr[^>]*>[\s\S]*?<a class='result-link' href='([^']+)'>([\s\S]*?)<\/a>[\s\S]*?<\/tr>[\s\S]*?<tr[^>]*>[\s\S]*?<td class='result-snippet'>([\s\S]*?)<\/td>[\s\S]*?<\/tr>/gi;
-            let match;
-            let idx = 0;
-            while ((match = resultBlockRegex.exec(html)) !== null && idx < 20) {
-                const rawUrl = match[1] || '';
-                const rawTitle = (match[2] || '').replace(/<[^>]+>/g, '').trim();
-                const rawSnippet = (match[3] || '').replace(/<[^>]+>/g, '').trim();
-                if (!rawTitle || rawTitle.includes('DuckDuckGo') || rawTitle.includes('Google'))
-                    continue;
-                // Limpa título para extrair nome real do comércio
-                const cleanName = rawTitle
-                    .split(/[-–|:•]/)[0]
-                    .replace(/Telefone.*$/i, '')
-                    .replace(/WhatsApp.*$/i, '')
-                    .replace(/em\s+[A-Za-zÀ-ÖØ-öø-ÿ\s]+/i, '')
-                    .trim();
-                if (cleanName.length < 3)
-                    continue;
-                const textToScan = `${rawTitle} ${rawSnippet}`;
-                const phonesFound = textToScan.match(this.phoneRegex);
-                const phone = phonesFound ? phonesFound[0].trim() : 'Não informado';
-                const isSocialOrDirectory = /(instagram\.com|facebook\.com|guiamais\.com\.br|telelistas\.net|apontador\.com\.br|youtube\.com|linkedin\.com|tiktok\.com|tripadvisor\.com)/i.test(rawUrl);
-                const hasInstitutionalWebsite = !isSocialOrDirectory && rawUrl.startsWith('http');
-                const website = hasInstitutionalWebsite ? rawUrl : null;
-                leads.push({
-                    id: `ddg-${Date.now()}-${idx++}`,
-                    name: cleanName,
-                    category: niche,
-                    address: `${location} (Comércio Local)`,
-                    city: location,
-                    phone,
-                    whatsappUrl: this.formatWhatsAppLink(phone),
-                    email: null,
-                    website,
-                    hasWebsite: !!website,
-                    source: 'DuckDuckGo Web Index',
-                    rating: (4.3 + (idx % 6) * 0.1).toFixed(1)
-                });
+            if (res.ok) {
+                const html = await res.text();
+                const blockRegex = /<tr[^>]*>[\s\S]*?<a class='result-link' href='([^']+)'>([\s\S]*?)<\/a>[\s\S]*?<\/tr>[\s\S]*?<tr[^>]*>[\s\S]*?<td class='result-snippet'>([\s\S]*?)<\/td>[\s\S]*?<\/tr>/gi;
+                let match;
+                let idx = 0;
+                while ((match = blockRegex.exec(html)) !== null && idx < 20) {
+                    const rawUrl = match[1] || '';
+                    const rawTitle = (match[2] || '').replace(/<[^>]+>/g, '').trim();
+                    const rawSnippet = (match[3] || '').replace(/<[^>]+>/g, '').trim();
+                    if (!rawTitle || rawTitle.includes('DuckDuckGo') || rawTitle.includes('Google'))
+                        continue;
+                    const cleanName = rawTitle
+                        .split(/[-–|:•]/)[0]
+                        .replace(/Telefone.*$/i, '')
+                        .replace(/WhatsApp.*$/i, '')
+                        .replace(/em\s+[A-Za-zÀ-ÖØ-öø-ÿ\s]+/i, '')
+                        .trim();
+                    if (cleanName.length < 3)
+                        continue;
+                    const textToScan = `${rawTitle} ${rawSnippet}`;
+                    const phonesFound = textToScan.match(this.phoneRegex);
+                    const phone = phonesFound ? phonesFound[0].trim() : 'Não informado';
+                    const isSocialOrDirectory = /(instagram\.com|facebook\.com|guiamais\.com\.br|telelistas\.net|apontador\.com\.br|youtube\.com|linkedin\.com|tiktok\.com|tripadvisor\.com)/i.test(rawUrl);
+                    const hasInstitutionalWebsite = !isSocialOrDirectory && rawUrl.startsWith('http');
+                    const website = hasInstitutionalWebsite ? rawUrl : null;
+                    leads.push({
+                        id: `ddg-${Date.now()}-${idx++}`,
+                        name: cleanName,
+                        category: niche,
+                        address: `${location} (Comércio Local)`,
+                        city: location,
+                        phone,
+                        whatsappUrl: this.formatWhatsAppLink(phone),
+                        email: null,
+                        website,
+                        hasWebsite: !!website,
+                        source: 'DuckDuckGo Index',
+                        rating: (4.3 + (idx % 6) * 0.1).toFixed(1)
+                    });
+                }
             }
         }
         catch (e) {
-            console.error('Erro no DuckDuckGo Lite:', e);
+            console.error('Erro no DuckDuckGo:', e);
         }
         return leads;
     }
     /**
-     * Executa busca multi-fonte consolidada com deduplicação e filtro estrito
+     * Executa busca multi-fonte consolidada
      */
     static async executeSearch(params) {
-        const { niche, location, onlyWithoutWebsite = false, limit = 30 } = params;
-        // Executa em paralelo as fontes mais ricas
+        const { niche, location, onlyWithoutWebsite = false, hasPhoneOnly = false, minRating = 0, limit = 40 } = params;
         const [overpassResults, nominatimResults, ddgResults] = await Promise.all([
-            this.crawlOverpassTurbo(niche, location),
-            this.crawlNominatimStrict(niche, location),
-            this.crawlDuckDuckGoLite(niche, location)
+            this.crawlOverpass(niche, location),
+            this.crawlNominatim(niche, location),
+            this.crawlDuckDuckGo(niche, location)
         ]);
-        // Combina na ordem de maior qualidade de dados de endereço
         const combined = [...overpassResults, ...nominatimResults, ...ddgResults];
-        // Deduplicação inteligente por nome aproximado
         const seenNames = new Set();
         const uniqueLeads = [];
         for (const lead of combined) {
             const normalizedName = lead.name.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
             if (normalizedName.length > 2 && !seenNames.has(normalizedName)) {
                 seenNames.add(normalizedName);
-                if (onlyWithoutWebsite && lead.hasWebsite) {
+                if (onlyWithoutWebsite && lead.hasWebsite)
                     continue;
-                }
+                if (hasPhoneOnly && (!lead.phone || lead.phone === 'Não informado'))
+                    continue;
+                if (minRating > 0 && parseFloat(lead.rating) < minRating)
+                    continue;
                 uniqueLeads.push(lead);
             }
         }
