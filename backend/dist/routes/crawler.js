@@ -21,7 +21,7 @@ router.post('/search', async (req, res) => {
             onlyWithoutWebsite: onlyWithoutWebsite === true || onlyWithoutWebsite === 'true',
             hasPhoneOnly: hasPhoneOnly === true || hasPhoneOnly === 'true',
             minRating: parseFloat(minRating || '0'),
-            limit: parseInt(limit || '40', 10)
+            limit: parseInt(limit || '150', 10)
         });
         return res.json({
             success: true,
