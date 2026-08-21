@@ -49,16 +49,13 @@ function resolveInternalUrl(base, relative) {
     try {
         const baseUrlObj = new URL(base);
         const resolved = new URL(relative, base);
-        // Permitir apenas o mesmo hostname base (ou com/sem www)
         const baseHostClean = baseUrlObj.hostname.replace(/^www\./, '');
         const resolvedHostClean = resolved.hostname.replace(/^www\./, '');
         if (baseHostClean !== resolvedHostClean)
             return null;
-        // Ignorar arquivos estáticos / mídias
         if (/\.(png|jpe?g|gif|svg|webp|pdf|zip|mp4|css|js|woff2?)$/i.test(resolved.pathname)) {
             return null;
         }
-        // Remover hash fragmentos e normalizar
         resolved.hash = '';
         return resolved.href;
     }
@@ -74,7 +71,7 @@ function cleanHtmlToText(html) {
         .replace(/<[^>]+>/g, ' ')
         .replace(/\s+/g, ' ')
         .trim()
-        .slice(0, 5000);
+        .slice(0, 4000);
 }
 /**
  * Fetch resiliente com fallback SSL e suporte a HTTP/HTTPS nativo
@@ -85,8 +82,7 @@ async function resilientFetchPage(url, proxyUrl) {
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8'
     };
-    // Tentativa 1: undici com Proxy se configurado
-    if (proxyUrl) {
+    if (proxyUrl && proxyUrl.startsWith('http')) {
         try {
             const { ProxyAgent, fetch: uFetch } = await Promise.resolve().then(() => __importStar(require('undici')));
             const res = await uFetch(url, {
@@ -98,7 +94,6 @@ async function resilientFetchPage(url, proxyUrl) {
         }
         catch { }
     }
-    // Tentativa 2: fetch nativo com timeout
     try {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 6000);
@@ -108,7 +103,6 @@ async function resilientFetchPage(url, proxyUrl) {
             return await res.text();
     }
     catch { }
-    // Tentativa 3: Node http/https nativo com SSL bypass (rejectUnauthorized: false)
     return new Promise((resolve, reject) => {
         const isHttps = url.startsWith('https');
         const client = isHttps ? https_1.default : http_1.default;
@@ -137,9 +131,9 @@ async function resilientFetchPage(url, proxyUrl) {
     });
 }
 /**
- * Raspa todas as páginas e subpáginas de um site cliente (até o limite de profundidade)
+ * Raspa todas as páginas e subpáginas de um site cliente
  */
-async function crawlEntireClientWebsite(startUrl, maxPages = 8, proxyUrl) {
+async function crawlEntireClientWebsite(startUrl, maxPages = 6, proxyUrl) {
     let normalizedStart = startUrl.trim();
     if (!normalizedStart.startsWith('http')) {
         normalizedStart = `https://${normalizedStart}`;
@@ -184,7 +178,6 @@ async function crawlEntireClientWebsite(startUrl, maxPages = 8, proxyUrl) {
                 html,
                 cleanText
             });
-            // Extrair links de subpáginas internas
             const linkMatches = [...html.matchAll(/href=["']([^"'#?]+)["']/gi)];
             for (const m of linkMatches) {
                 const resolved = resolveInternalUrl(currentUrl, m[1]);
@@ -200,18 +193,16 @@ async function crawlEntireClientWebsite(startUrl, maxPages = 8, proxyUrl) {
     return pages;
 }
 /**
- * Worker assíncrono que melhora e reconstrói o site completo com IA garantindo tema unificado e navegação universal
+ * Worker assíncrono que melhora e reconstrói o site completo com IA garantindo tema unificado, processamento concorrente e tolerância a falhas
  */
 async function processWebsiteRemasterJob(projectId, websiteUrl, businessName, customApiKey, registeredModels, customProxyUrl, onProgress) {
     try {
         if (onProgress)
             onProgress(`Analisando estrutura e páginas do site (${websiteUrl})...`, 1, 4);
-        // 1. Raspar o site completo (Home + Subpáginas)
-        const scrapedPages = await crawlEntireClientWebsite(websiteUrl, 8, customProxyUrl);
+        const scrapedPages = await crawlEntireClientWebsite(websiteUrl, 6, customProxyUrl);
         let homeText = '';
         let homeUrl = websiteUrl;
         let targetPagesList = [];
-        // Se o crawler encontrou páginas reais através do HTML:
         if (scrapedPages.length > 1) {
             const homeScraped = scrapedPages.find(p => p.slug === 'index') || scrapedPages[0];
             homeText = homeScraped.cleanText;
@@ -227,7 +218,6 @@ async function processWebsiteRemasterJob(projectId, websiteUrl, businessName, cu
             }
         }
         else {
-            // Caso o site seja protegido por firewall (ou retornou apenas a home), a IA atua como Arquiteto de Software para inferir o Sitemap completo de subpáginas do negócio
             if (scrapedPages.length === 1) {
                 homeText = scrapedPages[0].cleanText;
             }
@@ -236,74 +226,30 @@ async function processWebsiteRemasterJob(projectId, websiteUrl, businessName, cu
             }
             if (onProgress)
                 onProgress(`Estruturando arquitetura de subpáginas do negócio...`, 1, 4);
-            // Prompt para estruturar o Sitemap e as subpáginas necessárias
-            const sitemapPrompt = `
-        Você é um Arquiteto de Software e Estrategista Web.
-        A empresa "${businessName}" possui o site "${websiteUrl}".
-        Contexto do negócio: "${homeText.slice(0, 800)}".
-
-        Defina uma estrutura completa de 4 subpáginas essenciais além da Home (ex: Serviços / Soluções, Sobre Nós, Contato, Certificados ou Preços).
-        Retorne um array JSON estrito no formato:
-        {
-          "pages": [
-            { "name": "Serviços", "slug": "servicos", "description": "Soluções completas e serviços oferecidos pela empresa" },
-            { "name": "Sobre Nós", "slug": "sobre", "description": "História, autoridade e diferenciais da empresa" },
-            { "name": "Certificados Digitais", "slug": "certificados", "description": "Emissão de e-CPF, e-CNPJ e certificação digital" },
-            { "name": "Contato", "slug": "contato", "description": "Canais de atendimento, endereços e formulário" }
-          ]
+            targetPagesList = [
+                { name: "Serviços", slug: "servicos", description: "Soluções completas e produtos da empresa" },
+                { name: "Sobre Nós", slug: "sobre", description: "História, autoridade e equipe" },
+                { name: "Contato", slug: "contato", description: "Canais de atendimento e localização" }
+            ];
         }
-      `;
-            try {
-                const sitemapResponse = await (0, gemini_1.generateAIResponse)(sitemapPrompt, { html: '', css: '', js: '' }, customApiKey, undefined, registeredModels, undefined, customProxyUrl);
-                let parsedPages = sitemapResponse.pages;
-                if (!parsedPages && sitemapResponse.html) {
-                    try {
-                        const rawJson = JSON.parse(sitemapResponse.html);
-                        parsedPages = rawJson.pages;
-                    }
-                    catch { }
-                }
-                if (Array.isArray(parsedPages) && parsedPages.length > 0) {
-                    targetPagesList = parsedPages;
-                }
-                else {
-                    // Fallback padrão robusto
-                    targetPagesList = [
-                        { name: "Serviços", slug: "servicos", description: "Soluções completas e produtos da empresa" },
-                        { name: "Sobre Nós", slug: "sobre", description: "História, autoridade e equipe" },
-                        { name: "Contato", slug: "contato", description: "Canais de atendimento e localização" }
-                    ];
-                }
-            }
-            catch {
-                targetPagesList = [
-                    { name: "Serviços", slug: "servicos", description: "Soluções completas e produtos da empresa" },
-                    { name: "Sobre Nós", slug: "sobre", description: "História, autoridade e equipe" },
-                    { name: "Contato", slug: "contato", description: "Canais de atendimento e localização" }
-                ];
-            }
-        }
-        // Lista de todas as rotas do projeto para links universais
         const allNavigationRoutes = [
             { name: 'Home', href: '/' },
             ...targetPagesList.map(p => ({ name: p.name, href: `/${p.slug}` }))
         ];
         const navigationLinksText = allNavigationRoutes
-            .map(r => `- Link: "${r.name}" -> href="${r.href}" (ou "${r.href === '/' ? 'index.html' : r.href.slice(1) + '.html'}")`)
+            .map(r => `- "${r.name}" -> href="${r.href}"`)
             .join('\n');
-        // 2. Buscar a página Home já criada no projeto
         const existingHome = await db_1.prisma.page.findFirst({
             where: { projectId, isHomepage: true }
         });
         if (onProgress)
-            onProgress(`Criando Home remasterizada e estabelecendo Design System global...`, 2, 4);
-        // 3. Gerar código remasterizado para a HOME com Design System
+            onProgress(`Criando Home remasterizada e estabelecendo Design System...`, 2, 4);
         const homePrompt = `
       Você é o Líder de Design System e Arquiteto Frontend de Elite.
       Estamos modernizando o site completo da empresa "${businessName}".
       URL original: ${homeUrl}
 
-      MAPA UNIVERSAL DE NAVEGAÇÃO DO SITE (TODAS AS PÁGINAS DEVEM CONTER EXATAMENTE ESSES LINKS NA NAVBAR E NO FOOTER):
+      MAPA UNIVERSAL DE NAVEGAÇÃO (A NAVBAR E O FOOTER DEVEM TER ESSES LINKS):
       ${navigationLinksText}
 
       CONTEÚDO DO SITE ORIGINAL:
@@ -311,18 +257,10 @@ async function processWebsiteRemasterJob(projectId, websiteUrl, businessName, cu
       ${homeText}
       """
 
-      DIRETRIZES DE DESIGN SYSTEM E IDENTIDADE VISUAL:
-      1. ESTILO VISUAL PADRONIZADO: Crie uma identidade visual moderna, minimalista e premium (use Tailwind CSS, fontes elegantes como Outfit para títulos e Inter para textos, fundo escuro/glassmorphism ou tema refinado de alto contraste).
-      2. NAVBAR UNIVERSAL RESPONSIVA:
-         - Logo com o nome "${businessName}"
-         - Menu com links para TODAS as páginas: ${allNavigationRoutes.map(r => `<a href="${r.href}">${r.name}</a>`).join(' ')}
-         - Botão CTA de destaque (ex: "Fale Conosco" / "Atendimento WhatsApp").
-      3. SEÇÕES DA HOME:
-         - Hero impactante com headline clara e CTA
-         - Grid de Serviços/Soluções com cards refinados
-         - Diferenciais e Prova Social
-         - Seção Sobre / Autoridade
-         - Footer completo contendo os mesmos links de navegação.
+      DIRETRIZES:
+      1. ESTILO VISUAL: Crie um design moderno, minimalista e de altíssimo padrão com Tailwind CSS, fontes limpas e cores refinadas.
+      2. NAVBAR E FOOTER UNIVERSAIS: Navbar com logo "${businessName}", links para todas as páginas (${allNavigationRoutes.map(r => r.name).join(', ')}) e botão CTA de contato.
+      3. SEÇÕES DA HOME: Hero impactante com CTA, Grid de Serviços, Diferenciais/Sobre e Footer completo com os links.
     `;
         const homeAiResponse = await (0, gemini_1.generateAIResponse)(homePrompt, { html: '', css: '', js: '' }, customApiKey, undefined, registeredModels, (model, attempt, total) => {
             if (onProgress)
@@ -339,41 +277,32 @@ async function processWebsiteRemasterJob(projectId, websiteUrl, businessName, cu
                 }
             });
         }
-        // Extrai um trecho representativo do Header e do Footer gerados na Home para servir de template universal para as subpáginas
         const homeHtml = homeAiResponse.html || '';
-        // 4. Gerar todas as subpáginas identificadas aplicando estritamente o MESMO TEMA, NAVBAR e FOOTER da Home
-        for (let i = 0; i < targetPagesList.length; i++) {
-            const sub = targetPagesList[i];
-            if (onProgress)
-                onProgress(`Remasterizando ${sub.name} com Navbar e Tema Unificados (${i + 1}/${targetPagesList.length})...`, 3, 4);
+        // 4. Gerar todas as subpáginas em PARALELO com o mesmo tema e navbar
+        if (onProgress)
+            onProgress(`Remasterizando ${targetPagesList.length} subpáginas em paralelo com tema unificado...`, 3, 4);
+        await Promise.all(targetPagesList.map(async (sub) => {
             const subPrompt = `
-        Você é o Arquiteto Frontend responsável por manter a consistência de 100% do Design System da empresa "${businessName}".
-        Estamos gerando a subpágina "${sub.name}" (rota: /${sub.slug}).
+          Você é o Arquiteto Frontend da empresa "${businessName}".
+          Estamos gerando a subpágina "${sub.name}" (rota: /${sub.slug}).
 
-        MAPA UNIVERSAL DE NAVEGAÇÃO (A NAVBAR E O FOOTER DEVEM TER ESSES LINKS):
-        ${navigationLinksText}
+          MAPA DE NAVEGAÇÃO:
+          ${navigationLinksText}
 
-        CONTEÚDO ORIGINAL ESPECÍFICO DESTA PÁGINA "${sub.name}":
-        """
-        ${sub.cleanText || sub.description}
-        """
+          CONTEÚDO DESTA PÁGINA:
+          """
+          ${sub.cleanText || sub.description}
+          """
 
-        REFERÊNCIA VISUAL DA HOME (COPIE O MESMO HEADER / NAVBAR, MESMAS CORES, MESMA TIPOGRAFIA E MESMO FOOTER):
-        """
-        ${homeHtml.slice(0, 1500)}
-        """
+          REFERÊNCIA VISUAL DA HOME (USE A MESMA NAVBAR, CORES E FOOTER):
+          """
+          ${homeHtml.slice(0, 1000)}
+          """
 
-        REGRAS MANDATÓRIAS:
-        1. MESMO TEMA E NAVBAR: Utilize EXATAMENTE a mesma estrutura de Navbar e Footer da Home, destacando a página atual ("${sub.name}") como ativa.
-        2. NAVEGAÇÃO FUNCIONAL BI-DIRECIONAL: O botão da Home deve levar para href="/" e os demais links para suas respectivas rotas (${allNavigationRoutes.map(r => `${r.name}: ${r.href}`).join(', ')}).
-        3. PRESERVAÇÃO INTEGRAL DE DADOS: Mantenha todos os serviços, detalhes técnicos, tabelas, perguntas ou formulários reais desta subpágina.
-        4. Retorne SEMPRE o objeto JSON com o código HTML completo da página "${sub.name}".
-      `;
+          Retorne o HTML completo com Tailwind CSS preservando todos os dados reais.
+        `;
             try {
-                const subAiResponse = await (0, gemini_1.generateAIResponse)(subPrompt, { html: '', css: homeAiResponse.css || '', js: homeAiResponse.js || '' }, customApiKey, undefined, registeredModels, (model, attempt, total) => {
-                    if (onProgress)
-                        onProgress(`IA criando ${sub.name} (${model} - ${attempt}/${total})...`, 3, 4);
-                }, customProxyUrl);
+                const subAiResponse = await (0, gemini_1.generateAIResponse)(subPrompt, { html: '', css: homeAiResponse.css || '', js: homeAiResponse.js || '' }, customApiKey, undefined, registeredModels, undefined, customProxyUrl);
                 const existingSub = await db_1.prisma.page.findFirst({
                     where: { projectId, slug: sub.slug }
                 });
@@ -395,7 +324,7 @@ async function processWebsiteRemasterJob(projectId, websiteUrl, businessName, cu
                             title: `${sub.name} | ${businessName}`,
                             isHomepage: false,
                             projectId,
-                            html: subAiResponse.html,
+                            html: subAiResponse.html || '<div class="p-8 text-center text-white">Conteúdo em atualização</div>',
                             css: subAiResponse.css || homeAiResponse.css || '',
                             js: subAiResponse.js || homeAiResponse.js || ''
                         }
@@ -403,9 +332,9 @@ async function processWebsiteRemasterJob(projectId, websiteUrl, businessName, cu
                 }
             }
             catch (subErr) {
-                console.error(`Erro ao gerar subpágina ${sub.name}:`, subErr);
+                console.error(`Erro ao gerar subpágina ${sub.name}:`, subErr.message);
             }
-        }
+        }));
         if (onProgress)
             onProgress(`Site 100% remasterizado com Navbar e Tema Unificados!`, 4, 4);
     }
