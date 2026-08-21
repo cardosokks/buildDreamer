@@ -1,5 +1,7 @@
 import { prisma } from '../db';
 import { generateAIResponse } from '../services/gemini';
+import https from 'https';
+import http from 'http';
 
 interface ScrapedPage {
   url: string;
@@ -41,7 +43,70 @@ function cleanHtmlToText(html: string): string {
     .replace(/<[^>]+>/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
-    .slice(0, 4000); // Primeiros 4000 caracteres essenciais de conteúdo
+    .slice(0, 5000);
+}
+
+/**
+ * Fetch resiliente com fallback SSL e suporte a HTTP/HTTPS nativo
+ */
+async function resilientFetchPage(url: string, proxyUrl?: string): Promise<string> {
+  const headers = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8'
+  };
+
+  // Tentativa 1: undici com Proxy se configurado
+  if (proxyUrl) {
+    try {
+      const { ProxyAgent, fetch: uFetch } = await import('undici');
+      const res = await uFetch(url, {
+        headers,
+        dispatcher: new ProxyAgent(proxyUrl)
+      });
+      if (res.ok) return await res.text();
+    } catch {}
+  }
+
+  // Tentativa 2: fetch nativo com timeout
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 7000);
+    const res = await fetch(url, { headers, signal: controller.signal });
+    clearTimeout(timeout);
+    if (res.ok) return await res.text();
+  } catch {}
+
+  // Tentativa 3: Node http/https nativo com SSL bypass (rejectUnauthorized: false)
+  return new Promise((resolve, reject) => {
+    const isHttps = url.startsWith('https');
+    const client = isHttps ? https : http;
+
+    const req = client.get(url, {
+      headers,
+      rejectUnauthorized: false,
+      timeout: 8000
+    }, (res) => {
+      if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        let redirectUrl = res.headers.location;
+        if (!redirectUrl.startsWith('http')) {
+          const u = new URL(url);
+          redirectUrl = `${u.origin}${redirectUrl}`;
+        }
+        return resilientFetchPage(redirectUrl, proxyUrl).then(resolve).catch(reject);
+      }
+
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => resolve(data));
+    });
+
+    req.on('error', reject);
+    req.on('timeout', () => {
+      req.destroy();
+      reject(new Error('Timeout'));
+    });
+  });
 }
 
 /**
@@ -52,16 +117,14 @@ export async function crawlEntireClientWebsite(
   maxPages: number = 6,
   proxyUrl?: string
 ): Promise<ScrapedPage[]> {
-  const normalizedStart = startUrl.startsWith('http') ? startUrl : `https://${startUrl}`;
+  let normalizedStart = startUrl.trim();
+  if (!normalizedStart.startsWith('http')) {
+    normalizedStart = `https://${normalizedStart}`;
+  }
+
   const visited = new Set<string>();
   const queue: string[] = [normalizedStart];
   const pages: ScrapedPage[] = [];
-
-  const headers = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-    'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8'
-  };
 
   while (queue.length > 0 && pages.length < maxPages) {
     const currentUrl = queue.shift()!;
@@ -69,27 +132,24 @@ export async function crawlEntireClientWebsite(
     visited.add(currentUrl);
 
     try {
-      let res: any;
-      if (proxyUrl) {
-        const { ProxyAgent, fetch: uFetch } = await import('undici');
-        res = await uFetch(currentUrl, {
-          headers,
-          dispatcher: new ProxyAgent(proxyUrl)
-        });
-      } else {
-        res = await fetch(currentUrl, { headers });
+      let html = '';
+      try {
+        html = await resilientFetchPage(currentUrl, proxyUrl);
+      } catch {
+        // Fallback: se falhar em https, tenta http
+        if (currentUrl.startsWith('https://')) {
+          const fallbackHttp = currentUrl.replace('https://', 'http://');
+          html = await resilientFetchPage(fallbackHttp, proxyUrl);
+        }
       }
 
-      if (!res.ok) continue;
+      if (!html || html.length < 50) continue;
 
-      const html = await res.text();
       const cleanText = cleanHtmlToText(html);
-
       const urlObj = new URL(currentUrl);
       let pathname = urlObj.pathname.replace(/\/$/, '');
       let slug = pathname.replace(/^\//, '').replace(/[^a-z0-9]+/gi, '-').toLowerCase() || 'index';
       
-      // Nome amigável da página
       let name = slug === 'index' ? 'Home' : slug.charAt(0).toUpperCase() + slug.slice(1);
       const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
       if (titleMatch && titleMatch[1]) {
@@ -140,35 +200,43 @@ export async function processWebsiteRemasterJob(
 
     // 1. Raspar o site completo (Home + Subpáginas)
     const scrapedPages = await crawlEntireClientWebsite(websiteUrl, 6, customProxyUrl);
-    if (scrapedPages.length === 0) {
-      throw new Error(`Não foi possível acessar as páginas do site ${websiteUrl}. Verifique se o endereço está acessível.`);
-    }
+    
+    // Se o crawler não conseguir acessar diretamente (ex: firewall do cliente ou site offline), fazemos um fallback inteligente com o nome da empresa e URL
+    let homeText = '';
+    let homeUrl = websiteUrl;
+    let otherScraped: ScrapedPage[] = [];
 
-    const homeScraped = scrapedPages.find(p => p.slug === 'index') || scrapedPages[0];
-    const otherScraped = scrapedPages.filter(p => p !== homeScraped);
+    if (scrapedPages.length > 0) {
+      const homeScraped = scrapedPages.find(p => p.slug === 'index') || scrapedPages[0];
+      homeText = homeScraped.cleanText;
+      homeUrl = homeScraped.url;
+      otherScraped = scrapedPages.filter(p => p !== homeScraped);
+    } else {
+      homeText = `Website da empresa ${businessName}: ${websiteUrl}. Empresa brasileira atuante em seu nicho de mercado.`;
+    }
 
     // 2. Buscar a página Home já criada no projeto
     const existingHome = await prisma.page.findFirst({
       where: { projectId, isHomepage: true }
     });
 
-    if (onProgress) onProgress(`Redesenhando a página principal com Tailwind CSS e UI moderna...`, 2, 4);
+    if (onProgress) onProgress(`Construindo versão remasterizada com IA...`, 2, 4);
 
     // 3. Gerar código remasterizado para a HOME
     const homePrompt = `
       Você é um Arquiteto de Software e UI/UX Designer de Elite.
-      Estamos modernizando o site da empresa "${businessName}".
-      URL Original: ${homeScraped.url}
-      CONTEÚDO EXTRAÍDO DO SITE ORIGINAL:
+      Estamos modernizando e remasterizando o site da empresa "${businessName}".
+      URL do site: ${homeUrl}
+      CONTEÚDO E ESTRUTURA DO SITE ORIGINAL:
       """
-      ${homeScraped.cleanText}
+      ${homeText}
       """
 
       SUA MISSÃO:
       Crie uma versão 10x mais moderna, elegante, minimalista e de altíssima conversão para esta empresa.
-      - Inclua seções completas: Header responsivo com navegação, Hero Section impactante com CTA, Serviços/Produtos em cards estilizados, Prova Social/Diferenciais, Seção Sobre Nós, Contato e Rodapé.
-      - Use Tailwind CSS completo, sombras elegantes, botões modernos e micro-interações.
-      - Mantenha os dados reais da empresa (telefones, endereços, serviços oferecidos).
+      - Crie uma estrutura completa com: Navbar moderna responsiva, Hero Section impactante com CTA claro, Seção de Serviços/Soluções em cards com ícones, Seção de Diferenciais/Sobre Nós, Depoimentos/Confiança, Seção de Contato/WhatsApp e Rodapé completo.
+      - Utilize Tailwind CSS moderno, gradientes sutis, botões com efeito hover e tipografia limpa.
+      - Preserve e valorize as informações e o propósito da empresa.
     `;
 
     const homeAiResponse = await generateAIResponse(
@@ -177,7 +245,9 @@ export async function processWebsiteRemasterJob(
       customApiKey,
       undefined,
       registeredModels,
-      undefined,
+      (model, attempt, total) => {
+        if (onProgress) onProgress(`IA criando Home (${model} - ${attempt}/${total})...`, 2, 4);
+      },
       customProxyUrl
     );
 
@@ -217,7 +287,9 @@ export async function processWebsiteRemasterJob(
           customApiKey,
           undefined,
           registeredModels,
-          undefined,
+          (model, attempt, total) => {
+            if (onProgress) onProgress(`IA criando ${sub.name} (${model} - ${attempt}/${total})...`, 3, 4);
+          },
           customProxyUrl
         );
 
@@ -238,7 +310,7 @@ export async function processWebsiteRemasterJob(
       }
     }
 
-    if (onProgress) onProgress(`Site 100% remasterizado com todas as subpáginas!`, 4, 4);
+    if (onProgress) onProgress(`Site 100% remasterizado com todas as páginas!`, 4, 4);
   } catch (err: any) {
     console.error("Erro no processWebsiteRemasterJob:", err);
     throw err;
