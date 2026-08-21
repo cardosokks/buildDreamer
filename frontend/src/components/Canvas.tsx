@@ -30,10 +30,22 @@ export const Canvas: React.FC<CanvasProps> = ({
   onSelectParentElement
 }) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const isInitializedRef = useRef(false);
 
+  // Inicialização única do iframe ou recriação quando o script/css global mudar
   useEffect(() => {
     const iframe = iframeRef.current;
     if (!iframe) return;
+
+    // Se o iframe já foi inicializado e o documento está pronto, aplicamos MUTATION pontual sem recarregar iframe
+    if (isInitializedRef.current && iframe.contentDocument && iframe.contentDocument.getElementById('canvas-root')) {
+      iframe.contentWindow?.postMessage({
+        type: 'UPDATE_HTML_SEAMLESS',
+        html,
+        css
+      }, '*');
+      return;
+    }
 
     const documentContent = `
       <!DOCTYPE html>
@@ -43,7 +55,7 @@ export const Canvas: React.FC<CanvasProps> = ({
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <script src="https://cdn.tailwindcss.com"></script>
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-        <style>
+        <style id="studio-core-styles">
           * {
             box-sizing: border-box;
           }
@@ -82,7 +94,7 @@ export const Canvas: React.FC<CanvasProps> = ({
             border-radius: 4px;
           }
 
-          /* Floating Quick Action Toolbar (WordPress / Elementor Style) */
+          /* Floating Quick Action Toolbar */
           #studio-quick-toolbar {
             position: absolute;
             display: none;
@@ -133,7 +145,6 @@ export const Canvas: React.FC<CanvasProps> = ({
             color: #ffffff;
           }
 
-          /* Inline Editing State */
           [contenteditable="true"] {
             outline: 2px solid #22c55e !important;
             outline-offset: 3px !important;
@@ -141,7 +152,8 @@ export const Canvas: React.FC<CanvasProps> = ({
             min-width: 1ch;
             border-radius: 2px;
           }
-
+        </style>
+        <style id="studio-user-styles">
           ${css}
         </style>
       </head>
@@ -166,6 +178,7 @@ export const Canvas: React.FC<CanvasProps> = ({
 
         <script>
           let currentSelected = null;
+          let currentSelectedPath = null;
           const selectionBox = document.getElementById('studio-selection-box');
           const hoverBox = document.getElementById('studio-hover-box');
           const quickToolbar = document.getElementById('studio-quick-toolbar');
@@ -187,7 +200,6 @@ export const Canvas: React.FC<CanvasProps> = ({
             selectionBox.style.width = rect.width + 'px';
             selectionBox.style.height = rect.height + 'px';
 
-            // Position quick toolbar right above the element
             if (quickToolbar) {
               quickToolbar.style.display = 'flex';
               let toolTop = rect.top + scrollY - 36;
@@ -212,6 +224,7 @@ export const Canvas: React.FC<CanvasProps> = ({
             if (currentSelected) {
               currentSelected.removeAttribute('contenteditable');
               currentSelected = null;
+              currentSelectedPath = null;
             }
             if (selectionBox) selectionBox.style.display = 'none';
             if (quickToolbar) quickToolbar.style.display = 'none';
@@ -231,12 +244,17 @@ export const Canvas: React.FC<CanvasProps> = ({
             return indexParts.join('.');
           }
 
-          function selectElement(target) {
+          function selectElement(target, shouldScroll = false) {
             if (!target || target === document.body || target === document.documentElement || target.id === 'canvas-root' || target.id === 'studio-selection-box' || target.id === 'studio-hover-box' || target.id === 'studio-quick-toolbar' || target.closest('#studio-quick-toolbar')) return;
 
             removeSelection();
             currentSelected = target;
+            currentSelectedPath = getIndexPath(target);
             updateOverlayPosition();
+
+            if (shouldScroll) {
+              target.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
 
             // Compute Selector
             const selectorParts = [];
@@ -255,7 +273,7 @@ export const Canvas: React.FC<CanvasProps> = ({
               selEl = selEl.parentNode;
             }
             const selector = selectorParts.join(' > ') || target.tagName.toLowerCase();
-            const elementPath = getIndexPath(target);
+            const elementPath = currentSelectedPath;
 
             // Extract Attributes
             const attrs = {
@@ -315,7 +333,7 @@ export const Canvas: React.FC<CanvasProps> = ({
             }, '*');
           }
 
-          // Toolbar Button Actions
+          // Toolbar Actions
           document.getElementById('btn-delete').addEventListener('click', (e) => {
             e.stopPropagation();
             if (!currentSelected) return;
@@ -350,11 +368,10 @@ export const Canvas: React.FC<CanvasProps> = ({
             if (!currentSelected) return;
             const parent = currentSelected.parentElement;
             if (parent && parent.id !== 'canvas-root' && parent !== document.body) {
-              selectElement(parent);
+              selectElement(parent, false);
             }
           });
 
-          // Reposition on resize or scroll
           window.addEventListener('resize', updateOverlayPosition);
           window.addEventListener('scroll', updateOverlayPosition);
 
@@ -366,10 +383,10 @@ export const Canvas: React.FC<CanvasProps> = ({
             if (e.target.closest('#studio-quick-toolbar')) return;
             e.preventDefault();
             e.stopPropagation();
-            selectElement(e.target);
+            selectElement(e.target, false);
           });
 
-          // Double Click: Smart Inline Text Editing (Support for simple and compound/nested texts)
+          // Double Click Inline Edit
           document.body.addEventListener('dblclick', (e) => {
             if (e.target.closest('#studio-quick-toolbar')) return;
             e.preventDefault();
@@ -416,6 +433,43 @@ export const Canvas: React.FC<CanvasProps> = ({
           window.addEventListener('message', (msg) => {
             if (!msg.data) return;
 
+            // ATUALIZAÇÃO SEM RECARREGAR O IFRAME (Zero Piscadeira & Preservação da Rolagem)
+            if (msg.data.type === 'UPDATE_HTML_SEAMLESS') {
+              const scrollX = window.scrollX;
+              const scrollY = window.scrollY;
+              const canvasRoot = document.getElementById('canvas-root');
+
+              if (canvasRoot && typeof msg.data.html === 'string') {
+                canvasRoot.innerHTML = msg.data.html;
+              }
+
+              const userStyles = document.getElementById('studio-user-styles');
+              if (userStyles && typeof msg.data.css === 'string') {
+                userStyles.textContent = msg.data.css;
+              }
+
+              // Restaura a posição exata da barra de rolagem
+              window.scrollTo(scrollX, scrollY);
+
+              // Restaura a seleção do elemento sem rolar a página
+              if (currentSelectedPath) {
+                const parts = String(currentSelectedPath).split('.').map(Number);
+                let el = canvasRoot;
+                for (const idx of parts) {
+                  const kids = Array.from(el.children);
+                  if (!kids[idx]) { el = null; break; }
+                  el = kids[idx];
+                }
+                if (el && el !== canvasRoot) {
+                  currentSelected = el;
+                  updateOverlayPosition();
+                } else {
+                  removeSelection();
+                }
+              }
+              return;
+            }
+
             if (msg.data.type === 'HIGHLIGHT_ELEMENT') {
               const hPath = msg.data.path;
               if (hPath === null || hPath === undefined || hPath === '') {
@@ -431,8 +485,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                 el = kids[idx];
               }
               if (el && el !== canvasRoot) {
-                selectElement(el);
-                el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                selectElement(el, true);
               }
             }
 
@@ -474,6 +527,7 @@ export const Canvas: React.FC<CanvasProps> = ({
     `;
 
     iframe.srcdoc = documentContent;
+    isInitializedRef.current = true;
   }, [html, css, js]);
 
   // Sync Highlight Path
