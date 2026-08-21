@@ -1,6 +1,17 @@
 import { ProxyAgent, setGlobalDispatcher, fetch as undiciFetch } from 'undici';
 
-const defaultProxyUrl = process.env.HTTPS_PROXY || process.env.HTTP_PROXY || process.env.AI_PROXY_URL;
+function isValidHttpUrl(stringToTest?: string): boolean {
+  if (!stringToTest || typeof stringToTest !== 'string' || stringToTest.trim() === '') return false;
+  try {
+    const url = new URL(stringToTest.trim());
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch (_) {
+    return false;
+  }
+}
+
+const rawEnvProxy = process.env.HTTPS_PROXY || process.env.HTTP_PROXY || process.env.AI_PROXY_URL;
+const defaultProxyUrl = isValidHttpUrl(rawEnvProxy) ? rawEnvProxy!.trim() : undefined;
 
 if (defaultProxyUrl) {
   try {
@@ -22,7 +33,7 @@ export const generateAIResponse = async (
   customProxyUrl?: string
 ) => {
   const activeKey = customApiKey || process.env.GEMINI_API_KEY;
-  const proxyUrl = customProxyUrl || defaultProxyUrl;
+  const proxyUrl = isValidHttpUrl(customProxyUrl) ? customProxyUrl!.trim() : defaultProxyUrl;
 
   // Modelos candidatos em cascata
   let candidateModels: string[] = [];

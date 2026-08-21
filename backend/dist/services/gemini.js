@@ -2,7 +2,19 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.generateAIResponse = void 0;
 const undici_1 = require("undici");
-const defaultProxyUrl = process.env.HTTPS_PROXY || process.env.HTTP_PROXY || process.env.AI_PROXY_URL;
+function isValidHttpUrl(stringToTest) {
+    if (!stringToTest || typeof stringToTest !== 'string' || stringToTest.trim() === '')
+        return false;
+    try {
+        const url = new URL(stringToTest.trim());
+        return url.protocol === 'http:' || url.protocol === 'https:';
+    }
+    catch (_) {
+        return false;
+    }
+}
+const rawEnvProxy = process.env.HTTPS_PROXY || process.env.HTTP_PROXY || process.env.AI_PROXY_URL;
+const defaultProxyUrl = isValidHttpUrl(rawEnvProxy) ? rawEnvProxy.trim() : undefined;
 if (defaultProxyUrl) {
     try {
         const proxyAgent = new undici_1.ProxyAgent(defaultProxyUrl);
@@ -15,7 +27,7 @@ if (defaultProxyUrl) {
 }
 const generateAIResponse = async (prompt, context, customApiKey, customModel, registeredModels, onModelAttempt, customProxyUrl) => {
     const activeKey = customApiKey || process.env.GEMINI_API_KEY;
-    const proxyUrl = customProxyUrl || defaultProxyUrl;
+    const proxyUrl = isValidHttpUrl(customProxyUrl) ? customProxyUrl.trim() : defaultProxyUrl;
     // Modelos candidatos em cascata
     let candidateModels = [];
     if (registeredModels && Array.isArray(registeredModels) && registeredModels.length > 0) {
