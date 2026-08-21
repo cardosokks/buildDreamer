@@ -193,15 +193,18 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
       } else if ((e.key === 'Delete' || e.key === 'Backspace') && !isInput && selectedPath) {
         e.preventDefault();
         handleDeleteElement(selectedPath);
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd' && !isInput && selectedPath) {
+        e.preventDefault();
+        handleDuplicateElement(selectedPath);
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
         e.preventDefault();
-        setShowExportModal(true);
+        handleManualSave();
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleUndo, handleRedo, selectedPath]);
+  }, [handleUndo, handleRedo, selectedPath, activePage]);
 
   // Helpers to parse and serialize DOM trees safely
   const parseDocFromHtml = (htmlStr: string) => {
