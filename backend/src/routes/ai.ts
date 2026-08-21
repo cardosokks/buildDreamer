@@ -26,7 +26,8 @@ async function processAIChatJob(
   pageId: string,
   clientGeminiKey?: string,
   model?: string,
-  registeredModels?: string[]
+  registeredModels?: string[],
+  clientProxyUrl?: string
 ) {
   aiChatJobsQueue[jobId] = { status: 'processing', currentModel: model || 'gemini-2.5-flash' };
   try {
@@ -51,7 +52,8 @@ async function processAIChatJob(
           status: 'processing',
           currentModel
         };
-      }
+      },
+      clientProxyUrl
     );
 
     aiChatJobsQueue[jobId] = {
@@ -91,8 +93,9 @@ router.post('/chat', async (req: AuthenticatedRequest, res: any) => {
       return res.status(403).json({ error: 'Not authorized' });
     }
 
-    // Extract client provided Gemini Key from headers if present
+    // Extract client provided Gemini Key & Proxy from headers if present
     const clientGeminiKey = (req.headers['x-gemini-key'] || req.headers['X-Gemini-Key']) as string;
+    const clientProxyUrl = (req.headers['x-proxy-url'] || req.headers['X-Proxy-Url']) as string || process.env.AI_PROXY_URL;
     let registeredModels: string[] | undefined;
     try {
       const rawModels = (req.headers['x-gemini-models'] || req.headers['X-Gemini-Models']) as string;
@@ -103,7 +106,7 @@ router.post('/chat', async (req: AuthenticatedRequest, res: any) => {
     aiChatJobsQueue[jobId] = { status: 'pending', currentModel: model || 'gemini-2.5-flash' };
 
     // Disparar processamento assíncrono em background sem prender o HTTP request
-    processAIChatJob(jobId, prompt, pageId, clientGeminiKey, model, registeredModels);
+    processAIChatJob(jobId, prompt, pageId, clientGeminiKey, model, registeredModels, clientProxyUrl);
 
     return res.status(202).json({ jobId, status: 'pending' });
   } catch (error: any) {
@@ -128,13 +131,20 @@ router.get('/jobs/:jobId/status', (req: AuthenticatedRequest, res: any) => {
 router.get('/models', async (req: AuthenticatedRequest, res: any) => {
   try {
     const clientGeminiKey = (req.headers['x-gemini-key'] || req.headers['X-Gemini-Key'] || process.env.GEMINI_API_KEY) as string;
+    const clientProxyUrl = (req.headers['x-proxy-url'] || req.headers['X-Proxy-Url']) as string || process.env.AI_PROXY_URL;
     
     if (!clientGeminiKey) {
       return res.status(400).json({ error: 'Chave do Gemini não configurada' });
     }
 
-    // Call Google Gemini Models list endpoint directly
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${clientGeminiKey}`);
+    // Call Google Gemini Models list endpoint directly with proxy support
+    const fetchOptions: any = {};
+    if (clientProxyUrl) {
+      const { ProxyAgent } = await import('undici');
+      fetchOptions.dispatcher = new ProxyAgent(clientProxyUrl);
+    }
+    const { fetch: undiciFetch } = await import('undici');
+    const response = await undiciFetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${clientGeminiKey}`, fetchOptions);
     
     if (!response.ok) {
       const errBody = await response.text();

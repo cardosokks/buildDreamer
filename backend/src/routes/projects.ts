@@ -15,7 +15,14 @@ export const projectJobsQueue: Record<string, {
 }> = {};
 
 // Background task worker method
-async function processAIProjectGeneration(projectId: string, prompt: string, customApiKey?: string, customModel?: string, registeredModels?: string[]) {
+async function processAIProjectGeneration(
+  projectId: string, 
+  prompt: string, 
+  customApiKey?: string, 
+  customModel?: string, 
+  registeredModels?: string[],
+  customProxyUrl?: string
+) {
   projectJobsQueue[projectId] = { status: 'processing' };
   try {
     const page = await prisma.page.findFirst({
@@ -24,7 +31,7 @@ async function processAIProjectGeneration(projectId: string, prompt: string, cus
 
     if (!page) throw new Error("Homepage page not found in project");
 
-    // Invoke Gemini with dynamic attempt updates
+    // Invoke Gemini with dynamic attempt updates and proxy
     const response = await generateAIResponse(
       prompt,
       { html: page.html, css: page.css, js: page.js },
@@ -38,7 +45,8 @@ async function processAIProjectGeneration(projectId: string, prompt: string, cus
           attempt,
           total
         };
-      }
+      },
+      customProxyUrl
     );
 
     // Save final generated code to database
@@ -154,6 +162,7 @@ router.post('/', async (req: AuthenticatedRequest, res: any) => {
     // If generated using AI prompt, enqueue background job to build mockup
     if (isAIPrompt || description?.includes('Segmento:')) {
       const clientGeminiKey = (req.headers['x-gemini-key'] || req.headers['X-Gemini-Key']) as string || process.env.GEMINI_API_KEY;
+      const clientProxyUrl = (req.headers['x-proxy-url'] || req.headers['X-Proxy-Url']) as string || process.env.AI_PROXY_URL;
       let registeredModels: string[] | undefined;
       try {
         const rawModels = (req.headers['x-gemini-models'] || req.headers['X-Gemini-Models']) as string;
@@ -164,7 +173,7 @@ router.post('/', async (req: AuthenticatedRequest, res: any) => {
       
       // Enqueue job immediately on process memory thread
       projectJobsQueue[project.id] = { status: 'pending' };
-      processAIProjectGeneration(project.id, aiPromptMessage, clientGeminiKey, undefined, registeredModels);
+      processAIProjectGeneration(project.id, aiPromptMessage, clientGeminiKey, undefined, registeredModels, clientProxyUrl);
     }
 
     // Upload to FTP background

@@ -126,7 +126,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ pageId, onApplyChanges, on
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
           'x-gemini-key': localGeminiKey,
-          'x-gemini-models': JSON.stringify(registeredModelIds)
+          'x-gemini-models': JSON.stringify(registeredModelIds),
+          'x-proxy-url': localStorage.getItem('ai_proxy_url') || ''
         },
         body: JSON.stringify({ prompt: userMessage, pageId: currentRequestPageId, model: selectedModel })
       });

@@ -1,6 +1,16 @@
-import { GoogleGenAI } from '@google/genai';
+import { ProxyAgent, setGlobalDispatcher, fetch as undiciFetch } from 'undici';
 
-const apiKey = process.env.GEMINI_API_KEY;
+const defaultProxyUrl = process.env.HTTPS_PROXY || process.env.HTTP_PROXY || process.env.AI_PROXY_URL;
+
+if (defaultProxyUrl) {
+  try {
+    const proxyAgent = new ProxyAgent(defaultProxyUrl);
+    setGlobalDispatcher(proxyAgent);
+    console.log(`[AI Proxy Engine] Proxy global ativado: ${defaultProxyUrl.replace(/:[^:@]+@/, ':***@')}`);
+  } catch (err) {
+    console.error('[AI Proxy Engine] Falha ao configurar proxy global:', err);
+  }
+}
 
 export const generateAIResponse = async (
   prompt: string, 
@@ -8,11 +18,13 @@ export const generateAIResponse = async (
   customApiKey?: string,
   customModel?: string,
   registeredModels?: string[],
-  onModelAttempt?: (model: string, index: number, total: number) => void
+  onModelAttempt?: (model: string, index: number, total: number) => void,
+  customProxyUrl?: string
 ) => {
-  const activeKey = customApiKey || apiKey;
+  const activeKey = customApiKey || process.env.GEMINI_API_KEY;
+  const proxyUrl = customProxyUrl || defaultProxyUrl;
 
-  // Usa estritamente os modelos cadastrados nas configurações pelo usuário
+  // Modelos candidatos em cascata
   let candidateModels: string[] = [];
   if (registeredModels && Array.isArray(registeredModels) && registeredModels.length > 0) {
     candidateModels = [...registeredModels];
@@ -22,7 +34,7 @@ export const generateAIResponse = async (
   } else if (customModel) {
     candidateModels = [customModel];
   } else {
-    candidateModels = ['gemini-2.5-flash'];
+    candidateModels = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.5-pro', 'gemini-1.5-flash'];
   }
 
   const systemPrompt = `
@@ -56,8 +68,6 @@ export const generateAIResponse = async (
     throw new Error("Chave da API do Gemini não fornecida. Configure-a no menu de configurações do sistema ou no backend.");
   }
 
-  const ai = new GoogleGenAI({ apiKey: activeKey });
-
   let lastError: any = null;
 
   for (let i = 0; i < candidateModels.length; i++) {
@@ -67,25 +77,50 @@ export const generateAIResponse = async (
     }
 
     try {
-      const response = await ai.models.generateContent({
-        model: modelToTry,
+      // Endpoint oficial da API do Gemini v1beta
+      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelToTry}:generateContent?key=${activeKey}`;
+
+      const payload = {
         contents: [
-          { role: 'system', parts: [{ text: systemPrompt }] },
-          { 
-            role: 'user', 
+          {
+            role: 'user',
             parts: [
-              { text: `Contexto do site:\nHTML: ${context.html}\nCSS: ${context.css}\nJS: ${context.js}\n\nPedido do Usuário: ${prompt}` }
-            ] 
+              {
+                text: `${systemPrompt}\n\nContexto do site:\nHTML: ${context.html}\nCSS: ${context.css}\nJS: ${context.js}\n\nPedido do Usuário: ${prompt}`
+              }
+            ]
           }
         ],
-        config: {
-          responseMimeType: 'application/json'
+        generationConfig: {
+          responseMimeType: 'application/json',
+          temperature: 0.7
         }
-      });
+      };
 
-      let text = response.text || '{}';
-      
-      // Extract strictly the JSON object between first { and last } to avoid trailing commentary or tokens
+      const fetchOptions: any = {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      };
+
+      if (proxyUrl) {
+        fetchOptions.dispatcher = new ProxyAgent(proxyUrl);
+      }
+
+      const response = await undiciFetch(apiUrl, fetchOptions);
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`HTTP ${response.status}: ${errText}`);
+      }
+
+      const resJson: any = await response.json();
+      const rawText = resJson?.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+
+      // Extração estrita do JSON retornado pela IA
+      let text = rawText.trim();
       const firstBrace = text.indexOf('{');
       const lastBrace = text.lastIndexOf('}');
       if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
@@ -98,7 +133,6 @@ export const generateAIResponse = async (
       try {
         parsed = JSON.parse(text);
       } catch (parseErr) {
-        // Fallback: replace common invalid escape characters in large HTML/JS blobs
         const sanitized = text
           .replace(/\\n/g, "\\n")
           .replace(/\\'/g, "\\'")
@@ -114,12 +148,11 @@ export const generateAIResponse = async (
       parsed._usedModel = modelToTry;
       return parsed;
     } catch (error: any) {
-      console.warn(`[Cascata IA] Tentativa com o modelo ${modelToTry} (${i + 1}/${candidateModels.length}) falhou:`, error.message);
+      console.warn(`[AI Engine] Tentativa com o modelo ${modelToTry} (${i + 1}/${candidateModels.length}) falhou:`, error.message);
       lastError = error;
-      // Continue to next candidate model
     }
   }
 
   console.error("Erro na API do Gemini em todos os modelos candidatos:", lastError);
-  throw new Error(`Erro ao gerar resposta da IA: ${lastError?.message || 'Cota esgotada em todos os modelos cadastrados'}`);
+  throw new Error(`Erro ao gerar resposta da IA: ${lastError?.message || 'Falha de conexão com a API do Gemini'}`);
 };

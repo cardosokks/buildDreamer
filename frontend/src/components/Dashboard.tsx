@@ -414,7 +414,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
           'X-Gemini-Key': localStorage.getItem('gemini_api_key') || '',
-          'X-Gemini-Models': JSON.stringify(registeredModelIds)
+          'X-Gemini-Models': JSON.stringify(registeredModelIds),
+          'X-Proxy-Url': localStorage.getItem('ai_proxy_url') || ''
         },
         body: JSON.stringify({ 
           name: finalName, 

@@ -21,6 +21,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
   // AI credentials
   const [geminiKey, setGeminiKey] = useState(localStorage.getItem('gemini_api_key') || '');
   const [openaiKey, setOpenaiKey] = useState(localStorage.getItem('openai_api_key') || '');
+  const [proxyUrl, setProxyUrl] = useState(localStorage.getItem('ai_proxy_url') || '');
 
   // Models CRUD fields
   const getStoredModels = () => {
@@ -62,7 +63,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
     setSuccessMsg(null);
     localStorage.setItem('gemini_api_key', geminiKey);
     localStorage.setItem('openai_api_key', openaiKey);
-    setSuccessMsg('Credenciais de IA salvas com sucesso!');
+    localStorage.setItem('ai_proxy_url', proxyUrl);
+    setSuccessMsg('Configurações e Proxy salvos com sucesso!');
     setLoading(false);
   };
 
@@ -231,19 +233,36 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wider text-slate-455 mb-2 flex items-center gap-1">
                   Gemini API Key
-                  <span className="text-[10px] text-purple-400 lowercase italic font-normal">(Recomendado)</span>
+                  <span className="text-[10px] text-amber-400 lowercase italic font-normal">(Recomendado)</span>
                 </label>
                 <input 
                   type="password"
                   placeholder="AIzaSy..."
                   value={geminiKey}
                   onChange={(e) => setGeminiKey(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl focus:outline-none focus:ring-1 focus:ring-purple-500 text-xs text-white"
+                  className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500 text-xs text-white"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-455 mb-2">OpenAI API Key</label>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-455 mb-2 flex items-center justify-between">
+                  <span>Proxy para IA (HTTP / HTTPS / SOCKS5)</span>
+                  <span className="text-[10px] text-emerald-400 font-mono font-normal">Bypass de Bloqueio</span>
+                </label>
+                <input 
+                  type="text"
+                  placeholder="http://usuario:senha@ip-proxy:porta ou http://proxy.servidor.com:8080"
+                  value={proxyUrl}
+                  onChange={(e) => setProxyUrl(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500 text-xs text-white font-mono"
+                />
+                <p className="text-[10px] text-slate-500 mt-1">
+                  Configure um proxy caso o Gemini esteja barrando requisições do seu IP ou datacenter. Todas as chamadas para IA passarão por este túnel.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-455 mb-2">OpenAI API Key (Opcional)</label>
                 <input 
                   type="password"
                   placeholder="sk-..."

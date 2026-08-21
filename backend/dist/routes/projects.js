@@ -8,7 +8,7 @@ const gemini_1 = require("../services/gemini");
 const router = (0, express_1.Router)();
 exports.projectJobsQueue = {};
 // Background task worker method
-async function processAIProjectGeneration(projectId, prompt, customApiKey, customModel, registeredModels) {
+async function processAIProjectGeneration(projectId, prompt, customApiKey, customModel, registeredModels, customProxyUrl) {
     exports.projectJobsQueue[projectId] = { status: 'processing' };
     try {
         const page = await db_1.prisma.page.findFirst({
@@ -16,7 +16,7 @@ async function processAIProjectGeneration(projectId, prompt, customApiKey, custo
         });
         if (!page)
             throw new Error("Homepage page not found in project");
-        // Invoke Gemini with dynamic attempt updates
+        // Invoke Gemini with dynamic attempt updates and proxy
         const response = await (0, gemini_1.generateAIResponse)(prompt, { html: page.html, css: page.css, js: page.js }, customApiKey, customModel, registeredModels, (model, attempt, total) => {
             exports.projectJobsQueue[projectId] = {
                 status: 'processing',
@@ -24,7 +24,7 @@ async function processAIProjectGeneration(projectId, prompt, customApiKey, custo
                 attempt,
                 total
             };
-        });
+        }, customProxyUrl);
         // Save final generated code to database
         await db_1.prisma.page.update({
             where: { id: page.id },
@@ -133,6 +133,7 @@ router.post('/', async (req, res) => {
         // If generated using AI prompt, enqueue background job to build mockup
         if (isAIPrompt || description?.includes('Segmento:')) {
             const clientGeminiKey = (req.headers['x-gemini-key'] || req.headers['X-Gemini-Key']) || process.env.GEMINI_API_KEY;
+            const clientProxyUrl = (req.headers['x-proxy-url'] || req.headers['X-Proxy-Url']) || process.env.AI_PROXY_URL;
             let registeredModels;
             try {
                 const rawModels = (req.headers['x-gemini-models'] || req.headers['X-Gemini-Models']);
@@ -143,7 +144,7 @@ router.post('/', async (req, res) => {
             const aiPromptMessage = `Gere um mockup completo e profissional de site para a empresa "${name}". Descrição detalhada do negócio: ${description}. Crie uma paleta elegante, seções funcionais (Hero, Serviços, Contato, FAQ) e um design moderno responsivo.`;
             // Enqueue job immediately on process memory thread
             exports.projectJobsQueue[project.id] = { status: 'pending' };
-            processAIProjectGeneration(project.id, aiPromptMessage, clientGeminiKey, undefined, registeredModels);
+            processAIProjectGeneration(project.id, aiPromptMessage, clientGeminiKey, undefined, registeredModels, clientProxyUrl);
         }
         // Upload to FTP background
         try {
