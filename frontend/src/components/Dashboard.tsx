@@ -36,7 +36,13 @@ import {
   Moon,
   Radio,
   Square,
-  Play
+  Play,
+  Zap,
+  ArrowUpRight,
+  TrendingUp,
+  Cpu,
+  Server,
+  Code2
 } from 'lucide-react';
 
 import { useTheme } from '../context/ThemeContext';
@@ -1030,45 +1036,267 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
         <main className="flex-1 overflow-y-auto px-6 py-8">
           {activeTab === 'general' ? (
             <div className="max-w-6xl mx-auto space-y-8">
-              <div>
-                <h1 className="text-3xl font-extrabold text-white tracking-tight">Painel Administrativo</h1>
-                <p className="text-slate-400 mt-1">Monitore e configure seus recursos web com inteligência.</p>
-              </div>
-
-              {/* Status statistics grids */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="bg-[#0f0b18] border border-slate-850 rounded-2xl p-6 shadow-xl relative overflow-hidden group">
-                  <div className="absolute top-0 right-0 w-24 h-24 bg-purple-500/10 rounded-full blur-xl group-hover:bg-purple-500/20 transition-all" />
-                  <span className="text-xs text-slate-400 font-bold uppercase tracking-wider">Total de Projetos</span>
-                  <p className="text-4xl font-extrabold text-white mt-3">{projects.length}</p>
-                </div>
-                <div className="bg-[#0f0b18] border border-slate-850 rounded-2xl p-6 shadow-xl relative overflow-hidden group">
-                  <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500/10 rounded-full blur-xl group-hover:bg-indigo-500/20 transition-all" />
-                  <span className="text-xs text-slate-400 font-bold uppercase tracking-wider">Status do FTP</span>
-                  <p className="text-lg font-bold text-emerald-400 mt-3 flex items-center gap-1.5">
-                    <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full shadow-[0_0_8px_#10b981]" />
-                    Conectado
+              {/* Header com Boas-Vindas e Ação Principal */}
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <h1 className="text-3xl font-extrabold text-white tracking-tight flex items-center gap-2.5">
+                    <Sparkles className="w-8 h-8 text-purple-400" />
+                    Visão Geral da Plataforma
+                  </h1>
+                  <p className="text-slate-400 mt-1">
+                    Central de comando: crie sites com IA, prospecte clientes e publique em produção.
                   </p>
                 </div>
-                <div className="bg-[#0f0b18] border border-slate-850 rounded-2xl p-6 shadow-xl relative overflow-hidden group">
-                  <div className="absolute top-0 right-0 w-24 h-24 bg-pink-500/10 rounded-full blur-xl group-hover:bg-pink-500/20 transition-all" />
-                  <span className="text-xs text-slate-400 font-bold uppercase tracking-wider">Buscar Clientes</span>
-                  <button 
-                    onClick={() => { setActiveTab('leads'); }}
-                    className="mt-3 block w-full py-2 bg-purple-700/40 hover:bg-purple-700/60 border border-purple-500/30 text-xs font-semibold text-purple-300 rounded-xl transition-all cursor-pointer text-center animate-pulse"
+
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <button
+                    onClick={() => { setCreationMode('ai'); setShowCreateModal(true); }}
+                    className="px-4 py-2.5 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-purple-600/30 transition-all flex items-center gap-1.5 cursor-pointer"
                   >
-                    Abrir Buscador
+                    <Zap className="w-4 h-4" />
+                    Criar Site com IA
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('leads')}
+                    className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-200 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Users className="w-4 h-4 text-pink-400" />
+                    Buscar Novos Leads
                   </button>
                 </div>
               </div>
 
-              {/* Quick info row */}
-              <div className="p-6 bg-slate-900/30 border border-slate-800/80 rounded-2xl">
-                <h3 className="font-bold text-white mb-2 text-sm">Bem-vindo ao Real Premise</h3>
-                <p className="text-slate-400 text-xs leading-relaxed max-w-2xl">
-                  Utilize o menu lateral para gerenciar os arquivos de seus sites. Cada alteração realizada no construtor visual é enviada instantaneamente em ambiente sandbox para os servidores de nuvem configurados, garantindo carregamento de ponta com usabilidade completa.
-                </p>
+              {/* Status & Estatísticas em Grid Principal */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                {/* Total de Projetos */}
+                <div 
+                  onClick={() => setActiveTab('projects')}
+                  className="bg-[#0f0b18] border border-slate-850 hover:border-purple-500/40 rounded-2xl p-5 shadow-xl relative overflow-hidden group cursor-pointer transition-all"
+                >
+                  <div className="absolute top-0 right-0 w-20 h-20 bg-purple-500/10 rounded-full blur-xl group-hover:bg-purple-500/20 transition-all" />
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">Total de Sites</span>
+                    <div className="p-2 rounded-xl bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                      <Layout className="w-4 h-4" />
+                    </div>
+                  </div>
+                  <p className="text-3xl font-black text-white mt-2">{projects.length}</p>
+                  <span className="text-[11px] text-purple-400 font-medium flex items-center gap-1 mt-2">
+                    Gerenciar projetos <ChevronRight className="w-3 h-3" />
+                  </span>
+                </div>
+
+                {/* Previews Ngrok Ativos */}
+                <div 
+                  onClick={() => setActiveTab('tunnels')}
+                  className="bg-[#0f0b18] border border-slate-850 hover:border-cyan-500/40 rounded-2xl p-5 shadow-xl relative overflow-hidden group cursor-pointer transition-all"
+                >
+                  <div className="absolute top-0 right-0 w-20 h-20 bg-cyan-500/10 rounded-full blur-xl group-hover:bg-cyan-500/20 transition-all" />
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">Previews Ngrok</span>
+                    <div className="p-2 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                      <Radio className={`w-4 h-4 ${activeTunnels.length > 0 ? 'animate-pulse' : ''}`} />
+                    </div>
+                  </div>
+                  <p className="text-3xl font-black text-white mt-2">{activeTunnels.length}</p>
+                  <span className={`text-[11px] font-medium flex items-center gap-1 mt-2 ${activeTunnels.length > 0 ? 'text-emerald-400' : 'text-slate-500'}`}>
+                    {activeTunnels.length > 0 ? '● Túneis em transmissão' : 'Nenhum túnel ativo'}
+                  </span>
+                </div>
+
+                {/* Leads Prospectados & Salvos */}
+                <div 
+                  onClick={() => setActiveTab('saved-leads')}
+                  className="bg-[#0f0b18] border border-slate-850 hover:border-amber-500/40 rounded-2xl p-5 shadow-xl relative overflow-hidden group cursor-pointer transition-all"
+                >
+                  <div className="absolute top-0 right-0 w-20 h-20 bg-amber-500/10 rounded-full blur-xl group-hover:bg-amber-500/20 transition-all" />
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">Leads Salvos</span>
+                    <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                      <Bookmark className="w-4 h-4" />
+                    </div>
+                  </div>
+                  <p className="text-3xl font-black text-white mt-2">{savedLeads.length}</p>
+                  <span className="text-[11px] text-amber-400 font-medium flex items-center gap-1 mt-2">
+                    Ver oportunidades <ChevronRight className="w-3 h-3" />
+                  </span>
+                </div>
+
+                {/* Status do Servidor e Deploy */}
+                <div className="bg-[#0f0b18] border border-slate-850 rounded-2xl p-5 shadow-xl relative overflow-hidden group">
+                  <div className="absolute top-0 right-0 w-20 h-20 bg-emerald-500/10 rounded-full blur-xl group-hover:bg-emerald-500/20 transition-all" />
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">Servidor FTP</span>
+                    <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                      <Server className="w-4 h-4" />
+                    </div>
+                  </div>
+                  <p className="text-lg font-bold text-emerald-400 mt-2 flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full shadow-[0_0_8px_#10b981]" />
+                    Conectado
+                  </p>
+                  <span className="text-[11px] text-slate-500 font-mono mt-2 block">
+                    Sync Sandbox Live
+                  </span>
+                </div>
               </div>
+
+              {/* Seção Central: Ações Rápidas & IA Copilot Pipeline */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Card de Atalhos Rápidos */}
+                <div className="lg:col-span-2 bg-[#0f0b18] border border-slate-850 rounded-2xl p-6 shadow-xl space-y-4">
+                  <h3 className="font-bold text-white text-base flex items-center gap-2">
+                    <Cpu className="w-5 h-5 text-indigo-400" />
+                    Fluxos Rápidos de Produção
+                  </h3>
+                  
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <button
+                      onClick={() => { setCreationMode('ai'); setShowCreateModal(true); }}
+                      className="p-4 bg-slate-950 border border-slate-800/80 hover:border-purple-500/50 rounded-xl text-left transition-all group cursor-pointer"
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="p-2 rounded-lg bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                          <Zap className="w-4 h-4" />
+                        </span>
+                        <ArrowUpRight className="w-4 h-4 text-slate-600 group-hover:text-purple-400 transition-colors" />
+                      </div>
+                      <span className="font-bold text-white text-sm block">Gerar Site Completo com IA</span>
+                      <span className="text-xs text-slate-400 mt-0.5 block">Crie Home e subpáginas com base no nicho</span>
+                    </button>
+
+                    <button
+                      onClick={() => setActiveTab('leads')}
+                      className="p-4 bg-slate-950 border border-slate-800/80 hover:border-pink-500/50 rounded-xl text-left transition-all group cursor-pointer"
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="p-2 rounded-lg bg-pink-500/10 text-pink-400 border border-pink-500/20">
+                          <Users className="w-4 h-4" />
+                        </span>
+                        <ArrowUpRight className="w-4 h-4 text-slate-600 group-hover:text-pink-400 transition-colors" />
+                      </div>
+                      <span className="font-bold text-white text-sm block">Buscador de Clientes Locais</span>
+                      <span className="text-xs text-slate-400 mt-0.5 block">Prospecte comércios sem website e WhatsApp</span>
+                    </button>
+
+                    <button
+                      onClick={() => setActiveTab('presets')}
+                      className="p-4 bg-slate-950 border border-slate-800/80 hover:border-cyan-500/50 rounded-xl text-left transition-all group cursor-pointer"
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="p-2 rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                          <SlidersHorizontal className="w-4 h-4" />
+                        </span>
+                        <ArrowUpRight className="w-4 h-4 text-slate-600 group-hover:text-cyan-400 transition-colors" />
+                      </div>
+                      <span className="font-bold text-white text-sm block">Filtros Pré-Configurados</span>
+                      <span className="text-xs text-slate-400 mt-0.5 block">Buscas automatizadas com 1 clique</span>
+                    </button>
+
+                    <button
+                      onClick={() => setShowSettings(true)}
+                      className="p-4 bg-slate-950 border border-slate-800/80 hover:border-amber-500/50 rounded-xl text-left transition-all group cursor-pointer"
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="p-2 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                          <Settings className="w-4 h-4" />
+                        </span>
+                        <ArrowUpRight className="w-4 h-4 text-slate-600 group-hover:text-amber-400 transition-colors" />
+                      </div>
+                      <span className="font-bold text-white text-sm block">Configurar IA, Proxy & Ngrok</span>
+                      <span className="text-xs text-slate-400 mt-0.5 block">Chaves de API, proxies e tokens</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Painel Lateral: Previews Ngrok Ativos ou Destaque */}
+                <div className="bg-[#0f0b18] border border-slate-850 rounded-2xl p-6 shadow-xl flex flex-col justify-between space-y-4">
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="font-bold text-white text-base flex items-center gap-2">
+                        <Radio className="w-4 h-4 text-cyan-400" />
+                        Túneis em Tempo Real
+                      </h3>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono ${
+                        activeTunnels.length > 0 ? 'bg-emerald-950/60 text-emerald-300 border border-emerald-500/30' : 'bg-slate-900 text-slate-500'
+                      }`}>
+                        {activeTunnels.length} Ativo(s)
+                      </span>
+                    </div>
+
+                    {activeTunnels.length === 0 ? (
+                      <div className="p-4 bg-slate-950/60 border border-slate-850 rounded-xl text-center space-y-2 my-auto">
+                        <Globe className="w-6 h-6 text-slate-600 mx-auto" />
+                        <p className="text-xs text-slate-400">Nenhum preview público aberto no momento.</p>
+                        <p className="text-[10px] text-slate-500">Abra qualquer site no editor e clique em Preview &gt; Ngrok.</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2.5 max-h-48 overflow-y-auto pr-1">
+                        {activeTunnels.slice(0, 3).map(t => (
+                          <div key={t.projectId} className="p-3 bg-slate-950 border border-cyan-500/20 rounded-xl space-y-1">
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="font-bold text-white truncate">{t.projectName}</span>
+                              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                            </div>
+                            <a 
+                              href={t.url} 
+                              target="_blank" 
+                              rel="noreferrer"
+                              className="text-[10px] text-cyan-400 font-mono hover:underline truncate block"
+                            >
+                              {t.url}
+                            </a>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <button
+                    onClick={() => setActiveTab('tunnels')}
+                    className="w-full py-2 bg-slate-900 hover:bg-slate-850 border border-slate-800 text-slate-300 text-xs font-bold rounded-xl transition-all text-center cursor-pointer"
+                  >
+                    Abrir Gerenciador de Previews
+                  </button>
+                </div>
+              </div>
+
+              {/* Projetos Recentes */}
+              {projects.length > 0 && (
+                <div className="bg-[#0f0b18] border border-slate-850 rounded-2xl p-6 shadow-xl space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-bold text-white text-base flex items-center gap-2">
+                      <Layout className="w-5 h-5 text-purple-400" />
+                      Projetos Recentes
+                    </h3>
+                    <button
+                      onClick={() => setActiveTab('projects')}
+                      className="text-xs font-bold text-purple-400 hover:underline flex items-center gap-1"
+                    >
+                      Ver Todos ({projects.length}) <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {projects.slice(0, 3).map(p => (
+                      <div
+                        key={p.id}
+                        onClick={() => onSelectProject(p.id)}
+                        className="p-4 bg-slate-950 border border-slate-800/80 hover:border-purple-500/40 rounded-xl space-y-2 cursor-pointer transition-all group"
+                      >
+                        <div className="flex items-start justify-between">
+                          <h4 className="font-bold text-white text-sm group-hover:text-purple-300 transition-colors truncate">{p.name}</h4>
+                          <span className="text-[10px] px-2 py-0.5 bg-purple-950/60 text-purple-300 border border-purple-500/30 rounded-full font-mono">
+                            {p.pages?.length || 1} pág(s)
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-400 line-clamp-1">{p.description || 'Site criado no Real Premise'}</p>
+                        <span className="text-[10px] text-slate-500 block">Atualizado em: {new Date(p.updatedAt || p.createdAt).toLocaleDateString('pt-BR')}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           ) : activeTab === 'projects' ? (
             <div className="max-w-6xl mx-auto">
