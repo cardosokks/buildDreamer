@@ -474,9 +474,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
   };
 
   return (
-    <div className="min-h-screen bg-[#07020d] text-slate-100 font-sans flex flex-col">
+    <div className={`min-h-screen font-sans flex flex-col transition-colors duration-200 ${
+      theme === 'light' ? 'bg-slate-50 text-slate-900' : 'bg-[#0a0c10] text-slate-100'
+    }`}>
       {/* Top Navbar with Size and Minimized State Toggle */}
-      <header className={`border-b border-slate-900 bg-[#0f0b18]/90 backdrop-blur-md sticky top-0 z-30 shrink-0 shadow-[0_4px_30px_rgba(0,0,0,0.4)] transition-all duration-300 ${
+      <header className={`border-b sticky top-0 z-30 shrink-0 transition-all duration-300 backdrop-blur-md ${
+        theme === 'light'
+          ? 'bg-white/90 border-slate-200 shadow-sm'
+          : 'bg-[#0f1117]/90 border-slate-800/80 shadow-[0_4px_20px_rgba(0,0,0,0.3)]'
+      } ${
         navbarMinimized ? 'h-8 py-0' : navbarSize === 'compact' ? 'h-12 py-1' : navbarSize === 'large' ? 'h-20 py-3' : 'h-16 py-2'
       }`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-full flex items-center justify-between">
@@ -486,29 +492,45 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
             {/* Mobile Hamburger Toggle */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="p-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-white md:hidden transition-all cursor-pointer"
+              className={`p-1.5 rounded-lg border md:hidden transition-all cursor-pointer ${
+                theme === 'light'
+                  ? 'bg-slate-100 border-slate-200 text-slate-600 hover:text-slate-900'
+                  : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
+              }`}
               title="Menu Lateral"
             >
               {mobileMenuOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
             </button>
 
-            <div className="w-8 h-8 rounded-full overflow-hidden border border-amber-500/40 shadow-[0_0_12px_rgba(229,185,95,0.3)] shrink-0 bg-black/40 flex items-center justify-center">
+            <div className={`w-8 h-8 rounded-full overflow-hidden border shrink-0 flex items-center justify-center ${
+              theme === 'light' ? 'border-amber-600/30 bg-amber-50' : 'border-amber-500/30 bg-black/40'
+            }`}>
               <img src="/logo.png" alt="Real Premise" className="w-full h-full object-cover" />
             </div>
             {!navbarMinimized && (
               <div className="flex items-center gap-2">
-                <span className="font-extrabold text-base sm:text-lg tracking-widest bg-gradient-to-r from-amber-300 via-rose-300 to-amber-400 bg-clip-text text-transparent">REAL PREMISE</span>
-                <span className="hidden sm:inline-block px-2 py-0.5 rounded border border-amber-500/30 bg-amber-950/30 text-[9px] text-amber-300 font-mono tracking-widest shadow-[0_0_8px_rgba(229,185,95,0.2)]">STUDIO</span>
+                <span className={`font-extrabold text-base sm:text-lg tracking-wider ${
+                  theme === 'light' ? 'text-slate-900' : 'text-white'
+                }`}>REAL PREMISE</span>
+                <span className={`hidden sm:inline-block px-2 py-0.5 rounded border text-[9px] font-mono tracking-widest ${
+                  theme === 'light'
+                    ? 'border-slate-300 bg-slate-100 text-slate-600 font-semibold'
+                    : 'border-slate-700 bg-slate-800/80 text-slate-300'
+                }`}>STUDIO</span>
               </div>
             )}
           </div>
 
-          {/* Accessibility & Density Controls */}
+          {/* Accessibility & Theme Controls */}
           <div className="flex items-center gap-2.5">
             {/* Botão de Alternar Modo Escuro / Modo Claro */}
             <button
               onClick={toggleTheme}
-              className="p-2 rounded-xl bg-slate-900/60 dark:bg-slate-900/60 light:bg-amber-100/60 border border-amber-500/30 text-amber-300 hover:text-amber-200 transition-all cursor-pointer shadow-sm hover:shadow-[0_0_12px_rgba(229,185,95,0.3)] flex items-center gap-1.5"
+              className={`p-2 rounded-xl border transition-all cursor-pointer flex items-center gap-1.5 ${
+                theme === 'light'
+                  ? 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-800 shadow-sm'
+                  : 'bg-slate-900/80 hover:bg-slate-800 border-slate-800 text-amber-300 shadow-sm'
+              }`}
               title={theme === 'dark' ? 'Mudar para Modo Claro' : 'Mudar para Modo Escuro'}
             >
               {theme === 'dark' ? (
@@ -518,24 +540,30 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                 </>
               ) : (
                 <>
-                  <Moon className="w-4 h-4 text-rose-400" />
-                  <span className="hidden sm:inline text-xs font-semibold text-rose-500">Escuro</span>
+                  <Moon className="w-4 h-4 text-indigo-600" />
+                  <span className="hidden sm:inline text-xs font-semibold text-slate-700">Escuro</span>
                 </>
               )}
             </button>
 
             {/* Density Selector */}
             {!navbarMinimized && (
-              <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 bg-slate-950/60 border border-slate-800 rounded-xl">
-                <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Barra:</span>
+              <div className={`hidden lg:flex items-center gap-1.5 px-2.5 py-1 border rounded-xl ${
+                theme === 'light' ? 'bg-slate-100 border-slate-200' : 'bg-slate-900/80 border-slate-800'
+              }`}>
+                <span className={`text-[10px] font-semibold uppercase tracking-wider ${
+                  theme === 'light' ? 'text-slate-500' : 'text-slate-400'
+                }`}>Barra:</span>
                 <select
                   value={navbarSize}
                   onChange={(e) => setNavbarSize(e.target.value as any)}
-                  className="bg-transparent border-none text-[10px] text-amber-300 font-mono focus:outline-none cursor-pointer"
+                  className={`bg-transparent border-none text-[10px] font-mono focus:outline-none cursor-pointer ${
+                    theme === 'light' ? 'text-slate-800' : 'text-slate-200'
+                  }`}
                 >
-                  <option value="compact" className="bg-slate-900 text-white">Compacto</option>
-                  <option value="normal" className="bg-slate-900 text-white">Normal</option>
-                  <option value="large" className="bg-slate-900 text-white">Grande</option>
+                  <option value="compact" className={theme === 'light' ? 'bg-white text-slate-900' : 'bg-slate-900 text-white'}>Compacto</option>
+                  <option value="normal" className={theme === 'light' ? 'bg-white text-slate-900' : 'bg-slate-900 text-white'}>Normal</option>
+                  <option value="large" className={theme === 'light' ? 'bg-white text-slate-900' : 'bg-slate-900 text-white'}>Grande</option>
                 </select>
               </div>
             )}
@@ -543,7 +571,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
             {/* Minimize / Maximize Navbar Button */}
             <button
               onClick={() => setNavbarMinimized(!navbarMinimized)}
-              className="p-1.5 bg-slate-950/60 hover:bg-slate-900 border border-slate-800 text-slate-400 hover:text-white rounded-xl transition-all cursor-pointer shadow-sm"
+              className={`p-1.5 border rounded-xl transition-all cursor-pointer shadow-sm ${
+                theme === 'light'
+                  ? 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-600 hover:text-slate-900'
+                  : 'bg-slate-900/80 hover:bg-slate-800 border-slate-800 text-slate-400 hover:text-white'
+              }`}
               title={navbarMinimized ? "Expandir Barra Superior" : "Minimizar Barra Superior"}
             >
               {navbarMinimized ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
@@ -553,15 +585,23 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
             <div className="relative">
               <button
                 onClick={() => setShowUserDropdown(!showUserDropdown)}
-                className="flex items-center gap-2.5 p-1 pl-2.5 rounded-xl bg-purple-950/30 hover:bg-purple-900/40 border border-purple-500/25 transition-all cursor-pointer shadow-sm hover:border-purple-500/50"
+                className={`flex items-center gap-2.5 p-1 pl-2.5 rounded-xl border transition-all cursor-pointer shadow-sm ${
+                  theme === 'light'
+                    ? 'bg-slate-100 hover:bg-slate-200 border-slate-200'
+                    : 'bg-slate-900/80 hover:bg-slate-800 border-slate-800'
+                }`}
               >
                 {!navbarMinimized && (
                   <div className="text-right hidden sm:block">
-                    <p className="text-xs font-bold text-white leading-tight">{user?.name || 'Desenvolvedor'}</p>
-                    <p className="text-[9px] text-purple-400 font-mono">{user?.email}</p>
+                    <p className={`text-xs font-bold leading-tight ${
+                      theme === 'light' ? 'text-slate-900' : 'text-white'
+                    }`}>{user?.name || 'Desenvolvedor'}</p>
+                    <p className={`text-[9px] font-mono ${
+                      theme === 'light' ? 'text-slate-500' : 'text-slate-400'
+                    }`}>{user?.email}</p>
                   </div>
                 )}
-                <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-purple-600 to-indigo-500 flex items-center justify-center text-white font-bold text-xs shadow-md shadow-purple-500/20 border border-purple-400/30">
+                <div className="w-7 h-7 rounded-lg bg-slate-800 text-slate-100 flex items-center justify-center font-bold text-xs shadow border border-slate-700">
                   {(user?.name || 'U').charAt(0).toUpperCase()}
                 </div>
               </button>
@@ -569,12 +609,18 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
               {/* Dropdown Menu Popup */}
               {showUserDropdown && (
                 <div 
-                  className="absolute right-0 mt-2 w-56 bg-[#0f0b18] border border-purple-500/30 rounded-2xl shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-150 backdrop-blur-xl"
+                  className={`absolute right-0 mt-2 w-56 border rounded-2xl shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-150 backdrop-blur-xl ${
+                    theme === 'light'
+                      ? 'bg-white border-slate-200 text-slate-900'
+                      : 'bg-[#0f1117] border-slate-800 text-slate-100'
+                  }`}
                   onClick={() => setShowUserDropdown(false)}
                 >
-                  <div className="p-3 border-b border-slate-850 bg-purple-950/20">
-                    <p className="text-xs font-semibold text-white truncate">{user?.name || 'Desenvolvedor'}</p>
-                    <p className="text-[10px] text-slate-400 font-mono truncate">{user?.email}</p>
+                  <div className={`p-3 border-b ${
+                    theme === 'light' ? 'border-slate-100 bg-slate-50' : 'border-slate-800 bg-slate-900/50'
+                  }`}>
+                    <p className="text-xs font-semibold truncate">{user?.name || 'Desenvolvedor'}</p>
+                    <p className="text-[10px] text-slate-500 font-mono truncate">{user?.email}</p>
                   </div>
 
                   <div className="p-1.5 space-y-1">
@@ -663,85 +709,119 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
         {/* Left Navigation Sidebar with Drag-to-Resize Handle */}
         <aside 
           style={{ width: `${sidebarWidth}px` }}
-          className="border-r border-slate-900 bg-[#0b0614] flex flex-col justify-between shrink-0 p-4 hidden md:flex relative select-none"
+          className={`border-r flex flex-col justify-between shrink-0 p-4 hidden md:flex relative select-none transition-colors duration-200 ${
+            theme === 'light'
+              ? 'bg-white border-slate-200'
+              : 'bg-[#0b0d13] border-slate-800/80'
+          }`}
         >
-          <div className="space-y-1.5">
+          <div className="space-y-1">
             <button
               onClick={() => setActiveTab('general')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
+              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                 activeTab === 'general'
-                  ? 'bg-purple-900/20 border border-purple-500/30 text-purple-300 shadow-[0_0_15px_rgba(168,85,247,0.15)]'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/40 border border-transparent'
+                  ? theme === 'light'
+                    ? 'bg-indigo-50 text-indigo-700 font-bold'
+                    : 'bg-slate-800 text-white font-bold'
+                  : theme === 'light'
+                    ? 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                    : 'text-slate-400 hover:bg-slate-900/60 hover:text-slate-200'
               }`}
             >
-              <Sparkles className="w-4 h-4 text-purple-400 shrink-0" />
-              <span className="truncate">Visão Geral (Dashboard)</span>
+              <Sparkles className="w-4 h-4 text-indigo-500 shrink-0" />
+              <span className="truncate">Visão Geral</span>
             </button>
             <button
               onClick={() => setActiveTab('projects')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
+              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                 activeTab === 'projects'
-                  ? 'bg-purple-900/20 border border-purple-500/30 text-purple-300 shadow-[0_0_15px_rgba(168,85,247,0.15)]'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/40 border border-transparent'
+                  ? theme === 'light'
+                    ? 'bg-indigo-50 text-indigo-700 font-bold'
+                    : 'bg-slate-800 text-white font-bold'
+                  : theme === 'light'
+                    ? 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                    : 'text-slate-400 hover:bg-slate-900/60 hover:text-slate-200'
               }`}
             >
-              <Layout className="w-4 h-4 text-indigo-400 shrink-0" />
+              <Layout className="w-4 h-4 text-indigo-500 shrink-0" />
               <span className="truncate">Projetos / Sites</span>
             </button>
             
             {/* Prospecting Section Divider */}
-            <div className="pt-3 pb-1 px-3 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+            <div className={`pt-4 pb-1 px-3 text-[10px] font-bold uppercase tracking-wider ${
+              theme === 'light' ? 'text-slate-400' : 'text-slate-500'
+            }`}>
               Prospecção de Leads
             </div>
 
             <button
               onClick={() => setActiveTab('leads')}
-              className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
+              className={`w-full flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                 activeTab === 'leads'
-                  ? 'bg-purple-900/20 border border-purple-500/30 text-purple-300 shadow-[0_0_15px_rgba(168,85,247,0.15)]'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/40 border border-transparent'
+                  ? theme === 'light'
+                    ? 'bg-indigo-50 text-indigo-700 font-bold'
+                    : 'bg-slate-800 text-white font-bold'
+                  : theme === 'light'
+                    ? 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                    : 'text-slate-400 hover:bg-slate-900/60 hover:text-slate-200'
               }`}
             >
-              <Users className="w-4 h-4 text-pink-400 shrink-0" />
+              <Users className="w-4 h-4 text-indigo-500 shrink-0" />
               <span className="truncate">Buscador de Clientes</span>
             </button>
 
             <button
               onClick={() => setActiveTab('saved-leads')}
-              className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
+              className={`w-full flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                 activeTab === 'saved-leads'
-                  ? 'bg-purple-900/20 border border-purple-500/30 text-purple-300 shadow-[0_0_15px_rgba(168,85,247,0.15)]'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/40 border border-transparent'
+                  ? theme === 'light'
+                    ? 'bg-amber-50 text-amber-800 font-bold'
+                    : 'bg-slate-800 text-amber-300 font-bold'
+                  : theme === 'light'
+                    ? 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                    : 'text-slate-400 hover:bg-slate-900/60 hover:text-slate-200'
               }`}
             >
-              <Bookmark className="w-4 h-4 text-yellow-400 shrink-0" />
+              <Bookmark className="w-4 h-4 text-amber-500 shrink-0" />
               <span className="truncate flex-1 text-left">Leads Salvos</span>
-              {savedLeads.length > 0 && (
-                <span className="text-[10px] px-2 py-0.5 bg-yellow-500/20 text-yellow-300 border border-yellow-500/30 rounded-full font-mono">
-                  {savedLeads.length}
-                </span>
-              )}
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                theme === 'light' ? 'bg-amber-100 text-amber-800' : 'bg-amber-950/60 text-amber-300 border border-amber-500/30'
+              }`}>
+                {savedLeads.length}
+              </span>
             </button>
 
             <button
               onClick={() => setActiveTab('presets')}
-              className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
+              className={`w-full flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                 activeTab === 'presets'
-                  ? 'bg-purple-900/20 border border-purple-500/30 text-purple-300 shadow-[0_0_15px_rgba(168,85,247,0.15)]'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/40 border border-transparent'
+                  ? theme === 'light'
+                    ? 'bg-indigo-50 text-indigo-700 font-bold'
+                    : 'bg-slate-800 text-white font-bold'
+                  : theme === 'light'
+                    ? 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                    : 'text-slate-400 hover:bg-slate-900/60 hover:text-slate-200'
               }`}
             >
-              <SlidersHorizontal className="w-4 h-4 text-cyan-400 shrink-0" />
+              <SlidersHorizontal className="w-4 h-4 text-indigo-500 shrink-0" />
               <span className="truncate flex-1 text-left">Filtros Pré-Prontos</span>
-              <span className="text-[10px] px-2 py-0.5 bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 rounded-full font-mono">
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                theme === 'light' ? 'bg-slate-200 text-slate-700' : 'bg-slate-800 text-slate-300 border border-slate-700'
+              }`}>
                 {filterPresets.length}
               </span>
             </button>
           </div>
 
-          <div className="p-3 bg-slate-900/30 border border-slate-800/60 rounded-xl">
-            <span className="block text-[10px] text-slate-500 font-bold uppercase tracking-wider">Servidor de Deploy</span>
-            <span className="block text-xs text-purple-400 mt-1 font-mono truncate">Real Premise Live FTP</span>
+          <div className={`p-3 border rounded-xl ${
+            theme === 'light' ? 'bg-slate-50 border-slate-200' : 'bg-slate-900/40 border-slate-800/80'
+          }`}>
+            <span className={`block text-[10px] font-bold uppercase tracking-wider ${
+              theme === 'light' ? 'text-slate-400' : 'text-slate-500'
+            }`}>Ambiente de Deploy</span>
+            <span className={`block text-xs mt-0.5 font-mono truncate ${
+              theme === 'light' ? 'text-indigo-600 font-semibold' : 'text-indigo-400'
+            }`}>Real Premise Live FTP</span>
           </div>
 
           {/* Draggable Resize Divider */}

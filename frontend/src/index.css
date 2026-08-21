@@ -1,103 +1,97 @@
 @import "tailwindcss";
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800;900&family=Fira+Code:wght@400;500;600&display=swap');
 
-/* ─── Real Premise (Gold, Rose & Obsidian Theme Variables) ────────── */
+/* ─── Minimalist Design System Variables ──────────────────────────── */
 :root {
-  --rp-gold: #e5b95f;
-  --rp-gold-light: #fbe39d;
-  --rp-gold-dark: #b88628;
-  --rp-gold-glow: rgba(229, 185, 95, 0.35);
-  --rp-rose: #d9779f;
-  --rp-rose-light: #f9a8d4;
-  --rp-rose-dark: #9d174d;
-  --rp-rose-glow: rgba(217, 119, 159, 0.3);
+  --bg-app: #090a0f;
+  --bg-surface: #11131a;
+  --bg-sidebar: #0d0f15;
+  --bg-card: #151822;
+  --bg-input: #0c0d12;
   
-  /* Dark Mode Default */
-  --bg-main: #0c0814;
-  --bg-card: #130d20;
-  --bg-sidebar: #0f0919;
-  --border-color: rgba(229, 185, 95, 0.15);
-  --text-main: #f8fafc;
-  --text-muted: #94a3b8;
+  --border-subtle: #202433;
+  --border-strong: #2e3447;
+  
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  
+  --accent-primary: #6366f1;
+  --accent-hover: #4f46e5;
+  --accent-light: rgba(99, 102, 241, 0.12);
+  
+  --gold-accent: #d4af37;
 }
 
 html.light {
-  --bg-main: #fdf8f5;
+  --bg-app: #f8fafc;
+  --bg-surface: #ffffff;
+  --bg-sidebar: #f1f5f9;
   --bg-card: #ffffff;
-  --bg-sidebar: #f8eff2;
-  --border-color: rgba(184, 134, 40, 0.2);
-  --text-main: #1e1b24;
-  --text-muted: #64748b;
+  --bg-input: #f8fafc;
+  
+  --border-subtle: #e2e8f0;
+  --border-strong: #cbd5e1;
+  
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+  
+  --accent-primary: #4f46e5;
+  --accent-hover: #4338ca;
+  --accent-light: rgba(79, 70, 229, 0.08);
+  
+  --gold-accent: #b89726;
 }
 
 body {
-  background-color: var(--bg-main);
-  color: var(--text-main);
-  font-family: 'Inter', sans-serif;
+  background-color: var(--bg-app);
+  color: var(--text-primary);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   -webkit-tap-highlight-color: transparent;
   padding-bottom: env(safe-area-inset-bottom);
-  transition: background-color 0.3s ease, color 0.3s ease;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 h1, h2, h3, h4, .font-heading {
   font-family: 'Outfit', sans-serif;
 }
 
-/* ─── Custom Premium Gold Scrollbar ───────────────────────────────── */
+/* ─── Global Theme Utility Classes ────────────────────────────────── */
+.app-bg { background-color: var(--bg-app); }
+.surface-bg { background-color: var(--bg-surface); }
+.sidebar-bg { background-color: var(--bg-sidebar); }
+.card-bg { background-color: var(--bg-card); }
+.input-bg { background-color: var(--bg-input); }
+
+.border-theme { border-color: var(--border-subtle); }
+.border-theme-strong { border-color: var(--border-strong); }
+
+.text-theme-primary { color: var(--text-primary); }
+.text-theme-secondary { color: var(--text-secondary); }
+.text-theme-muted { color: var(--text-muted); }
+
+/* Minimalist Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--bg-main);
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #3c2a1a; 
+  background: var(--border-strong);
   border-radius: 99px;
-  border: 1px solid rgba(229, 185, 95, 0.3);
-  transition: all 0.2s;
-}
-
-html.light ::-webkit-scrollbar-thumb {
-  background: #d8c2aa;
-  border: 1px solid rgba(184, 134, 40, 0.4);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--rp-gold); 
-  box-shadow: 0 0 10px var(--rp-gold-glow);
-}
-
-::-webkit-scrollbar-corner {
-  background: transparent;
+  background: var(--text-muted);
 }
 
 /* Firefox */
 * {
   scrollbar-width: thin;
-  scrollbar-color: #3c2a1a var(--bg-main);
-}
-
-*:hover {
-  scrollbar-color: var(--rp-gold) var(--bg-main);
-}
-
-/* Touch Friendly Utilities */
-.touch-pan-y {
-  touch-action: pan-y;
-}
-
-@keyframes goldGlow {
-  0%, 100% {
-    box-shadow: 0 0 15px rgba(229, 185, 95, 0.25);
-  }
-  50% {
-    box-shadow: 0 0 25px rgba(229, 185, 95, 0.5);
-  }
-}
-
-.animate-gold-glow {
-  animation: goldGlow 3s infinite ease-in-out;
+  scrollbar-color: var(--border-strong) transparent;
 }
