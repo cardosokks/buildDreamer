@@ -124,4 +124,40 @@ router.get('/jobs/:jobId/status', (req: AuthenticatedRequest, res: any) => {
   return res.json(job);
 });
 
+// List available models from Google Gemini API with the given API key
+router.get('/models', async (req: AuthenticatedRequest, res: any) => {
+  try {
+    const clientGeminiKey = (req.headers['x-gemini-key'] || req.headers['X-Gemini-Key'] || process.env.GEMINI_API_KEY) as string;
+    
+    if (!clientGeminiKey) {
+      return res.status(400).json({ error: 'Chave do Gemini não configurada' });
+    }
+
+    // Call Google Gemini Models list endpoint directly
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${clientGeminiKey}`);
+    
+    if (!response.ok) {
+      const errBody = await response.text();
+      return res.status(response.status).json({ error: `Erro na API do Gemini: ${errBody}` });
+    }
+
+    const data: any = await response.json();
+    const geminiModels = (data.models || [])
+      .filter((m: any) => m.name && m.supportedGenerationMethods && m.supportedGenerationMethods.includes('generateContent'))
+      .map((m: any) => {
+        const id = m.name.replace('models/', '');
+        return {
+          id,
+          name: m.displayName || id,
+          description: m.description
+        };
+      });
+
+    return res.json({ models: geminiModels });
+  } catch (error: any) {
+    console.error("Erro ao buscar modelos do Gemini:", error);
+    return res.status(500).json({ error: error.message });
+  }
+});
+
 export const aiRouter = router;

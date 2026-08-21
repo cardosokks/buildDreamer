@@ -87,4 +87,35 @@ router.get('/jobs/:jobId/status', (req, res) => {
     }
     return res.json(job);
 });
+// List available models from Google Gemini API with the given API key
+router.get('/models', async (req, res) => {
+    try {
+        const clientGeminiKey = (req.headers['x-gemini-key'] || req.headers['X-Gemini-Key'] || process.env.GEMINI_API_KEY);
+        if (!clientGeminiKey) {
+            return res.status(400).json({ error: 'Chave do Gemini não configurada' });
+        }
+        // Call Google Gemini Models list endpoint directly
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${clientGeminiKey}`);
+        if (!response.ok) {
+            const errBody = await response.text();
+            return res.status(response.status).json({ error: `Erro na API do Gemini: ${errBody}` });
+        }
+        const data = await response.json();
+        const geminiModels = (data.models || [])
+            .filter((m) => m.name && m.supportedGenerationMethods && m.supportedGenerationMethods.includes('generateContent'))
+            .map((m) => {
+            const id = m.name.replace('models/', '');
+            return {
+                id,
+                name: m.displayName || id,
+                description: m.description
+            };
+        });
+        return res.json({ models: geminiModels });
+    }
+    catch (error) {
+        console.error("Erro ao buscar modelos do Gemini:", error);
+        return res.status(500).json({ error: error.message });
+    }
+});
 exports.aiRouter = router;

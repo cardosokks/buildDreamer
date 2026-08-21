@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { User, Key, Save, Trash2, Plus, Box } from 'lucide-react';
+import { User, Key, Save, Trash2, Plus, Box, Sparkles } from 'lucide-react';
+import { API_URL } from '../config';
 
 interface SettingsModalProps {
   onClose: () => void;
@@ -87,6 +88,56 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
     setModels(updated);
     localStorage.setItem('custom_gemini_models', JSON.stringify(updated));
     setSuccessMsg('Modelo excluído com sucesso!');
+  };
+
+  const [fetchingApiModels, setFetchingApiModels] = useState(false);
+
+  const handleFetchApiModels = async () => {
+    setFetchingApiModels(true);
+    setErrorMsg(null);
+    setSuccessMsg(null);
+
+    const activeKey = geminiKey || localStorage.getItem('gemini_api_key') || '';
+
+    try {
+      const res = await fetch(`${API_URL}/api/ai/models`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'x-gemini-key': activeKey
+        }
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Falha ao buscar modelos na API do Gemini');
+      }
+
+      const data = await res.json();
+      const apiModels: Array<{ id: string; name: string }> = data.models || [];
+
+      if (apiModels.length === 0) {
+        setErrorMsg('Nenhum modelo de geração de conteúdo encontrado para este token.');
+        return;
+      }
+
+      // Adiciona apenas os modelos que ainda não estão na lista
+      const existingIds = new Set(models.map(m => m.id));
+      const newDiscovered = apiModels.filter(m => !existingIds.has(m.id));
+
+      if (newDiscovered.length === 0) {
+        setSuccessMsg(`Todos os ${apiModels.length} modelos retornados pela API já estão cadastrados!`);
+      } else {
+        const updated = [...models, ...newDiscovered];
+        setModels(updated);
+        localStorage.setItem('custom_gemini_models', JSON.stringify(updated));
+        setSuccessMsg(`Sucesso! ${newDiscovered.length} novos modelos foram encontrados na sua chave e cadastrados.`);
+      }
+    } catch (e: any) {
+      console.error(e);
+      setErrorMsg(e.message || 'Erro ao conectar à API do Gemini');
+    } finally {
+      setFetchingApiModels(false);
+    }
   };
 
   return (
@@ -217,10 +268,34 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
 
           {activeTab === 'models' && (
             <div className="space-y-6">
+
+              {/* Sincronização Automática via API Token */}
+              <div className="p-4 bg-purple-950/25 border border-purple-500/30 rounded-xl space-y-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-xs font-bold text-white flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+                      Buscar Modelos Disponíveis na API
+                    </h3>
+                    <p className="text-[10px] text-slate-400 mt-0.5">
+                      Consulta a API oficial do Gemini com seu token e cadastra automaticamente os modelos liberados na sua conta.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleFetchApiModels}
+                    disabled={fetchingApiModels}
+                    className="flex items-center gap-1.5 px-3 py-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all shadow-[0_0_15px_rgba(168,85,247,0.3)] shrink-0 cursor-pointer"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    {fetchingApiModels ? 'Consultando...' : 'Sincronizar Modelos'}
+                  </button>
+                </div>
+              </div>
               
-              {/* Add New Custom Model */}
+              {/* Add New Custom Model Manualmente */}
               <form onSubmit={handleAddModel} className="bg-slate-950 p-4 border border-slate-850 rounded-xl space-y-3">
-                <h3 className="text-xs font-bold text-slate-350 uppercase tracking-wider">Adicionar Novo Modelo</h3>
+                <h3 className="text-xs font-bold text-slate-350 uppercase tracking-wider">Adicionar Manualmente</h3>
                 
                 <div className="grid grid-cols-2 gap-2">
                   <div>
@@ -228,7 +303,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                     <input 
                       type="text"
                       required
-                      placeholder="gemini-2.0-flash-exp"
+                      placeholder="gemini-2.5-flash"
                       value={newModelId}
                       onChange={(e) => setNewModelId(e.target.value)}
                       className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-xs text-white"
@@ -239,7 +314,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                     <input 
                       type="text"
                       required
-                      placeholder="Gemini 2.0 Flash Exp"
+                      placeholder="Gemini 2.5 Flash"
                       value={newModelName}
                       onChange={(e) => setNewModelName(e.target.value)}
                       className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-xs text-white"
@@ -249,16 +324,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
 
                 <button
                   type="submit"
-                  className="w-full py-2 bg-purple-600 hover:bg-purple-500 text-white rounded text-xs font-semibold flex items-center justify-center gap-1 cursor-pointer"
+                  className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-white rounded text-xs font-semibold flex items-center justify-center gap-1 cursor-pointer"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  Adicionar
+                  Adicionar Manualmente
                 </button>
               </form>
 
               {/* Models List */}
               <div className="space-y-2">
-                <h3 className="text-xs font-bold text-slate-350 uppercase tracking-wider">Modelos Disponíveis</h3>
+                <h3 className="text-xs font-bold text-slate-350 uppercase tracking-wider">
+                  Modelos Cadastrados ({models.length})
+                </h3>
                 
                 <div className="space-y-1.5 max-h-48 overflow-y-auto">
                   {models.map(m => (
