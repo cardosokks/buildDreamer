@@ -25,9 +25,14 @@ import {
   AlignEndHorizontal,
   AlignVerticalJustifyCenter,
   FileText,
+  Globe,
+  Search,
+  Share2,
+  Tag,
+  Plus,
+  X
 } from 'lucide-react';
 
-// Convert "rgb(r, g, b)" or "rgba(r,g,b,a)" to "#rrggbb" for color inputs
 const rgbToHex = (color: string): string => {
   if (!color || color === 'transparent' || color.startsWith('#')) return color;
   const m = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
@@ -37,10 +42,8 @@ const rgbToHex = (color: string): string => {
     .join('');
 };
 
-// Strip computed px values to just the number part when not set inline
 const cleanComputedValue = (val: string, prop: string): string => {
   if (!val) return '';
-  // If the value looks like a default computed value (e.g. 0px for margin), return empty
   const zerosProps = ['margin-top','margin-bottom','margin-left','margin-right',
     'padding-top','padding-bottom','padding-left','padding-right',
     'top','right','bottom','left','letter-spacing','gap'];
@@ -53,9 +56,6 @@ const cleanComputedValue = (val: string, prop: string): string => {
   if (prop === 'box-shadow' && val === 'none') return '';
   return val;
 };
-
-
-import { Globe, Search, Share2 } from 'lucide-react';
 
 interface PropertiesPanelProps {
   selectedSelector: string | null;
@@ -72,7 +72,6 @@ interface PropertiesPanelProps {
   onPageSeoChange?: (key: 'title' | 'description' | 'ogImage', value: string) => void;
 }
 
-// Reusable building blocks
 const Section: React.FC<{ title: string; icon: React.ReactNode; children: React.ReactNode; defaultOpen?: boolean }> = ({
   title, icon, children, defaultOpen = true
 }) => {
@@ -81,21 +80,21 @@ const Section: React.FC<{ title: string; icon: React.ReactNode; children: React.
     <div className="border-b border-slate-900/80">
       <button
         onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center justify-between px-3 py-2 hover:bg-slate-900/50 transition-colors cursor-pointer"
+        className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-slate-900/40 transition-colors cursor-pointer"
       >
-        <span className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-slate-500">
+        <span className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">
           {icon}
           {title}
         </span>
-        {open ? <ChevronDown className="w-3 h-3 text-slate-600" /> : <ChevronRight className="w-3 h-3 text-slate-600" />}
+        {open ? <ChevronDown className="w-3 h-3 text-slate-500" /> : <ChevronRight className="w-3 h-3 text-slate-500" />}
       </button>
-      {open && <div className="px-3 pb-3 pt-1 space-y-2.5">{children}</div>}
+      {open && <div className="px-3 pb-3.5 pt-1 space-y-3">{children}</div>}
     </div>
   );
 };
 
 const Label: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <span className="block text-[10px] text-slate-500 mb-1 font-medium">{children}</span>
+  <span className="block text-[10px] text-slate-400 mb-1 font-medium">{children}</span>
 );
 
 const inputCls = "w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1.5 text-[11px] text-white focus:outline-none focus:ring-1 focus:ring-purple-500 focus:border-purple-500 transition-colors";
@@ -109,11 +108,8 @@ const UnitInput: React.FC<{
   placeholder?: string;
 }> = ({ label, prop, value, onChange, placeholder }) => {
   const units = ['px', '%', 'rem', 'em', 'vw', 'vh', 'auto'];
-  
-  // Clean value to extract numeric representation and unit
   const strVal = String(value || '').trim();
   const isAuto = strVal === 'auto';
-  
   const match = strVal.match(/^([\d.-]+)(.*)$/);
   const num = isAuto ? '' : (match ? match[1] : strVal);
   const unit = isAuto ? 'auto' : (match ? (match[2] || 'px') : 'px');
@@ -163,14 +159,15 @@ const ColorInput: React.FC<{
   onChange: (p: string, v: string) => void;
 }> = ({ label, prop, value, onChange }) => {
   const hex = rgbToHex(value);
-  const isHex = /^#[0-9a-fA-F]{3,8}$/.test(hex);
+  const isHex = hex.startsWith('#') && (hex.length === 7 || hex.length === 4);
+
   return (
     <div>
       <Label>{label}</Label>
-      <div className="flex gap-1.5">
+      <div className="flex gap-1.5 items-center">
         <input
           type="color"
-          className="w-7 h-7 rounded cursor-pointer border-0 bg-transparent p-0 shrink-0"
+          className="w-7 h-7 rounded cursor-pointer border border-slate-800 bg-transparent p-0 shrink-0"
           value={isHex ? hex : '#000000'}
           onChange={e => onChange(prop, e.target.value)}
         />
@@ -186,52 +183,90 @@ const ColorInput: React.FC<{
   );
 };
 
-const SpacingBox: React.FC<{
-  label: string;
-  props: { top: string; right: string; bottom: string; left: string };
-  values: Record<string, string>;
+const BoxModelVisualizer: React.FC<{
+  styles: Record<string, string>;
   onChange: (p: string, v: string) => void;
-}> = ({ label, props, values, onChange }) => (
-  <div>
-    <Label>{label}</Label>
-    <div className="grid grid-cols-3 gap-1 items-center">
-      <div />
-      <input type="text" placeholder="Top" className={`${inputCls} text-center`}
-        value={values[props.top] || ''} onChange={e => onChange(props.top, e.target.value)} />
-      <div />
-      <input type="text" placeholder="L" className={`${inputCls} text-center`}
-        value={values[props.left] || ''} onChange={e => onChange(props.left, e.target.value)} />
-      <div className="w-4 h-4 rounded border border-slate-700 bg-slate-800 mx-auto" />
-      <input type="text" placeholder="R" className={`${inputCls} text-center`}
-        value={values[props.right] || ''} onChange={e => onChange(props.right, e.target.value)} />
-      <div />
-      <input type="text" placeholder="Bot" className={`${inputCls} text-center`}
-        value={values[props.bottom] || ''} onChange={e => onChange(props.bottom, e.target.value)} />
-      <div />
-    </div>
-  </div>
-);
+}> = ({ styles, onChange }) => {
+  return (
+    <div className="bg-[#05010a] border border-slate-800/80 rounded-xl p-3 select-none text-center">
+      <span className="text-[9px] uppercase font-bold text-slate-500 mb-1 block">Margin & Padding (Box Model)</span>
+      <div className="bg-purple-950/20 border border-dashed border-purple-500/40 rounded-lg p-2 relative">
+        <span className="text-[8px] text-purple-400 font-mono absolute top-0.5 left-1.5">MARGIN</span>
+        <div className="grid grid-cols-3 gap-1 items-center max-w-[200px] mx-auto my-1">
+          <div />
+          <input
+            type="text"
+            placeholder="0"
+            value={styles['margin-top'] || ''}
+            onChange={e => onChange('margin-top', e.target.value)}
+            className="w-12 h-6 bg-slate-900 border border-slate-800 text-[10px] text-center text-white rounded mx-auto"
+          />
+          <div />
+          <input
+            type="text"
+            placeholder="0"
+            value={styles['margin-left'] || ''}
+            onChange={e => onChange('margin-left', e.target.value)}
+            className="w-12 h-6 bg-slate-900 border border-slate-800 text-[10px] text-center text-white rounded"
+          />
+          
+          {/* Inner Padding Container */}
+          <div className="bg-cyan-950/30 border border-dashed border-cyan-500/40 rounded p-1.5 relative">
+            <span className="text-[8px] text-cyan-400 font-mono block">PAD</span>
+            <input
+              type="text"
+              placeholder="0"
+              value={styles['padding-top'] || ''}
+              onChange={e => onChange('padding-top', e.target.value)}
+              className="w-10 h-5 bg-slate-900 border border-slate-800 text-[9px] text-center text-white rounded mx-auto mb-1 block"
+            />
+            <div className="flex items-center justify-between gap-1">
+              <input
+                type="text"
+                placeholder="0"
+                value={styles['padding-left'] || ''}
+                onChange={e => onChange('padding-left', e.target.value)}
+                className="w-8 h-5 bg-slate-900 border border-slate-800 text-[9px] text-center text-white rounded"
+              />
+              <div className="w-3 h-3 rounded-full bg-purple-500/40 mx-auto" />
+              <input
+                type="text"
+                placeholder="0"
+                value={styles['padding-right'] || ''}
+                onChange={e => onChange('padding-right', e.target.value)}
+                className="w-8 h-5 bg-slate-900 border border-slate-800 text-[9px] text-center text-white rounded"
+              />
+            </div>
+            <input
+              type="text"
+              placeholder="0"
+              value={styles['padding-bottom'] || ''}
+              onChange={e => onChange('padding-bottom', e.target.value)}
+              className="w-10 h-5 bg-slate-900 border border-slate-800 text-[9px] text-center text-white rounded mx-auto mt-1 block"
+            />
+          </div>
 
-const IconToggleGroup: React.FC<{
-  options: { value: string; icon: React.ReactNode; title: string }[];
-  selected: string;
-  onChange: (v: string) => void;
-}> = ({ options, selected, onChange }) => (
-  <div className="flex gap-1 bg-slate-900 border border-slate-800 rounded-lg p-0.5">
-    {options.map(o => (
-      <button
-        key={o.value}
-        title={o.title}
-        onClick={() => onChange(o.value)}
-        className={`flex-1 flex items-center justify-center p-1.5 rounded cursor-pointer transition-all ${
-          selected === o.value ? 'bg-purple-600 text-white' : 'text-slate-500 hover:text-white hover:bg-slate-800'
-        }`}
-      >
-        {o.icon}
-      </button>
-    ))}
-  </div>
-);
+          <input
+            type="text"
+            placeholder="0"
+            value={styles['margin-right'] || ''}
+            onChange={e => onChange('margin-right', e.target.value)}
+            className="w-12 h-6 bg-slate-900 border border-slate-800 text-[10px] text-center text-white rounded"
+          />
+          <div />
+          <input
+            type="text"
+            placeholder="0"
+            value={styles['margin-bottom'] || ''}
+            onChange={e => onChange('margin-bottom', e.target.value)}
+            className="w-12 h-6 bg-slate-900 border border-slate-800 text-[10px] text-center text-white rounded mx-auto"
+          />
+          <div />
+        </div>
+      </div>
+    </div>
+  );
+};
 
 export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   selectedSelector,
@@ -244,6 +279,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   onPageSeoChange,
 }) => {
   const [panelTab, setPanelTab] = useState<'styles' | 'seo'>('styles');
+  const [newClassInput, setNewClassInput] = useState('');
 
   const get = (prop: string) => cleanComputedValue(selectedStyles[prop] || '', prop);
   const S = (p: string, v: string) => onStyleChange(p, v);
@@ -254,26 +290,41 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const position = get('position') || 'static';
   const isPositioned = position !== 'static';
 
+  const classList = (selectedAttrs['class'] || '').split(' ').filter(Boolean);
+
+  const handleAddClass = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newClassInput.trim()) return;
+    const updated = [...classList, newClassInput.trim()].join(' ');
+    onAttrChange('class', updated);
+    setNewClassInput('');
+  };
+
+  const handleRemoveClass = (clsToRemove: string) => {
+    const updated = classList.filter(c => c !== clsToRemove).join(' ');
+    onAttrChange('class', updated);
+  };
+
   return (
-    <aside className="w-64 border-l border-slate-900 bg-slate-950 flex flex-col h-full shrink-0 select-none">
+    <aside className="w-72 border-l border-slate-900 bg-[#090410] flex flex-col h-full shrink-0 select-none shadow-2xl">
       {/* Panel Top Tabs (Estilos vs SEO / Meta Tags) */}
-      <div className="flex border-b border-slate-900 bg-slate-900/40 p-1 gap-1">
+      <div className="flex border-b border-slate-900 bg-slate-950/60 p-1 gap-1">
         <button
           onClick={() => setPanelTab('styles')}
           className={`flex-1 py-1.5 text-[11px] font-semibold rounded-md flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
             panelTab === 'styles'
-              ? 'bg-purple-600/20 text-purple-300 border border-purple-500/30'
+              ? 'bg-purple-600/25 text-purple-300 border border-purple-500/30 shadow-sm'
               : 'text-slate-500 hover:text-slate-300'
           }`}
         >
           <Palette className="w-3 h-3" />
-          Estilos
+          Inspector
         </button>
         <button
           onClick={() => setPanelTab('seo')}
           className={`flex-1 py-1.5 text-[11px] font-semibold rounded-md flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
             panelTab === 'seo'
-              ? 'bg-purple-600/20 text-purple-300 border border-purple-500/30'
+              ? 'bg-purple-600/25 text-purple-300 border border-purple-500/30 shadow-sm'
               : 'text-slate-500 hover:text-slate-300'
           }`}
         >
@@ -283,7 +334,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       </div>
 
       {panelTab === 'seo' ? (
-        <div className="flex-1 overflow-y-auto p-3 space-y-4">
+        <div className="flex-1 overflow-y-auto p-3.5 space-y-4">
           <div>
             <span className="text-[10px] uppercase font-bold text-purple-400 tracking-wider flex items-center gap-1.5 mb-2">
               <Search className="w-3 h-3" />
@@ -326,8 +377,8 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           </div>
 
           {/* Live SERP Google Card Preview */}
-          <div className="mt-4 p-3 bg-slate-900 border border-slate-800 rounded-xl space-y-1">
-            <span className="text-[9px] uppercase font-semibold text-slate-500 block">Prévia no Google</span>
+          <div className="mt-4 p-3.5 bg-slate-950 border border-slate-800 rounded-xl space-y-1.5">
+            <span className="text-[9px] uppercase font-bold text-slate-500 block">Prévia no Google Search</span>
             <div className="text-[11px] text-blue-400 font-medium truncate">
               {pageSeo?.title || 'Título da Sua Página'}
             </div>
@@ -341,456 +392,166 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         </div>
       ) : !selectedSelector ? (
         <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
-          <Settings className="w-8 h-8 text-slate-700 mx-auto mb-2" />
-          <p className="text-xs text-slate-600 italic">Selecione um elemento no canvas<br />para editar propriedades</p>
+          <Settings className="w-8 h-8 text-slate-700 mx-auto mb-2 animate-pulse" />
+          <p className="text-xs text-slate-500 italic">Selecione um elemento no canvas<br />para inspecionar propriedades</p>
         </div>
       ) : (
         <div className="flex-1 overflow-y-auto">
-          {/* Header do elemento selecionado */}
-          <div className="px-3 py-2 border-b border-slate-900 flex items-center gap-2 shrink-0 bg-slate-900/30">
-            <Settings className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 truncate">
-              {selectedSelector.split('>').pop()?.trim() || selectedSelector}
-            </span>
-          </div>
-
-        {/* CONTEÚDO DO ELEMENTO (text editing) */}
-        {selectedAttrs['_hasChildren'] !== 'true' && selectedAttrs['_tag'] && !['img','input','hr','br','meta','link'].includes(selectedAttrs['_tag']) && (
-          <Section title="Conteúdo do Texto" icon={<FileText className="w-3 h-3" />} defaultOpen={true}>
-            <div>
-              <Label>Texto do elemento ({selectedAttrs['_tag']})</Label>
-              <textarea
-                className={`${inputCls} resize-none leading-relaxed`}
-                rows={3}
-                placeholder="Digite o texto aqui..."
-                value={selectedAttrs['_textContent'] || ''}
-                onChange={e => onAttrChange('_textContent', e.target.value)}
-              />
+          {/* Header do Elemento Selecionado */}
+          <div className="px-3.5 py-2.5 border-b border-slate-900 flex items-center justify-between gap-2 shrink-0 bg-slate-950/60">
+            <div className="flex items-center gap-2 min-w-0">
+              <Tag className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+              <span className="text-[11px] font-bold text-white font-mono truncate">
+                {selectedAttrs['_tag'] || 'div'}
+              </span>
             </div>
-          </Section>
-        )}
-
-        {/* ATRIBUTOS HTML */}
-        <Section title="Atributos HTML" icon={<Code className="w-3 h-3" />} defaultOpen={true}>
-          <div>
-            <Label>id</Label>
-            <input className={inputCls} placeholder="identificador" value={selectedAttrs['id'] || ''}
-              onChange={e => onAttrChange('id', e.target.value)} />
-          </div>
-          <div>
-            <Label>class</Label>
-            <input className={inputCls} placeholder="classes CSS" value={selectedAttrs['class'] || ''}
-              onChange={e => onAttrChange('class', e.target.value)} />
-          </div>
-          {(selectedAttrs['_tag'] === 'a') && (
-            <>
-              <div>
-                <Label>href</Label>
-                <input className={inputCls} placeholder="https://..." value={selectedAttrs['href'] || ''}
-                  onChange={e => onAttrChange('href', e.target.value)} />
-              </div>
-              <div>
-                <Label>target</Label>
-                <select className={selectCls} value={selectedAttrs['target'] || '_self'}
-                  onChange={e => onAttrChange('target', e.target.value)}>
-                  <option value="_self">_self</option>
-                  <option value="_blank">_blank</option>
-                </select>
-              </div>
-            </>
-          )}
-          {(selectedAttrs['_tag'] === 'img') && (
-            <>
-              <div>
-                <Label>src</Label>
-                <input className={inputCls} placeholder="URL da imagem" value={selectedAttrs['src'] || ''}
-                  onChange={e => onAttrChange('src', e.target.value)} />
-              </div>
-              <div>
-                <Label>alt</Label>
-                <input className={inputCls} placeholder="Descrição" value={selectedAttrs['alt'] || ''}
-                  onChange={e => onAttrChange('alt', e.target.value)} />
-              </div>
-            </>
-          )}
-          {(['input', 'textarea'].includes(selectedAttrs['_tag'] || '')) && (
-            <div>
-              <Label>placeholder</Label>
-              <input className={inputCls} placeholder="Texto de exemplo" value={selectedAttrs['placeholder'] || ''}
-                onChange={e => onAttrChange('placeholder', e.target.value)} />
-            </div>
-          )}
-        </Section>
-
-        {/* DIMENSÕES */}
-        <Section title="Dimensões" icon={<Maximize2 className="w-3 h-3" />}>
-          <div className="grid grid-cols-2 gap-2">
-            <UnitInput label="Width" prop="width" value={get('width')} onChange={S} />
-            <UnitInput label="Height" prop="height" value={get('height')} onChange={S} />
-            <UnitInput label="Min W" prop="min-width" value={get('min-width')} onChange={S} />
-            <UnitInput label="Max W" prop="max-width" value={get('max-width')} onChange={S} />
-            <UnitInput label="Min H" prop="min-height" value={get('min-height')} onChange={S} />
-            <UnitInput label="Max H" prop="max-height" value={get('max-height')} onChange={S} />
-          </div>
-          <div>
-            <Label>Overflow</Label>
-            <div className="grid grid-cols-2 gap-1">
-              <select className={selectCls} value={get('overflow-x') || 'visible'}
-                onChange={e => S('overflow-x', e.target.value)}>
-                <option value="visible">X: visible</option>
-                <option value="hidden">X: hidden</option>
-                <option value="auto">X: auto</option>
-                <option value="scroll">X: scroll</option>
-              </select>
-              <select className={selectCls} value={get('overflow-y') || 'visible'}
-                onChange={e => S('overflow-y', e.target.value)}>
-                <option value="visible">Y: visible</option>
-                <option value="hidden">Y: hidden</option>
-                <option value="auto">Y: auto</option>
-                <option value="scroll">Y: scroll</option>
-              </select>
-            </div>
-          </div>
-        </Section>
-
-        {/* ESPAÇAMENTO */}
-        <Section title="Espaçamento" icon={<Box className="w-3 h-3" />}>
-          <SpacingBox
-            label="Margin"
-            props={{ top: 'margin-top', right: 'margin-right', bottom: 'margin-bottom', left: 'margin-left' }}
-            values={selectedStyles}
-            onChange={S}
-          />
-          <SpacingBox
-            label="Padding"
-            props={{ top: 'padding-top', right: 'padding-right', bottom: 'padding-bottom', left: 'padding-left' }}
-            values={selectedStyles}
-            onChange={S}
-          />
-        </Section>
-
-        {/* LAYOUT */}
-        <Section title="Layout" icon={<Layers className="w-3 h-3" />}>
-          <div>
-            <Label>Display</Label>
-            <select className={selectCls} value={display} onChange={e => S('display', e.target.value)}>
-              <option value="block">Block</option>
-              <option value="flex">Flex</option>
-              <option value="grid">Grid</option>
-              <option value="inline">Inline</option>
-              <option value="inline-block">Inline Block</option>
-              <option value="inline-flex">Inline Flex</option>
-              <option value="none">None (oculto)</option>
-            </select>
+            {selectedAttrs['id'] && (
+              <span className="text-[10px] text-cyan-400 font-mono bg-cyan-950/50 border border-cyan-500/30 px-1.5 py-0.5 rounded">
+                #{selectedAttrs['id']}
+              </span>
+            )}
           </div>
 
-          {isFlex && (
-            <>
-              <div>
-                <Label>Flex Direction</Label>
-                <select className={selectCls} value={get('flex-direction') || 'row'}
-                  onChange={e => S('flex-direction', e.target.value)}>
-                  <option value="row">Row →</option>
-                  <option value="row-reverse">Row Reverse ←</option>
-                  <option value="column">Column ↓</option>
-                  <option value="column-reverse">Column Reverse ↑</option>
-                </select>
-              </div>
-              <div>
-                <Label>Align Items</Label>
-                <IconToggleGroup
-                  selected={get('align-items') || 'stretch'}
-                  onChange={v => S('align-items', v)}
-                  options={[
-                    { value: 'flex-start', icon: <AlignStartHorizontal className="w-3.5 h-3.5" />, title: 'flex-start' },
-                    { value: 'center', icon: <AlignVerticalJustifyCenter className="w-3.5 h-3.5" />, title: 'center' },
-                    { value: 'flex-end', icon: <AlignEndHorizontal className="w-3.5 h-3.5" />, title: 'flex-end' },
-                    { value: 'stretch', icon: <AlignJustify className="w-3.5 h-3.5" />, title: 'stretch' },
-                  ]}
-                />
-              </div>
-              <div>
-                <Label>Justify Content</Label>
-                <select className={selectCls} value={get('justify-content') || 'flex-start'}
-                  onChange={e => S('justify-content', e.target.value)}>
-                  <option value="flex-start">Start</option>
-                  <option value="center">Center</option>
-                  <option value="flex-end">End</option>
-                  <option value="space-between">Space Between</option>
-                  <option value="space-around">Space Around</option>
-                  <option value="space-evenly">Space Evenly</option>
-                </select>
-              </div>
-              <div>
-                <Label>Flex Wrap</Label>
-                <select className={selectCls} value={get('flex-wrap') || 'nowrap'}
-                  onChange={e => S('flex-wrap', e.target.value)}>
-                  <option value="nowrap">No Wrap</option>
-                  <option value="wrap">Wrap</option>
-                  <option value="wrap-reverse">Wrap Reverse</option>
-                </select>
-              </div>
-              <UnitInput label="Gap" prop="gap" value={get('gap')} onChange={S} placeholder="8px" />
-            </>
-          )}
-
-          {isGrid && (
-            <>
-              <div>
-                <Label>Grid Template Columns</Label>
-                <input className={inputCls} placeholder="repeat(3, 1fr)" value={get('grid-template-columns')}
-                  onChange={e => S('grid-template-columns', e.target.value)} />
-              </div>
-              <div>
-                <Label>Grid Template Rows</Label>
-                <input className={inputCls} placeholder="auto" value={get('grid-template-rows')}
-                  onChange={e => S('grid-template-rows', e.target.value)} />
-              </div>
-              <UnitInput label="Gap" prop="gap" value={get('gap')} onChange={S} placeholder="16px" />
-            </>
-          )}
-        </Section>
-
-        {/* POSICIONAMENTO */}
-        <Section title="Posicionamento" icon={<Move className="w-3 h-3" />} defaultOpen={false}>
-          <div>
-            <Label>Position</Label>
-            <select className={selectCls} value={position} onChange={e => S('position', e.target.value)}>
-              <option value="static">Static</option>
-              <option value="relative">Relative</option>
-              <option value="absolute">Absolute</option>
-              <option value="fixed">Fixed</option>
-              <option value="sticky">Sticky</option>
-            </select>
-          </div>
-          {isPositioned && (
-            <div className="grid grid-cols-2 gap-1.5">
-              <UnitInput label="Top" prop="top" value={get('top')} onChange={S} />
-              <UnitInput label="Right" prop="right" value={get('right')} onChange={S} />
-              <UnitInput label="Bottom" prop="bottom" value={get('bottom')} onChange={S} />
-              <UnitInput label="Left" prop="left" value={get('left')} onChange={S} />
-            </div>
-          )}
-          <div>
-            <Label>Z-Index</Label>
-            <input type="number" className={inputCls} placeholder="0" value={get('z-index')}
-              onChange={e => S('z-index', e.target.value)} />
-          </div>
-        </Section>
-
-        {/* TIPOGRAFIA */}
-        <Section title="Tipografia" icon={<Type className="w-3 h-3" />}>
-          <div>
-            <Label>Font Family</Label>
-            <select className={selectCls} value={get('font-family') || 'inherit'}
-              onChange={e => S('font-family', e.target.value)}>
-              <option value="inherit">Herdar</option>
-              <option value="'Inter', sans-serif">Inter</option>
-              <option value="'Roboto', sans-serif">Roboto</option>
-              <option value="'Outfit', sans-serif">Outfit</option>
-              <option value="'Poppins', sans-serif">Poppins</option>
-              <option value="'Playfair Display', serif">Playfair Display</option>
-              <option value="'Lora', serif">Lora</option>
-              <option value="'JetBrains Mono', monospace">JetBrains Mono</option>
-              <option value="monospace">Monospace</option>
-              <option value="serif">Serif</option>
-              <option value="sans-serif">Sans-Serif</option>
-            </select>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <UnitInput label="Font Size" prop="font-size" value={get('font-size')} onChange={S} placeholder="16px" />
-            <UnitInput label="Line Height" prop="line-height" value={get('line-height')} onChange={S} placeholder="1.5" />
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <Label>Font Weight</Label>
-              <select className={selectCls} value={get('font-weight') || '400'}
-                onChange={e => S('font-weight', e.target.value)}>
-                <option value="100">100 Thin</option>
-                <option value="200">200 ExtraLight</option>
-                <option value="300">300 Light</option>
-                <option value="400">400 Regular</option>
-                <option value="500">500 Medium</option>
-                <option value="600">600 SemiBold</option>
-                <option value="700">700 Bold</option>
-                <option value="800">800 ExtraBold</option>
-                <option value="900">900 Black</option>
-              </select>
-            </div>
-            <UnitInput label="Letter Spacing" prop="letter-spacing" value={get('letter-spacing')} onChange={S} placeholder="0px" />
-          </div>
-          <div>
-            <Label>Text Align</Label>
-            <IconToggleGroup
-              selected={get('text-align') || 'left'}
-              onChange={v => S('text-align', v)}
-              options={[
-                { value: 'left', icon: <AlignLeft className="w-3.5 h-3.5" />, title: 'Left' },
-                { value: 'center', icon: <AlignCenter className="w-3.5 h-3.5" />, title: 'Center' },
-                { value: 'right', icon: <AlignRight className="w-3.5 h-3.5" />, title: 'Right' },
-                { value: 'justify', icon: <AlignJustify className="w-3.5 h-3.5" />, title: 'Justify' },
-              ]}
-            />
-          </div>
-          <div>
-            <Label>Decoração / Estilo</Label>
-            <div className="flex gap-1.5">
-              {[
-                { prop: 'font-style', val: 'italic', icon: <Italic className="w-3.5 h-3.5" />, active: get('font-style') === 'italic' },
-                { prop: 'font-weight', val: get('font-weight') === '700' ? '400' : '700', icon: <Bold className="w-3.5 h-3.5" />, active: Number(get('font-weight')) >= 700 },
-                { prop: 'text-decoration', val: get('text-decoration') === 'underline' ? 'none' : 'underline', icon: <Underline className="w-3.5 h-3.5" />, active: get('text-decoration') === 'underline' },
-                { prop: 'text-decoration', val: get('text-decoration') === 'line-through' ? 'none' : 'line-through', icon: <Strikethrough className="w-3.5 h-3.5" />, active: get('text-decoration') === 'line-through' },
-              ].map((btn, i) => (
-                <button key={i}
-                  onClick={() => S(btn.prop, btn.val)}
-                  className={`flex-1 flex items-center justify-center p-1.5 rounded-lg border cursor-pointer transition-all ${btn.active ? 'bg-purple-600 border-purple-500 text-white' : 'bg-slate-900 border-slate-800 text-slate-500 hover:text-white'}`}>
-                  {btn.icon}
-                </button>
+          {/* CLASSES TAILWIND TAGS */}
+          <Section title="Classes Tailwind & CSS" icon={<Code className="w-3 h-3 text-cyan-400" />} defaultOpen={true}>
+            <div className="flex flex-wrap gap-1 mb-2">
+              {classList.map((cls, idx) => (
+                <span
+                  key={idx}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-950/60 border border-purple-500/40 rounded text-[10px] text-purple-200 font-mono"
+                >
+                  {cls}
+                  <button
+                    onClick={() => handleRemoveClass(cls)}
+                    className="hover:text-red-400 cursor-pointer"
+                  >
+                    <X className="w-2.5 h-2.5" />
+                  </button>
+                </span>
               ))}
             </div>
-          </div>
-          <div>
-            <Label>Text Transform</Label>
-            <select className={selectCls} value={get('text-transform') || 'none'}
-              onChange={e => S('text-transform', e.target.value)}>
-              <option value="none">none</option>
-              <option value="uppercase">UPPERCASE</option>
-              <option value="lowercase">lowercase</option>
-              <option value="capitalize">Capitalize</option>
-            </select>
-          </div>
-          <ColorInput label="Cor do Texto" prop="color" value={get('color')} onChange={S} />
-        </Section>
+            <form onSubmit={handleAddClass} className="flex gap-1">
+              <input
+                type="text"
+                placeholder="Adicionar classe (ex: text-center, p-4)..."
+                value={newClassInput}
+                onChange={e => setNewClassInput(e.target.value)}
+                className={`${inputCls} font-mono`}
+              />
+              <button
+                type="submit"
+                className="p-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-lg cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+              </button>
+            </form>
+          </Section>
 
-        {/* APARÊNCIA */}
-        <Section title="Aparência" icon={<Palette className="w-3 h-3" />}>
-          <ColorInput label="Background Color" prop="background-color" value={get('background-color')} onChange={S} />
-          <div>
-            <Label>Background Image / Gradient</Label>
-            <input className={inputCls} placeholder="linear-gradient(...) / url(...)"
-              value={get('background-image')} onChange={e => S('background-image', e.target.value)} />
-          </div>
-          <div>
-            <Label>Background Size</Label>
-            <select className={selectCls} value={get('background-size') || 'auto'}
-              onChange={e => S('background-size', e.target.value)}>
-              <option value="auto">auto</option>
-              <option value="cover">cover</option>
-              <option value="contain">contain</option>
-            </select>
-          </div>
-          <div>
-            <Label>Opacidade: {get('opacity') || '1'}</Label>
-            <input type="range" min="0" max="1" step="0.01"
-              className="w-full accent-purple-500 cursor-pointer"
-              value={get('opacity') || '1'}
-              onChange={e => S('opacity', e.target.value)} />
-          </div>
-          <div>
-            <Label>Cursor</Label>
-            <select className={selectCls} value={get('cursor') || 'default'}
-              onChange={e => S('cursor', e.target.value)}>
-              <option value="default">default</option>
-              <option value="pointer">pointer</option>
-              <option value="text">text</option>
-              <option value="not-allowed">not-allowed</option>
-              <option value="grab">grab</option>
-              <option value="crosshair">crosshair</option>
-            </select>
-          </div>
-        </Section>
+          {/* BOX MODEL VISUALIZER */}
+          <Section title="Box Model" icon={<Box className="w-3 h-3 text-purple-400" />} defaultOpen={true}>
+            <BoxModelVisualizer styles={selectedStyles} onChange={S} />
+          </Section>
 
-        {/* BORDA */}
-        <Section title="Borda" icon={<Square className="w-3 h-3" />} defaultOpen={false}>
-          <div className="grid grid-cols-2 gap-2">
+          {/* LAYOUT & DISPLAY */}
+          <Section title="Layout & Display" icon={<Layers className="w-3 h-3 text-pink-400" />} defaultOpen={true}>
             <div>
-              <Label>Border Style</Label>
-              <select className={selectCls} value={get('border-style') || 'none'}
-                onChange={e => S('border-style', e.target.value)}>
-                <option value="none">none</option>
-                <option value="solid">solid</option>
-                <option value="dashed">dashed</option>
-                <option value="dotted">dotted</option>
-                <option value="double">double</option>
+              <Label>Display</Label>
+              <select className={selectCls} value={display} onChange={e => S('display', e.target.value)}>
+                <option value="block">Block</option>
+                <option value="flex">Flex</option>
+                <option value="grid">Grid</option>
+                <option value="inline-block">Inline-Block</option>
+                <option value="none">None (Oculto)</option>
               </select>
             </div>
-            <UnitInput label="Border Width" prop="border-width" value={get('border-width')} onChange={S} placeholder="1px" />
-          </div>
-          <ColorInput label="Border Color" prop="border-color" value={get('border-color')} onChange={S} />
-          <div>
-            <Label>Border Radius (geral)</Label>
-            <div className="flex gap-1">
-              <input type="range" min="0" max="100" className="flex-1 accent-purple-500 cursor-pointer"
-                value={parseInt(get('border-radius')) || 0}
-                onChange={e => S('border-radius', `${e.target.value}px`)} />
-              <span className="text-[10px] text-slate-400 w-8 text-right">{get('border-radius') || '0px'}</span>
+
+            {isFlex && (
+              <div className="space-y-2.5 pt-1">
+                <div>
+                  <Label>Flex Direction</Label>
+                  <select className={selectCls} value={get('flex-direction')} onChange={e => S('flex-direction', e.target.value)}>
+                    <option value="row">Row (Horizontal)</option>
+                    <option value="column">Column (Vertical)</option>
+                    <option value="row-reverse">Row Reverse</option>
+                    <option value="column-reverse">Column Reverse</option>
+                  </select>
+                </div>
+                <div>
+                  <Label>Justify Content</Label>
+                  <select className={selectCls} value={get('justify-content')} onChange={e => S('justify-content', e.target.value)}>
+                    <option value="flex-start">Start</option>
+                    <option value="center">Center</option>
+                    <option value="flex-end">End</option>
+                    <option value="space-between">Space Between</option>
+                    <option value="space-around">Space Around</option>
+                  </select>
+                </div>
+                <div>
+                  <Label>Align Items</Label>
+                  <select className={selectCls} value={get('align-items')} onChange={e => S('align-items', e.target.value)}>
+                    <option value="stretch">Stretch</option>
+                    <option value="flex-start">Flex Start</option>
+                    <option value="center">Center</option>
+                    <option value="flex-end">Flex End</option>
+                  </select>
+                </div>
+                <UnitInput label="Gap" prop="gap" value={get('gap')} onChange={S} placeholder="16px" />
+              </div>
+            )}
+          </Section>
+
+          {/* TIPOGRAFIA */}
+          <Section title="Tipografia" icon={<Type className="w-3 h-3 text-yellow-400" />} defaultOpen={true}>
+            <div className="grid grid-cols-2 gap-2">
+              <UnitInput label="Tamanho da Fonte" prop="font-size" value={get('font-size')} onChange={S} placeholder="16px" />
+              <div>
+                <Label>Peso (Weight)</Label>
+                <select className={selectCls} value={get('font-weight')} onChange={e => S('font-weight', e.target.value)}>
+                  <option value="300">Light (300)</option>
+                  <option value="400">Regular (400)</option>
+                  <option value="500">Medium (500)</option>
+                  <option value="600">Semibold (600)</option>
+                  <option value="700">Bold (700)</option>
+                  <option value="800">Extrabold (800)</option>
+                </select>
+              </div>
             </div>
-          </div>
-          <div className="grid grid-cols-2 gap-1.5">
-            <UnitInput label="↖ TL" prop="border-top-left-radius" value={get('border-top-left-radius')} onChange={S} placeholder="0px" />
-            <UnitInput label="↗ TR" prop="border-top-right-radius" value={get('border-top-right-radius')} onChange={S} placeholder="0px" />
-            <UnitInput label="↙ BL" prop="border-bottom-left-radius" value={get('border-bottom-left-radius')} onChange={S} placeholder="0px" />
-            <UnitInput label="↘ BR" prop="border-bottom-right-radius" value={get('border-bottom-right-radius')} onChange={S} placeholder="0px" />
-          </div>
-        </Section>
+            <ColorInput label="Cor do Texto" prop="color" value={get('color')} onChange={S} />
+            <div>
+              <Label>Alinhamento do Texto</Label>
+              <div className="flex gap-1 bg-slate-900 border border-slate-800 rounded-lg p-0.5">
+                {[
+                  { icon: <AlignLeft className="w-3.5 h-3.5" />, val: 'left' },
+                  { icon: <AlignCenter className="w-3.5 h-3.5" />, val: 'center' },
+                  { icon: <AlignRight className="w-3.5 h-3.5" />, val: 'right' },
+                  { icon: <AlignJustify className="w-3.5 h-3.5" />, val: 'justify' }
+                ].map(item => (
+                  <button
+                    key={item.val}
+                    type="button"
+                    onClick={() => S('text-align', item.val)}
+                    className={`flex-1 flex items-center justify-center p-1 rounded transition-colors cursor-pointer ${
+                      get('text-align') === item.val ? 'bg-purple-600 text-white' : 'text-slate-500 hover:text-white'
+                    }`}
+                  >
+                    {item.icon}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </Section>
 
-        {/* SOMBRA */}
-        <Section title="Sombra" icon={<Wind className="w-3 h-3" />} defaultOpen={false}>
-          <div>
-            <Label>Box Shadow</Label>
-            <input className={inputCls} placeholder="0 4px 24px rgba(0,0,0,0.3)"
-              value={get('box-shadow')} onChange={e => S('box-shadow', e.target.value)} />
-          </div>
-          <div className="grid grid-cols-3 gap-1">
-            {[
-              { label: 'None', val: 'none' },
-              { label: 'sm', val: '0 1px 3px rgba(0,0,0,0.2)' },
-              { label: 'md', val: '0 4px 16px rgba(0,0,0,0.3)' },
-              { label: 'lg', val: '0 10px 40px rgba(0,0,0,0.4)' },
-              { label: 'xl', val: '0 20px 60px rgba(0,0,0,0.5)' },
-              { label: 'inner', val: 'inset 0 2px 8px rgba(0,0,0,0.3)' },
-            ].map(p => (
-              <button key={p.label} onClick={() => S('box-shadow', p.val)}
-                className="px-2 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-[10px] text-slate-400 hover:text-white hover:border-slate-700 cursor-pointer transition-colors">
-                {p.label}
-              </button>
-            ))}
-          </div>
-          <div>
-            <Label>Text Shadow</Label>
-            <input className={inputCls} placeholder="0 2px 8px rgba(0,0,0,0.5)"
-              value={get('text-shadow')} onChange={e => S('text-shadow', e.target.value)} />
-          </div>
-        </Section>
-
-        {/* TRANSIÇÃO */}
-        <Section title="Transição / Animação" icon={<Zap className="w-3 h-3" />} defaultOpen={false}>
-          <div>
-            <Label>Transition</Label>
-            <input className={inputCls} placeholder="all 0.3s ease"
-              value={get('transition')} onChange={e => S('transition', e.target.value)} />
-          </div>
-          <div className="grid grid-cols-2 gap-1">
-            {[
-              { label: 'Rápido', val: 'all 0.15s ease' },
-              { label: 'Normal', val: 'all 0.3s ease' },
-              { label: 'Lento', val: 'all 0.6s ease' },
-              { label: 'Bounce', val: 'all 0.4s cubic-bezier(0.34,1.56,0.64,1)' },
-            ].map(p => (
-              <button key={p.label} onClick={() => S('transition', p.val)}
-                className="px-2 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-[10px] text-slate-400 hover:text-white hover:border-slate-700 cursor-pointer transition-colors">
-                {p.label}
-              </button>
-            ))}
-          </div>
-          <div>
-            <Label>Transform</Label>
-            <input className={inputCls} placeholder="scale(1) rotate(0deg) translateX(0)"
-              value={get('transform')} onChange={e => S('transform', e.target.value)} />
-          </div>
-        </Section>
-      </div>
-    )}
-  </aside>
+          {/* CORES & FUNDO */}
+          <Section title="Fundo & Bordas" icon={<Palette className="w-3 h-3 text-emerald-400" />} defaultOpen={false}>
+            <ColorInput label="Cor de Fundo" prop="background-color" value={get('background-color')} onChange={S} />
+            <div className="grid grid-cols-2 gap-2">
+              <UnitInput label="Raio da Borda" prop="border-radius" value={get('border-radius')} onChange={S} placeholder="8px" />
+              <UnitInput label="Largura Borda" prop="border-width" value={get('border-width')} onChange={S} placeholder="1px" />
+            </div>
+            <ColorInput label="Cor da Borda" prop="border-color" value={get('border-color')} onChange={S} />
+          </Section>
+        </div>
+      )}
+    </aside>
   );
 };

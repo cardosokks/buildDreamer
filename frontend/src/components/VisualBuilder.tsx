@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { API_URL } from '../config';
 import { Sidebar } from './Sidebar';
+import type { ElementNode } from './Sidebar';
 import { Canvas } from './Canvas';
 import { PropertiesPanel } from './PropertiesPanel';
 import { CodeEditor } from './CodeEditor';
@@ -15,17 +16,19 @@ import {
   Smartphone, 
   Tablet, 
   Monitor,
-  Undo,
-  Redo,
-  Play,
-  MessageSquare,
-  ExternalLink,
-  PanelLeftClose,
-  PanelRightClose,
-  Maximize2,
+  Undo2,
+  Redo2,
   Sliders,
   History,
-  RotateCcw
+  RotateCcw,
+  PanelLeftClose,
+  PanelRightClose,
+  MessageSquare,
+  Copy,
+  Check,
+  ZoomIn,
+  ZoomOut,
+  Maximize2
 } from 'lucide-react';
 
 interface Page {
@@ -35,6 +38,8 @@ interface Page {
   html: string;
   css: string;
   js: string;
+  seoTitle?: string;
+  seoDescription?: string;
   isHomepage: boolean;
 }
 
@@ -49,336 +54,236 @@ interface VisualBuilderProps {
   onBack: () => void;
 }
 
+interface HistoryState {
+  html: string;
+  css: string;
+  js: string;
+  timestamp: string;
+  description: string;
+}
+
 export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack }) => {
   const { token } = useAuth();
   const [project, setProject] = useState<ProjectData | null>(null);
   const [activePageId, setActivePageId] = useState<string>('');
   
-  // Viewport breakpoint state
+  // Breakpoints & Viewports
   const [viewport, setViewport] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
+  const [zoom, setZoom] = useState<number>(100);
 
-  // Element Selection State
+  // Selection & Tree State
   const [selectedSelector, setSelectedSelector] = useState<string | null>(null);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
+  const [hoverPath, setHoverPath] = useState<string | null>(null);
   const [selectedStyles, setSelectedStyles] = useState<Record<string, string>>({});
   const [selectedAttrs, setSelectedAttrs] = useState<Record<string, string>>({});
 
-  // Monaco Editor View Toggle
-  const [viewMode, setViewMode] = useState<'split' | 'visual' | 'code'>('visual');
-
-  // Chat panel toggle
+  // Layout Panels
+  const [showSidebar, setShowSidebar] = useState(true);
+  const [showStylesPanel, setShowStylesPanel] = useState(true);
   const [showChat, setShowChat] = useState(true);
 
-  // Sidebar toggle state
-  const [showSidebar, setShowSidebar] = useState(true);
-
-  // Styles Panel toggle state
-  const [showStylesPanel, setShowStylesPanel] = useState(true);
-
-  // Code editor modal state
+  // Modais
   const [showCodeModal, setShowCodeModal] = useState(false);
-
-  // Navbar size and minimize states
-  const [navbarSize, setNavbarSize] = useState<'compact' | 'normal' | 'large'>('normal');
-  const [navbarMinimized, setNavbarMinimized] = useState(false);
-
-  // Panel widths and resize states
-  const [leftSidebarWidth, setLeftSidebarWidth] = useState(280);
-  const [rightPanelWidth, setRightPanelWidth] = useState(320);
-  const [isResizingLeft, setIsResizingLeft] = useState(false);
-  const [isResizingRight, setIsResizingRight] = useState(false);
-
-  // Topbar dropdown menu state
-  const [showBuilderMenu, setShowBuilderMenu] = useState(false);
-
-  // Background AI Job Status Polling
-  const [jobStatus, setJobStatus] = useState<'pending' | 'processing' | 'completed' | 'failed'>('completed');
-  const [activeJobModel, setActiveJobModel] = useState<string | null>(null);
-  const [jobAttempt, setJobAttempt] = useState<number>(1);
-  const [jobTotal, setJobTotal] = useState<number>(1);
-  const [jobError, setJobError] = useState<string | null>(null);
-
-  // History version state
-  interface VersionSnapshot {
-    timestamp: string;
-    description: string;
-    html: string;
-    css: string;
-    js: string;
-  }
-  const [versionHistory, setVersionHistory] = useState<Record<string, VersionSnapshot[]>>(() => {
-    try {
-      const stored = localStorage.getItem(`version_history_${projectId}`);
-      const parsed = stored ? JSON.parse(stored) : {};
-      return parsed && typeof parsed === 'object' ? parsed : {};
-    } catch {
-      return {};
-    }
-  });
-  const [showHistoryModal, setShowHistoryModal] = useState(false);
-
-  useEffect(() => {
-    if (Object.keys(versionHistory).length > 0) {
-      localStorage.setItem(`version_history_${projectId}`, JSON.stringify(versionHistory));
-    }
-  }, [versionHistory, projectId]);
-
-  // Detect screen size on load/resize to automatically collapse sidebars on smaller resolutions
-  useEffect(() => {
-    const handleResize = () => {
-      if (window.innerWidth < 1024) {
-        setShowSidebar(false);
-        setShowStylesPanel(false);
-        setShowChat(false);
-      }
-    };
-    handleResize(); // run initially
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
-  // Panel drag resizing effect
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (isResizingLeft) {
-        const newW = Math.max(200, Math.min(500, e.clientX));
-        setLeftSidebarWidth(newW);
-      } else if (isResizingRight) {
-        const newW = Math.max(240, Math.min(600, window.innerWidth - e.clientX));
-        setRightPanelWidth(newW);
-      }
-    };
-
-    const handleMouseUp = () => {
-      setIsResizingLeft(false);
-      setIsResizingRight(false);
-    };
-
-    if (isResizingLeft || isResizingRight) {
-      window.addEventListener('mousemove', handleMouseMove);
-      window.addEventListener('mouseup', handleMouseUp);
-    }
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [isResizingLeft, isResizingRight]);
-
-  // Export Modal state
   const [showExportModal, setShowExportModal] = useState(false);
-  const [exportOptions, setExportOptions] = useState({
-    pages: true,
-    css: true,
-    js: true,
-    docker: true,
-    readme: true
-  });
+  const [copiedCode, setCopiedCode] = useState(false);
+  const [activeExportTab, setActiveExportTab] = useState<'html' | 'css' | 'js'>('html');
+
+  // History Undo/Redo Stacks
+  const [undoStack, setUndoStack] = useState<HistoryState[]>([]);
+  const [redoStack, setRedoStack] = useState<HistoryState[]>([]);
 
   const fetchProjectDetails = async () => {
     try {
       const res = await fetch(`${API_URL}/api/projects/${projectId}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+        headers: { 'Authorization': `Bearer ${token}` }
       });
-      if (!res.ok) throw new Error('Falha ao buscar detalhes do projeto');
+      if (!res.ok) throw new Error('Falha ao carregar projeto');
       const data = await res.json();
       setProject(data);
-      if (data.pages && data.pages.length > 0) {
+      if (data.pages && data.pages.length > 0 && !activePageId) {
         const home = data.pages.find((p: Page) => p.isHomepage) || data.pages[0];
         setActivePageId(home.id);
       }
-    } catch (err: any) {
-      alert(err.message);
-    }
-  };
-
-  // Poll status of AI Generation background job for this project
-  useEffect(() => {
-    let interval: any;
-    const checkJobStatus = async () => {
-      try {
-        const res = await fetch(`${API_URL}/api/projects/jobs/${projectId}/status`, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setJobStatus(data.status);
-          if (data.currentModel) setActiveJobModel(data.currentModel);
-          if (data.attempt) setJobAttempt(data.attempt);
-          if (data.total) setJobTotal(data.total);
-
-          if (data.status === 'completed') {
-            clearInterval(interval);
-            fetchProjectDetails(); // refresh details to load generated page code
-          } else if (data.status === 'failed') {
-            setJobError(data.error || 'Erro na geração de mockup da IA');
-            clearInterval(interval);
-          }
-        }
-      } catch (err) {
-        console.error('Failed to fetch job queue status:', err);
-      }
-    };
-
-    checkJobStatus(); // run immediately
-    interval = setInterval(checkJobStatus, 3000); // check status every 3 seconds
-
-    return () => clearInterval(interval);
-  }, [projectId, token]);
-
-  useEffect(() => {
-    fetchProjectDetails();
-  }, [projectId, token]);
-
-  const activePage = project?.pages.find(p => p.id === activePageId);
-
-  // Initialize page version history snapshot if empty
-  useEffect(() => {
-    if (activePage && !versionHistory[activePage.id]) {
-      const initialSnapshot: VersionSnapshot = {
-        timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-        description: 'Versão Inicial / Carga do Projeto',
-        html: activePage.html,
-        css: activePage.css,
-        js: activePage.js
-      };
-      setVersionHistory(prev => ({
-        ...prev,
-        [activePage.id]: [initialSnapshot]
-      }));
-    }
-  }, [activePageId, activePage]);
-
-  const savePageCode = async (pageId: string, updates: Partial<Page>) => {
-    try {
-      const res = await fetch(`${API_URL}/api/pages/${pageId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(updates)
-      });
-      if (!res.ok) throw new Error('Erro ao salvar página no servidor');
-      const updatedPage = await res.json();
-      
-      setProject(prev => {
-        if (!prev) return null;
-        return {
-          ...prev,
-          pages: prev.pages.map(p => p.id === pageId ? updatedPage : p)
-        };
-      });
     } catch (err: any) {
       console.error(err);
     }
   };
 
-  // Debounced API save implementation to prevent API overload on typing/sliders
-  const [saveTimeout, setSaveTimeout] = useState<any>(null);
-
-  const handleCodeChange = (type: 'html' | 'css' | 'js', value: string) => {
-    if (!activePage) return;
-    
-    // 1. Instantly update local state to render in canvas
-    setProject(prev => {
-      if (!prev) return null;
-      return {
-        ...prev,
-        pages: prev.pages.map(p => p.id === activePage.id ? { ...p, [type]: value } : p)
-      };
-    });
-
-    // 2. Debounce persisting in database (1000ms delay)
-    if (saveTimeout) clearTimeout(saveTimeout);
-    const timeout = setTimeout(() => {
-      savePageCode(activePage.id, { [type]: value });
-    }, 1000);
-    setSaveTimeout(timeout);
-  };
-
-  // Cleanup timeout on unmount
   useEffect(() => {
-    return () => {
-      if (saveTimeout) clearTimeout(saveTimeout);
+    fetchProjectDetails();
+  }, [projectId]);
+
+  const activePage = project?.pages.find(p => p.id === activePageId);
+
+  // Push Snapshot to Undo Stack
+  const pushHistorySnapshot = useCallback((description: string) => {
+    if (!activePage) return;
+    setUndoStack(prev => [
+      ...prev.slice(-30),
+      {
+        html: activePage.html,
+        css: activePage.css,
+        js: activePage.js,
+        timestamp: new Date().toLocaleTimeString(),
+        description
+      }
+    ]);
+    setRedoStack([]);
+  }, [activePage]);
+
+  // Handle Undo
+  const handleUndo = useCallback(() => {
+    if (undoStack.length === 0 || !activePage) return;
+    const last = undoStack[undoStack.length - 1];
+    setUndoStack(prev => prev.slice(0, -1));
+    setRedoStack(prev => [
+      ...prev,
+      {
+        html: activePage.html,
+        css: activePage.css,
+        js: activePage.js,
+        timestamp: new Date().toLocaleTimeString(),
+        description: 'Undo State'
+      }
+    ]);
+
+    setProject(prev => prev ? {
+      ...prev,
+      pages: prev.pages.map(p => p.id === activePage.id ? { ...p, html: last.html, css: last.css, js: last.js } : p)
+    } : null);
+  }, [undoStack, activePage]);
+
+  // Handle Redo
+  const handleRedo = useCallback(() => {
+    if (redoStack.length === 0 || !activePage) return;
+    const next = redoStack[redoStack.length - 1];
+    setRedoStack(prev => prev.slice(0, -1));
+    setUndoStack(prev => [
+      ...prev,
+      {
+        html: activePage.html,
+        css: activePage.css,
+        js: activePage.js,
+        timestamp: new Date().toLocaleTimeString(),
+        description: 'Redo State'
+      }
+    ]);
+
+    setProject(prev => prev ? {
+      ...prev,
+      pages: prev.pages.map(p => p.id === activePage.id ? { ...p, html: next.html, css: next.css, js: next.js } : p)
+    } : null);
+  }, [redoStack, activePage]);
+
+  // Global Keyboard Shortcuts (Ctrl+Z, Ctrl+Y, Escape, Delete, Ctrl+S)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const isInput = ['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement)?.tagName);
+      
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        handleUndo();
+      } else if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' || (e.key.toLowerCase() === 'z' && e.shiftKey))) {
+        e.preventDefault();
+        handleRedo();
+      } else if (e.key === 'Escape') {
+        setSelectedSelector(null);
+        setSelectedPath(null);
+      } else if ((e.key === 'Delete' || e.key === 'Backspace') && !isInput && selectedPath) {
+        e.preventDefault();
+        handleDeleteElement(selectedPath);
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        setShowExportModal(true);
+      }
     };
-  }, [saveTimeout]);
 
-  const handleApplyAIChanges = (html: string, css: string, js: string, targetPageId?: string) => {
-    const pageIdToUpdate = targetPageId || activePage?.id;
-    if (!pageIdToUpdate) return;
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleUndo, handleRedo, selectedPath]);
 
-    // Direct replacement of whole page code contexts (prevents buggy AST selectors parsing)
-    setProject(prev => {
-      if (!prev) return null;
-      return {
-        ...prev,
-        pages: prev.pages.map(p => p.id === pageIdToUpdate ? { ...p, html, css, js } : p)
-      };
-    });
-
-    // Record snapshot version in history log
-    const newSnapshot: VersionSnapshot = {
-      timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-      description: 'Alteração gerada por IA / Chat',
-      html,
-      css,
-      js
-    };
-    setVersionHistory(prev => {
-      const pageHistory = prev[pageIdToUpdate] || [];
-      return {
-        ...prev,
-        [pageIdToUpdate]: [newSnapshot, ...pageHistory]
-      };
-    });
-
-    savePageCode(pageIdToUpdate, { html, css, js });
-  };
-
-  // Helper: get element by path index e.g. "0.1.2" in body children
-  const getElementByPath = (root: Element, path: string): Element | null => {
-    const parts = path.split('.').map(Number);
-    let current: Element | null = root;
-    for (const idx of parts) {
-      if (!current) return null;
-      const childNodes: Element[] = Array.from(current.children);
-      current = childNodes[idx] ?? null;
-    }
-    return current;
-  };
-
-  const parseDocFromHtml = (html: string) => {
+  // Helpers to parse and serialize DOM trees safely
+  const parseDocFromHtml = (htmlStr: string) => {
     const parser = new DOMParser();
-    const doc = parser.parseFromString(html, 'text/html');
-    return doc;
+    return parser.parseFromString(htmlStr || '', 'text/html');
   };
 
-  const serializeBodyContent = (doc: Document): string => {
-    return doc.body.innerHTML;
+  const serializeBodyContent = (doc: Document) => {
+    const canvasRoot = doc.getElementById('canvas-root');
+    if (canvasRoot) return canvasRoot.innerHTML;
+    return doc.body ? doc.body.innerHTML : '';
   };
 
-  const handleStyleChange = (property: string, value: string) => {
-    if (!activePage || !selectedPath) return;
+  const getElementByPath = (root: Element, path: string): Element | null => {
+    if (!path && path !== '0') return null;
+    const parts = String(path).split('.').map(Number);
+    let el: Element | null = root;
+    for (const idx of parts) {
+      if (!el || !el.children) return null;
+      el = el.children.item(idx);
+    }
+    return el;
+  };
 
-    // Update local state immediately
-    setSelectedStyles(prev => ({ ...prev, [property]: value }));
+  // Update Page Code with Database Sync
+  const handleCodeChange = async (type: 'html' | 'css' | 'js', value: string) => {
+    if (!activePage) return;
+    pushHistorySnapshot(`Edição de ${type.toUpperCase()}`);
 
-    // Apply style to the real HTML via DOMParser
+    const updatedPages = project?.pages.map(p => {
+      if (p.id === activePage.id) return { ...p, [type]: value };
+      return p;
+    });
+    setProject(prev => prev ? { ...prev, pages: updatedPages || [] } : null);
+
+    try {
+      await fetch(`${API_URL}/api/pages/${activePage.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ [type]: value })
+      });
+    } catch (e) {
+      console.error("Erro ao sincronizar com banco:", e);
+    }
+  };
+
+  // Inline content editable change handler
+  const handleInlineTextChange = (path: string, newText: string) => {
+    if (!activePage) return;
     const doc = parseDocFromHtml(activePage.html);
     const root = doc.getElementById('canvas-root') || doc.body;
-    const el = getElementByPath(root, selectedPath);
-    if (el && el instanceof HTMLElement) {
-      const cssProp = property.replace(/-([a-z])/g, (_, l) => l.toUpperCase()) as any;
-      el.style[cssProp] = value;
+    const el = getElementByPath(root, path);
+    if (el) {
+      el.textContent = newText;
       const newHtml = serializeBodyContent(doc);
       handleCodeChange('html', newHtml);
     }
   };
 
+  // Style change handler
+  const handleStyleChange = (prop: string, value: string) => {
+    if (!activePage || !selectedPath) return;
+    setSelectedStyles(prev => ({ ...prev, [prop]: value }));
+
+    const doc = parseDocFromHtml(activePage.html);
+    const root = doc.getElementById('canvas-root') || doc.body;
+    const el = getElementByPath(root, selectedPath);
+    if (el instanceof HTMLElement) {
+      if (value) {
+        el.style.setProperty(prop, value);
+      } else {
+        el.style.removeProperty(prop);
+      }
+      const newHtml = serializeBodyContent(doc);
+      handleCodeChange('html', newHtml);
+    }
+  };
+
+  // Attribute change handler
   const handleAttrChange = (attr: string, value: string) => {
     if (!activePage || !selectedPath) return;
     setSelectedAttrs(prev => ({ ...prev, [attr]: value }));
@@ -387,14 +292,9 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
     const root = doc.getElementById('canvas-root') || doc.body;
     const el = getElementByPath(root, selectedPath);
     if (el) {
-      if (attr === '_tag') return; // internal meta
+      if (attr === '_tag') return;
       if (attr === '_textContent') {
-        // Only update text content when element has no child elements
-        if (el.childElementCount === 0) {
-          el.textContent = value;
-        }
-      } else if (attr === '_hasChildren') {
-        return; // read-only meta
+        if (el.childElementCount <= 1) el.textContent = value;
       } else {
         el.setAttribute(attr, value);
       }
@@ -403,21 +303,22 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
     }
   };
 
-  // Delete element by path
+  // Element Delete
   const handleDeleteElement = (path: string) => {
     if (!activePage) return;
     const doc = parseDocFromHtml(activePage.html);
     const root = doc.getElementById('canvas-root') || doc.body;
     const el = getElementByPath(root, path);
-    if (el) {
-      el.parentElement?.removeChild(el);
+    if (el && el.parentElement) {
+      el.parentElement.removeChild(el);
       const newHtml = serializeBodyContent(doc);
       handleCodeChange('html', newHtml);
-      if (selectedPath === path) { setSelectedSelector(null); setSelectedPath(null); }
+      setSelectedPath(null);
+      setSelectedSelector(null);
     }
   };
 
-  // Duplicate element by path
+  // Element Duplicate
   const handleDuplicateElement = (path: string) => {
     if (!activePage) return;
     const doc = parseDocFromHtml(activePage.html);
@@ -431,7 +332,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
     }
   };
 
-  // Move element: drag sourcePath into targetPath container
+  // Element Reorder
   const handleMoveElement = (sourcePath: string, targetPath: string) => {
     if (!activePage || sourcePath === targetPath) return;
     if (targetPath.startsWith(sourcePath + '.')) return;
@@ -444,11 +345,12 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
       tgtEl.appendChild(srcEl);
       const newHtml = serializeBodyContent(doc);
       handleCodeChange('html', newHtml);
-      setSelectedPath(null); setSelectedSelector(null);
+      setSelectedPath(null);
+      setSelectedSelector(null);
     }
   };
 
-  // Inserir bloco de template pronto no final do canvas
+  // Insert ready block
   const handleInsertBlock = (htmlBlock: string, cssBlock?: string) => {
     if (!activePage) return;
     const currentHtml = activePage.html || '';
@@ -458,7 +360,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
     if (cssBlock) handleCodeChange('css', newCss);
   };
 
-  // Atualizar metadados de SEO da página
+  // SEO updates
   const handlePageSeoChange = async (key: 'title' | 'description' | 'ogImage', value: string) => {
     if (!activePage) return;
     try {
@@ -475,748 +377,476 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
         body: JSON.stringify(updateData)
       });
 
-      setProject(prev => {
-        if (!prev) return null;
-        return {
-          ...prev,
-          pages: prev.pages.map(p => p.id === activePage.id ? { ...p, [key === 'title' ? 'seoTitle' : 'seoDescription']: value } : p)
-        };
-      });
+      setProject(prev => prev ? {
+        ...prev,
+        pages: prev.pages.map(p => p.id === activePage.id ? { ...p, [key === 'title' ? 'seoTitle' : 'seoDescription']: value } : p)
+      } : null);
     } catch (e) {
       console.error("Erro ao salvar SEO:", e);
     }
   };
 
-  // Wrap element in a new <div>
-  const handleWrapElement = (path: string) => {
+  // AI Copilot Change Application
+  const handleApplyAIChanges = (newHtml: string, newCss: string, newJs: string) => {
     if (!activePage) return;
-    const doc = parseDocFromHtml(activePage.html);
-    const root = doc.getElementById('canvas-root') || doc.body;
-    const el = getElementByPath(root, path);
-    if (el && el.parentElement) {
-      const wrapper = doc.createElement('div');
-      el.parentElement.insertBefore(wrapper, el);
-      wrapper.appendChild(el);
-      const newHtml = serializeBodyContent(doc);
-      handleCodeChange('html', newHtml);
-    }
+    pushHistorySnapshot("Alterações aplicadas pelo AI Copilot");
+    setProject(prev => prev ? {
+      ...prev,
+      pages: prev.pages.map(p => p.id === activePage.id ? { ...p, html: newHtml, css: newCss, js: newJs } : p)
+    } : null);
+
+    fetch(`${API_URL}/api/pages/${activePage.id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ html: newHtml, css: newCss, js: newJs })
+    }).catch(console.error);
   };
 
-  // Add child element to a tag in canvas root
-  const handleAddChildElement = (parentPath: string, tag: string, text?: string) => {
-    if (!activePage) return;
-    const doc = parseDocFromHtml(activePage.html);
-    const root = doc.getElementById('canvas-root') || doc.body;
-    const parentEl = getElementByPath(root, parentPath);
-    if (parentEl) {
-      const newEl = doc.createElement(tag);
-      if (text) {
-        newEl.textContent = text;
-      }
-      // Apply some basic styling for visual visibility
-      if (tag === 'div') {
-        newEl.style.minHeight = '50px';
-        newEl.style.padding = '10px';
-        newEl.style.border = '1px dashed #4b5563'; // gray-600
-      }
-      parentEl.appendChild(newEl);
-      const newHtml = serializeBodyContent(doc);
-      handleCodeChange('html', newHtml);
-    }
-  };
-
-  const handleCreatePage = async () => {
-    const name = prompt('Nome da página:');
-    if (!name) return;
-    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-
-    try {
-      const res = await fetch(`${API_URL}/api/projects/${projectId}/pages`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ name, slug, title: name })
-      });
-      if (!res.ok) throw new Error('Erro ao criar página');
-      const newPage = await res.json();
-      setProject(prev => prev ? { ...prev, pages: [...prev.pages, newPage] } : null);
-      setActivePageId(newPage.id);
-    } catch (err: any) {
-      alert(err.message);
-    }
-  };
-
-  const handleDuplicatePage = (id: string) => {
-    alert('Duplicação de páginas em breve!');
-  };
-
-  const handleDeletePage = async (id: string) => {
-    if (!confirm('Excluir esta página?')) return;
-    try {
-      const res = await fetch(`${API_URL}/api/pages/${id}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      if (!res.ok) throw new Error('Erro ao deletar página');
-      setProject(prev => prev ? { ...prev, pages: prev.pages.filter(p => p.id !== id) } : null);
-      if (activePageId === id) {
-        const home = project?.pages.find(p => p.isHomepage);
-        if (home) setActivePageId(home.id);
-      }
-    } catch (err: any) {
-      alert(err.message);
-    }
-  };
-
-  // Dynamic HTML parsing function to generate the layer tree structure
-  const parseHtmlToLayers = (htmlString: string): any[] => {
+  // Parse HTML into recursive DOM Layer tree
+  const parseHtmlToLayers = (htmlString: string): ElementNode[] => {
     if (!htmlString) return [];
     try {
       const parser = new DOMParser();
       const doc = parser.parseFromString(htmlString, 'text/html');
       
-      const nodeToElementNode = (node: Element): any => {
-        const children: any[] = [];
-        Array.from(node.children).forEach(child => {
-          children.push(nodeToElementNode(child));
-        });
+      function nodeToElementNode(node: Element): ElementNode {
+        const childNodes: ElementNode[] = [];
+        for (let i = 0; i < node.children.length; i++) {
+          childNodes.push(nodeToElementNode(node.children[i]));
+        }
         
         return {
           tag: node.tagName.toLowerCase(),
           id: node.id || undefined,
           className: (typeof node.className === 'string' ? node.className : node.getAttribute('class')) || undefined,
-          children: children.length > 0 ? children : undefined
+          children: childNodes.length > 0 ? childNodes : undefined
         };
-      };
+      }
 
-      // Traverse all children inside body or canvas root
-      const rootNode = doc.getElementById('canvas-root') || doc.body;
-      const elements = Array.from(rootNode.children);
-      
-      // If rootNode is body and has canvas-root inside, traverse canvas-root children directly
       const canvasRoot = doc.getElementById('canvas-root');
-      const targetElements = canvasRoot ? Array.from(canvasRoot.children) : elements;
-
-      return targetElements.map(nodeToElementNode);
+      const rootElements = canvasRoot ? Array.from(canvasRoot.children) : Array.from(doc.body.children);
+      return rootElements.map(nodeToElementNode);
     } catch (e) {
-      console.error("Failed to parse HTML to Layers tree:", e);
+      console.error("Falha ao gerar árvore DOM:", e);
       return [];
     }
   };
 
   const layers = activePage ? parseHtmlToLayers(activePage.html) : [];
 
+  const getFullHtmlDocument = () => {
+    if (!activePage) return '';
+    return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${activePage.seoTitle || activePage.name}</title>
+  <meta name="description" content="${activePage.seoDescription || ''}">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    h1,h2,h3,h4,h5,h6 { font-family: 'Outfit', sans-serif; }
+    ${activePage.css || ''}
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen">
+  ${activePage.html || ''}
+  <script>
+    ${activePage.js || ''}
+  </script>
+</body>
+</html>`;
+  };
+
+  const handleDownloadCode = () => {
+    const content = getFullHtmlDocument();
+    const blob = new Blob([content], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${activePage?.slug || 'index'}.html`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
-    <div className="h-full w-full bg-slate-950 flex flex-col font-sans text-slate-100 overflow-hidden relative">
+    <div className="h-screen w-screen bg-[#07020d] flex flex-col font-sans text-slate-100 overflow-hidden select-none">
       
-      {/* Background AI mockup generation progress overlay status screen */}
-      {(jobStatus === 'pending' || jobStatus === 'processing') && (
-        <div className="absolute inset-0 bg-slate-950/95 backdrop-blur-md z-50 flex flex-col items-center justify-center p-6 animate-in fade-in duration-300">
-          <div className="relative w-24 h-24 mb-6">
-            <div className="absolute inset-0 rounded-full border-4 border-purple-500/10 border-t-purple-500 animate-spin shadow-[0_0_15px_var(--neon-purple-glow)]" />
-            <Sparkles className="absolute inset-0 m-auto w-8 h-8 text-purple-400 animate-pulse" />
-          </div>
-          <h2 className="text-2xl font-extrabold bg-gradient-to-r from-purple-400 via-pink-400 to-indigo-400 bg-clip-text text-transparent tracking-widest uppercase">
-            Real Premise AI
-          </h2>
-          <p className="text-sm text-slate-300 mt-2 font-medium animate-pulse">
-            {jobStatus === 'pending' ? 'Entrando na fila de geração...' : 'Escrevendo códigos (HTML/CSS)...'}
-          </p>
-
-          {/* Model attempt badge */}
-          {activeJobModel && (
-            <div className="mt-4 px-3 py-1.5 rounded-xl bg-purple-950/60 border border-purple-500/40 flex items-center gap-2 shadow-[0_0_15px_rgba(168,85,247,0.15)] animate-in fade-in">
-              <span className="w-2 h-2 rounded-full bg-purple-400 animate-ping" />
-              <span className="text-xs text-purple-200 font-mono">
-                Modelo: <strong className="text-white font-bold">{activeJobModel}</strong> {jobTotal > 1 ? `(${jobAttempt}/${jobTotal})` : ''}
-              </span>
-            </div>
-          )}
-
-          <span className="text-[10px] text-slate-500 font-mono mt-6 border border-slate-900 rounded-lg px-3 py-1 bg-slate-950/70">
-            Fallback automático ativo entre modelos cadastrados
-          </span>
-        </div>
-      )}
-
-      {jobStatus === 'failed' && (
-        <div className="absolute inset-0 bg-slate-950/95 backdrop-blur-md z-50 flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-300">
-          <div className="p-4 bg-red-950/40 border border-red-500/30 text-red-400 rounded-full mb-6">
-            <svg className="w-12 h-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
-          </div>
-          <h2 className="text-xl font-bold text-white mb-2">Erro de Geração</h2>
-          <p className="text-sm text-slate-400 max-w-md mb-6 leading-relaxed">
-            {jobError || 'Não foi possível completar a geração do site. Verifique sua chave do Gemini e tente novamente.'}
-          </p>
-          <div className="flex gap-4">
-            <button
-              onClick={onBack}
-              className="px-5 py-2.5 bg-slate-900 hover:bg-slate-850 text-xs font-semibold text-slate-350 border border-slate-800 rounded-xl transition-all cursor-pointer"
-            >
-              Voltar ao Dashboard
-            </button>
-            <button
-              onClick={() => { setJobStatus('completed'); setJobError(null); fetchProjectDetails(); }}
-              className="px-5 py-2.5 bg-purple-700 hover:bg-purple-650 text-xs font-semibold text-white rounded-xl transition-all cursor-pointer"
-            >
-              Forçar Acesso ao Editor
-            </button>
-          </div>
-        </div>
-      )}
-      
-      {/* Top Navbar */}
-      <header className={`border-b border-slate-900 bg-slate-950 flex items-center justify-between px-3 sm:px-4 z-20 shrink-0 transition-all duration-300 ${
-        navbarMinimized ? 'h-7 py-0 overflow-hidden' : navbarSize === 'compact' ? 'h-10 text-xs' : navbarSize === 'large' ? 'h-18' : 'h-14'
-      }`}>
-        <div className="flex items-center gap-2 sm:gap-3">
+      {/* ─── Top Studio Navbar ─── */}
+      <header className="h-14 border-b border-slate-900/80 bg-[#090410] flex items-center justify-between px-3 md:px-4 shrink-0 z-30 shadow-md">
+        <div className="flex items-center gap-3 min-w-0">
           <button 
             onClick={onBack}
-            className="p-1 hover:bg-slate-900 text-slate-400 hover:text-white rounded-lg transition-colors cursor-pointer"
+            className="p-1.5 hover:bg-slate-900 text-slate-400 hover:text-white rounded-lg transition-colors cursor-pointer"
             title="Voltar ao Dashboard"
           >
-            <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" />
+            <ArrowLeft className="w-4 h-4" />
           </button>
-          
+
           <button 
             onClick={() => setShowSidebar(!showSidebar)}
-            className={`p-1 sm:p-1.5 rounded-lg transition-all cursor-pointer ${showSidebar ? 'bg-purple-650 text-purple-400 hover:bg-slate-900' : 'bg-slate-900 text-slate-550 hover:text-white'}`}
-            title="Alternar Painel Lateral"
+            className={`p-1.5 rounded-lg transition-all cursor-pointer ${showSidebar ? 'bg-purple-600/20 text-purple-300 border border-purple-500/30' : 'bg-slate-900 text-slate-500 hover:text-white'}`}
+            title="Alternar Árvore DOM / Páginas"
           >
-            <PanelLeftClose className="w-4 h-4 sm:w-5 sm:h-5" />
+            <PanelLeftClose className="w-4 h-4" />
           </button>
 
-          {!navbarMinimized && (
-            <div className="flex items-center gap-1.5 truncate">
-              <span className="font-bold text-white tracking-wide text-xs sm:text-sm truncate">{project?.name || 'Carregando...'}</span>
-              <span className="text-xs text-slate-500">/</span>
-              <span className="text-xs text-slate-400 font-medium truncate">{activePage?.name}</span>
-            </div>
-          )}
+          <div className="flex items-center gap-2 truncate">
+            <span className="font-bold text-white tracking-wide text-xs sm:text-sm truncate">{project?.name || 'Studio'}</span>
+            <span className="text-xs text-slate-600">/</span>
+            <span className="text-xs text-purple-400 font-medium font-mono truncate">{activePage?.name}</span>
+          </div>
         </div>
 
-        {/* Navbar Size and Viewport Control wrapper */}
-        <div className="flex items-center gap-2 sm:gap-4">
-          {/* Navbar Size Control */}
-          <div className="flex items-center gap-1.5">
-            <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Tamanho Barra:</span>
-            <select
-              value={navbarSize}
-              onChange={(e) => setNavbarSize(e.target.value as any)}
-              className="bg-slate-900 border border-slate-800 rounded px-1.5 py-0.5 text-[10px] text-slate-350 focus:outline-none focus:ring-1 focus:ring-purple-500 font-mono cursor-pointer"
+        {/* Viewports & Breakpoints Controller */}
+        <div className="hidden sm:flex items-center gap-3">
+          <div className="flex items-center gap-1 p-1 bg-slate-950/80 border border-slate-900 rounded-xl">
+            <button 
+              onClick={() => setViewport('desktop')}
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${viewport === 'desktop' ? 'bg-purple-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'}`}
             >
-              <option value="compact">Compacto</option>
-              <option value="normal">Normal</option>
-              <option value="large">Grande</option>
-            </select>
+              <Monitor className="w-3.5 h-3.5" />
+              Desktop
+            </button>
+            <button 
+              onClick={() => setViewport('tablet')}
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${viewport === 'tablet' ? 'bg-purple-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'}`}
+            >
+              <Tablet className="w-3.5 h-3.5" />
+              Tablet
+            </button>
+            <button 
+              onClick={() => setViewport('mobile')}
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${viewport === 'mobile' ? 'bg-purple-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'}`}
+            >
+              <Smartphone className="w-3.5 h-3.5" />
+              Mobile (Android)
+            </button>
           </div>
 
-          {/* Viewport size switcher */}
-          <div className="flex items-center gap-1 p-0.5 bg-slate-900 border border-slate-850 rounded-xl">
-          <button 
-            onClick={() => setViewport('desktop')}
-            className={`p-2 rounded-lg transition-all cursor-pointer ${viewport === 'desktop' ? 'bg-purple-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'}`}
-          >
-            <Monitor className="w-4 h-4" />
-          </button>
-          <button 
-            onClick={() => setViewport('tablet')}
-            className={`p-2 rounded-lg transition-all cursor-pointer ${viewport === 'tablet' ? 'bg-purple-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'}`}
-          >
-            <Tablet className="w-4 h-4" />
-          </button>
-          <button 
-            onClick={() => setViewport('mobile')}
-            className={`p-2 rounded-lg transition-all cursor-pointer ${viewport === 'mobile' ? 'bg-purple-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'}`}
-          >
-            <Smartphone className="w-4 h-4" />
-          </button>
+          {/* Zoom Controls */}
+          <div className="flex items-center gap-1 bg-slate-950/80 border border-slate-900 rounded-xl px-2 py-1">
+            <button 
+              onClick={() => setZoom(z => Math.max(50, z - 10))}
+              className="p-1 text-slate-400 hover:text-white cursor-pointer"
+              title="Diminuir Zoom"
+            >
+              <ZoomOut className="w-3.5 h-3.5" />
+            </button>
+            <span className="text-[11px] text-slate-300 font-mono w-10 text-center">{zoom}%</span>
+            <button 
+              onClick={() => setZoom(z => Math.min(150, z + 10))}
+              className="p-1 text-slate-400 hover:text-white cursor-pointer"
+              title="Aumentar Zoom"
+            >
+              <ZoomIn className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
-      </div>
 
-      {/* Action controls */}
-      <div className="flex items-center gap-2">
-          {/* Chat AI toggle */}
+        {/* Actions & Utilities */}
+        <div className="flex items-center gap-2">
+          {/* Undo / Redo */}
+          <div className="hidden md:flex items-center gap-1 bg-slate-950/80 border border-slate-900 rounded-xl p-1">
+            <button
+              onClick={handleUndo}
+              disabled={undoStack.length === 0}
+              className="p-1.5 text-slate-400 hover:text-white disabled:opacity-30 rounded-lg cursor-pointer"
+              title="Desfazer (Ctrl+Z)"
+            >
+              <Undo2 className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={handleRedo}
+              disabled={redoStack.length === 0}
+              className="p-1.5 text-slate-400 hover:text-white disabled:opacity-30 rounded-lg cursor-pointer"
+              title="Refazer (Ctrl+Y)"
+            >
+              <Redo2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          {/* Chat AI Toggle */}
           <button 
             onClick={() => setShowChat(!showChat)}
-            className={`p-2 rounded-xl transition-all cursor-pointer ${showChat ? 'bg-purple-600 text-white shadow-md shadow-purple-600/30' : 'bg-slate-900 text-slate-400 hover:text-white'}`}
-            title="Chat com IA"
+            className={`p-2 rounded-xl transition-all cursor-pointer ${showChat ? 'bg-purple-600 text-white shadow-[0_0_15px_rgba(168,85,247,0.3)]' : 'bg-slate-900 text-slate-400 hover:text-white'}`}
+            title="AI Copilot Studio"
           >
             <MessageSquare className="w-4 h-4" />
           </button>
 
-          {/* Quick Preview Button */}
+          {/* Code View Modal */}
           <button 
-            onClick={() => {
-              if (!activePage) return;
-              const fullHtml = `
-                <!DOCTYPE html>
-                <html>
-                <head>
-                  <meta charset="utf-8">
-                  <meta name="viewport" content="width=device-width, initial-scale=1">
-                  <title>${activePage.name} - Preview</title>
-                  <script src="https://cdn.tailwindcss.com"></script>
-                  <style>${activePage.css}</style>
-                </head>
-                <body class="bg-slate-950 text-slate-100 min-h-screen">
-                  ${activePage.html}
-                  <script>${activePage.js}</script>
-                </body>
-                </html>
-              `;
-              const blob = new Blob([fullHtml], { type: 'text/html' });
-              const url = URL.createObjectURL(blob);
-              window.open(url, '_blank');
-            }}
-            className="hidden sm:flex items-center gap-1.5 px-3 py-2 bg-slate-900 border border-slate-800 hover:bg-slate-850 hover:text-white font-semibold text-xs text-slate-300 rounded-xl transition-all cursor-pointer"
-            title="Visualizar em Nova Aba"
+            onClick={() => setShowCodeModal(true)}
+            className="p-2 bg-slate-900 border border-slate-800 hover:border-purple-500/40 rounded-xl text-slate-400 hover:text-white transition-all cursor-pointer"
+            title="Editor de Código"
           >
-            <ExternalLink className="w-3.5 h-3.5" />
-            Visualizar
+            <Code2 className="w-4 h-4" />
           </button>
 
-          {/* Export Project Button */}
+          {/* Export Code Modal */}
           <button 
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-purple-600 hover:bg-purple-500 font-semibold text-xs text-white rounded-xl transition-all cursor-pointer shadow-md shadow-purple-600/20"
             onClick={() => setShowExportModal(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 font-bold text-xs text-white rounded-xl transition-all shadow-[0_0_15px_rgba(168,85,247,0.3)] cursor-pointer"
           >
             <Download className="w-3.5 h-3.5" />
             Exportar
           </button>
 
-          {/* Unified Options Dropdown Menu */}
-          <div className="relative">
-            <button 
-              onClick={() => setShowBuilderMenu(!showBuilderMenu)}
-              className="p-2 bg-slate-900 border border-slate-800 hover:border-purple-500/40 rounded-xl text-slate-400 hover:text-white transition-all cursor-pointer shadow-sm"
-              title="Mais opções e ferramentas"
-            >
-              <Sliders className="w-4 h-4 text-purple-400" />
-            </button>
-
-            {showBuilderMenu && (
-              <div 
-                className="absolute right-0 mt-2 w-56 bg-[#0f0b18] border border-purple-500/30 rounded-2xl shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-150 backdrop-blur-xl"
-                onClick={() => setShowBuilderMenu(false)}
-              >
-                <div className="p-3 border-b border-slate-850 bg-purple-950/20">
-                  <p className="text-xs font-semibold text-white">Ferramentas de Edição</p>
-                  <p className="text-[10px] text-slate-400 font-mono">Real Premise Studio</p>
-                </div>
-
-                <div className="p-1.5 space-y-1">
-                  <button
-                    onClick={() => { setShowBuilderMenu(false); setShowStylesPanel(!showStylesPanel); }}
-                    className="w-full flex items-center justify-between px-3 py-2 text-xs text-slate-300 hover:text-white hover:bg-purple-900/30 rounded-xl transition-all cursor-pointer"
-                  >
-                    <div className="flex items-center gap-2">
-                      <Sliders className="w-4 h-4 text-purple-400" />
-                      Painel de Estilos
-                    </div>
-                    <span className="text-[10px] text-slate-500 font-mono">{showStylesPanel ? 'ON' : 'OFF'}</span>
-                  </button>
-
-                  <button
-                    onClick={() => { setShowBuilderMenu(false); setShowCodeModal(true); }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-slate-300 hover:text-white hover:bg-purple-900/30 rounded-xl transition-all cursor-pointer"
-                  >
-                    <Code2 className="w-4 h-4 text-pink-400" />
-                    Editor de Código
-                  </button>
-
-                  <button
-                    onClick={() => { setShowBuilderMenu(false); setShowHistoryModal(true); }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-slate-300 hover:text-white hover:bg-purple-900/30 rounded-xl transition-all cursor-pointer"
-                  >
-                    <History className="w-4 h-4 text-indigo-400" />
-                    Histórico de Versões
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
+          {/* Toggle Styles Panel */}
+          <button 
+            onClick={() => setShowStylesPanel(!showStylesPanel)}
+            className={`p-2 rounded-xl transition-all cursor-pointer ${showStylesPanel ? 'bg-purple-600/20 text-purple-300 border border-purple-500/30' : 'bg-slate-900 text-slate-500 hover:text-white'}`}
+            title="Painel de Propriedades"
+          >
+            <PanelRightClose className="w-4 h-4" />
+          </button>
         </div>
       </header>
 
-      {/* Editor Body Area */}
-      <div className="flex-1 flex overflow-hidden">
-        {project && activePage ? (
-          <>
-            {/* Sidebar (Pages & Layers) with Draggable Resize Handle */}
-            {showSidebar && (
-              <div 
-                style={{ width: `${leftSidebarWidth}px` }} 
-                className="relative shrink-0 flex flex-col h-full overflow-hidden select-none"
-              >
-                <Sidebar
-                  pages={project.pages}
-                  activePageId={activePageId}
-                  onSelectPage={(id) => {
-                    setActivePageId(id);
-                    setSelectedSelector(null);
-                    setSelectedPath(null);
-                  }}
-                  onCreatePage={handleCreatePage}
-                  onDuplicatePage={handleDuplicatePage}
-                  onDeletePage={handleDeletePage}
-                  layers={layers}
-                  onSelectLayer={(selector, path) => {
-                    setSelectedSelector(selector);
-                    setSelectedPath(path);
-                    
-                    // Extract element attributes and styles to populate PropertiesPanel
-                    const doc = parseDocFromHtml(activePage.html);
-                    const root = doc.getElementById('canvas-root') || doc.body;
-                    const el = getElementByPath(root, path);
-                    if (el) {
-                      const attrs: Record<string, string> = {
-                        _tag: el.tagName.toLowerCase(),
-                        _textContent: el.childElementCount === 0 ? (el.textContent || '') : '',
-                        _hasChildren: el.childElementCount > 0 ? 'true' : 'false'
-                      };
-                      for (let i = 0; i < el.attributes.length; i++) {
-                        const attr = el.attributes[i];
-                        attrs[attr.name] = attr.value;
-                      }
-                      setSelectedAttrs(attrs);
+      {/* ─── Main Editor Workspace Layout ─── */}
+      <div className="flex-1 flex overflow-hidden relative">
+        {/* Left Sidebar (Páginas + DOM Tree) */}
+        {showSidebar && project && activePage && (
+          <Sidebar
+            pages={project.pages}
+            activePageId={activePageId}
+            onSelectPage={(id) => {
+              setActivePageId(id);
+              setSelectedSelector(null);
+              setSelectedPath(null);
+            }}
+            onCreatePage={async () => {
+              const name = prompt('Nome da nova página:');
+              if (!name) return;
+              const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+              const res = await fetch(`${API_URL}/api/pages`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({ name, slug, projectId })
+              });
+              if (res.ok) {
+                const newP = await res.json();
+                setProject(prev => prev ? { ...prev, pages: [...prev.pages, newP] } : null);
+                setActivePageId(newP.id);
+              }
+            }}
+            onDuplicatePage={async (id) => {
+              const pToDup = project.pages.find(p => p.id === id);
+              if (!pToDup) return;
+              const res = await fetch(`${API_URL}/api/pages`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({
+                  name: `${pToDup.name} (Cópia)`,
+                  slug: `${pToDup.slug}-copia`,
+                  html: pToDup.html,
+                  css: pToDup.css,
+                  js: pToDup.js,
+                  projectId
+                })
+              });
+              if (res.ok) {
+                const dup = await res.json();
+                setProject(prev => prev ? { ...prev, pages: [...prev.pages, dup] } : null);
+                setActivePageId(dup.id);
+              }
+            }}
+            onDeletePage={async (id) => {
+              if (!confirm('Deseja excluir esta página permanentemente?')) return;
+              await fetch(`${API_URL}/api/pages/${id}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+              });
+              setProject(prev => prev ? { ...prev, pages: prev.pages.filter(p => p.id !== id) } : null);
+              if (activePageId === id) {
+                const remaining = project.pages.filter(p => p.id !== id);
+                if (remaining.length > 0) setActivePageId(remaining[0].id);
+              }
+            }}
+            layers={layers}
+            onSelectLayer={(selector, path) => {
+              setSelectedSelector(selector);
+              setSelectedPath(path);
+            }}
+            onHoverLayer={(path) => setHoverPath(path)}
+            onDeleteElement={handleDeleteElement}
+            onDuplicateElement={handleDuplicateElement}
+            onMoveElement={handleMoveElement}
+            onInsertBlock={handleInsertBlock}
+            selectedPath={selectedPath}
+          />
+        )}
 
-                      const styles: Record<string, string> = {};
-                      if (el instanceof HTMLElement) {
-                        for (let i = 0; i < el.style.length; i++) {
-                          const styleName = el.style[i];
-                          styles[styleName] = el.style.getPropertyValue(styleName);
-                        }
-                      }
-                      setSelectedStyles(styles);
-                    } else {
-                      setSelectedAttrs({});
-                      setSelectedStyles({});
-                    }
-                  }}
-                  onDeleteElement={handleDeleteElement}
-                  onDuplicateElement={handleDuplicateElement}
-                  onMoveElement={handleMoveElement}
-                  onWrapElement={handleWrapElement}
-                  onAddChildElement={handleAddChildElement}
-                  onInsertBlock={handleInsertBlock}
-                  selectedPath={selectedPath}
-                />
-                
-                {/* Left Drag Resize Divider */}
-                <div
-                  onMouseDown={() => setIsResizingLeft(true)}
-                  className="absolute -right-1 top-0 bottom-0 w-2.5 cursor-col-resize z-30 group flex items-center justify-center hover:bg-purple-500/20 transition-all"
-                  title="Arrastar para redimensionar barra de páginas e camadas"
-                >
-                  <div className="w-0.5 h-8 rounded-full bg-slate-800 group-hover:bg-purple-400 transition-colors" />
-                </div>
-              </div>
-            )}
-
-            {/* Main Interactive Canvas Area */}
-            <main className="flex-1 p-2 md:p-6 flex justify-center items-center overflow-auto bg-slate-950/20 min-w-0">
-              <div 
-                className="transition-all duration-300 max-w-full h-full flex items-center justify-center"
-                style={{
-                  width: viewport === 'mobile' ? '375px' : viewport === 'tablet' ? '768px' : '100%',
-                  height: '100%'
+        {/* Central Interactive Sandbox Canvas */}
+        <main className="flex-1 flex justify-center items-center overflow-auto bg-[#07020d] p-3 md:p-6 min-w-0">
+          <div 
+            className="transition-all duration-200 h-full flex items-center justify-center relative"
+            style={{
+              width: viewport === 'mobile' ? '375px' : viewport === 'tablet' ? '768px' : '100%',
+              height: '100%'
+            }}
+          >
+            {activePage && (
+              <Canvas
+                key={activePage.id}
+                html={activePage.html}
+                css={activePage.css}
+                js={activePage.js}
+                highlightPath={selectedPath}
+                hoverPath={hoverPath}
+                zoom={zoom}
+                onElementSelect={(selector, styles, attrs, path) => {
+                  setSelectedSelector(selector);
+                  setSelectedStyles(styles);
+                  setSelectedAttrs(attrs);
+                  setSelectedPath(path);
                 }}
-              >
-                <Canvas
-                  key={activePage.id}
-                  html={activePage.html}
-                  css={activePage.css}
-                  js={activePage.js}
-                  highlightPath={selectedPath}
-                  onElementSelect={(selector, styles, attrs, elementPath) => {
-                    setSelectedSelector(selector);
-                    setSelectedStyles(styles);
-                    setSelectedAttrs(attrs || {});
-                    // Use index-based path from canvas click
-                    setSelectedPath(elementPath || null);
-                  }}
-                />
-              </div>
-            </main>
-
-            {/* Properties Control Panel with Draggable Resize Handle */}
-            {showStylesPanel && (
-              <div 
-                style={{ width: `${rightPanelWidth}px` }} 
-                className="relative shrink-0 flex flex-col h-full overflow-hidden select-none"
-              >
-                {/* Right Drag Resize Divider */}
-                <div
-                  onMouseDown={() => setIsResizingRight(true)}
-                  className="absolute -left-1 top-0 bottom-0 w-2.5 cursor-col-resize z-30 group flex items-center justify-center hover:bg-purple-500/20 transition-all"
-                  title="Arrastar para redimensionar painel de estilos"
-                >
-                  <div className="w-0.5 h-8 rounded-full bg-slate-800 group-hover:bg-purple-400 transition-colors" />
-                </div>
-
-                <PropertiesPanel
-                  selectedSelector={selectedSelector}
-                  selectedPath={selectedPath}
-                  selectedStyles={selectedStyles}
-                  selectedAttrs={selectedAttrs}
-                  onStyleChange={handleStyleChange}
-                  onAttrChange={handleAttrChange}
-                  pageSeo={{
-                    title: (activePage as any)?.seoTitle || activePage?.name || '',
-                    description: (activePage as any)?.seoDescription || '',
-                    ogImage: ''
-                  }}
-                  onPageSeoChange={handlePageSeoChange}
-                />
-              </div>
-            )}
-
-            {/* Chat Panel AI */}
-            {showChat && (
-              <ChatPanel
-                pageId={activePage.id}
-                onApplyChanges={handleApplyAIChanges}
+                onInlineContentChange={handleInlineTextChange}
               />
             )}
-
-            {/* Modal de Código Flutuante */}
-            {showCodeModal && (
-              <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-6">
-                <div className="w-full max-w-4xl h-[80vh] bg-slate-900 border border-slate-850 rounded-2xl flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-                  {/* Modal Header */}
-                  <div className="px-5 py-3.5 bg-slate-950 border-b border-slate-850 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Code2 className="w-4 h-4 text-purple-400" />
-                      <span className="font-semibold text-sm text-white">Editor de Código Manual - {activePage.name}</span>
-                    </div>
-                    <button
-                      onClick={() => setShowCodeModal(false)}
-                      className="px-3 py-1 bg-slate-800 hover:bg-slate-700 active:bg-slate-900 text-slate-300 hover:text-white rounded-lg text-xs transition-colors cursor-pointer font-medium"
-                    >
-                      Fechar
-                    </button>
-                  </div>
-
-                  {/* Modal Editor Body */}
-                  <div className="flex-1 min-h-0">
-                    <CodeEditor
-                      key={activePage.id}
-                      html={activePage.html}
-                      css={activePage.css}
-                      js={activePage.js}
-                      onChange={handleCodeChange}
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
-            {/* Modal de Histórico de Alterações */}
-            {showHistoryModal && (
-              <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-6">
-                <div className="w-full max-w-2xl h-[70vh] bg-slate-900 border border-slate-850 rounded-2xl flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-                  {/* Modal Header */}
-                  <div className="px-5 py-3.5 bg-slate-950 border-b border-slate-850 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <History className="w-4 h-4 text-purple-400" />
-                      <span className="font-semibold text-sm text-white">Histórico de Alterações - {activePage.name}</span>
-                    </div>
-                    <button
-                      onClick={() => setShowHistoryModal(false)}
-                      className="px-3 py-1 bg-slate-800 hover:bg-slate-700 active:bg-slate-900 text-slate-300 hover:text-white rounded-lg text-xs transition-colors cursor-pointer font-medium"
-                    >
-                      Fechar
-                    </button>
-                  </div>
-
-                  {/* Versions List */}
-                  <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                    {(!versionHistory[activePage.id] || versionHistory[activePage.id].length === 0) ? (
-                      <p className="text-xs text-slate-500 italic text-center py-10">Nenhum snapshot de alteração gravado ainda.</p>
-                    ) : (
-                      versionHistory[activePage.id].map((ver, idx) => (
-                        <div 
-                          key={idx} 
-                          className="p-3 bg-slate-950/60 border border-slate-850 hover:border-slate-800 rounded-xl flex items-center justify-between gap-4 transition-all"
-                        >
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs font-bold text-slate-400 bg-slate-900 px-1.5 py-0.5 rounded font-mono">{ver.timestamp}</span>
-                              <span className="text-xs font-semibold text-white truncate">{ver.description}</span>
-                            </div>
-                            <p className="text-[10px] text-slate-500 mt-1 truncate">
-                              HTML: {ver.html.slice(0, 45)}... | CSS: {ver.css.slice(0, 30)}...
-                            </p>
-                          </div>
-
-                          <button
-                            onClick={() => {
-                              if (confirm('Deseja reverter a página para esta versão anterior? As mudanças atuais serão substituídas.')) {
-                                handleApplyAIChanges(ver.html, ver.css, ver.js, activePage.id);
-                                setShowHistoryModal(false);
-                              }
-                            }}
-                            className="flex items-center gap-1 px-2.5 py-1 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-xs transition-colors cursor-pointer font-semibold shrink-0"
-                          >
-                            <RotateCcw className="w-3.5 h-3.5" />
-                            Restaurar
-                          </button>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Modal de Exportação Seletiva */}
-            {showExportModal && (
-              <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-6">
-                <div className="w-full max-w-md bg-slate-900 border border-slate-850 rounded-2xl flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-                  <div className="px-5 py-3.5 bg-slate-950 border-b border-slate-850 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Download className="w-4 h-4 text-purple-400" />
-                      <span className="font-semibold text-sm text-white">Opções de Exportação</span>
-                    </div>
-                    <button
-                      onClick={() => setShowExportModal(false)}
-                      className="text-slate-400 hover:text-white text-lg font-bold"
-                    >
-                      &times;
-                    </button>
-                  </div>
-
-                  <div className="p-6 space-y-4">
-                    <p className="text-xs text-slate-400">Selecione quais diretórios e arquivos deseja incluir na sua exportação:</p>
-                    
-                    <div className="space-y-3">
-                      <label className="flex items-center gap-3 p-3 bg-slate-950/40 border border-slate-850 rounded-xl hover:border-slate-850 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={exportOptions.pages}
-                          onChange={(e) => setExportOptions({ ...exportOptions, pages: e.target.checked })}
-                          className="w-4 h-4 text-purple-600 bg-slate-900 border-slate-800 rounded focus:ring-purple-500"
-                        />
-                        <div>
-                          <div className="text-xs font-bold text-white">pages/</div>
-                          <div className="text-[10px] text-slate-500">Arquivos HTML estruturados com conteúdo das páginas</div>
-                        </div>
-                      </label>
-
-                      <label className="flex items-center gap-3 p-3 bg-slate-950/40 border border-slate-850 rounded-xl hover:border-slate-850 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={exportOptions.css}
-                          onChange={(e) => setExportOptions({ ...exportOptions, css: e.target.checked })}
-                          className="w-4 h-4 text-purple-600 bg-slate-900 border-slate-800 rounded focus:ring-purple-500"
-                        />
-                        <div>
-                          <div className="text-xs font-bold text-white">css/</div>
-                          <div className="text-[10px] text-slate-500">Folhas de estilo correspondentes para cada página</div>
-                        </div>
-                      </label>
-
-                      <label className="flex items-center gap-3 p-3 bg-slate-950/40 border border-slate-850 rounded-xl hover:border-slate-850 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={exportOptions.js}
-                          onChange={(e) => setExportOptions({ ...exportOptions, js: e.target.checked })}
-                          className="w-4 h-4 text-purple-600 bg-slate-900 border-slate-800 rounded focus:ring-purple-500"
-                        />
-                        <div>
-                          <div className="text-xs font-bold text-white">js/</div>
-                          <div className="text-[10px] text-slate-500">Arquivos JavaScript com interatividades programadas</div>
-                        </div>
-                      </label>
-
-                      <label className="flex items-center gap-3 p-3 bg-slate-950/40 border border-slate-850 rounded-xl hover:border-slate-850 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={exportOptions.docker}
-                          onChange={(e) => setExportOptions({ ...exportOptions, docker: e.target.checked })}
-                          className="w-4 h-4 text-purple-600 bg-slate-900 border-slate-800 rounded focus:ring-purple-500"
-                        />
-                        <div>
-                          <div className="text-xs font-bold text-white">Dockerfile & docker-compose.yml</div>
-                          <div className="text-[10px] text-slate-500">Configuração de container pronta para rodar em produção</div>
-                        </div>
-                      </label>
-
-                      <label className="flex items-center gap-3 p-3 bg-slate-950/40 border border-slate-850 rounded-xl hover:border-slate-850 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={exportOptions.readme}
-                          onChange={(e) => setExportOptions({ ...exportOptions, readme: e.target.checked })}
-                          className="w-4 h-4 text-purple-600 bg-slate-900 border-slate-800 rounded focus:ring-purple-500"
-                        />
-                        <div>
-                          <div className="text-xs font-bold text-white">README.md</div>
-                          <div className="text-[10px] text-slate-500">Guia de introdução rápida do projeto</div>
-                        </div>
-                      </label>
-                    </div>
-                  </div>
-
-                  <div className="px-5 py-3.5 bg-slate-950 border-t border-slate-850 flex justify-end gap-3">
-                    <button
-                      onClick={() => setShowExportModal(false)}
-                      className="px-4 py-2 bg-slate-900 border border-slate-850 hover:bg-slate-850 hover:text-white rounded-xl text-xs font-semibold text-slate-350 cursor-pointer transition-all"
-                    >
-                      Cancelar
-                    </button>
-                    <button
-                      onClick={async () => {
-                        try {
-                          const queryParams = new URLSearchParams({
-                            pages: exportOptions.pages.toString(),
-                            css: exportOptions.css.toString(),
-                            js: exportOptions.js.toString(),
-                            docker: exportOptions.docker.toString(),
-                            readme: exportOptions.readme.toString()
-                          }).toString();
-
-                          const response = await fetch(`${API_URL}/api/export/${projectId}?${queryParams}`, {
-                            headers: {
-                              'Authorization': `Bearer ${token}`
-                            }
-                          });
-                          if (!response.ok) throw new Error('Falha ao exportar ZIP');
-                          
-                          const blob = await response.blob();
-                          const url = window.URL.createObjectURL(blob);
-                          const a = document.createElement('a');
-                          a.href = url;
-                          a.download = `projeto-${project?.name.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'site'}.zip`;
-                          document.body.appendChild(a);
-                          a.click();
-                          a.remove();
-                          setShowExportModal(false);
-                        } catch (err: any) {
-                          alert(err.message);
-                        }
-                      }}
-                      className="px-4 py-2 bg-purple-600 hover:bg-purple-500 rounded-xl text-xs font-semibold text-white cursor-pointer transition-all"
-                    >
-                      Baixar ZIP
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-          </>
-        ) : (
-          <div className="flex-1 flex justify-center items-center text-slate-500">
-            Carregando editor...
           </div>
+        </main>
+
+        {/* Right Inspector & Properties Panel */}
+        {showStylesPanel && (
+          <PropertiesPanel
+            selectedSelector={selectedSelector}
+            selectedPath={selectedPath}
+            selectedStyles={selectedStyles}
+            selectedAttrs={selectedAttrs}
+            onStyleChange={handleStyleChange}
+            onAttrChange={handleAttrChange}
+            pageSeo={{
+              title: activePage?.seoTitle || activePage?.name || '',
+              description: activePage?.seoDescription || '',
+              ogImage: ''
+            }}
+            onPageSeoChange={handlePageSeoChange}
+          />
+        )}
+
+        {/* AI Copilot Panel */}
+        {showChat && activePage && (
+          <ChatPanel
+            pageId={activePage.id}
+            onApplyChanges={handleApplyAIChanges}
+            onUndo={handleUndo}
+            canUndo={undoStack.length > 0}
+          />
         )}
       </div>
 
+      {/* ─── Modal de Código Fonte Completo ─── */}
+      {showCodeModal && activePage && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-4xl h-[80vh] bg-slate-950 border border-slate-800 rounded-2xl flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="px-5 py-3.5 bg-[#090410] border-b border-slate-850 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Code2 className="w-4 h-4 text-purple-400" />
+                <span className="font-bold text-sm text-white">Editor de Código - {activePage.name}</span>
+              </div>
+              <button
+                onClick={() => setShowCodeModal(false)}
+                className="px-3 py-1 bg-slate-900 hover:bg-slate-800 text-slate-300 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+              >
+                Fechar
+              </button>
+            </div>
+            <div className="flex-1 min-h-0">
+              <CodeEditor
+                key={activePage.id}
+                html={activePage.html}
+                css={activePage.css}
+                js={activePage.js}
+                onChange={handleCodeChange}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Modal de Exportação & Download ─── */}
+      {showExportModal && activePage && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-2xl bg-slate-950 border border-slate-800 rounded-2xl flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="px-5 py-4 bg-[#090410] border-b border-slate-850 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Download className="w-4 h-4 text-purple-400" />
+                <span className="font-bold text-sm text-white">Exportação de Código de Produção</span>
+              </div>
+              <button
+                onClick={() => setShowExportModal(false)}
+                className="text-slate-400 hover:text-white font-bold text-lg cursor-pointer"
+              >
+                &times;
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              <div className="flex gap-2 border-b border-slate-900 pb-2">
+                <button
+                  onClick={() => setActiveExportTab('html')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${activeExportTab === 'html' ? 'bg-purple-600 text-white' : 'text-slate-400 hover:text-white'}`}
+                >
+                  HTML Completo
+                </button>
+                <button
+                  onClick={() => setActiveExportTab('css')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${activeExportTab === 'css' ? 'bg-purple-600 text-white' : 'text-slate-400 hover:text-white'}`}
+                >
+                  CSS Customizado
+                </button>
+                <button
+                  onClick={() => setActiveExportTab('js')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${activeExportTab === 'js' ? 'bg-purple-600 text-white' : 'text-slate-400 hover:text-white'}`}
+                >
+                  JavaScript
+                </button>
+              </div>
+
+              <textarea
+                readOnly
+                rows={10}
+                value={
+                  activeExportTab === 'html' ? getFullHtmlDocument() :
+                  activeExportTab === 'css' ? (activePage.css || '/* Nenhum CSS customizado */') :
+                  (activePage.js || '// Nenhum script interativo')
+                }
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 font-mono text-xs text-slate-300 focus:outline-none resize-none"
+              />
+
+              <div className="flex items-center justify-between pt-2">
+                <button
+                  onClick={() => {
+                    const text = activeExportTab === 'html' ? getFullHtmlDocument() : activeExportTab === 'css' ? activePage.css : activePage.js;
+                    navigator.clipboard.writeText(text);
+                    setCopiedCode(true);
+                    setTimeout(() => setCopiedCode(false), 2000);
+                  }}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-850 text-slate-300 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                >
+                  {copiedCode ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5 text-purple-400" />}
+                  {copiedCode ? 'Copiado!' : 'Copiar Código'}
+                </button>
+
+                <button
+                  onClick={handleDownloadCode}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-xs font-bold transition-all shadow-[0_0_15px_rgba(168,85,247,0.3)] cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  Baixar index.html
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

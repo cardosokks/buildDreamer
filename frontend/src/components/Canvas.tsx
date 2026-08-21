@@ -5,10 +5,22 @@ interface CanvasProps {
   css: string;
   js: string;
   highlightPath?: string | null;
+  hoverPath?: string | null;
+  zoom?: number;
   onElementSelect: (selector: string, styles: Record<string, string>, attrs: Record<string, string>, elementPath: string) => void;
+  onInlineContentChange?: (elementPath: string, newText: string) => void;
 }
 
-export const Canvas: React.FC<CanvasProps> = ({ html, css, js, highlightPath, onElementSelect }) => {
+export const Canvas: React.FC<CanvasProps> = ({
+  html,
+  css,
+  js,
+  highlightPath,
+  hoverPath,
+  zoom = 100,
+  onElementSelect,
+  onInlineContentChange
+}) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   useEffect(() => {
@@ -17,29 +29,67 @@ export const Canvas: React.FC<CanvasProps> = ({ html, css, js, highlightPath, on
 
     const documentContent = `
       <!DOCTYPE html>
-      <html lang="pt-br">
+      <html lang="pt-BR">
       <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <script src="https://cdn.tailwindcss.com"></script>
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
         <style>
-          /* Base Styles */
+          * {
+            box-sizing: border-box;
+          }
           body {
             margin: 0;
             padding: 0;
             min-height: 100vh;
-            cursor: pointer;
-            box-sizing: border-box;
+            background: #ffffff;
+            color: #0f172a;
+            font-family: 'Inter', sans-serif;
+            position: relative;
           }
-          /* Hover & Selection Visualizer */
-          *:hover {
-            outline: 2px dashed rgba(168, 85, 247, 0.4);
-            outline-offset: -2px;
+          h1, h2, h3, h4, h5, h6 {
+            font-family: 'Outfit', sans-serif;
           }
-          .selected-element {
-            outline: 2px solid rgb(168, 85, 247) !important;
-            outline-offset: -2px;
+
+          /* ─── Selection & Hover Overlay Box System ─── */
+          .studio-hovered {
+            outline: 2px dashed #06b6d4 !important;
+            outline-offset: -2px !important;
           }
+
+          .studio-selected {
+            outline: 2px solid #a855f7 !important;
+            outline-offset: -2px !important;
+            position: relative !important;
+          }
+
+          .studio-tag-badge {
+            position: absolute;
+            top: -22px;
+            left: -2px;
+            background: #a855f7;
+            color: #ffffff;
+            font-family: monospace;
+            font-size: 10px;
+            font-weight: 700;
+            padding: 2px 6px;
+            border-radius: 4px;
+            pointer-events: none;
+            z-index: 999999;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            text-transform: lowercase;
+            white-space: nowrap;
+          }
+
+          /* Inline Editing State */
+          [contenteditable="true"] {
+            outline: 2px solid #22c55e !important;
+            outline-offset: 2px !important;
+            cursor: text !important;
+            min-width: 1ch;
+          }
+
           ${css}
         </style>
       </head>
@@ -47,42 +97,24 @@ export const Canvas: React.FC<CanvasProps> = ({ html, css, js, highlightPath, on
         <div id="canvas-root">
           ${html}
         </div>
+
         <script>
-          // Selection logic inside Sandbox Iframe
-          document.body.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
+          let currentSelected = null;
+          let badgeEl = null;
 
-            const target = e.target;
-            if (target === document.body || target === document.documentElement) return;
-
-            // Clear previous selection
-            document.querySelectorAll('.selected-element').forEach(el => {
-              el.classList.remove('selected-element');
-            });
-
-            // Mark new selection
-            target.classList.add('selected-element');
-
-            // Build CSS selector path (for display)
-            const selectorParts = [];
-            let selectorEl = target;
-            while (selectorEl && selectorEl !== document.body) {
-              let name = selectorEl.nodeName.toLowerCase();
-              if (selectorEl.id) {
-                name += '#' + selectorEl.id;
-              } else if (selectorEl.className) {
-                const cleanClasses = Array.from(selectorEl.classList)
-                  .filter(c => c !== 'selected-element')
-                  .join('.');
-                if (cleanClasses) name += '.' + cleanClasses;
+          function removeSelection() {
+            if (currentSelected) {
+              currentSelected.classList.remove('studio-selected');
+              currentSelected.removeAttribute('contenteditable');
+              if (badgeEl && badgeEl.parentNode) {
+                badgeEl.parentNode.removeChild(badgeEl);
+                badgeEl = null;
               }
-              selectorParts.unshift(name);
-              selectorEl = selectorEl.parentNode;
+              currentSelected = null;
             }
-            const selector = selectorParts.join(' > ');
+          }
 
-            // Calculate index-based path (e.g. "0.1.2") relative to canvas-root or body
+          function getIndexPath(target) {
             const canvasRoot = document.getElementById('canvas-root') || document.body;
             const indexParts = [];
             let indexEl = target;
@@ -93,21 +125,56 @@ export const Canvas: React.FC<CanvasProps> = ({ html, css, js, highlightPath, on
               indexParts.unshift(idx);
               indexEl = parent;
             }
-            const elementPath = indexParts.join('.');
+            return indexParts.join('.');
+          }
 
-            // Extract attributes
+          function selectElement(target) {
+            if (!target || target === document.body || target === document.documentElement || target.id === 'canvas-root') return;
+
+            removeSelection();
+            currentSelected = target;
+            target.classList.add('studio-selected');
+
+            // Attach floating tag badge
+            badgeEl = document.createElement('div');
+            badgeEl.className = 'studio-tag-badge';
+            const tag = target.tagName.toLowerCase();
+            const id = target.id ? '#' + target.id : '';
+            const cls = target.className ? '.' + target.className.split(' ').filter(c => !c.startsWith('studio-'))[0] : '';
+            badgeEl.textContent = tag + id + (cls ? cls.slice(0, 15) : '');
+            target.appendChild(badgeEl);
+
+            // Compute Selector
+            const selectorParts = [];
+            let selEl = target;
+            while (selEl && selEl !== document.body && selEl.id !== 'canvas-root') {
+              let name = selEl.nodeName.toLowerCase();
+              if (selEl.id) {
+                name += '#' + selEl.id;
+              } else if (selEl.className) {
+                const cleanClasses = Array.from(selEl.classList)
+                  .filter(c => !c.startsWith('studio-'))
+                  .join('.');
+                if (cleanClasses) name += '.' + cleanClasses;
+              }
+              selectorParts.unshift(name);
+              selEl = selEl.parentNode;
+            }
+            const selector = selectorParts.join(' > ') || target.tagName.toLowerCase();
+            const elementPath = getIndexPath(target);
+
+            // Extract Attributes
             const attrs = {
               _tag: target.tagName.toLowerCase(),
-              _textContent: target.childElementCount === 0 ? (target.textContent || '') : '',
-              _hasChildren: target.childElementCount > 0 ? 'true' : 'false',
+              _textContent: target.childElementCount <= 1 ? (target.textContent || '') : '',
+              _hasChildren: target.childElementCount > 1 ? 'true' : 'false',
             };
-            const relevantAttrs = ['id', 'class', 'href', 'src', 'alt', 'target', 'placeholder', 'type', 'name', 'value'];
-            relevantAttrs.forEach(a => {
+            ['id', 'class', 'href', 'src', 'alt', 'target', 'placeholder', 'type', 'name', 'value'].forEach(a => {
               const v = target.getAttribute(a);
               if (v !== null) attrs[a] = v;
             });
 
-            // Extract inline styles
+            // Extract Computed Styles
             const computedStyle = window.getComputedStyle(target);
             const styles = {
               display: target.style.display || computedStyle.display,
@@ -143,10 +210,8 @@ export const Canvas: React.FC<CanvasProps> = ({ html, css, js, highlightPath, on
               'justify-content': target.style.justifyContent || computedStyle.justifyContent,
               gap: target.style.gap || computedStyle.gap,
               'z-index': target.style.zIndex || computedStyle.zIndex,
-              cursor: target.style.cursor || computedStyle.cursor,
             };
 
-            // Post back to Editor Host
             window.parent.postMessage({
               type: 'ELEMENT_SELECTED',
               selector,
@@ -154,37 +219,97 @@ export const Canvas: React.FC<CanvasProps> = ({ html, css, js, highlightPath, on
               styles,
               attrs
             }, '*');
+          }
+
+          // Single click -> Select bounding box
+          document.body.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            selectElement(e.target);
           });
 
-          // Listen for parent highlight messages
+          // Double click -> Inline Content Editable for Text
+          document.body.addEventListener('dblclick', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const target = e.target;
+            if (target && target.childElementCount <= 1) {
+              target.setAttribute('contenteditable', 'true');
+              target.focus();
+
+              const onBlur = () => {
+                target.removeAttribute('contenteditable');
+                target.removeEventListener('blur', onBlur);
+                const path = getIndexPath(target);
+                window.parent.postMessage({
+                  type: 'INLINE_TEXT_CHANGED',
+                  path,
+                  text: target.innerText || target.textContent
+                }, '*');
+              };
+              target.addEventListener('blur', onBlur);
+            }
+          });
+
+          // Hover feedback
+          document.body.addEventListener('mouseover', (e) => {
+            if (e.target && e.target !== document.body && !e.target.classList.contains('studio-selected')) {
+              e.target.classList.add('studio-hovered');
+            }
+          });
+          document.body.addEventListener('mouseout', (e) => {
+            if (e.target) {
+              e.target.classList.remove('studio-hovered');
+            }
+          });
+
+          // Window Message Dispatcher
           window.addEventListener('message', (msg) => {
-            if (!msg.data || msg.data.type !== 'HIGHLIGHT_ELEMENT') return;
-            const hPath = msg.data.path;
-            // Clear all selections first
-            document.querySelectorAll('.selected-element').forEach(el => {
-              el.classList.remove('selected-element');
-            });
-            if (hPath === null || hPath === undefined || hPath === '') return;
-            // Navigate to element by index path
-            const canvasRoot = document.getElementById('canvas-root') || document.body;
-            const parts = String(hPath).split('.').map(Number);
-            let el = canvasRoot;
-            for (const idx of parts) {
-              const kids = Array.from(el.children);
-              if (!kids[idx]) { el = null; break; }
-              el = kids[idx];
+            if (!msg.data) return;
+
+            if (msg.data.type === 'HIGHLIGHT_ELEMENT') {
+              const hPath = msg.data.path;
+              if (hPath === null || hPath === undefined || hPath === '') {
+                removeSelection();
+                return;
+              }
+              const canvasRoot = document.getElementById('canvas-root') || document.body;
+              const parts = String(hPath).split('.').map(Number);
+              let el = canvasRoot;
+              for (const idx of parts) {
+                const kids = Array.from(el.children);
+                if (!kids[idx]) { el = null; break; }
+                el = kids[idx];
+              }
+              if (el && el !== canvasRoot) {
+                selectElement(el);
+                el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+              }
             }
-            if (el && el !== canvasRoot) {
-              el.classList.add('selected-element');
-              el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+            if (msg.data.type === 'HOVER_ELEMENT') {
+              document.querySelectorAll('.studio-hovered').forEach(el => el.classList.remove('studio-hovered'));
+              const hoverP = msg.data.path;
+              if (!hoverP) return;
+              const canvasRoot = document.getElementById('canvas-root') || document.body;
+              const parts = String(hoverP).split('.').map(Number);
+              let el = canvasRoot;
+              for (const idx of parts) {
+                const kids = Array.from(el.children);
+                if (!kids[idx]) { el = null; break; }
+                el = kids[idx];
+              }
+              if (el && el !== canvasRoot) {
+                el.classList.add('studio-hovered');
+              }
             }
           });
 
-          // Inject user JavaScript safely
+          // Inject user JavaScript securely
           try {
             ${js}
           } catch(err) {
-            console.error('Erro no script do usuário:', err);
+            console.warn('Erro de execução no script do usuário:', err);
           }
         </script>
       </body>
@@ -194,14 +319,13 @@ export const Canvas: React.FC<CanvasProps> = ({ html, css, js, highlightPath, on
     iframe.srcdoc = documentContent;
   }, [html, css, js]);
 
-  // When highlightPath changes (from layer click), tell the iframe to highlight that element
+  // Sync Highlight Path
   useEffect(() => {
     const iframe = iframeRef.current;
     if (!iframe) return;
     const send = () => {
       iframe.contentWindow?.postMessage({ type: 'HIGHLIGHT_ELEMENT', path: highlightPath ?? null }, '*');
     };
-    // If iframe is still loading, wait for it
     if (iframe.contentDocument?.readyState === 'complete') {
       send();
     } else {
@@ -209,25 +333,52 @@ export const Canvas: React.FC<CanvasProps> = ({ html, css, js, highlightPath, on
     }
   }, [highlightPath]);
 
+  // Sync Hover Path from Tree
+  useEffect(() => {
+    const iframe = iframeRef.current;
+    if (!iframe) return;
+    iframe.contentWindow?.postMessage({ type: 'HOVER_ELEMENT', path: hoverPath ?? null }, '*');
+  }, [hoverPath]);
+
+  // Handle Incoming Iframe Messages
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
-      if (event.data && event.data.type === 'ELEMENT_SELECTED') {
-        onElementSelect(event.data.selector, event.data.styles, event.data.attrs || {}, event.data.elementPath || '');
+      if (event.data?.type === 'ELEMENT_SELECTED') {
+        onElementSelect(
+          event.data.selector,
+          event.data.styles,
+          event.data.attrs || {},
+          event.data.elementPath || ''
+        );
+      }
+      if (event.data?.type === 'INLINE_TEXT_CHANGED' && onInlineContentChange) {
+        onInlineContentChange(event.data.path, event.data.text);
       }
     };
 
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [onElementSelect]);
+  }, [onElementSelect, onInlineContentChange]);
+
+  const scale = zoom / 100;
 
   return (
-    <div className="w-full h-full bg-slate-950 border border-slate-900 rounded-xl overflow-hidden shadow-2xl relative">
-      <iframe
-        ref={iframeRef}
-        title="Visual Site Builder Canvas"
-        className="w-full h-full bg-white"
-        sandbox="allow-scripts"
-      />
+    <div className="w-full h-full flex items-center justify-center overflow-auto p-4 select-none">
+      <div 
+        className="w-full h-full bg-white rounded-xl shadow-2xl border border-slate-800/80 overflow-hidden transition-transform duration-150 origin-center"
+        style={{
+          transform: `scale(${scale})`,
+          maxWidth: '100%',
+          maxHeight: '100%'
+        }}
+      >
+        <iframe
+          ref={iframeRef}
+          title="Studio Visual Engine Canvas"
+          className="w-full h-full border-0 bg-white"
+          sandbox="allow-scripts allow-same-origin"
+        />
+      </div>
     </div>
   );
 };
