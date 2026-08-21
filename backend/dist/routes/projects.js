@@ -1,4 +1,37 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.projectRouter = exports.projectJobsQueue = void 0;
 const express_1 = require("express");
@@ -236,6 +269,154 @@ router.delete('/:id', async (req, res) => {
     }
     catch (error) {
         return res.status(500).json({ error: error.message });
+    }
+});
+// Import Project from ZIP (Base64)
+router.post('/import-zip', async (req, res) => {
+    try {
+        const { name, description, zipBase64, targetProjectId } = req.body;
+        const userId = req.userId;
+        if (!zipBase64) {
+            return res.status(400).json({ error: 'Arquivo ZIP em Base64 é obrigatório.' });
+        }
+        const JSZip = (await Promise.resolve().then(() => __importStar(require('jszip')))).default;
+        const zipData = Buffer.from(zipBase64.replace(/^data:.*?;base64,/, ''), 'base64');
+        const zip = await JSZip.loadAsync(zipData);
+        const extractedPages = [];
+        const files = Object.keys(zip.files);
+        const htmlFiles = files.filter(f => !zip.files[f].dir && f.endsWith('.html') && !f.startsWith('__MACOSX/'));
+        if (htmlFiles.length === 0) {
+            return res.status(400).json({ error: 'Nenhum arquivo HTML encontrado no arquivo ZIP.' });
+        }
+        for (const filePath of htmlFiles) {
+            const rawHtml = await zip.file(filePath).async('string');
+            const basename = filePath.split('/').pop().replace(/\.html$/, '');
+            const isHome = basename === 'index' || basename === 'home' || filePath === 'index.html';
+            const slug = isHome ? 'index' : basename.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+            const nameTitle = isHome ? 'Home' : basename.charAt(0).toUpperCase() + basename.slice(1);
+            // Tenta extrair <title>
+            const titleMatch = rawHtml.match(/<title[^>]*>([^<]+)<\/title>/i);
+            const title = titleMatch ? titleMatch[1].trim() : nameTitle;
+            // Extrai corpo ou <div id="canvas-root"> ou <body>
+            let bodyHtml = rawHtml;
+            const bodyMatch = rawHtml.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+            if (bodyMatch) {
+                bodyHtml = bodyMatch[1].trim();
+            }
+            // Procura arquivo CSS correspondente no ZIP
+            let cssContent = '';
+            const possibleCssFiles = [`css/${slug}.css`, `${slug}.css`, `css/style.css`, `style.css`];
+            for (const cssPath of possibleCssFiles) {
+                const found = zip.file(cssPath);
+                if (found) {
+                    cssContent = await found.async('string');
+                    break;
+                }
+            }
+            // Procura arquivo JS correspondente no ZIP
+            let jsContent = '';
+            const possibleJsFiles = [`js/${slug}.js`, `${slug}.js`, `js/script.js`, `script.js`];
+            for (const jsPath of possibleJsFiles) {
+                const found = zip.file(jsPath);
+                if (found) {
+                    jsContent = await found.async('string');
+                    break;
+                }
+            }
+            extractedPages.push({
+                name: nameTitle,
+                slug,
+                title,
+                isHomepage: isHome,
+                html: bodyHtml,
+                css: cssContent,
+                js: jsContent
+            });
+        }
+        // Garante que exista pelo menos uma Home
+        if (!extractedPages.some(p => p.isHomepage) && extractedPages.length > 0) {
+            extractedPages[0].isHomepage = true;
+            extractedPages[0].slug = 'index';
+        }
+        let finalProject;
+        if (targetProjectId) {
+            // Importar / Mesclar em projeto existente
+            const existing = await db_1.prisma.project.findFirst({
+                where: { id: targetProjectId, members: { some: { userId } } }
+            });
+            if (!existing)
+                return res.status(404).json({ error: 'Projeto alvo não encontrado.' });
+            for (const ep of extractedPages) {
+                const existingPage = await db_1.prisma.page.findFirst({
+                    where: { projectId: targetProjectId, slug: ep.slug }
+                });
+                if (existingPage) {
+                    await db_1.prisma.page.update({
+                        where: { id: existingPage.id },
+                        data: {
+                            name: ep.name,
+                            title: ep.title,
+                            html: ep.html,
+                            css: ep.css || existingPage.css,
+                            js: ep.js || existingPage.js
+                        }
+                    });
+                }
+                else {
+                    await db_1.prisma.page.create({
+                        data: {
+                            projectId: targetProjectId,
+                            name: ep.name,
+                            slug: ep.slug,
+                            title: ep.title,
+                            isHomepage: ep.isHomepage,
+                            html: ep.html,
+                            css: ep.css,
+                            js: ep.js
+                        }
+                    });
+                }
+            }
+            finalProject = await db_1.prisma.project.findUnique({
+                where: { id: targetProjectId },
+                include: { pages: true }
+            });
+        }
+        else {
+            // Criar novo projeto a partir do ZIP
+            const projectName = name || 'Site Importado (ZIP)';
+            finalProject = await db_1.prisma.project.create({
+                data: {
+                    name: projectName,
+                    description: description || `Projeto importado via arquivo ZIP com ${extractedPages.length} página(s).`,
+                    members: {
+                        create: {
+                            userId,
+                            role: 'OWNER'
+                        }
+                    },
+                    pages: {
+                        create: extractedPages.map(p => ({
+                            name: p.name,
+                            slug: p.slug,
+                            title: p.title,
+                            isHomepage: p.isHomepage,
+                            html: p.html,
+                            css: p.css,
+                            js: p.js
+                        }))
+                    }
+                },
+                include: {
+                    pages: true
+                }
+            });
+        }
+        return res.status(201).json(finalProject);
+    }
+    catch (error) {
+        console.error('Erro ao importar projeto ZIP:', error);
+        return res.status(500).json({ error: error.message || 'Falha ao processar arquivo ZIP.' });
     }
 });
 exports.projectRouter = router;

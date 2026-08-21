@@ -26,7 +26,8 @@ import {
   Radio,
   Square,
   ChevronDown,
-  Loader2
+  Loader2,
+  Upload
 } from 'lucide-react';
 import { Sidebar } from './Sidebar';
 import type { ElementNode } from './Sidebar';
@@ -618,6 +619,52 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
     }
   };
 
+  const [importingZip, setImportingZip] = useState(false);
+  const zipFileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImportZipFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !project) return;
+
+    if (!file.name.endsWith('.zip')) {
+      alert('Selecione um arquivo .zip válido.');
+      return;
+    }
+
+    setImportingZip(true);
+    try {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const base64 = reader.result as string;
+        const res = await fetch(`${API_URL}/api/projects/import-zip`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            targetProjectId: project.id,
+            zipBase64: base64
+          })
+        });
+
+        if (!res.ok) {
+          const errData = await res.json();
+          throw new Error(errData.error || 'Falha ao importar arquivo ZIP.');
+        }
+
+        alert('Arquivo ZIP importado com sucesso para este projeto!');
+        fetchProjectDetails();
+      };
+      reader.readAsDataURL(file);
+    } catch (err: any) {
+      alert(err.message || 'Erro ao processar o arquivo ZIP.');
+    } finally {
+      setImportingZip(false);
+      if (zipFileInputRef.current) zipFileInputRef.current.value = '';
+    }
+  };
+
   const getFullHtmlDocument = () => {
     if (!activePage) return '';
     return `<!DOCTYPE html>
@@ -1012,6 +1059,26 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
               </div>
             )}
           </div>
+
+          {/* Hidden ZIP File Input */}
+          <input 
+            type="file" 
+            ref={zipFileInputRef} 
+            onChange={handleImportZipFile} 
+            accept=".zip" 
+            className="hidden" 
+          />
+
+          {/* Import ZIP Button */}
+          <button 
+            onClick={() => zipFileInputRef.current?.click()}
+            disabled={importingZip}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 hover:text-white font-bold text-xs rounded-xl transition-all cursor-pointer"
+            title="Importar arquivos .zip de páginas para este projeto"
+          >
+            {importingZip ? <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-400" /> : <Upload className="w-3.5 h-3.5 text-cyan-400" />}
+            {importingZip ? 'Importando...' : 'Importar ZIP'}
+          </button>
 
           {/* Export Code Modal */}
           <button 

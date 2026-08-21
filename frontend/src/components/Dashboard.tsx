@@ -42,7 +42,9 @@ import {
   TrendingUp,
   Cpu,
   Server,
-  Code2
+  Code2,
+  Upload,
+  FileArchive
 } from 'lucide-react';
 
 import { useTheme } from '../context/ThemeContext';
@@ -360,8 +362,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
   const [newProjectDesc, setNewProjectDesc] = useState('');
-  const [creationMode, setCreationMode] = useState<'scratch' | 'template' | 'ai'>('scratch');
+  const [creationMode, setCreationMode] = useState<'scratch' | 'template' | 'ai' | 'zip'>('scratch');
   const [creating, setCreating] = useState(false);
+  const [selectedZipBase64, setSelectedZipBase64] = useState<string | null>(null);
+  const [selectedZipName, setSelectedZipName] = useState<string>('');
 
   // AI Prompt generation States
   const [businessName, setBusinessName] = useState('');
@@ -568,6 +572,43 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
     setCreating(true);
 
     try {
+      if (creationMode === 'zip') {
+        if (!selectedZipBase64) {
+          alert('Por favor, selecione um arquivo .zip para importar.');
+          setCreating(false);
+          return;
+        }
+
+        const res = await fetch(`${API_URL}/api/projects/import-zip`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            name: newProjectName || selectedZipName.replace(/\.zip$/i, '') || 'Site Importado (ZIP)',
+            description: newProjectDesc || 'Projeto importado via arquivo .zip.',
+            zipBase64: selectedZipBase64
+          })
+        });
+
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.error || 'Falha ao importar arquivo ZIP.');
+        }
+
+        const newProject = await res.json();
+        setProjects([newProject, ...projects]);
+        setShowCreateModal(false);
+        onSelectProject(newProject.id);
+        
+        setSelectedZipBase64(null);
+        setSelectedZipName('');
+        setNewProjectName('');
+        setNewProjectDesc('');
+        return;
+      }
+
       let finalName = newProjectName;
       let finalDesc = newProjectDesc;
 
@@ -623,6 +664,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
       setBusinessName('');
       setSegment('');
       setVisualStyle('');
+      setSelectedZipBase64(null);
+      setSelectedZipName('');
     } catch (err: any) {
       alert(err.message);
     } finally {
@@ -2601,7 +2644,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
             </h2>
 
             {/* Mode selection */}
-            <div className="grid grid-cols-3 gap-2 p-1 bg-slate-955 border border-slate-850 rounded-xl mb-6">
+            <div className="grid grid-cols-4 gap-1.5 p-1 bg-slate-955 border border-slate-850 rounded-xl mb-6">
               <button 
                 type="button"
                 onClick={() => setCreationMode('scratch')}
@@ -2623,16 +2666,93 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
               >
                 IA Gemini
               </button>
+              <button 
+                type="button"
+                onClick={() => setCreationMode('zip')}
+                className={`py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1 ${creationMode === 'zip' ? 'bg-cyan-600 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}
+              >
+                <Upload className="w-3 h-3" />
+                ZIP
+              </button>
             </div>
 
             {/* Modal Form inputs conditionally */}
             <form onSubmit={handleCreateProject} className="space-y-4">
-              {creationMode === 'ai' ? (
+              {creationMode === 'zip' ? (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-slate-455 mb-2">Arquivo ZIP do Site</label>
+                    <div className="border-2 border-dashed border-slate-800 hover:border-cyan-500/50 rounded-2xl p-6 text-center transition-all bg-slate-950/50">
+                      <input 
+                        type="file" 
+                        id="dashboard-zip-input"
+                        accept=".zip"
+                        required={!selectedZipBase64}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          if (!file.name.endsWith('.zip')) {
+                            alert('Selecione um arquivo .zip');
+                            return;
+                          }
+                          setSelectedZipName(file.name);
+                          if (!newProjectName) {
+                            setNewProjectName(file.name.replace(/\.zip$/i, ''));
+                          }
+                          const reader = new FileReader();
+                          reader.onload = () => {
+                            setSelectedZipBase64(reader.result as string);
+                          };
+                          reader.readAsDataURL(file);
+                        }}
+                        className="hidden"
+                      />
+                      <label htmlFor="dashboard-zip-input" className="cursor-pointer flex flex-col items-center justify-center">
+                        <FileArchive className="w-10 h-10 text-cyan-400 mb-2 animate-bounce" />
+                        {selectedZipName ? (
+                          <>
+                            <span className="text-sm font-bold text-cyan-300">{selectedZipName}</span>
+                            <span className="text-[11px] text-slate-400 mt-1">Clique para trocar de arquivo</span>
+                          </>
+                        ) : (
+                          <>
+                            <span className="text-sm font-bold text-white">Clique para selecionar seu arquivo .ZIP</span>
+                            <span className="text-[11px] text-slate-400 mt-1">Extrai automaticamente todas as páginas HTML, CSS e JS</span>
+                          </>
+                        )}
+                      </label>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-slate-455 mb-2">Nome do Projeto</label>
+                    <input 
+                      type="text" 
+                      required
+                      placeholder="Ex: Site Exportado"
+                      value={newProjectName}
+                      onChange={(e) => setNewProjectName(e.target.value)}
+                      className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500/50 text-sm text-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-slate-455 mb-2">Descrição (Opcional)</label>
+                    <textarea 
+                      placeholder="Ex: Site importado para edição e preview no Ngrok"
+                      value={newProjectDesc}
+                      onChange={(e) => setNewProjectDesc(e.target.value)}
+                      rows={2}
+                      className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500/50 text-sm text-white resize-none"
+                    />
+                  </div>
+                </div>
+              ) : creationMode === 'ai' ? (
                 <div className="space-y-4">
                   <div>
                     <label className="block text-xs font-semibold uppercase tracking-wider text-slate-455 mb-2">Nome do Negócio</label>
                     <input 
-                      type="text"
+                      type="text" 
                       required
                       placeholder="Ex: Bella Napoli"
                       value={businessName}
@@ -2644,7 +2764,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                   <div>
                     <label className="block text-xs font-semibold uppercase tracking-wider text-slate-455 mb-2">Segmento</label>
                     <input 
-                      type="text"
+                      type="text" 
                       required
                       placeholder="Ex: Restaurante Italiano, Advocacia, SaaS de Marketing"
                       value={segment}
@@ -2656,7 +2776,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                   <div>
                     <label className="block text-xs font-semibold uppercase tracking-wider text-slate-455 mb-2">Estilo Visual & Cores</label>
                     <input 
-                      type="text"
+                      type="text" 
                       placeholder="Ex: Moderno, Minimalista, Cores Escuras e Roxo"
                       value={visualStyle}
                       onChange={(e) => setVisualStyle(e.target.value)}
