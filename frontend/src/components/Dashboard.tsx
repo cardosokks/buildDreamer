@@ -55,6 +55,8 @@ interface Lead {
   category?: string;
   address: string;
   city?: string;
+  state?: string;
+  country?: string;
   phone: string;
   whatsappUrl?: string | null;
   email?: string | null;
@@ -123,6 +125,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
   const [minRating, setMinRating] = useState('0');
   const [leadsList, setLeadsList] = useState<Lead[]>([]);
   const [loadingLeads, setLoadingLeads] = useState(false);
+  
+  // Paginação e Modo de Visualização (Lista Compacta vs Cards)
+  const [currentPage, setCurrentPage] = useState(1);
+  const [leadsPerPage, setLeadsPerPage] = useState(10);
+  const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
 
   // Saved Leads State (Persistência no LocalStorage)
   const [savedLeads, setSavedLeads] = useState<Lead[]>(() => {
@@ -273,6 +280,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
     e.preventDefault();
     if (!leadQuery) return;
     setLoadingLeads(true);
+    setCurrentPage(1);
 
     try {
       // 1. Chamar Crawler Autônomo com parâmetros segmentados
@@ -890,6 +898,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                       <div className="mt-4 pt-4 border-t border-slate-850/80 flex items-center justify-between gap-2 flex-wrap">
                         <span className="text-[10px] text-slate-500 font-mono">Salvo na Lista</span>
                         <div className="flex items-center gap-2">
+                          <a
+                            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${lead.name} ${lead.address || lead.city || ''}`)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-2.5 py-1.5 bg-pink-950/30 hover:bg-pink-900/50 border border-pink-500/30 text-pink-300 text-xs font-semibold rounded-xl transition-all flex items-center gap-1"
+                            title="Ver no Google Maps"
+                          >
+                            <MapPin className="w-3.5 h-3.5" />
+                            Maps
+                          </a>
                           {lead.whatsappUrl && (
                             <a
                               href={lead.whatsappUrl}
@@ -1149,11 +1167,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                 </div>
               </form>
 
-              {/* Leads results list */}
+              {/* Leads results list com Controles de Visualização e Paginação */}
               {loadingLeads ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {[1, 2, 3, 4].map(i => (
-                    <div key={i} className="h-36 rounded-2xl bg-[#0f0b18] border border-slate-850 animate-pulse" />
+                <div className="space-y-3">
+                  {[1, 2, 3, 4, 5].map(i => (
+                    <div key={i} className="h-16 rounded-2xl bg-[#0f0b18] border border-slate-850 animate-pulse" />
                   ))}
                 </div>
               ) : leadsList.length === 0 ? (
@@ -1161,95 +1179,341 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                   <Search className="w-12 h-12 text-slate-600 mx-auto" />
                   <h3 className="text-base font-bold text-white">Nenhum lead exibido</h3>
                   <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                    Digite um nicho comercial (ex: <em>Padaria</em>, <em>Dentista</em>, <em>Oficina</em>) e uma cidade, ou use um dos nossos <strong>Filtros Prontos</strong>.
+                    Digite um nicho comercial (ex: <em>Advocacia</em>, <em>Dentista</em>, <em>Padaria</em>) e uma cidade, ou use um dos nossos <strong>Filtros Prontos</strong>.
                   </p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {leadsList.map(lead => {
-                    const isSaved = savedLeads.some(l => l.id === lead.id || l.name === lead.name);
-                    return (
-                      <div 
-                        key={lead.id}
-                        className={`bg-[#0f0b18] border rounded-2xl p-5 flex flex-col justify-between transition-all shadow-md ${
-                          isSaved ? 'border-yellow-500/40 shadow-[0_0_15px_rgba(234,179,8,0.1)]' : 'border-slate-850 hover:border-purple-500/30'
-                        }`}
-                      >
-                        <div className="space-y-2">
-                          <div className="flex items-start justify-between gap-3">
-                            <div>
-                              <h3 className="font-bold text-white text-base leading-tight">{lead.name}</h3>
-                              {lead.category && (
-                                <span className="text-[10px] text-purple-400 font-mono">{lead.category}</span>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-2 shrink-0">
-                              <button
-                                onClick={() => handleToggleSaveLead(lead)}
-                                className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
-                                  isSaved 
-                                    ? 'bg-yellow-500/20 border-yellow-500/40 text-yellow-300' 
-                                    : 'bg-slate-900 border-slate-800 text-slate-500 hover:text-yellow-400'
-                                }`}
-                                title={isSaved ? 'Salvo nos favoritos' : 'Salvar lead para depois'}
-                              >
-                                {isSaved ? <BookmarkCheck className="w-4 h-4 fill-yellow-400" /> : <Bookmark className="w-4 h-4" />}
-                              </button>
-                              <div className="flex items-center gap-1 bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 px-1.5 py-0.5 rounded text-[10px]">
-                                <Star className="w-3 h-3 fill-yellow-400" />
-                                {lead.rating}
+                <div className="space-y-4">
+                  {/* Barra Superior da Listagem: Contador, Filtros de Paginação e Alternador de Layout */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#0f0b18] border border-slate-850 px-4 py-3 rounded-2xl text-xs">
+                    <div className="flex items-center gap-2 text-slate-400">
+                      <span>Exibindo <strong>{Math.min((currentPage - 1) * leadsPerPage + 1, leadsList.length)}</strong>–<strong>{Math.min(currentPage * leadsPerPage, leadsList.length)}</strong> de <strong>{leadsList.length}</strong> estabelecimentos</span>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      {/* Seletor de itens por página */}
+                      <div className="flex items-center gap-1.5 text-slate-400">
+                        <span>Por página:</span>
+                        <select
+                          value={leadsPerPage}
+                          onChange={(e) => {
+                            setLeadsPerPage(Number(e.target.value));
+                            setCurrentPage(1);
+                          }}
+                          className="bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-white text-xs focus:outline-none"
+                        >
+                          <option value={10}>10</option>
+                          <option value={20}>20</option>
+                          <option value={30}>30</option>
+                          <option value={50}>50</option>
+                        </select>
+                      </div>
+
+                      {/* Alternador Tabela / Cards */}
+                      <div className="flex items-center bg-slate-950 border border-slate-800 rounded-xl p-0.5">
+                        <button
+                          type="button"
+                          onClick={() => setViewMode('table')}
+                          className={`px-2.5 py-1 rounded-lg transition-all ${
+                            viewMode === 'table' ? 'bg-purple-700 text-white font-bold' : 'text-slate-400 hover:text-white'
+                          }`}
+                          title="Visualização em Lista Compacta"
+                        >
+                          Lista
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setViewMode('cards')}
+                          className={`px-2.5 py-1 rounded-lg transition-all ${
+                            viewMode === 'cards' ? 'bg-purple-700 text-white font-bold' : 'text-slate-400 hover:text-white'
+                          }`}
+                          title="Visualização em Cards"
+                        >
+                          Cards
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Renderização em Tabela / Lista Compacta com Ações ao Final */}
+                  {viewMode === 'table' ? (
+                    <div className="bg-[#0f0b18] border border-slate-850 rounded-2xl overflow-hidden shadow-xl">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse">
+                          <thead>
+                            <tr className="border-b border-slate-850 bg-slate-950/60 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                              <th className="py-3.5 px-4">Estabelecimento / Nicho</th>
+                              <th className="py-3.5 px-4">Endereço & Localização</th>
+                              <th className="py-3.5 px-4">Telefone / Presença</th>
+                              <th className="py-3.5 px-4 text-center">Nota</th>
+                              <th className="py-3.5 px-4 text-right">Ações Rápidas</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-850/60 text-xs">
+                            {leadsList
+                              .slice((currentPage - 1) * leadsPerPage, currentPage * leadsPerPage)
+                              .map(lead => {
+                                const isSaved = savedLeads.some(l => l.id === lead.id || l.name === lead.name);
+                                const mapsSearchUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${lead.name} ${lead.address || lead.city || ''}`)}`;
+
+                                return (
+                                  <tr 
+                                    key={lead.id} 
+                                    className={`hover:bg-slate-900/40 transition-colors group ${
+                                      isSaved ? 'bg-yellow-500/5' : ''
+                                    }`}
+                                  >
+                                    <td className="py-3.5 px-4">
+                                      <div className="font-bold text-white text-sm flex items-center gap-2">
+                                        <span className="truncate max-w-[220px]" title={lead.name}>{lead.name}</span>
+                                        {isSaved && (
+                                          <BookmarkCheck className="w-3.5 h-3.5 text-yellow-400 fill-yellow-400 shrink-0" />
+                                        )}
+                                      </div>
+                                      <div className="flex items-center gap-2 mt-0.5">
+                                        <span className="text-[10px] text-purple-400 font-mono">{lead.category}</span>
+                                        <span className="text-[10px] text-slate-500">• {lead.source}</span>
+                                      </div>
+                                    </td>
+
+                                    <td className="py-3.5 px-4 text-slate-300 max-w-[260px]">
+                                      <div className="flex items-start gap-1.5">
+                                        <MapPin className="w-3.5 h-3.5 text-pink-400 shrink-0 mt-0.5" />
+                                        <span className="line-clamp-2 text-xs text-slate-300" title={lead.address}>
+                                          {lead.address || `${lead.city || ''} - ${lead.state || ''}`}
+                                        </span>
+                                      </div>
+                                    </td>
+
+                                    <td className="py-3.5 px-4">
+                                      <div className="space-y-1">
+                                        <div className="flex items-center gap-1.5 text-slate-300 font-mono text-xs">
+                                          <Phone className="w-3 h-3 text-indigo-400 shrink-0" />
+                                          <span>{lead.phone}</span>
+                                        </div>
+                                        <div>
+                                          {lead.website ? (
+                                            <a 
+                                              href={lead.website} 
+                                              target="_blank" 
+                                              rel="noopener noreferrer" 
+                                              className="text-[11px] text-cyan-400 hover:underline flex items-center gap-1 truncate max-w-[180px]"
+                                              title={lead.website}
+                                            >
+                                              <Globe className="w-3 h-3 shrink-0" />
+                                              <span className="truncate">{lead.website.replace(/^https?:\/\//, '')}</span>
+                                            </a>
+                                          ) : (
+                                            <span className="text-[10px] font-bold text-red-400 bg-red-950/40 border border-red-500/20 px-1.5 py-0.5 rounded">
+                                              Sem Website
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </td>
+
+                                    <td className="py-3.5 px-4 text-center">
+                                      <span className="inline-flex items-center gap-1 bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 px-2 py-0.5 rounded-lg text-xs font-bold">
+                                        <Star className="w-3 h-3 fill-yellow-400" />
+                                        {lead.rating}
+                                      </span>
+                                    </td>
+
+                                    <td className="py-3.5 px-4 text-right">
+                                      <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                                        {/* Botão Ver no Maps */}
+                                        <a
+                                          href={mapsSearchUrl}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="p-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-pink-500/40 text-pink-400 rounded-lg transition-all"
+                                          title="Ver localização no Google Maps"
+                                        >
+                                          <MapPin className="w-3.5 h-3.5" />
+                                        </a>
+
+                                        {/* WhatsApp */}
+                                        {lead.whatsappUrl && (
+                                          <a
+                                            href={lead.whatsappUrl}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="px-2.5 py-1.5 bg-emerald-600/20 hover:bg-emerald-600/40 border border-emerald-500/40 text-emerald-400 text-xs font-bold rounded-lg transition-all"
+                                            title="Chamar no WhatsApp"
+                                          >
+                                            WhatsApp
+                                          </a>
+                                        )}
+
+                                        {/* Salvar Lead */}
+                                        <button
+                                          onClick={() => handleToggleSaveLead(lead)}
+                                          className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
+                                            isSaved 
+                                              ? 'bg-yellow-500/20 border-yellow-500/40 text-yellow-300' 
+                                              : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-yellow-400'
+                                          }`}
+                                          title={isSaved ? 'Salvo' : 'Salvar Lead'}
+                                        >
+                                          {isSaved ? <BookmarkCheck className="w-3.5 h-3.5 fill-yellow-400" /> : <Bookmark className="w-3.5 h-3.5" />}
+                                        </button>
+
+                                        {/* Criar Site */}
+                                        <button
+                                          onClick={() => handleCreateProjectFromLead(lead)}
+                                          className="px-3 py-1.5 bg-purple-700 hover:bg-purple-600 text-white font-bold rounded-lg text-xs transition-all shadow-md cursor-pointer"
+                                        >
+                                          Gerar Site
+                                        </button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ) : (
+                    /* Renderização em Cards */
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {leadsList
+                        .slice((currentPage - 1) * leadsPerPage, currentPage * leadsPerPage)
+                        .map(lead => {
+                          const isSaved = savedLeads.some(l => l.id === lead.id || l.name === lead.name);
+                          const mapsSearchUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${lead.name} ${lead.address || lead.city || ''}`)}`;
+
+                          return (
+                            <div 
+                              key={lead.id}
+                              className={`bg-[#0f0b18] border rounded-2xl p-5 flex flex-col justify-between transition-all shadow-md ${
+                                isSaved ? 'border-yellow-500/40 shadow-[0_0_15px_rgba(234,179,8,0.1)]' : 'border-slate-850 hover:border-purple-500/30'
+                              }`}
+                            >
+                              <div className="space-y-2">
+                                <div className="flex items-start justify-between gap-3">
+                                  <div>
+                                    <h3 className="font-bold text-white text-base leading-tight">{lead.name}</h3>
+                                    {lead.category && (
+                                      <span className="text-[10px] text-purple-400 font-mono">{lead.category}</span>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-2 shrink-0">
+                                    <button
+                                      onClick={() => handleToggleSaveLead(lead)}
+                                      className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
+                                        isSaved 
+                                          ? 'bg-yellow-500/20 border-yellow-500/40 text-yellow-300' 
+                                          : 'bg-slate-900 border-slate-800 text-slate-500 hover:text-yellow-400'
+                                      }`}
+                                      title={isSaved ? 'Salvo nos favoritos' : 'Salvar lead para depois'}
+                                    >
+                                      {isSaved ? <BookmarkCheck className="w-4 h-4 fill-yellow-400" /> : <Bookmark className="w-4 h-4" />}
+                                    </button>
+                                    <div className="flex items-center gap-1 bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 px-1.5 py-0.5 rounded text-[10px]">
+                                      <Star className="w-3 h-3 fill-yellow-400" />
+                                      {lead.rating}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <p className="text-xs text-slate-400 flex items-center gap-1.5">
+                                  <MapPin className="w-3.5 h-3.5 text-pink-400 shrink-0" />
+                                  <span className="line-clamp-1">{lead.address}</span>
+                                </p>
+
+                                <p className="text-xs text-slate-400 flex items-center gap-1.5">
+                                  <Phone className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                                  <span>{lead.phone}</span>
+                                </p>
+
+                                <p className="text-xs flex items-center gap-1.5">
+                                  <Globe className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                                  {lead.website ? (
+                                    <a href={lead.website} target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline line-clamp-1">
+                                      {lead.website}
+                                    </a>
+                                  ) : (
+                                    <span className="text-red-400 font-semibold uppercase tracking-wider text-[10px] bg-red-950/30 border border-red-500/25 px-1.5 py-0.5 rounded shadow-[0_0_8px_rgba(239,68,68,0.1)]">Sem Website (Oportunidade!)</span>
+                                  )}
+                                </p>
+                              </div>
+
+                              <div className="mt-4 pt-4 border-t border-slate-850/80 flex items-center justify-between gap-2 flex-wrap">
+                                <span className="text-[10px] text-slate-500 font-mono">
+                                  {lead.source || 'Crawler Autônomo'}
+                                </span>
+                                <div className="flex items-center gap-2">
+                                  <a
+                                    href={mapsSearchUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="px-2.5 py-1.5 bg-pink-950/30 hover:bg-pink-900/50 border border-pink-500/30 text-pink-300 text-xs font-semibold rounded-xl transition-all flex items-center gap-1"
+                                    title="Ver no Google Maps"
+                                  >
+                                    <MapPin className="w-3.5 h-3.5" />
+                                    Maps
+                                  </a>
+                                  {lead.whatsappUrl && (
+                                    <a
+                                      href={lead.whatsappUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="px-3 py-1.5 bg-emerald-600/20 hover:bg-emerald-600/40 border border-emerald-500/40 text-emerald-400 text-xs font-bold rounded-xl transition-all"
+                                    >
+                                      WhatsApp
+                                    </a>
+                                  )}
+                                  <button
+                                    onClick={() => handleCreateProjectFromLead(lead)}
+                                    className="px-3.5 py-1.5 bg-purple-700 hover:bg-purple-600 text-white font-bold rounded-xl text-xs transition-all shadow-md cursor-pointer"
+                                  >
+                                    Gerar Site
+                                  </button>
+                                </div>
                               </div>
                             </div>
-                          </div>
+                          );
+                        })}
+                    </div>
+                  )}
 
-                          <p className="text-xs text-slate-400 flex items-center gap-1.5">
-                            <MapPin className="w-3.5 h-3.5 text-pink-400 shrink-0" />
-                            <span className="line-clamp-1">{lead.address}</span>
-                          </p>
+                  {/* Controles de Paginação (Anterior / Próxima e Números de Página) */}
+                  {Math.ceil(leadsList.length / leadsPerPage) > 1 && (
+                    <div className="flex items-center justify-center gap-2 pt-4">
+                      <button
+                        onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
+                        disabled={currentPage === 1}
+                        className="px-3.5 py-2 bg-[#0f0b18] border border-slate-800 hover:border-purple-500/40 text-xs font-semibold text-slate-300 hover:text-white rounded-xl disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                      >
+                        Anterior
+                      </button>
 
-                          <p className="text-xs text-slate-400 flex items-center gap-1.5">
-                            <Phone className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-                            <span>{lead.phone}</span>
-                          </p>
-
-                          <p className="text-xs flex items-center gap-1.5">
-                            <Globe className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-                            {lead.website ? (
-                              <a href={lead.website} target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline line-clamp-1">
-                                {lead.website}
-                              </a>
-                            ) : (
-                              <span className="text-red-400 font-semibold uppercase tracking-wider text-[10px] bg-red-950/30 border border-red-500/25 px-1.5 py-0.5 rounded shadow-[0_0_8px_rgba(239,68,68,0.1)]">Sem Website (Oportunidade!)</span>
-                            )}
-                          </p>
-                        </div>
-
-                        <div className="mt-4 pt-4 border-t border-slate-850/80 flex items-center justify-between gap-2 flex-wrap">
-                          <span className="text-[10px] text-slate-500 font-mono">
-                            {lead.source || 'Crawler Autônomo'}
-                          </span>
-                          <div className="flex items-center gap-2">
-                            {lead.whatsappUrl && (
-                              <a
-                                href={lead.whatsappUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="px-3 py-1.5 bg-emerald-600/20 hover:bg-emerald-600/40 border border-emerald-500/40 text-emerald-400 text-xs font-bold rounded-xl transition-all"
-                              >
-                                WhatsApp
-                              </a>
-                            )}
-                            <button
-                              onClick={() => handleCreateProjectFromLead(lead)}
-                              className="px-3.5 py-1.5 bg-purple-700/30 hover:bg-purple-700/60 border border-purple-500/40 text-xs font-bold text-purple-300 rounded-xl transition-all cursor-pointer"
-                            >
-                              Criar Site Para Cliente
-                            </button>
-                          </div>
-                        </div>
+                      <div className="flex items-center gap-1">
+                        {Array.from({ length: Math.ceil(leadsList.length / leadsPerPage) }, (_, i) => i + 1).map(page => (
+                          <button
+                            key={page}
+                            onClick={() => setCurrentPage(page)}
+                            className={`w-8 h-8 rounded-xl text-xs font-bold transition-all ${
+                              currentPage === page
+                                ? 'bg-purple-700 text-white shadow-[0_0_10px_rgba(168,85,247,0.4)]'
+                                : 'bg-[#0f0b18] border border-slate-850 text-slate-400 hover:text-white'
+                            }`}
+                          >
+                            {page}
+                          </button>
+                        ))}
                       </div>
-                    );
-                  })}
+
+                      <button
+                        onClick={() => setCurrentPage(p => Math.min(p + 1, Math.ceil(leadsList.length / leadsPerPage)))}
+                        disabled={currentPage === Math.ceil(leadsList.length / leadsPerPage)}
+                        className="px-3.5 py-2 bg-[#0f0b18] border border-slate-800 hover:border-purple-500/40 text-xs font-semibold text-slate-300 hover:text-white rounded-xl disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                      >
+                        Próxima
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
