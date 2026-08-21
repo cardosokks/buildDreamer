@@ -640,6 +640,40 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
   <script>
     ${activePage.js || ''}
   </script>
+  <script>
+    // Interceptor de navegação para Preview local multi-páginas
+    window.__PROJECT_PAGES__ = ${JSON.stringify((project?.pages || []).map(p => ({
+      name: p.name,
+      slug: p.slug,
+      isHomepage: p.isHomepage,
+      html: p.html,
+      css: p.css,
+      js: p.js,
+      title: p.seoTitle || p.name
+    })))};
+
+    document.addEventListener('click', function(e) {
+      var target = e.target.closest('a');
+      if (!target) return;
+      var href = target.getAttribute('href');
+      if (!href || href.startsWith('http') || href.startsWith('mailto:') || href.startsWith('tel:') || href.startsWith('#')) return;
+
+      e.preventDefault();
+      var cleanSlug = href.replace(/^\\//, '').replace(/\\.html$/, '') || 'index';
+      var page = window.__PROJECT_PAGES__.find(function(p) {
+        return p.slug === cleanSlug || (cleanSlug === 'index' && p.isHomepage);
+      });
+
+      if (page) {
+        document.title = page.title || page.name;
+        document.body.innerHTML = page.html || '';
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        if (page.js) {
+          try { eval(page.js); } catch(err) { console.error(err); }
+        }
+      }
+    });
+  </script>
 </body>
 </html>`;
   };

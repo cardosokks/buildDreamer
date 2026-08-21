@@ -200,7 +200,7 @@ async function crawlEntireClientWebsite(startUrl, maxPages = 8, proxyUrl) {
     return pages;
 }
 /**
- * Worker assíncrono que melhora e reconstrói o site completo com IA criando cada página correspondente
+ * Worker assíncrono que melhora e reconstrói o site completo com IA garantindo tema unificado e navegação universal
  */
 async function processWebsiteRemasterJob(projectId, websiteUrl, businessName, customApiKey, registeredModels, customProxyUrl, onProgress) {
     try {
@@ -283,27 +283,46 @@ async function processWebsiteRemasterJob(projectId, websiteUrl, businessName, cu
                 ];
             }
         }
+        // Lista de todas as rotas do projeto para links universais
+        const allNavigationRoutes = [
+            { name: 'Home', href: '/' },
+            ...targetPagesList.map(p => ({ name: p.name, href: `/${p.slug}` }))
+        ];
+        const navigationLinksText = allNavigationRoutes
+            .map(r => `- Link: "${r.name}" -> href="${r.href}" (ou "${r.href === '/' ? 'index.html' : r.href.slice(1) + '.html'}")`)
+            .join('\n');
         // 2. Buscar a página Home já criada no projeto
         const existingHome = await db_1.prisma.page.findFirst({
             where: { projectId, isHomepage: true }
         });
         if (onProgress)
-            onProgress(`Criando Home remasterizada com IA...`, 2, 4);
-        // 3. Gerar código remasterizado para a HOME
+            onProgress(`Criando Home remasterizada e estabelecendo Design System global...`, 2, 4);
+        // 3. Gerar código remasterizado para a HOME com Design System
         const homePrompt = `
-      Você é um Arquiteto de Software e UI/UX Designer de Elite.
-      Estamos modernizando e remasterizando o site da empresa "${businessName}".
-      URL do site: ${homeUrl}
-      CONTEÚDO E ESTRUTURA DO SITE ORIGINAL:
+      Você é o Líder de Design System e Arquiteto Frontend de Elite.
+      Estamos modernizando o site completo da empresa "${businessName}".
+      URL original: ${homeUrl}
+
+      MAPA UNIVERSAL DE NAVEGAÇÃO DO SITE (TODAS AS PÁGINAS DEVEM CONTER EXATAMENTE ESSES LINKS NA NAVBAR E NO FOOTER):
+      ${navigationLinksText}
+
+      CONTEÚDO DO SITE ORIGINAL:
       """
       ${homeText}
       """
 
-      SUA MISSÃO:
-      Crie uma versão 10x mais moderna, elegante, minimalista e de altíssima conversão para esta empresa.
-      - Crie uma estrutura completa com: Navbar moderna responsiva com links para as páginas (${targetPagesList.map(p => p.name).join(', ')}), Hero Section impactante com CTA claro, Seção de Serviços/Soluções em cards com ícones, Seção de Diferenciais/Sobre Nós, Depoimentos/Confiança, Seção de Contato/WhatsApp e Rodapé completo.
-      - Utilize Tailwind CSS moderno, gradientes sutis, botões com efeito hover e tipografia limpa.
-      - Preserve e valorize as informações e o propósito da empresa.
+      DIRETRIZES DE DESIGN SYSTEM E IDENTIDADE VISUAL:
+      1. ESTILO VISUAL PADRONIZADO: Crie uma identidade visual moderna, minimalista e premium (use Tailwind CSS, fontes elegantes como Outfit para títulos e Inter para textos, fundo escuro/glassmorphism ou tema refinado de alto contraste).
+      2. NAVBAR UNIVERSAL RESPONSIVA:
+         - Logo com o nome "${businessName}"
+         - Menu com links para TODAS as páginas: ${allNavigationRoutes.map(r => `<a href="${r.href}">${r.name}</a>`).join(' ')}
+         - Botão CTA de destaque (ex: "Fale Conosco" / "Atendimento WhatsApp").
+      3. SEÇÕES DA HOME:
+         - Hero impactante com headline clara e CTA
+         - Grid de Serviços/Soluções com cards refinados
+         - Diferenciais e Prova Social
+         - Seção Sobre / Autoridade
+         - Footer completo contendo os mesmos links de navegação.
     `;
         const homeAiResponse = await (0, gemini_1.generateAIResponse)(homePrompt, { html: '', css: '', js: '' }, customApiKey, undefined, registeredModels, (model, attempt, total) => {
             if (onProgress)
@@ -320,31 +339,41 @@ async function processWebsiteRemasterJob(projectId, websiteUrl, businessName, cu
                 }
             });
         }
-        // 4. Gerar todas as subpáginas identificadas baseando-se estritamente no seu próprio conteúdo original
+        // Extrai um trecho representativo do Header e do Footer gerados na Home para servir de template universal para as subpáginas
+        const homeHtml = homeAiResponse.html || '';
+        // 4. Gerar todas as subpáginas identificadas aplicando estritamente o MESMO TEMA, NAVBAR e FOOTER da Home
         for (let i = 0; i < targetPagesList.length; i++) {
             const sub = targetPagesList[i];
             if (onProgress)
-                onProgress(`Remasterizando ${sub.name} com base no conteúdo original (${i + 1}/${targetPagesList.length})...`, 3, 4);
+                onProgress(`Remasterizando ${sub.name} com Navbar e Tema Unificados (${i + 1}/${targetPagesList.length})...`, 3, 4);
             const subPrompt = `
-        Você é um Arquiteto de Software e UI/UX Designer de Elite.
-        Estamos modernizando a página "${sub.name}" (slug: ${sub.slug}) da empresa "${businessName}".
+        Você é o Arquiteto Frontend responsável por manter a consistência de 100% do Design System da empresa "${businessName}".
+        Estamos gerando a subpágina "${sub.name}" (rota: /${sub.slug}).
 
-        CONTEÚDO ORIGINAL EXTRAÍDO DESTA PÁGINA ESPECÍFICA:
+        MAPA UNIVERSAL DE NAVEGAÇÃO (A NAVBAR E O FOOTER DEVEM TER ESSES LINKS):
+        ${navigationLinksText}
+
+        CONTEÚDO ORIGINAL ESPECÍFICO DESTA PÁGINA "${sub.name}":
         """
         ${sub.cleanText || sub.description}
         """
 
-        DIRETRIZES FUNDAMENTAIS:
-        1. PRESERVAÇÃO TOTAL DE INFORMAÇÕES: Não invente nem descarte dados reais. Mantenha todos os textos, descrições de serviços, planos, tabelas, perguntas frequentes, canais de contato e diferenciais que constam no conteúdo original acima.
-        2. EXCELÊNCIA VISUAL 10x SUPERIOR: Transforme esse conteúdo em uma página moderna, limpa e elegante utilizando Tailwind CSS completo, cards bem distribuídos, ícones contextualizados, títulos expressivos e rodapé harmonizado.
-        3. Retorne SEMPRE o objeto JSON com o código HTML completo da página "${sub.name}".
+        REFERÊNCIA VISUAL DA HOME (COPIE O MESMO HEADER / NAVBAR, MESMAS CORES, MESMA TIPOGRAFIA E MESMO FOOTER):
+        """
+        ${homeHtml.slice(0, 1500)}
+        """
+
+        REGRAS MANDATÓRIAS:
+        1. MESMO TEMA E NAVBAR: Utilize EXATAMENTE a mesma estrutura de Navbar e Footer da Home, destacando a página atual ("${sub.name}") como ativa.
+        2. NAVEGAÇÃO FUNCIONAL BI-DIRECIONAL: O botão da Home deve levar para href="/" e os demais links para suas respectivas rotas (${allNavigationRoutes.map(r => `${r.name}: ${r.href}`).join(', ')}).
+        3. PRESERVAÇÃO INTEGRAL DE DADOS: Mantenha todos os serviços, detalhes técnicos, tabelas, perguntas ou formulários reais desta subpágina.
+        4. Retorne SEMPRE o objeto JSON com o código HTML completo da página "${sub.name}".
       `;
             try {
-                const subAiResponse = await (0, gemini_1.generateAIResponse)(subPrompt, { html: '', css: '', js: '' }, customApiKey, undefined, registeredModels, (model, attempt, total) => {
+                const subAiResponse = await (0, gemini_1.generateAIResponse)(subPrompt, { html: '', css: homeAiResponse.css || '', js: homeAiResponse.js || '' }, customApiKey, undefined, registeredModels, (model, attempt, total) => {
                     if (onProgress)
                         onProgress(`IA criando ${sub.name} (${model} - ${attempt}/${total})...`, 3, 4);
                 }, customProxyUrl);
-                // Verificar se a página já existe para evitar duplicidades
                 const existingSub = await db_1.prisma.page.findFirst({
                     where: { projectId, slug: sub.slug }
                 });
@@ -353,8 +382,8 @@ async function processWebsiteRemasterJob(projectId, websiteUrl, businessName, cu
                         where: { id: existingSub.id },
                         data: {
                             html: subAiResponse.html || existingSub.html,
-                            css: subAiResponse.css || '',
-                            js: subAiResponse.js || ''
+                            css: subAiResponse.css || homeAiResponse.css || '',
+                            js: subAiResponse.js || homeAiResponse.js || ''
                         }
                     });
                 }
@@ -367,8 +396,8 @@ async function processWebsiteRemasterJob(projectId, websiteUrl, businessName, cu
                             isHomepage: false,
                             projectId,
                             html: subAiResponse.html,
-                            css: subAiResponse.css || '',
-                            js: subAiResponse.js || ''
+                            css: subAiResponse.css || homeAiResponse.css || '',
+                            js: subAiResponse.js || homeAiResponse.js || ''
                         }
                     });
                 }
@@ -378,7 +407,7 @@ async function processWebsiteRemasterJob(projectId, websiteUrl, businessName, cu
             }
         }
         if (onProgress)
-            onProgress(`Site 100% remasterizado com todas as subpáginas!`, 4, 4);
+            onProgress(`Site 100% remasterizado com Navbar e Tema Unificados!`, 4, 4);
     }
     catch (err) {
         console.error("Erro no processWebsiteRemasterJob:", err);
