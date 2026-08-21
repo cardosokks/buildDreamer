@@ -241,6 +241,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
   const [segment, setSegment] = useState('');
   const [visualStyle, setVisualStyle] = useState('');
 
+  // Rastreamento de projetos sendo gerados pela IA no momento
+  const [generatingProjectJobs, setGeneratingProjectJobs] = useState<Record<string, { status: string; currentModel?: string; attempt?: number; total?: number }>>({});
+
   const fetchProjects = async () => {
     try {
       const res = await fetch(`${API_URL}/api/projects`, {
@@ -257,6 +260,40 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
       setLoading(false);
     }
   };
+
+  // Monitorar em tempo real todos os projetos que estão sendo construídos pela IA
+  useEffect(() => {
+    const activeProjectIds = Object.keys(generatingProjectJobs);
+    if (activeProjectIds.length === 0) return;
+
+    const interval = setInterval(async () => {
+      for (const pId of activeProjectIds) {
+        try {
+          const res = await fetch(`${API_URL}/api/projects/jobs/${pId}/status`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (!res.ok) continue;
+          const job = await res.json();
+
+          if (job.status === 'completed' || job.status === 'failed') {
+            setGeneratingProjectJobs(prev => {
+              const copy = { ...prev };
+              delete copy[pId];
+              return copy;
+            });
+            fetchProjects();
+          } else {
+            setGeneratingProjectJobs(prev => ({
+              ...prev,
+              [pId]: job
+            }));
+          }
+        } catch {}
+      }
+    }, 2500);
+
+    return () => clearInterval(interval);
+  }, [generatingProjectJobs, token]);
 
   useEffect(() => {
     fetchProjects();
@@ -391,6 +428,18 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
       
       setProjects([newProject, ...projects]);
       setShowCreateModal(false);
+
+      // Se for geração com IA, marcamos o projeto como 'em geração' e mantemos o usuário na aba de Projetos para acompanhar o status
+      if (creationMode === 'ai') {
+        setGeneratingProjectJobs(prev => ({
+          ...prev,
+          [newProject.id]: { status: 'processing' }
+        }));
+        setActiveTab('projects');
+      } else {
+        // Se for do zero ou template tradicional, abre direto o editor
+        onSelectProject(newProject.id);
+      }
       
       // Reset fields
       setNewProjectName('');
@@ -398,9 +447,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
       setBusinessName('');
       setSegment('');
       setVisualStyle('');
-
-      // Open the visual builder
-      onSelectProject(newProject.id);
     } catch (err: any) {
       alert(err.message);
     } finally {
@@ -800,52 +846,86 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
               ) : (
                 /* Project List Grid */
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {projects.map((project) => (
-                    <div 
-                      key={project.id}
-                      onClick={() => onSelectProject(project.id)}
-                      className="bg-[#0f0b18] border border-slate-855 hover:border-purple-500/40 hover:bg-[#130d1e] rounded-2xl p-6 transition-all group cursor-pointer flex flex-col justify-between min-h-[220px] shadow-lg hover:shadow-[0_0_20px_rgba(168,85,247,0.1)] animate-in fade-in duration-200"
-                    >
-                      <div>
-                        <div className="flex items-start justify-between gap-4 mb-3">
-                          <h3 className="font-bold text-lg text-white group-hover:text-purple-455 transition-colors line-clamp-1">
-                            {project.name}
-                          </h3>
-                          <span className="px-2 py-0.5 rounded bg-purple-500/10 text-purple-400 border border-purple-500/20 text-xs capitalize font-medium shrink-0">
-                            {project.status === 'development' ? 'Em Desenvolvimento' : 'Publicado'}
-                          </span>
+                  {projects.map((project) => {
+                    const isGenerating = !!generatingProjectJobs[project.id];
+                    const jobInfo = generatingProjectJobs[project.id];
+
+                    return (
+                      <div 
+                        key={project.id}
+                        onClick={() => {
+                          if (isGenerating) {
+                            alert('Aguarde! A IA ainda está finalizando a geração do site.');
+                            return;
+                          }
+                          onSelectProject(project.id);
+                        }}
+                        className={`bg-[#0f0b18] border rounded-2xl p-6 transition-all group flex flex-col justify-between min-h-[220px] shadow-lg animate-in fade-in duration-200 ${
+                          isGenerating 
+                            ? 'border-amber-500/50 shadow-[0_0_25px_rgba(229,185,95,0.2)] cursor-not-allowed relative overflow-hidden' 
+                            : 'border-slate-855 hover:border-purple-500/40 hover:bg-[#130d1e] cursor-pointer hover:shadow-[0_0_20px_rgba(168,85,247,0.1)]'
+                        }`}
+                      >
+                        {isGenerating && (
+                          <div className="absolute inset-0 bg-black/75 backdrop-blur-[2px] z-10 flex flex-col items-center justify-center p-4 text-center">
+                            <div className="w-10 h-10 rounded-full border-2 border-amber-500/50 p-1 mb-2 animate-spin shadow-[0_0_15px_rgba(229,185,95,0.4)] flex items-center justify-center">
+                              <Sparkles className="w-5 h-5 text-amber-400 animate-pulse" />
+                            </div>
+                            <span className="text-xs font-bold text-amber-300 tracking-wide">Construindo com IA...</span>
+                            <span className="text-[10px] text-slate-300 font-mono mt-1 animate-pulse">
+                              {jobInfo?.currentModel ? `${jobInfo.currentModel} (${jobInfo.attempt}/${jobInfo.total})` : 'Estruturando HTML, CSS e Seções'}
+                            </span>
+                          </div>
+                        )}
+
+                        <div>
+                          <div className="flex items-start justify-between gap-4 mb-3">
+                            <h3 className="font-bold text-lg text-white group-hover:text-amber-300 transition-colors line-clamp-1">
+                              {project.name}
+                            </h3>
+                            <span className={`px-2 py-0.5 rounded text-xs capitalize font-medium shrink-0 border ${
+                              isGenerating 
+                                ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 animate-pulse'
+                                : 'bg-purple-500/10 text-purple-400 border-purple-500/20'
+                            }`}>
+                              {isGenerating ? 'Gerando com IA...' : project.status === 'development' ? 'Em Desenvolvimento' : 'Publicado'}
+                            </span>
+                          </div>
+
+                          <p className="text-slate-400 text-sm line-clamp-2 mb-6">
+                            {project.description || 'Nenhuma descrição fornecida.'}
+                          </p>
                         </div>
 
-                        <p className="text-slate-400 text-sm line-clamp-2 mb-6">
-                          {project.description || 'Nenhuma descrição fornecida.'}
-                        </p>
+                        <div className="border-t border-slate-800/80 pt-4 flex items-center justify-between text-xs text-slate-500">
+                          <div className="flex items-center gap-4">
+                            <span className="flex items-center gap-1">
+                              <FileText className="w-4 h-4" />
+                              {project.pages?.length || 1} pág.
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <Calendar className="w-4 h-4" />
+                              {new Date(project.updatedAt).toLocaleDateString()}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteProject(project.id, e);
+                              }}
+                              className="p-1.5 hover:text-red-400 rounded-lg hover:bg-slate-850 transition-all cursor-pointer"
+                              title="Deletar projeto"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                            <ChevronRight className="w-5 h-5 text-slate-650 group-hover:translate-x-1 transition-transform group-hover:text-amber-400" />
+                          </div>
+                        </div>
                       </div>
-
-                      <div className="border-t border-slate-800/80 pt-4 flex items-center justify-between text-xs text-slate-500">
-                        <div className="flex items-center gap-4">
-                          <span className="flex items-center gap-1">
-                            <FileText className="w-4 h-4" />
-                            {project.pages?.length || 1} pág.
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <Calendar className="w-4 h-4" />
-                            {new Date(project.updatedAt).toLocaleDateString()}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          <button 
-                            onClick={(e) => handleDeleteProject(project.id, e)}
-                            className="p-1.5 hover:text-red-400 rounded-lg hover:bg-slate-850 transition-all cursor-pointer"
-                            title="Deletar projeto"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                          <ChevronRight className="w-5 h-5 text-slate-650 group-hover:translate-x-1 transition-transform group-hover:text-purple-400" />
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
