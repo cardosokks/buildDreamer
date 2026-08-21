@@ -59,14 +59,28 @@ async function processAIChatJob(jobId, prompt, pageId, applyToAll, clientGeminiK
             const allPages = page.project.pages;
             exports.aiChatJobsQueue[jobId] = {
                 status: 'processing',
-                currentModel: `${model || 'gemini-2.5-flash'} (Processando ${allPages.length} páginas em paralelo...)`,
+                currentModel: `${model || 'gemini-2.5-flash'} (Processando ${allPages.length} páginas do projeto em paralelo...)`,
                 scope: 'all'
             };
+            const allRoutes = allPages.map(p => ({
+                name: p.name,
+                slug: p.slug,
+                href: p.isHomepage ? 'index.html' : `${p.slug}.html`
+            }));
+            const routesGuide = allRoutes.map(r => `- "${r.name}" -> href="${r.href}"`).join('\n');
             const updatedPages = await Promise.all(allPages.map(async (p) => {
                 const pagePrompt = `
-            Estamos aplicando uma alteração global em todas as páginas do site.
-            Página atual: "${p.name}" (slug: /${p.slug})
+            Estamos aplicando uma alteração global em todas as páginas do site do projeto "${page.project?.name}".
+            Página atual: "${p.name}" (slug: /${p.slug}, arquivo: ${p.isHomepage ? 'index.html' : p.slug + '.html'})
+            
+            MAPA DE NAVEGAÇÃO UNIVERSAL DO PROJETO (Mantenha a Navbar e Footer com esses links em todas as páginas):
+            ${routesGuide}
+
             Instrução do usuário: "${prompt}"
+
+            REGRAS OBRIGATÓRIAS:
+            1. Mantenha o MESMO tema, fontes, cores e a MESMA Navbar/Header em todas as páginas.
+            2. Separação Estrita: Retorne APENAS HTML limpo no campo "html" (sem tags <style> nem <script>). Todo CSS adicional no campo "css" e JS funcional no campo "js".
           `;
                 const aiResponse = await (0, gemini_1.generateAIResponse)(pagePrompt, {
                     html: p.html,
@@ -95,7 +109,7 @@ async function processAIChatJob(jobId, prompt, pageId, applyToAll, clientGeminiK
                 status: 'completed',
                 scope: 'all',
                 result: {
-                    explanation: `Alteração aplicada em paralelo em todas as ${updatedPages.length} páginas do site!`,
+                    explanation: `Alteração aplicada com sucesso em todas as ${updatedPages.length} páginas do site com tema e navbar sincronizados!`,
                     html: activeUpdated.html,
                     css: activeUpdated.css,
                     js: activeUpdated.js,

@@ -178,7 +178,31 @@ export async function crawlEntireClientWebsite(
 }
 
 /**
- * Worker assíncrono que melhora e reconstrói o site completo com IA garantindo tema unificado, processamento concorrente e tolerância a falhas
+ * Extrai o bloco exato de Header/Navbar e Footer gerado na Home para reutilização idêntica em todas as subpáginas
+ */
+function extractNavbarAndFooter(homeHtml: string): { navbarHtml: string; footerHtml: string } {
+  let navbarHtml = '';
+  let footerHtml = '';
+
+  const navMatch = homeHtml.match(/<header\b[^>]*>[\s\S]*?<\/header>|<nav\b[^>]*>[\s\S]*?<\/nav>/i);
+  if (navMatch) {
+    navbarHtml = navMatch[0];
+  }
+
+  const footMatch = homeHtml.match(/<footer\b[^>]*>[\s\S]*?<\/footer>/i);
+  if (footMatch) {
+    footerHtml = footMatch[0];
+  }
+
+  return { navbarHtml, footerHtml };
+}
+
+/**
+ * Worker assíncrono que melhora e reconstrói o site completo com IA
+ * Garante:
+ * 1. Design System e Paleta de Cores Estritamente Compartilhados
+ * 2. Navbar e Footer Universais IDÊNTICOS em todas as páginas
+ * 3. Separação Absoluta de HTML, CSS e JS
  */
 export async function processWebsiteRemasterJob(
   projectId: string,
@@ -229,26 +253,27 @@ export async function processWebsiteRemasterJob(
     }
 
     const allNavigationRoutes = [
-      { name: 'Home', href: '/' },
-      ...targetPagesList.map(p => ({ name: p.name, href: `/${p.slug}` }))
+      { name: 'Home', href: 'index.html' },
+      ...targetPagesList.map(p => ({ name: p.name, href: `${p.slug}.html` }))
     ];
 
     const navigationLinksText = allNavigationRoutes
-      .map(r => `- "${r.name}" -> href="${r.href}"`)
+      .map(r => `- Link: "${r.name}" -> href="${r.href}"`)
       .join('\n');
 
     const existingHome = await prisma.page.findFirst({
       where: { projectId, isHomepage: true }
     });
 
-    if (onProgress) onProgress(`Criando Home remasterizada e estabelecendo Design System...`, 2, 4);
+    if (onProgress) onProgress(`Criando Home remasterizada e estabelecendo Design System & Navbar Universal...`, 2, 4);
 
+    // 1. GERAÇÃO DA HOME (Define o Design System, a Navbar Universal e o Footer)
     const homePrompt = `
       Você é o Líder de Design System e Arquiteto Frontend de Elite.
       Estamos modernizando o site completo da empresa "${businessName}".
       URL original: ${homeUrl}
 
-      MAPA UNIVERSAL DE NAVEGAÇÃO (A NAVBAR E O FOOTER DEVEM TER ESSES LINKS):
+      MAPA UNIVERSAL DE NAVEGAÇÃO DO SITE (A NAVBAR E O FOOTER DEVEM CONTER ESSES LINKS):
       ${navigationLinksText}
 
       CONTEÚDO DO SITE ORIGINAL:
@@ -256,10 +281,14 @@ export async function processWebsiteRemasterJob(
       ${homeText}
       """
 
-      DIRETRIZES:
-      1. ESTILO VISUAL: Crie um design moderno, minimalista e de altíssimo padrão com Tailwind CSS, fontes limpas e cores refinadas.
-      2. NAVBAR E FOOTER UNIVERSAIS: Navbar com logo "${businessName}", links para todas as páginas (${allNavigationRoutes.map(r => r.name).join(', ')}) e botão CTA de contato.
-      3. SEÇÕES DA HOME: Hero impactante com CTA, Grid de Serviços, Diferenciais/Sobre e Footer completo com os links.
+      DIRETRIZES DE DESIGN SYSTEM E ARQUITETURA:
+      1. ESTILO VISUAL: Crie um design minimalista, luxuoso e de altíssimo padrão com Tailwind CSS (dark mode elegante ou tema refinado de alto contraste, tipografia Inter/Outfit).
+      2. NAVBAR UNIVERSAL RESPONSIVA:
+         - Logo com o nome "${businessName}"
+         - Menu com links para TODAS as páginas: ${allNavigationRoutes.map(r => `<a href="${r.href}">${r.name}</a>`).join(' ')}
+         - Botão CTA de destaque (ex: "Fale Conosco" / "Atendimento WhatsApp").
+      3. SEÇÕES DA HOME: Hero impactante com headline clara e CTA, Grid de Serviços/Soluções, Prova Social / Diferenciais e Footer completo com todos os links.
+      4. SEPARAÇÃO RIGOROSA: Retorne APENAS HTML no campo "html" (sem tags <style> nem <script>), CSS customizado no campo "css" e JavaScript no campo "js".
     `;
 
     const homeAiResponse = await generateAIResponse(
@@ -287,36 +316,47 @@ export async function processWebsiteRemasterJob(
     }
 
     const homeHtml = homeAiResponse.html || '';
+    const globalCss = homeAiResponse.css || '';
+    const globalJs = homeAiResponse.js || '';
+    const { navbarHtml, footerHtml } = extractNavbarAndFooter(homeHtml);
 
-    // 4. Gerar todas as subpáginas em PARALELO com o mesmo tema e navbar
-    if (onProgress) onProgress(`Remasterizando ${targetPagesList.length} subpáginas em paralelo com tema unificado...`, 3, 4);
+    // 2. GERAÇÃO DAS SUBPÁGINAS (Com Navbar, Tema e Design System IDÊNTICOS da Home)
+    if (onProgress) onProgress(`Remasterizando ${targetPagesList.length} subpáginas com Tema e Navbar Universal compartilhados...`, 3, 4);
 
     await Promise.all(
       targetPagesList.map(async (sub) => {
         const subPrompt = `
-          Você é o Arquiteto Frontend da empresa "${businessName}".
-          Estamos gerando a subpágina "${sub.name}" (rota: /${sub.slug}).
+          Você é o Arquiteto Frontend responsável por manter 100% de consistência com o Design System da empresa "${businessName}".
+          Estamos gerando a subpágina "${sub.name}" (arquivo: ${sub.slug}.html).
 
-          MAPA DE NAVEGAÇÃO:
+          MAPA DE NAVEGAÇÃO UNIVERSAL:
           ${navigationLinksText}
 
-          CONTEÚDO DESTA PÁGINA:
+          CONTEÚDO ESPECÍFICO DESTA PÁGINA "${sub.name}":
           """
           ${sub.cleanText || sub.description}
           """
 
-          REFERÊNCIA VISUAL DA HOME (USE A MESMA NAVBAR, CORES E FOOTER):
+          NAVBAR UNIVERSAL OBRIGATÓRIA DA HOME (MANTENHA A MESMA ESTRUTURA VISUAL E LINKS):
           """
-          ${homeHtml.slice(0, 1000)}
+          ${navbarHtml || '<header class="p-4 border-b border-slate-800 flex justify-between items-center"><div class="font-bold">' + businessName + '</div><nav>' + navigationLinksText + '</nav></header>'}
           """
 
-          Retorne o HTML completo com Tailwind CSS preservando todos os dados reais.
+          FOOTER UNIVERSAL OBRIGATÓRIO DA HOME:
+          """
+          ${footerHtml || '<footer class="p-8 border-t border-slate-800 text-center text-slate-400">© ' + businessName + '</footer>'}
+          """
+
+          REGRAS MANDATÓRIAS:
+          1. CONSISTÊNCIA DE TEMA: Use rigorosamente a mesma paleta de cores, tipografia, espaçamentos e cards da Home.
+          2. NAVBAR & FOOTER IDÊNTICOS: Insira a mesma Navbar no topo (com o link da página atual ativo) e o mesmo Footer no final.
+          3. SEPARAÇÃO TOTAL: Retorne APENAS HTML limpo no campo "html" (sem tags <style> nem <script>).
         `;
 
         try {
           const subAiResponse = await generateAIResponse(
             subPrompt,
-            { html: '', css: homeAiResponse.css || '', js: homeAiResponse.js || '' },
+            { html: '', css: globalCss, js: globalJs },
             customApiKey,
             undefined,
             registeredModels,
@@ -333,8 +373,8 @@ export async function processWebsiteRemasterJob(
               where: { id: existingSub.id },
               data: {
                 html: subAiResponse.html || existingSub.html,
-                css: subAiResponse.css || homeAiResponse.css || '',
-                js: subAiResponse.js || homeAiResponse.js || ''
+                css: subAiResponse.css || globalCss,
+                js: subAiResponse.js || globalJs
               }
             });
           } else {
@@ -346,8 +386,8 @@ export async function processWebsiteRemasterJob(
                 isHomepage: false,
                 projectId,
                 html: subAiResponse.html || '<div class="p-8 text-center text-white">Conteúdo em atualização</div>',
-                css: subAiResponse.css || homeAiResponse.css || '',
-                js: subAiResponse.js || homeAiResponse.js || ''
+                css: subAiResponse.css || globalCss,
+                js: subAiResponse.js || globalJs
               }
             });
           }

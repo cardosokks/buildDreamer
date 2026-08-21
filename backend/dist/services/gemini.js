@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.generateAIResponse = void 0;
+exports.cleanHtmlExtractAssets = cleanHtmlExtractAssets;
 const undici_1 = require("undici");
 function isValidHttpUrl(stringToTest) {
     if (!stringToTest || typeof stringToTest !== 'string' || stringToTest.trim() === '')
@@ -26,40 +27,98 @@ if (defaultProxyUrl) {
     }
 }
 /**
- * Tenta fazer o parse de JSON de forma ultra resiliente mesmo se houver caracteres de controle / quebras de linha não escapadas
+ * Limpa o HTML removendo tags <style> e <script> embutidas para garantir separação estrita
+ */
+function cleanHtmlExtractAssets(rawHtml, existingCss = '', existingJs = '') {
+    let cleanHtml = rawHtml;
+    let extractedCss = existingCss;
+    let extractedJs = existingJs;
+    // Extrair e remover tags <style> do HTML
+    const styleRegex = /<style\b[^>]*>([\s\S]*?)<\/style>/gi;
+    let styleMatch;
+    while ((styleMatch = styleRegex.exec(rawHtml)) !== null) {
+        if (styleMatch[1] && styleMatch[1].trim()) {
+            extractedCss = `${extractedCss}\n${styleMatch[1].trim()}`.trim();
+        }
+    }
+    cleanHtml = cleanHtml.replace(styleRegex, '').trim();
+    // Extrair e remover tags <script> do HTML (exceto CDNs externos como Tailwind)
+    const scriptRegex = /<script\b(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi;
+    let scriptMatch;
+    while ((scriptMatch = scriptRegex.exec(rawHtml)) !== null) {
+        if (scriptMatch[1] && scriptMatch[1].trim()) {
+            extractedJs = `${extractedJs}\n${scriptMatch[1].trim()}`.trim();
+        }
+    }
+    cleanHtml = cleanHtml.replace(scriptRegex, '').trim();
+    // Se o HTML contiver <body>, extrai apenas o conteúdo do corpo
+    const bodyMatch = cleanHtml.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+    if (bodyMatch) {
+        cleanHtml = bodyMatch[1].trim();
+    }
+    // Remove marcações <html>, <head>, <!DOCTYPE> residuais para o canvas visual
+    cleanHtml = cleanHtml
+        .replace(/<!DOCTYPE[^>]*>/gi, '')
+        .replace(/<html[^>]*>/gi, '')
+        .replace(/<\/html>/gi, '')
+        .replace(/<head\b[^>]*>[\s\S]*?<\/head>/gi, '')
+        .trim();
+    return {
+        html: cleanHtml,
+        css: extractedCss,
+        js: extractedJs
+    };
+}
+/**
+ * Tenta fazer o parse de JSON de forma ultra resiliente mesmo se houver caracteres de controle
  */
 function resilientJsonParse(rawString) {
     let text = rawString.trim();
-    // Remove marcações markdown ```json ... ```
     if (text.startsWith('```')) {
         text = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
     }
-    // Tenta parse direto
     try {
-        return JSON.parse(text);
+        const directParsed = JSON.parse(text);
+        const cleaned = cleanHtmlExtractAssets(directParsed.html || '', directParsed.css || '', directParsed.js || '');
+        return {
+            ...directParsed,
+            html: cleaned.html,
+            css: cleaned.css,
+            js: cleaned.js
+        };
     }
     catch { }
-    // Localiza o bloco JSON mais externo
     const firstBrace = text.indexOf('{');
     const lastBrace = text.lastIndexOf('}');
     if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
         const trimmed = text.slice(firstBrace, lastBrace + 1);
         try {
-            return JSON.parse(trimmed);
+            const parsed = JSON.parse(trimmed);
+            const cleaned = cleanHtmlExtractAssets(parsed.html || '', parsed.css || '', parsed.js || '');
+            return {
+                ...parsed,
+                html: cleaned.html,
+                css: cleaned.css,
+                js: cleaned.js
+            };
         }
         catch { }
     }
-    // Se ainda falhou, extrai campos html, css, js ou explanation via regex
+    // Regex fallback
     const htmlMatch = text.match(/"html"\s*:\s*"([\s\S]*?)"\s*,\s*"(?:css|js|explanation)"/);
     const cssMatch = text.match(/"css"\s*:\s*"([\s\S]*?)"\s*,\s*"(?:js|html|explanation)"/);
     const jsMatch = text.match(/"js"\s*:\s*"([\s\S]*?)"\s*,\s*"(?:css|html|explanation)"/);
     const explMatch = text.match(/"explanation"\s*:\s*"([\s\S]*?)"/);
     if (htmlMatch) {
+        const rawH = htmlMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"');
+        const rawC = cssMatch ? cssMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"') : '';
+        const rawJ = jsMatch ? jsMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"') : '';
+        const cleaned = cleanHtmlExtractAssets(rawH, rawC, rawJ);
         return {
             explanation: explMatch ? explMatch[1] : 'Página gerada pela IA.',
-            html: htmlMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"'),
-            css: cssMatch ? cssMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"') : '',
-            js: jsMatch ? jsMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"') : ''
+            html: cleaned.html,
+            css: cleaned.css,
+            js: cleaned.js
         };
     }
     throw new Error('Falha ao processar resposta JSON da IA.');
@@ -67,7 +126,6 @@ function resilientJsonParse(rawString) {
 const generateAIResponse = async (prompt, context, customApiKey, customModel, registeredModels, onModelAttempt, customProxyUrl) => {
     const activeKey = customApiKey || process.env.GEMINI_API_KEY;
     const proxyUrl = isValidHttpUrl(customProxyUrl) ? customProxyUrl.trim() : defaultProxyUrl;
-    // Modelos candidatos em cascata ultra-rápidos
     let candidateModels = [];
     if (registeredModels && Array.isArray(registeredModels) && registeredModels.length > 0) {
         candidateModels = [...registeredModels];
@@ -90,20 +148,24 @@ const generateAIResponse = async (prompt, context, customApiKey, customModel, re
     - CSS Atual
     - JS Atual
 
-    INSTRUÇÕES MANDATÓRIAS:
-    1. Modifique o HTML/CSS/JS com máxima excelência estética:
+    INSTRUÇÕES MANDATÓRIAS DE ARQUITETURA E SEPARAÇÃO DE CÓDIGO:
+    1. SEPARAÇÃO TOTAL DE ARQUIVOS (HTML, CSS e JS TOTALMENTE SEPARADOS):
+       - O campo "html" deve conter APENAS a estrutura visual com classes Tailwind semânticas.
+       - NUNCA inclua tags <style>...</style> dentro do campo "html". Todo CSS customizado, animações @keyframes ou regras extras DEVEM ficar exclusivamente no campo "css".
+       - NUNCA inclua tags <script>...</script> dentro do campo "html". Toda interatividade, handlers de formulários, sliders ou modais DEVEM ficar exclusivamente no campo "js".
+    2. PADRÃO ESTÉTICO & DESIGN SYSTEM UNIVERSAL:
        - Use Tailwind CSS moderno, gradientes sutis, glassmorphism e design limpo.
        - Garanta que o layout seja 100% responsivo para mobile (375px) e desktop (1280px).
        - Mantenha IDs e classes semânticas.
        - Preserve o container <div id="canvas-root"> como nó raiz do conteúdo.
-    2. Retorne SEMPRE um objeto JSON estrito com o código completo atualizado e uma explicação amigável do que foi feito.
+    3. Retorne SEMPRE um objeto JSON estrito no formato abaixo:
 
     Formato da Resposta JSON OBRIGATÓRIO:
     {
       "explanation": "Breve resumo técnico e amigável das alterações aplicadas.",
-      "html": "<código HTML completo e atualizado>",
-      "css": "/* CSS customizado adicional se necessário */",
-      "js": "// JavaScript interativo se necessário"
+      "html": "<apenas nós HTML sem tags <style> nem <script>>",
+      "css": "/* Todo CSS adicional separado aqui */",
+      "js": "// Todo JavaScript funcional separado aqui"
     }
   `;
     if (!activeKey) {
