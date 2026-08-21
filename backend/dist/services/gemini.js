@@ -66,6 +66,17 @@ const generateAIResponse = async (prompt, context, customApiKey, customModel, re
             onModelAttempt(modelToTry, i + 1, candidateModels.length);
         }
         try {
+            const isGemini25 = modelToTry.includes('2.5') || modelToTry.includes('2.0');
+            const generationConfig = {
+                responseMimeType: 'application/json',
+                temperature: 0.7
+            };
+            // thinkingConfig só é suportado nos modelos Gemini 2.5 e 2.0
+            if (isGemini25) {
+                generationConfig.thinkingConfig = {
+                    thinkingBudget: 0
+                };
+            }
             const payload = {
                 contents: [
                     {
@@ -77,14 +88,7 @@ const generateAIResponse = async (prompt, context, customApiKey, customModel, re
                         ]
                     }
                 ],
-                generationConfig: {
-                    responseMimeType: 'application/json',
-                    temperature: 0.7,
-                    // Desativa o raciocínio estendido (Thinking/Chain-of-Thought excessivo) nos modelos 2.5 Flash / 2.0 Flash para geração instantânea
-                    thinkingConfig: {
-                        thinkingBudget: 0
-                    }
-                }
+                generationConfig
             };
             const fetchOptions = {
                 method: 'POST',
