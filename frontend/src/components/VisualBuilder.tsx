@@ -131,9 +131,10 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
     } catch {}
   }, [showChat]);
 
-  // Modais
+  // Modais & Menus
   const [showCodeModal, setShowCodeModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
+  const [showProjectMenuDropdown, setShowProjectMenuDropdown] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
   const [activeExportTab, setActiveExportTab] = useState<'html' | 'css' | 'js'>('html');
 
@@ -1093,25 +1094,71 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
             className="hidden" 
           />
 
-          {/* Import ZIP Button */}
-          <button 
-            onClick={() => zipFileInputRef.current?.click()}
-            disabled={importingZip}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 hover:text-white font-bold text-xs rounded-xl transition-all cursor-pointer"
-            title="Importar arquivos .zip de páginas para este projeto"
-          >
-            {importingZip ? <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-400" /> : <Upload className="w-3.5 h-3.5 text-cyan-400" />}
-            {importingZip ? 'Importando...' : 'Importar ZIP'}
-          </button>
+          {/* Menu Dropdown de Projeto (Importar / Exportar Código / Exportar ZIP) */}
+          <div className="relative">
+            <button 
+              onClick={() => setShowProjectMenuDropdown(!showProjectMenuDropdown)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 font-bold text-xs text-white rounded-xl transition-all shadow-[0_0_15px_rgba(168,85,247,0.25)] cursor-pointer"
+              title="Opções de Importação e Exportação do Projeto"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Projeto</span>
+              <ChevronDown className="w-3 h-3 opacity-80" />
+            </button>
 
-          {/* Export Code Modal */}
-          <button 
-            onClick={() => setShowExportModal(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 font-bold text-xs text-white rounded-xl transition-all shadow-[0_0_15px_rgba(168,85,247,0.3)] cursor-pointer"
-          >
-            <Download className="w-3.5 h-3.5" />
-            Exportar
-          </button>
+            {showProjectMenuDropdown && (
+              <div className="absolute right-0 top-full mt-1.5 w-60 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl p-1.5 z-50 space-y-1 backdrop-blur-md animate-in fade-in zoom-in-95 duration-100">
+                <button
+                  onClick={() => {
+                    setShowProjectMenuDropdown(false);
+                    setShowExportModal(true);
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-purple-600 hover:text-white rounded-lg transition-colors cursor-pointer text-left group"
+                >
+                  <Download className="w-4 h-4 text-purple-400 group-hover:text-white shrink-0" />
+                  <div>
+                    <span className="block">Exportar Site / Pacote ZIP</span>
+                    <span className="text-[10px] text-slate-400 group-hover:text-purple-100 font-normal">Baixar HTML, CSS, JS e Docker</span>
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setShowProjectMenuDropdown(false);
+                    zipFileInputRef.current?.click();
+                  }}
+                  disabled={importingZip}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-indigo-600 hover:text-white rounded-lg transition-colors cursor-pointer text-left group"
+                >
+                  {importingZip ? (
+                    <Loader2 className="w-4 h-4 text-cyan-400 animate-spin shrink-0" />
+                  ) : (
+                    <Upload className="w-4 h-4 text-cyan-400 group-hover:text-white shrink-0" />
+                  )}
+                  <div>
+                    <span className="block">{importingZip ? 'Importando...' : 'Importar Arquivo .ZIP'}</span>
+                    <span className="text-[10px] text-slate-400 group-hover:text-indigo-100 font-normal">Carregar páginas de um ZIP</span>
+                  </div>
+                </button>
+
+                <div className="border-t border-slate-800 my-1" />
+
+                <button
+                  onClick={() => {
+                    setShowProjectMenuDropdown(false);
+                    setShowCodeModal(true);
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-800 hover:text-white rounded-lg transition-colors cursor-pointer text-left"
+                >
+                  <Code2 className="w-4 h-4 text-amber-400 shrink-0" />
+                  <div>
+                    <span className="block">Inspecionar Código</span>
+                    <span className="text-[10px] text-slate-400 font-normal">Ver e copiar HTML/CSS/JS</span>
+                  </div>
+                </button>
+              </div>
+            )}
+          </div>
 
           {/* Botão de Alternar Modo Escuro / Modo Claro */}
           <button
