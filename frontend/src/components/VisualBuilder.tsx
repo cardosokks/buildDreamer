@@ -93,6 +93,9 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
   const [undoStack, setUndoStack] = useState<HistoryState[]>([]);
   const [redoStack, setRedoStack] = useState<HistoryState[]>([]);
 
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [aiJobStatus, setAiJobStatus] = useState<string | null>(null);
+
   const fetchProjectDetails = async () => {
     try {
       const res = await fetch(`${API_URL}/api/projects/${projectId}`, {
@@ -109,6 +112,48 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
       console.error(err);
     }
   };
+
+  // Monitorar se há uma geração com IA em andamento no projeto
+  useEffect(() => {
+    let interval: any = null;
+
+    const checkJob = async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/projects/jobs/${projectId}/status`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!res.ok) return;
+        const job = await res.json();
+        
+        if (job.status === 'processing' || job.status === 'pending') {
+          setAiGenerating(true);
+          if (job.currentModel) {
+            setAiJobStatus(`Criando site com ${job.currentModel} (tentativa ${job.attempt}/${job.total})...`);
+          } else {
+            setAiJobStatus('A IA está construindo a estrutura e o design do site...');
+          }
+        } else if (job.status === 'completed') {
+          if (aiGenerating) {
+            setAiGenerating(false);
+            setAiJobStatus(null);
+            fetchProjectDetails();
+          }
+          if (interval) clearInterval(interval);
+        } else if (job.status === 'failed') {
+          setAiGenerating(false);
+          setAiJobStatus(null);
+          if (interval) clearInterval(interval);
+        }
+      } catch {}
+    };
+
+    checkJob();
+    interval = setInterval(checkJob, 2000);
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [projectId, token, aiGenerating]);
 
   useEffect(() => {
     fetchProjectDetails();
@@ -824,6 +869,22 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
               height: '100%'
             }}
           >
+            {/* Overlay de carregamento com IA */}
+            {aiGenerating && (
+              <div className="absolute inset-0 z-40 bg-black/85 backdrop-blur-md rounded-2xl flex flex-col items-center justify-center p-6 text-center shadow-2xl border border-amber-500/30">
+                <div className="w-16 h-16 rounded-full border-2 border-amber-500/50 p-1 mb-4 animate-spin shadow-[0_0_25px_rgba(229,185,95,0.5)] flex items-center justify-center">
+                  <Sparkles className="w-8 h-8 text-amber-400 animate-pulse" />
+                </div>
+                <h3 className="text-lg font-bold text-white mb-2 tracking-wide">Construindo Site com Inteligência Artificial</h3>
+                <p className="text-xs text-amber-300/80 max-w-md font-mono mb-4 animate-pulse">
+                  {aiJobStatus || 'Gerando estrutura de alta conversão, paleta e seções sob medida...'}
+                </p>
+                <div className="w-48 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                  <div className="w-full h-full bg-gradient-to-r from-amber-400 via-rose-400 to-amber-500 animate-pulse" />
+                </div>
+              </div>
+            )}
+
             {activePage && (
               <Canvas
                 key={activePage.id}
