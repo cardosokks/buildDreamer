@@ -15,6 +15,7 @@ const pages_1 = require("./routes/pages");
 const ai_1 = require("./routes/ai");
 const export_1 = require("./routes/export");
 const leads_1 = require("./routes/leads");
+const crawler_1 = require("./routes/crawler");
 const auth_2 = require("./middleware/auth");
 dotenv_1.default.config();
 const app = (0, express_1.default)();
@@ -34,6 +35,7 @@ app.use('/api/projects', auth_2.authenticateToken, projects_1.projectRouter);
 app.use('/api/export', auth_2.authenticateToken, export_1.exportRouter);
 app.use('/api/ai', auth_2.authenticateToken, ai_1.aiRouter);
 app.use('/api/leads', auth_2.authenticateToken, leads_1.leadsRouter);
+app.use('/api/crawler', auth_2.authenticateToken, crawler_1.crawlerRouter);
 app.use('/api', auth_2.authenticateToken, pages_1.pageRouter);
 app.get('/health', (req, res) => {
     res.json({ status: 'OK', timestamp: new Date() });

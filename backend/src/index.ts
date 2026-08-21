@@ -10,6 +10,7 @@ import { pageRouter } from './routes/pages';
 import { aiRouter } from './routes/ai';
 import { exportRouter } from './routes/export';
 import { leadsRouter } from './routes/leads';
+import { crawlerRouter } from './routes/crawler';
 import { authenticateToken } from './middleware/auth';
 
 dotenv.config();
@@ -33,6 +34,7 @@ app.use('/api/projects', authenticateToken, projectRouter);
 app.use('/api/export', authenticateToken, exportRouter);
 app.use('/api/ai', authenticateToken, aiRouter);
 app.use('/api/leads', authenticateToken, leadsRouter);
+app.use('/api/crawler', authenticateToken, crawlerRouter);
 app.use('/api', authenticateToken, pageRouter);
 
 app.get('/health', (req, res) => {

@@ -43,11 +43,17 @@ interface Project {
 interface Lead {
   id: string;
   name: string;
+  category?: string;
   address: string;
+  city?: string;
   phone: string;
+  whatsappUrl?: string | null;
+  email?: string | null;
   website: string | null;
+  hasWebsite?: boolean;
+  source?: string;
   rating: string;
-  needsWebsite: boolean;
+  needsWebsite?: boolean;
 }
 
 interface DashboardProps {
@@ -89,6 +95,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
   // Leads state variables
   const [leadQuery, setLeadQuery] = useState('');
   const [leadLocation, setLeadLocation] = useState('');
+  const [onlyWithoutWebsite, setOnlyWithoutWebsite] = useState(false);
   const [leadsList, setLeadsList] = useState<Lead[]>([]);
   const [loadingLeads, setLoadingLeads] = useState(false);
 
@@ -150,14 +157,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
     };
   }, [isResizingSidebar]);
 
-  // Lead search method
+  // Lead search method com Crawler Autônomo
   const handleSearchLeads = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!leadQuery) return;
     setLoadingLeads(true);
 
     try {
-      // Dynamic map iframe sync on text location searches (like Brasília)
+      // Dynamic map iframe sync on text location searches
       if (leadLocation) {
         const iframe = document.querySelector('iframe[title="Seletor de Região Leaflet"]') as HTMLIFrameElement;
         if (iframe) {
@@ -165,6 +172,33 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
         }
       }
 
+      // 1. Tentar Crawler Autônomo
+      const crawlerRes = await fetch(`${API_URL}/api/crawler/search`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          niche: leadQuery,
+          location: leadLocation || 'Brasil',
+          onlyWithoutWebsite,
+          limit: 30
+        })
+      });
+
+      if (crawlerRes.ok) {
+        const data = await crawlerRes.json();
+        if (data.leads && data.leads.length > 0) {
+          setLeadsList(data.leads.map((l: any) => ({
+            ...l,
+            needsWebsite: l.hasWebsite === false || !l.website
+          })));
+          return;
+        }
+      }
+
+      // 2. Fallback para rota de diretórios / leads anterior
       const res = await fetch(`${API_URL}/api/leads/search-leads`, {
         method: 'POST',
         headers: {
@@ -691,35 +725,49 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                   </div>
                 </div>
               </div>
-              <form onSubmit={handleSearchLeads} className="bg-[#0f0b18] border border-slate-850 rounded-2xl p-5 shadow-xl flex flex-col md:flex-row items-center gap-4">
-                <div className="w-full md:flex-1 relative">
-                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-slate-500" />
-                  <input 
-                    type="text"
-                    required
-                    placeholder="O que está procurando? Ex: Pizzaria, Dentista, Advogado"
-                    value={leadQuery}
-                    onChange={(e) => setLeadQuery(e.target.value)}
-                    className="w-full pl-11 pr-4 py-3 bg-slate-950 border border-slate-850 rounded-xl focus:outline-none focus:ring-1 focus:ring-purple-500 text-sm text-white placeholder-slate-600"
-                  />
+              <form onSubmit={handleSearchLeads} className="bg-[#0f0b18] border border-slate-850 rounded-2xl p-5 shadow-xl space-y-3">
+                <div className="flex flex-col md:flex-row items-center gap-4">
+                  <div className="w-full md:flex-1 relative">
+                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-slate-500" />
+                    <input 
+                      type="text"
+                      required
+                      placeholder="O que está procurando? Ex: Supermercado, Pizzaria, Dentista"
+                      value={leadQuery}
+                      onChange={(e) => setLeadQuery(e.target.value)}
+                      className="w-full pl-11 pr-4 py-3 bg-slate-950 border border-slate-850 rounded-xl focus:outline-none focus:ring-1 focus:ring-purple-500 text-sm text-white placeholder-slate-600"
+                    />
+                  </div>
+                  <div className="w-full md:w-80 relative">
+                    <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-slate-500" />
+                    <input 
+                      type="text"
+                      placeholder="Localização (ex: Formosa GO)"
+                      value={leadLocation}
+                      onChange={(e) => setLeadLocation(e.target.value)}
+                      className="w-full pl-11 pr-4 py-3 bg-slate-950 border border-slate-850 rounded-xl focus:outline-none focus:ring-1 focus:ring-purple-500 text-sm text-white placeholder-slate-600"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={loadingLeads}
+                    className="w-full md:w-auto px-6 py-3 bg-purple-700 hover:bg-purple-650 text-white font-semibold rounded-xl text-sm transition-all shadow-[0_0_15px_rgba(168,85,247,0.3)] hover:shadow-[0_0_20px_rgba(168,85,247,0.5)] cursor-pointer"
+                  >
+                    {loadingLeads ? 'Raspando...' : 'Buscar Leads'}
+                  </button>
                 </div>
-                <div className="w-full md:w-80 relative">
-                  <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-slate-500" />
-                  <input 
-                    type="text"
-                    placeholder="Localização ou 'Perto de mim'"
-                    value={leadLocation}
-                    onChange={(e) => setLeadLocation(e.target.value)}
-                    className="w-full pl-11 pr-4 py-3 bg-slate-950 border border-slate-850 rounded-xl focus:outline-none focus:ring-1 focus:ring-purple-500 text-sm text-white placeholder-slate-600"
-                  />
+
+                <div className="flex items-center gap-2 pt-1">
+                  <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer select-none">
+                    <input 
+                      type="checkbox"
+                      checked={onlyWithoutWebsite}
+                      onChange={(e) => setOnlyWithoutWebsite(e.target.checked)}
+                      className="w-4 h-4 rounded bg-slate-900 border-slate-700 text-purple-600 focus:ring-purple-500"
+                    />
+                    <span>Filtrar apenas estabelecimentos <strong>sem website institucional</strong> (Oportunidades quentes)</span>
+                  </label>
                 </div>
-                <button
-                  type="submit"
-                  disabled={loadingLeads}
-                  className="w-full md:w-auto px-6 py-3 bg-purple-700 hover:bg-purple-650 text-white font-semibold rounded-xl text-sm transition-all shadow-[0_0_15px_rgba(168,85,247,0.3)] hover:shadow-[0_0_20px_rgba(168,85,247,0.5)] cursor-pointer"
-                >
-                  {loadingLeads ? 'Buscando...' : 'Buscar'}
-                </button>
               </form>
 
               {/* Leads results */}
@@ -731,7 +779,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                 </div>
               ) : leadsList.length === 0 ? (
                 <div className="p-12 bg-slate-900/10 border border-slate-850 rounded-2xl text-center text-slate-500 text-sm italic">
-                  Digite o segmento e clique em "Buscar" para listar potenciais clientes.
+                  Digite o nicho e cidade e clique em "Buscar Leads" para prospectar clientes reais da região.
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -742,7 +790,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                     >
                       <div className="space-y-2">
                         <div className="flex items-start justify-between gap-3">
-                          <h3 className="font-bold text-white text-base leading-tight">{lead.name}</h3>
+                          <div>
+                            <h3 className="font-bold text-white text-base leading-tight">{lead.name}</h3>
+                            {lead.category && (
+                              <span className="text-[10px] text-purple-400 font-mono">{lead.category}</span>
+                            )}
+                          </div>
                           <div className="flex items-center gap-1 shrink-0 bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 px-1.5 py-0.5 rounded text-[10px]">
                             <Star className="w-3 h-3 fill-yellow-400" />
                             {lead.rating}
@@ -771,14 +824,28 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                         </p>
                       </div>
 
-                      <div className="mt-4 pt-4 border-t border-slate-850/80 flex items-center justify-between">
-                        <span className="text-[10px] text-slate-500">Google Maps Lead</span>
-                        <button
-                          onClick={() => handleCreateProjectFromLead(lead)}
-                          className="px-3.5 py-1.5 bg-purple-700/30 hover:bg-purple-700/60 border border-purple-500/40 text-xs font-bold text-purple-300 rounded-xl transition-all cursor-pointer"
-                        >
-                          Criar Site Para Cliente
-                        </button>
+                      <div className="mt-4 pt-4 border-t border-slate-850/80 flex items-center justify-between gap-2 flex-wrap">
+                        <span className="text-[10px] text-slate-500 font-mono">
+                          {lead.source || 'Crawler Autônomo'}
+                        </span>
+                        <div className="flex items-center gap-2">
+                          {lead.whatsappUrl && (
+                            <a
+                              href={lead.whatsappUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-3 py-1.5 bg-emerald-600/20 hover:bg-emerald-600/40 border border-emerald-500/40 text-emerald-400 text-xs font-bold rounded-xl transition-all"
+                            >
+                              WhatsApp
+                            </a>
+                          )}
+                          <button
+                            onClick={() => handleCreateProjectFromLead(lead)}
+                            className="px-3.5 py-1.5 bg-purple-700/30 hover:bg-purple-700/60 border border-purple-500/40 text-xs font-bold text-purple-300 rounded-xl transition-all cursor-pointer"
+                          >
+                            Criar Site Para Cliente
+                          </button>
+                        </div>
                       </div>
                     </div>
                   ))}
