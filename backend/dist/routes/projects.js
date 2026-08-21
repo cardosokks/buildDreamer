@@ -204,6 +204,7 @@ router.get('/:id', async (req, res) => {
         return res.status(500).json({ error: error.message });
     }
 });
+const ngrokService_1 = require("../services/ngrokService");
 // Delete Project
 router.delete('/:id', async (req, res) => {
     try {
@@ -218,6 +219,17 @@ router.delete('/:id', async (req, res) => {
         });
         if (!membership) {
             return res.status(403).json({ error: 'Only the project owner can delete this project' });
+        }
+        // 1. Derruba o túnel Ngrok do projeto se estiver ativo
+        try {
+            await (0, ngrokService_1.stopNgrokPreview)(id);
+        }
+        catch (ngErr) {
+            console.warn(`Erro ao derrubar túnel Ngrok na exclusão do projeto ${id}:`, ngErr);
+        }
+        // 2. Cancela jobs de IA ativos na fila para este projeto
+        if (exports.projectJobsQueue[id]) {
+            delete exports.projectJobsQueue[id];
         }
         await db_1.prisma.project.delete({ where: { id } });
         return res.json({ message: 'Project deleted successfully' });

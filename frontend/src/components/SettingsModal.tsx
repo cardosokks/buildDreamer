@@ -18,10 +18,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
   const [name, setName] = useState(user?.name || '');
   const [email, setEmail] = useState(user?.email || '');
 
-  // AI credentials
+  // AI & Tunnel credentials
   const [geminiKey, setGeminiKey] = useState(localStorage.getItem('gemini_api_key') || '');
   const [openaiKey, setOpenaiKey] = useState(localStorage.getItem('openai_api_key') || '');
   const [proxyUrl, setProxyUrl] = useState(localStorage.getItem('ai_proxy_url') || '');
+  const [ngrokToken, setNgrokToken] = useState(localStorage.getItem('ngrok_authtoken') || '');
 
   // Models CRUD fields
   const getStoredModels = () => {
@@ -64,7 +65,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
     localStorage.setItem('gemini_api_key', geminiKey);
     localStorage.setItem('openai_api_key', openaiKey);
     localStorage.setItem('ai_proxy_url', proxyUrl);
-    setSuccessMsg('Configurações e Proxy salvos com sucesso!');
+    localStorage.setItem('ngrok_authtoken', ngrokToken);
+    setSuccessMsg('Configurações, Proxy e Ngrok salvos com sucesso!');
     setLoading(false);
   };
 
@@ -258,6 +260,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                 />
                 <p className="text-[10px] text-slate-500 mt-1">
                   Configure um proxy caso o Gemini esteja barrando requisições do seu IP ou datacenter. Todas as chamadas para IA passarão por este túnel.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-455 mb-2 flex items-center justify-between">
+                  <span>Ngrok Authtoken</span>
+                  <span className="text-[10px] text-cyan-400 font-mono font-normal">Preview Público</span>
+                </label>
+                <input 
+                  type="password"
+                  placeholder="2xxxx_xxxxxxxxxxxxxxxxxxxx"
+                  value={ngrokToken}
+                  onChange={(e) => setNgrokToken(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl focus:outline-none focus:ring-1 focus:ring-cyan-500 text-xs text-white font-mono"
+                />
+                <p className="text-[10px] text-slate-500 mt-1">
+                  Seu token do ngrok.com para gerar links de preview públicos que você pode enviar para clientes.
                 </p>
               </div>
 
