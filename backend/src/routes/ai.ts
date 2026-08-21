@@ -10,6 +10,8 @@ export const aiChatJobsQueue: Record<string, {
   status: 'pending' | 'processing' | 'completed' | 'failed';
   currentModel?: string;
   scope?: 'single' | 'all';
+  pageId?: string;
+  projectId?: string;
   result?: {
     explanation: string;
     html?: string;
@@ -32,12 +34,6 @@ async function processAIChatJob(
   registeredModels?: string[],
   clientProxyUrl?: string
 ) {
-  aiChatJobsQueue[jobId] = { 
-    status: 'processing', 
-    currentModel: model || 'gemini-2.5-flash',
-    scope: applyToAll ? 'all' : 'single'
-  };
-
   try {
     const page = await prisma.page.findUnique({
       where: { id: pageId },
@@ -46,13 +42,23 @@ async function processAIChatJob(
 
     if (!page) throw new Error('Página não encontrada');
 
+    aiChatJobsQueue[jobId] = { 
+      status: 'processing', 
+      currentModel: model || 'gemini-2.5-flash',
+      scope: applyToAll ? 'all' : 'single',
+      pageId,
+      projectId: page.projectId
+    };
+
     // Se applyToAll for true, processa todas as páginas em PARALELO para máxima velocidade
     if (applyToAll && page.project?.pages && page.project.pages.length > 1) {
       const allPages = page.project.pages;
       aiChatJobsQueue[jobId] = {
         status: 'processing',
         currentModel: `${model || 'gemini-2.5-flash'} (Processando ${allPages.length} páginas do projeto em paralelo...)`,
-        scope: 'all'
+        scope: 'all',
+        pageId,
+        projectId: page.projectId
       };
 
       const allRoutes = allPages.map(p => ({
@@ -117,6 +123,8 @@ async function processAIChatJob(
       aiChatJobsQueue[jobId] = {
         status: 'completed',
         scope: 'all',
+        pageId,
+        projectId: page.projectId,
         result: {
           explanation: `Alteração aplicada com sucesso em todas as ${updatedPages.length} páginas do site com tema e navbar sincronizados!`,
           html: activeUpdated.html,
@@ -141,7 +149,9 @@ async function processAIChatJob(
           aiChatJobsQueue[jobId] = {
             status: 'processing',
             currentModel,
-            scope: 'single'
+            scope: 'single',
+            pageId,
+            projectId: page.projectId
           };
         },
         clientProxyUrl
@@ -160,6 +170,8 @@ async function processAIChatJob(
       aiChatJobsQueue[jobId] = {
         status: 'completed',
         scope: 'single',
+        pageId,
+        projectId: page.projectId,
         result: aiResponse,
         currentModel: aiResponse._usedModel || model
       };
@@ -168,18 +180,19 @@ async function processAIChatJob(
     console.error(`Erro ao processar job de IA ${jobId}:`, error);
     aiChatJobsQueue[jobId] = {
       status: 'failed',
+      pageId,
       error: error.message || 'Erro ao processar alterações da IA'
     };
   }
 }
 
-// Process AI request and start background job
+// Endpoint para disparar alteração via Chat AI em background
 router.post('/chat', async (req: AuthenticatedRequest, res: any) => {
   try {
     const { prompt, pageId, model, applyToAll } = req.body;
 
     if (!prompt || !pageId) {
-      return res.status(400).json({ error: 'Prompt and pageId are required' });
+      return res.status(400).json({ error: 'Prompt e pageId são obrigatórios' });
     }
 
     const page = await prisma.page.findUnique({
@@ -212,7 +225,9 @@ router.post('/chat', async (req: AuthenticatedRequest, res: any) => {
     aiChatJobsQueue[jobId] = { 
       status: 'pending', 
       currentModel: model || 'gemini-2.5-flash',
-      scope: hasGlobalIntent ? 'all' : 'single'
+      scope: hasGlobalIntent ? 'all' : 'single',
+      pageId,
+      projectId: page.projectId
     };
 
     // Disparar processamento assíncrono em background
@@ -232,6 +247,25 @@ router.post('/chat', async (req: AuthenticatedRequest, res: any) => {
     console.error("Erro na rota /api/ai/chat:", error);
     return res.status(500).json({ error: error.message });
   }
+});
+
+// Endpoint para buscar o job ativo de uma página ou projeto
+router.get('/jobs/active', (req: AuthenticatedRequest, res: any) => {
+  const { pageId, projectId } = req.query as { pageId?: string; projectId?: string };
+
+  const jobsList = Object.entries(aiChatJobsQueue);
+  for (const [jobId, job] of jobsList.reverse()) {
+    if (job.status === 'processing' || job.status === 'pending') {
+      if (pageId && job.pageId === pageId) {
+        return res.json({ jobId, ...job });
+      }
+      if (projectId && job.projectId === projectId && job.scope === 'all') {
+        return res.json({ jobId, ...job });
+      }
+    }
+  }
+
+  return res.json({ active: false });
 });
 
 // Poll AI Chat Job status

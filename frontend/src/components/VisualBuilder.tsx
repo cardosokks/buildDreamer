@@ -1297,6 +1297,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
         {showChat && activePage && (
           <ChatPanel
             pageId={activePage.id}
+            projectId={projectId}
             onApplyChanges={handleApplyAIChanges}
             onUndo={handleUndo}
             canUndo={undoStack.length > 0}

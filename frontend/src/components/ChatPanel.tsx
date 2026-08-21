@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Sparkles, Send, Bot, User, Check, Play, Undo2, RotateCcw, Copy, ExternalLink, Code2, Globe } from 'lucide-react';
+import { Sparkles, Send, Bot, User, Check, Play, Undo2, Globe, Loader2 } from 'lucide-react';
 import { API_URL } from '../config';
 
 interface ChatPanelProps {
   pageId: string;
+  projectId?: string;
   onApplyChanges: (html: string, css: string, js: string, targetPageId?: string) => void;
   onUndo?: () => void;
   canUndo?: boolean;
@@ -22,7 +23,14 @@ interface Message {
   scope?: 'single' | 'all';
 }
 
-export const ChatPanel: React.FC<ChatPanelProps> = ({ pageId, onApplyChanges, onUndo, canUndo, onReloadAllPages }) => {
+export const ChatPanel: React.FC<ChatPanelProps> = ({ 
+  pageId, 
+  projectId,
+  onApplyChanges, 
+  onUndo, 
+  canUndo, 
+  onReloadAllPages 
+}) => {
   const { token } = useAuth();
   
   const [messages, setMessages] = useState<Message[]>(() => {
@@ -40,6 +48,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ pageId, onApplyChanges, on
   const [applyToAllPages, setApplyToAllPages] = useState(false);
   const [activeJobModel, setActiveJobModel] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const activePollRef = useRef<any>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -52,6 +61,23 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ pageId, onApplyChanges, on
   useEffect(() => {
     localStorage.setItem(`chat_history_${pageId}`, JSON.stringify(messages));
   }, [messages, pageId]);
+
+  // Atualizar histórico quando o pageId mudar
+  useEffect(() => {
+    const stored = localStorage.getItem(`chat_history_${pageId}`);
+    if (stored) {
+      try {
+        setMessages(JSON.parse(stored));
+      } catch {}
+    } else {
+      setMessages([
+        {
+          role: 'assistant',
+          text: 'Olá! Sou o seu AI Copilot e Arquiteto Frontend. Peça qualquer alteração ("adicione botão WhatsApp", "mude a cor da navbar em todas as páginas", "crie tabela de preços") e aplicarei imediatamente!'
+        }
+      ]);
+    }
+  }, [pageId]);
 
   const [availableModels, setAvailableModels] = useState<Array<{ id: string; name: string }>>(() => {
     const stored = localStorage.getItem('custom_gemini_models');
@@ -98,6 +124,109 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ pageId, onApplyChanges, on
     loadStoredModels();
   }, []);
 
+  // Verificar automaticamente se há um job ativo no servidor ao carregar/trocar de página
+  useEffect(() => {
+    let isMounted = true;
+
+    const checkActiveJob = async () => {
+      if (!token) return;
+      try {
+        const queryParams = new URLSearchParams();
+        if (pageId) queryParams.append('pageId', pageId);
+        if (projectId) queryParams.append('projectId', projectId);
+
+        const res = await fetch(`${API_URL}/api/ai/jobs/active?${queryParams.toString()}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (res.ok) {
+          const activeJob = await res.json();
+          if (isMounted && activeJob && activeJob.jobId && (activeJob.status === 'processing' || activeJob.status === 'pending')) {
+            setLoading(true);
+            if (activeJob.currentModel) setActiveJobModel(activeJob.currentModel);
+            startPollingJob(activeJob.jobId, pageId);
+          }
+        }
+      } catch (e) {
+        console.warn("Erro ao checar job ativo no servidor:", e);
+      }
+    };
+
+    checkActiveJob();
+
+    return () => {
+      isMounted = false;
+      if (activePollRef.current) {
+        clearInterval(activePollRef.current);
+      }
+    };
+  }, [pageId, projectId, token]);
+
+  const startPollingJob = (jobId: string, targetPageId: string) => {
+    if (activePollRef.current) clearInterval(activePollRef.current);
+
+    activePollRef.current = setInterval(async () => {
+      try {
+        const statusRes = await fetch(`${API_URL}/api/ai/jobs/${jobId}/status`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (statusRes.ok) {
+          const jobData = await statusRes.json();
+          if (jobData.currentModel) setActiveJobModel(jobData.currentModel);
+
+          if (jobData.status === 'completed' && jobData.result) {
+            if (activePollRef.current) clearInterval(activePollRef.current);
+            setLoading(false);
+            setActiveJobModel(null);
+
+            const assistantMessage: Message = { 
+              role: 'assistant', 
+              text: jobData.result.explanation || 'Alterações arquitetadas e geradas com sucesso.',
+              html: jobData.result.html,
+              css: jobData.result.css,
+              js: jobData.result.js,
+              modelUsed: jobData.result._usedModel || jobData.currentModel || selectedModel,
+              applied: true,
+              scope: jobData.scope
+            };
+
+            const freshStored = localStorage.getItem(`chat_history_${targetPageId}`);
+            const freshMessages: Message[] = freshStored ? JSON.parse(freshStored) : [];
+            const finalMessages = [...freshMessages, assistantMessage];
+
+            localStorage.setItem(`chat_history_${targetPageId}`, JSON.stringify(finalMessages));
+            setMessages(finalMessages);
+
+            // Se a alteração foi em todas as páginas, recarrega o projeto inteiro
+            if (jobData.scope === 'all' && onReloadAllPages) {
+              onReloadAllPages();
+            }
+
+            // Auto-aplica as alterações imediatamente no Canvas atual
+            if (jobData.result.html) {
+              onApplyChanges(jobData.result.html, jobData.result.css || '', jobData.result.js || '', targetPageId);
+            }
+          } else if (jobData.status === 'failed') {
+            if (activePollRef.current) clearInterval(activePollRef.current);
+            setLoading(false);
+            setActiveJobModel(null);
+
+            const errorMessage: Message = { role: 'assistant', text: `Erro: ${jobData.error || 'Falha ao processar alterações'}` };
+            const freshStored = localStorage.getItem(`chat_history_${targetPageId}`);
+            const freshMessages: Message[] = freshStored ? JSON.parse(freshStored) : [];
+            const finalMessages = [...freshMessages, errorMessage];
+
+            localStorage.setItem(`chat_history_${targetPageId}`, JSON.stringify(finalMessages));
+            setMessages(finalMessages);
+          }
+        }
+      } catch (pollErr) {
+        console.error("Erro no polling do chat IA:", pollErr);
+      }
+    }, 1500);
+  };
+
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || loading) return;
@@ -142,70 +271,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ pageId, onApplyChanges, on
       if (!res.ok) throw new Error('Falha ao iniciar solicitação de IA');
       
       const { jobId } = await res.json();
-
-      // Polling do Job de IA em background com feedback visual
-      const pollInterval = setInterval(async () => {
-        try {
-          const statusRes = await fetch(`${API_URL}/api/ai/jobs/${jobId}/status`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-          });
-
-          if (statusRes.ok) {
-            const jobData = await statusRes.json();
-            if (jobData.currentModel) setActiveJobModel(jobData.currentModel);
-
-            if (jobData.status === 'completed' && jobData.result) {
-              clearInterval(pollInterval);
-              setLoading(false);
-
-              const assistantMessage: Message = { 
-                role: 'assistant', 
-                text: jobData.result.explanation || 'Alterações arquitetadas e geradas com sucesso.',
-                html: jobData.result.html,
-                css: jobData.result.css,
-                js: jobData.result.js,
-                modelUsed: jobData.result._usedModel || jobData.currentModel || selectedModel,
-                applied: true,
-                scope: jobData.scope
-              };
-
-              const freshStored = localStorage.getItem(`chat_history_${currentRequestPageId}`);
-              const freshMessages = freshStored ? JSON.parse(freshStored) : updatedMessages;
-              const finalMessages = [...freshMessages, assistantMessage];
-
-              localStorage.setItem(`chat_history_${currentRequestPageId}`, JSON.stringify(finalMessages));
-              if (pageId === currentRequestPageId) {
-                setMessages(finalMessages);
-              }
-
-              // Se a alteração foi em todas as páginas, recarrega o projeto inteiro
-              if (jobData.scope === 'all' && onReloadAllPages) {
-                onReloadAllPages();
-              }
-
-              // Auto-aplica as alterações imediatamente no Canvas atual
-              if (jobData.result.html) {
-                onApplyChanges(jobData.result.html, jobData.result.css || '', jobData.result.js || '', currentRequestPageId);
-              }
-            } else if (jobData.status === 'failed') {
-              clearInterval(pollInterval);
-              setLoading(false);
-
-              const errorMessage: Message = { role: 'assistant', text: `Erro: ${jobData.error || 'Falha ao processar alterações'}` };
-              const freshStored = localStorage.getItem(`chat_history_${currentRequestPageId}`);
-              const freshMessages = freshStored ? JSON.parse(freshStored) : updatedMessages;
-              const finalMessages = [...freshMessages, errorMessage];
-
-              localStorage.setItem(`chat_history_${currentRequestPageId}`, JSON.stringify(finalMessages));
-              if (pageId === currentRequestPageId) {
-                setMessages(finalMessages);
-              }
-            }
-          }
-        } catch (pollErr) {
-          console.error("Erro no polling do chat IA:", pollErr);
-        }
-      }, 1500);
+      startPollingJob(jobId, currentRequestPageId);
     } catch (err: any) {
       setLoading(false);
       const errorMessage: Message = { role: 'assistant', text: `Erro: ${err.message}` };
@@ -220,7 +286,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ pageId, onApplyChanges, on
   };
 
   return (
-    <aside className="w-80 bg-slate-950 border-l border-slate-900 flex flex-col h-full z-20 shrink-0">
+    <aside className="w-80 bg-slate-950 border-l border-slate-900 flex flex-col h-full z-20 shrink-0 select-none">
       {/* Header */}
       <div className="p-3.5 border-b border-slate-900 flex items-center justify-between bg-slate-950/80 backdrop-blur">
         <div className="flex items-center gap-2">
@@ -228,7 +294,10 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ pageId, onApplyChanges, on
             <Sparkles className="w-4 h-4" />
           </div>
           <div>
-            <h3 className="font-bold text-xs text-white">AI Copilot</h3>
+            <h3 className="font-bold text-xs text-white flex items-center gap-1.5">
+              AI Copilot
+              {loading && <Loader2 className="w-3 h-3 text-amber-400 animate-spin" />}
+            </h3>
             <p className="text-[10px] text-purple-400">Arquiteto Frontend</p>
           </div>
         </div>
@@ -319,16 +388,22 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ pageId, onApplyChanges, on
 
         {loading && (
           <div className="flex items-start gap-2 animate-in fade-in">
-            <div className="p-3 bg-slate-900 border border-purple-500/30 rounded-2xl rounded-bl-none text-xs text-purple-300 flex flex-col gap-2">
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-purple-400 animate-ping" />
-                <span className="font-semibold">Gerando código e estilos...</span>
+            <div className="p-3.5 bg-slate-900 border border-purple-500/40 rounded-2xl rounded-bl-none text-xs text-purple-300 flex flex-col gap-2.5 shadow-lg shadow-purple-950/50">
+              <div className="flex items-center gap-2.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping" />
+                <span className="font-bold text-white flex items-center gap-1.5">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400" />
+                  Processando requisição no servidor...
+                </span>
               </div>
               {activeJobModel && (
-                <span className="text-[10px] text-slate-400 font-mono">
-                  Engine: <strong className="text-white">{activeJobModel}</strong>
-                </span>
+                <div className="text-[10px] text-slate-400 font-mono bg-slate-950/80 px-2 py-1 rounded border border-slate-800">
+                  Engine: <strong className="text-purple-300">{activeJobModel}</strong>
+                </div>
               )}
+              <div className="w-full bg-slate-800 h-1 rounded-full overflow-hidden">
+                <div className="bg-gradient-to-r from-purple-500 via-pink-500 to-amber-400 h-full animate-pulse w-full" />
+              </div>
             </div>
           </div>
         )}
