@@ -59,16 +59,16 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
         
         {/* Header / Logo */}
         <div className="text-center mb-8">
-          <div className="inline-flex p-3 rounded-xl bg-purple-900/35 border border-purple-500/50 mb-4 text-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.3)] animate-pulse">
-            <Lock className="w-8 h-8" />
+          <div className="w-20 h-20 mx-auto rounded-full overflow-hidden border-2 border-amber-500/50 p-1 mb-4 shadow-[0_0_20px_rgba(229,185,95,0.4)] bg-black/40 flex items-center justify-center">
+            <img src="/logo.png" alt="Real Premise" className="w-full h-full object-cover rounded-full" />
           </div>
-          <h2 className="text-3xl font-extrabold tracking-wider bg-gradient-to-r from-purple-400 via-pink-400 to-indigo-400 bg-clip-text text-transparent">
+          <h2 className="text-3xl font-extrabold tracking-widest bg-gradient-to-r from-amber-300 via-rose-300 to-amber-400 bg-clip-text text-transparent">
             REAL PREMISE
           </h2>
           <p className="text-sm text-slate-400 mt-2">
             {isLogin 
-              ? 'Entre para acessar seus projetos no seu portal.' 
-              : 'Comece a construir sites profissionais em minutos.'}
+              ? 'Entre para acessar seu estúdio e gerenciar seus clientes.' 
+              : 'Comece a construir sites de alta performance em minutos.'}
           </p>
         </div>
 

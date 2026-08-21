@@ -1,49 +1,73 @@
 @import "tailwindcss";
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800;900&family=Fira+Code:wght@400;500;600&display=swap');
 
-/* ─── Neon Theme Variables ────────────────────────────────────────── */
+/* ─── Real Premise (Gold, Rose & Obsidian Theme Variables) ────────── */
 :root {
-  --neon-purple: #a855f7;
-  --neon-purple-glow: rgba(168, 85, 247, 0.4);
-  --neon-cyan: #06b6d4;
-  --neon-pink: #ec4899;
-  --dark-bg: #07020d;
-  --panel-bg: #0d0714;
+  --rp-gold: #e5b95f;
+  --rp-gold-light: #fbe39d;
+  --rp-gold-dark: #b88628;
+  --rp-gold-glow: rgba(229, 185, 95, 0.35);
+  --rp-rose: #d9779f;
+  --rp-rose-light: #f9a8d4;
+  --rp-rose-dark: #9d174d;
+  --rp-rose-glow: rgba(217, 119, 159, 0.3);
+  
+  /* Dark Mode Default */
+  --bg-main: #0c0814;
+  --bg-card: #130d20;
+  --bg-sidebar: #0f0919;
+  --border-color: rgba(229, 185, 95, 0.15);
+  --text-main: #f8fafc;
+  --text-muted: #94a3b8;
+}
+
+html.light {
+  --bg-main: #fdf8f5;
+  --bg-card: #ffffff;
+  --bg-sidebar: #f8eff2;
+  --border-color: rgba(184, 134, 40, 0.2);
+  --text-main: #1e1b24;
+  --text-muted: #64748b;
 }
 
 body {
-  background-color: var(--dark-bg);
-  color: #f8fafc;
+  background-color: var(--bg-main);
+  color: var(--text-main);
   font-family: 'Inter', sans-serif;
   -webkit-tap-highlight-color: transparent;
   padding-bottom: env(safe-area-inset-bottom);
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 h1, h2, h3, h4, .font-heading {
   font-family: 'Outfit', sans-serif;
 }
 
-/* ─── Custom Scrollbar ────────────────────────────────────────────── */
-/* Webkit (Chrome, Edge, Safari, Android Webview) */
+/* ─── Custom Premium Gold Scrollbar ───────────────────────────────── */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #0f0b18;
+  background: var(--bg-main);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #3c245c; 
+  background: #3c2a1a; 
   border-radius: 99px;
-  border: 1px solid #582296;
+  border: 1px solid rgba(229, 185, 95, 0.3);
   transition: all 0.2s;
 }
 
+html.light ::-webkit-scrollbar-thumb {
+  background: #d8c2aa;
+  border: 1px solid rgba(184, 134, 40, 0.4);
+}
+
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--neon-purple); 
-  box-shadow: 0 0 10px var(--neon-purple-glow);
+  background: var(--rp-gold); 
+  box-shadow: 0 0 10px var(--rp-gold-glow);
 }
 
 ::-webkit-scrollbar-corner {
@@ -53,11 +77,11 @@ h1, h2, h3, h4, .font-heading {
 /* Firefox */
 * {
   scrollbar-width: thin;
-  scrollbar-color: #3c245c #0f0b18;
+  scrollbar-color: #3c2a1a var(--bg-main);
 }
 
 *:hover {
-  scrollbar-color: #a855f7 #0f0b18;
+  scrollbar-color: var(--rp-gold) var(--bg-main);
 }
 
 /* Touch Friendly Utilities */
@@ -65,15 +89,15 @@ h1, h2, h3, h4, .font-heading {
   touch-action: pan-y;
 }
 
-@keyframes pulseGlow {
+@keyframes goldGlow {
   0%, 100% {
-    box-shadow: 0 0 15px rgba(168, 85, 247, 0.3);
+    box-shadow: 0 0 15px rgba(229, 185, 95, 0.25);
   }
   50% {
-    box-shadow: 0 0 25px rgba(168, 85, 247, 0.6);
+    box-shadow: 0 0 25px rgba(229, 185, 95, 0.5);
   }
 }
 
-.animate-neon-glow {
-  animation: pulseGlow 2.5s infinite ease-in-out;
+.animate-gold-glow {
+  animation: goldGlow 3s infinite ease-in-out;
 }

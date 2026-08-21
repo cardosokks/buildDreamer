@@ -27,13 +27,16 @@ import {
   BookmarkCheck,
   Sliders,
   Plus,
-  Edit2,
-  Check,
   SlidersHorizontal,
   ExternalLink,
-  MessageSquare
+  MessageSquare,
+  Edit2,
+  Check,
+  Sun,
+  Moon
 } from 'lucide-react';
 
+import { useTheme } from '../context/ThemeContext';
 import { SettingsModal } from './SettingsModal';
 import { API_URL } from '../config';
 
@@ -87,6 +90,7 @@ interface DashboardProps {
 
 export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', onTabChange, onSelectProject }) => {
   const { token, logout, user } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -436,27 +440,46 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
               {mobileMenuOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
             </button>
 
-            <div className="p-1.5 bg-purple-900/30 border border-purple-500/40 rounded-lg text-purple-400 shadow-[0_0_10px_rgba(168,85,247,0.2)]">
-              <Sparkles className="w-4 h-4 animate-pulse" />
+            <div className="w-8 h-8 rounded-full overflow-hidden border border-amber-500/40 shadow-[0_0_12px_rgba(229,185,95,0.3)] shrink-0 bg-black/40 flex items-center justify-center">
+              <img src="/logo.png" alt="Real Premise" className="w-full h-full object-cover" />
             </div>
             {!navbarMinimized && (
               <div className="flex items-center gap-2">
-                <span className="font-extrabold text-base sm:text-lg tracking-widest bg-gradient-to-r from-purple-400 via-pink-400 to-indigo-400 bg-clip-text text-transparent">REAL PREMISE</span>
-                <span className="hidden sm:inline-block px-2 py-0.5 rounded border border-purple-500/30 bg-purple-950/40 text-[9px] text-purple-300 font-mono tracking-widest shadow-[0_0_8px_rgba(168,85,247,0.15)]">PORTAL</span>
+                <span className="font-extrabold text-base sm:text-lg tracking-widest bg-gradient-to-r from-amber-300 via-rose-300 to-amber-400 bg-clip-text text-transparent">REAL PREMISE</span>
+                <span className="hidden sm:inline-block px-2 py-0.5 rounded border border-amber-500/30 bg-amber-950/30 text-[9px] text-amber-300 font-mono tracking-widest shadow-[0_0_8px_rgba(229,185,95,0.2)]">STUDIO</span>
               </div>
             )}
           </div>
 
           {/* Accessibility & Density Controls */}
           <div className="flex items-center gap-2.5">
+            {/* Botão de Alternar Modo Escuro / Modo Claro */}
+            <button
+              onClick={toggleTheme}
+              className="p-2 rounded-xl bg-slate-900/60 dark:bg-slate-900/60 light:bg-amber-100/60 border border-amber-500/30 text-amber-300 hover:text-amber-200 transition-all cursor-pointer shadow-sm hover:shadow-[0_0_12px_rgba(229,185,95,0.3)] flex items-center gap-1.5"
+              title={theme === 'dark' ? 'Mudar para Modo Claro' : 'Mudar para Modo Escuro'}
+            >
+              {theme === 'dark' ? (
+                <>
+                  <Sun className="w-4 h-4 text-amber-400" />
+                  <span className="hidden sm:inline text-xs font-semibold text-amber-300">Claro</span>
+                </>
+              ) : (
+                <>
+                  <Moon className="w-4 h-4 text-rose-400" />
+                  <span className="hidden sm:inline text-xs font-semibold text-rose-500">Escuro</span>
+                </>
+              )}
+            </button>
+
             {/* Density Selector */}
             {!navbarMinimized && (
-              <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 bg-slate-950 border border-slate-850 rounded-xl">
+              <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 bg-slate-950/60 border border-slate-800 rounded-xl">
                 <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Barra:</span>
                 <select
                   value={navbarSize}
                   onChange={(e) => setNavbarSize(e.target.value as any)}
-                  className="bg-transparent border-none text-[10px] text-purple-300 font-mono focus:outline-none cursor-pointer"
+                  className="bg-transparent border-none text-[10px] text-amber-300 font-mono focus:outline-none cursor-pointer"
                 >
                   <option value="compact" className="bg-slate-900 text-white">Compacto</option>
                   <option value="normal" className="bg-slate-900 text-white">Normal</option>
@@ -468,7 +491,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
             {/* Minimize / Maximize Navbar Button */}
             <button
               onClick={() => setNavbarMinimized(!navbarMinimized)}
-              className="p-1.5 bg-slate-950 hover:bg-slate-900 border border-slate-800 text-slate-400 hover:text-white rounded-xl transition-all cursor-pointer shadow-sm"
+              className="p-1.5 bg-slate-950/60 hover:bg-slate-900 border border-slate-800 text-slate-400 hover:text-white rounded-xl transition-all cursor-pointer shadow-sm"
               title={navbarMinimized ? "Expandir Barra Superior" : "Minimizar Barra Superior"}
             >
               {navbarMinimized ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
