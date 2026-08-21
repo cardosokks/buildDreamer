@@ -54,28 +54,25 @@ async function processAIChatJob(jobId, prompt, pageId, applyToAll, clientGeminiK
         });
         if (!page)
             throw new Error('Página não encontrada');
-        // Se applyToAll for true, processa iterativamente ou em lote todas as páginas do projeto
+        // Se applyToAll for true, processa todas as páginas em PARALELO para máxima velocidade
         if (applyToAll && page.project?.pages && page.project.pages.length > 1) {
             const allPages = page.project.pages;
-            const updatedPages = [];
-            for (let i = 0; i < allPages.length; i++) {
-                const p = allPages[i];
-                exports.aiChatJobsQueue[jobId] = {
-                    status: 'processing',
-                    currentModel: `${model || 'gemini-2.5-flash'} (Página ${i + 1}/${allPages.length}: ${p.name})`,
-                    scope: 'all'
-                };
+            exports.aiChatJobsQueue[jobId] = {
+                status: 'processing',
+                currentModel: `${model || 'gemini-2.5-flash'} (Processando ${allPages.length} páginas em paralelo...)`,
+                scope: 'all'
+            };
+            const updatedPages = await Promise.all(allPages.map(async (p) => {
                 const pagePrompt = `
-          Estamos aplicando uma alteração global em todas as páginas do site.
-          Página atual sendo editada: "${p.name}" (slug: /${p.slug})
-          Instrução do usuário: "${prompt}"
-        `;
+            Estamos aplicando uma alteração global em todas as páginas do site.
+            Página atual: "${p.name}" (slug: /${p.slug})
+            Instrução do usuário: "${prompt}"
+          `;
                 const aiResponse = await (0, gemini_1.generateAIResponse)(pagePrompt, {
                     html: p.html,
                     css: p.css,
                     js: p.js
                 }, clientGeminiKey, model, registeredModels, undefined, clientProxyUrl);
-                // Atualizar no banco de dados
                 await db_1.prisma.page.update({
                     where: { id: p.id },
                     data: {
@@ -84,21 +81,21 @@ async function processAIChatJob(jobId, prompt, pageId, applyToAll, clientGeminiK
                         js: aiResponse.js || p.js
                     }
                 });
-                updatedPages.push({
+                return {
                     id: p.id,
                     name: p.name,
                     slug: p.slug,
                     html: aiResponse.html || p.html,
                     css: aiResponse.css || p.css,
                     js: aiResponse.js || p.js
-                });
-            }
+                };
+            }));
             const activeUpdated = updatedPages.find(p => p.id === pageId) || updatedPages[0];
             exports.aiChatJobsQueue[jobId] = {
                 status: 'completed',
                 scope: 'all',
                 result: {
-                    explanation: `Alteração aplicada com sucesso em todas as ${updatedPages.length} páginas do site!`,
+                    explanation: `Alteração aplicada em paralelo em todas as ${updatedPages.length} páginas do site!`,
                     html: activeUpdated.html,
                     css: activeUpdated.css,
                     js: activeUpdated.js,

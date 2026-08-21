@@ -28,7 +28,7 @@ if (defaultProxyUrl) {
 const generateAIResponse = async (prompt, context, customApiKey, customModel, registeredModels, onModelAttempt, customProxyUrl) => {
     const activeKey = customApiKey || process.env.GEMINI_API_KEY;
     const proxyUrl = isValidHttpUrl(customProxyUrl) ? customProxyUrl.trim() : defaultProxyUrl;
-    // Modelos candidatos em cascata
+    // Modelos candidatos em cascata ultra-rápidos
     let candidateModels = [];
     if (registeredModels && Array.isArray(registeredModels) && registeredModels.length > 0) {
         candidateModels = [...registeredModels];
@@ -40,7 +40,7 @@ const generateAIResponse = async (prompt, context, customApiKey, customModel, re
         candidateModels = [customModel];
     }
     else {
-        candidateModels = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.5-pro', 'gemini-1.5-flash'];
+        candidateModels = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-2.5-pro'];
     }
     const systemPrompt = `
     Você é um Arquiteto de Software Frontend de Elite e Engenheiro de Design System especializado em ferramentas visuais No-Code / Code-generation (estilo Webflow, Framer, v0.dev e Tailwind UI).
@@ -81,9 +81,11 @@ const generateAIResponse = async (prompt, context, customApiKey, customModel, re
             const isGemini25 = modelToTry.includes('2.5') || modelToTry.includes('2.0');
             const generationConfig = {
                 responseMimeType: 'application/json',
-                temperature: 0.7
+                temperature: 0.4,
+                topP: 0.95,
+                maxOutputTokens: 8192
             };
-            // thinkingConfig só é suportado nos modelos Gemini 2.5 e 2.0
+            // thinkingConfig desativado (thinkingBudget: 0) força o Gemini a responder na hora sem overhead
             if (isGemini25) {
                 generationConfig.thinkingConfig = {
                     thinkingBudget: 0

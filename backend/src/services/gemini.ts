@@ -35,7 +35,7 @@ export const generateAIResponse = async (
   const activeKey = customApiKey || process.env.GEMINI_API_KEY;
   const proxyUrl = isValidHttpUrl(customProxyUrl) ? customProxyUrl!.trim() : defaultProxyUrl;
 
-  // Modelos candidatos em cascata
+  // Modelos candidatos em cascata ultra-rápidos
   let candidateModels: string[] = [];
   if (registeredModels && Array.isArray(registeredModels) && registeredModels.length > 0) {
     candidateModels = [...registeredModels];
@@ -45,7 +45,7 @@ export const generateAIResponse = async (
   } else if (customModel) {
     candidateModels = [customModel];
   } else {
-    candidateModels = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.5-pro', 'gemini-1.5-flash'];
+    candidateModels = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-2.5-pro'];
   }
 
   const systemPrompt = `
@@ -92,10 +92,12 @@ export const generateAIResponse = async (
       
       const generationConfig: any = {
         responseMimeType: 'application/json',
-        temperature: 0.7
+        temperature: 0.4,
+        topP: 0.95,
+        maxOutputTokens: 8192
       };
 
-      // thinkingConfig só é suportado nos modelos Gemini 2.5 e 2.0
+      // thinkingConfig desativado (thinkingBudget: 0) força o Gemini a responder na hora sem overhead
       if (isGemini25) {
         generationConfig.thinkingConfig = {
           thinkingBudget: 0

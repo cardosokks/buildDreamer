@@ -46,58 +46,56 @@ async function processAIChatJob(
 
     if (!page) throw new Error('Página não encontrada');
 
-    // Se applyToAll for true, processa iterativamente ou em lote todas as páginas do projeto
+    // Se applyToAll for true, processa todas as páginas em PARALELO para máxima velocidade
     if (applyToAll && page.project?.pages && page.project.pages.length > 1) {
       const allPages = page.project.pages;
-      const updatedPages: Array<{ id: string; name: string; slug: string; html: string; css: string; js: string }> = [];
+      aiChatJobsQueue[jobId] = {
+        status: 'processing',
+        currentModel: `${model || 'gemini-2.5-flash'} (Processando ${allPages.length} páginas em paralelo...)`,
+        scope: 'all'
+      };
 
-      for (let i = 0; i < allPages.length; i++) {
-        const p = allPages[i];
-        aiChatJobsQueue[jobId] = {
-          status: 'processing',
-          currentModel: `${model || 'gemini-2.5-flash'} (Página ${i + 1}/${allPages.length}: ${p.name})`,
-          scope: 'all'
-        };
+      const updatedPages = await Promise.all(
+        allPages.map(async (p) => {
+          const pagePrompt = `
+            Estamos aplicando uma alteração global em todas as páginas do site.
+            Página atual: "${p.name}" (slug: /${p.slug})
+            Instrução do usuário: "${prompt}"
+          `;
 
-        const pagePrompt = `
-          Estamos aplicando uma alteração global em todas as páginas do site.
-          Página atual sendo editada: "${p.name}" (slug: /${p.slug})
-          Instrução do usuário: "${prompt}"
-        `;
+          const aiResponse = await generateAIResponse(
+            pagePrompt,
+            {
+              html: p.html,
+              css: p.css,
+              js: p.js
+            },
+            clientGeminiKey,
+            model,
+            registeredModels,
+            undefined,
+            clientProxyUrl
+          );
 
-        const aiResponse = await generateAIResponse(
-          pagePrompt,
-          {
-            html: p.html,
-            css: p.css,
-            js: p.js
-          },
-          clientGeminiKey,
-          model,
-          registeredModels,
-          undefined,
-          clientProxyUrl
-        );
+          await prisma.page.update({
+            where: { id: p.id },
+            data: {
+              html: aiResponse.html || p.html,
+              css: aiResponse.css || p.css,
+              js: aiResponse.js || p.js
+            }
+          });
 
-        // Atualizar no banco de dados
-        await prisma.page.update({
-          where: { id: p.id },
-          data: {
+          return {
+            id: p.id,
+            name: p.name,
+            slug: p.slug,
             html: aiResponse.html || p.html,
             css: aiResponse.css || p.css,
             js: aiResponse.js || p.js
-          }
-        });
-
-        updatedPages.push({
-          id: p.id,
-          name: p.name,
-          slug: p.slug,
-          html: aiResponse.html || p.html,
-          css: aiResponse.css || p.css,
-          js: aiResponse.js || p.js
-        });
-      }
+          };
+        })
+      );
 
       const activeUpdated = updatedPages.find(p => p.id === pageId) || updatedPages[0];
 
@@ -105,7 +103,7 @@ async function processAIChatJob(
         status: 'completed',
         scope: 'all',
         result: {
-          explanation: `Alteração aplicada com sucesso em todas as ${updatedPages.length} páginas do site!`,
+          explanation: `Alteração aplicada em paralelo em todas as ${updatedPages.length} páginas do site!`,
           html: activeUpdated.html,
           css: activeUpdated.css,
           js: activeUpdated.js,
