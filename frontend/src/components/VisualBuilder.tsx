@@ -437,6 +437,53 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
 
   const layers = activePage ? parseHtmlToLayers(activePage.html) : [];
 
+  // Download Project as complete ZIP package (including Dockerfile, docker-compose, pages, css, js)
+  const [exportOptions, setExportOptions] = useState({
+    pages: true,
+    css: true,
+    js: true,
+    docker: true,
+    readme: true
+  });
+  const [downloadingZip, setDownloadingZip] = useState(false);
+
+  const handleDownloadZip = async () => {
+    if (!project) return;
+    setDownloadingZip(true);
+    try {
+      const queryParams = new URLSearchParams({
+        pages: String(exportOptions.pages),
+        css: String(exportOptions.css),
+        js: String(exportOptions.js),
+        docker: String(exportOptions.docker),
+        readme: String(exportOptions.readme)
+      }).toString();
+
+      const res = await fetch(`${API_URL}/api/export/${project.id}?${queryParams}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (!res.ok) throw new Error('Falha ao exportar pacote ZIP');
+
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `projeto-${project.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      a.remove();
+    } catch (e) {
+      console.error(e);
+      alert('Erro ao gerar pacote de exportação ZIP.');
+    } finally {
+      setDownloadingZip(false);
+    }
+  };
+
   const getFullHtmlDocument = () => {
     if (!activePage) return '';
     return `<!DOCTYPE html>
@@ -463,7 +510,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
 </html>`;
   };
 
-  const handleDownloadCode = () => {
+  const handleDownloadSingleHtml = () => {
     const content = getFullHtmlDocument();
     const blob = new Blob([content], { type: 'text/html' });
     const url = URL.createObjectURL(blob);
@@ -771,14 +818,14 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
         </div>
       )}
 
-      {/* ─── Modal de Exportação & Download ─── */}
-      {showExportModal && activePage && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-2xl bg-slate-950 border border-slate-800 rounded-2xl flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+      {/* ─── Modal de Exportação & Download Completo (ZIP + Docker) ─── */}
+      {showExportModal && activePage && project && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-2xl bg-slate-950 border border-slate-800 rounded-2xl flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 max-h-[90vh]">
             <div className="px-5 py-4 bg-[#090410] border-b border-slate-850 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Download className="w-4 h-4 text-purple-400" />
-                <span className="font-bold text-sm text-white">Exportação de Código de Produção</span>
+                <span className="font-bold text-sm text-white">Exportação do Projeto - {project.name}</span>
               </div>
               <button
                 onClick={() => setShowExportModal(false)}
@@ -788,60 +835,136 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
               </button>
             </div>
 
-            <div className="p-5 space-y-4">
-              <div className="flex gap-2 border-b border-slate-900 pb-2">
-                <button
-                  onClick={() => setActiveExportTab('html')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${activeExportTab === 'html' ? 'bg-purple-600 text-white' : 'text-slate-400 hover:text-white'}`}
-                >
-                  HTML Completo
-                </button>
-                <button
-                  onClick={() => setActiveExportTab('css')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${activeExportTab === 'css' ? 'bg-purple-600 text-white' : 'text-slate-400 hover:text-white'}`}
-                >
-                  CSS Customizado
-                </button>
-                <button
-                  onClick={() => setActiveExportTab('js')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${activeExportTab === 'js' ? 'bg-purple-600 text-white' : 'text-slate-400 hover:text-white'}`}
-                >
-                  JavaScript
-                </button>
+            <div className="p-5 space-y-4 overflow-y-auto flex-1">
+              {/* Pacote ZIP Completo com Docker e Estrutura */}
+              <div className="p-4 bg-purple-950/20 border border-purple-500/30 rounded-xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
+                      <Download className="w-3.5 h-3.5 text-purple-400" />
+                      Pacote Completo do Projeto (.ZIP)
+                    </h4>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      Gera o arquivo ZIP com todas as páginas, folhas de estilo CSS, JS, Dockerfile e docker-compose.yml pronto para deploy em qualquer VPS ou Easypanel.
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleDownloadZip}
+                    disabled={downloadingZip}
+                    className="flex items-center gap-1.5 px-4 py-2.5 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all shadow-[0_0_15px_rgba(168,85,247,0.3)] shrink-0 cursor-pointer"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    {downloadingZip ? 'Gerando ZIP...' : 'Baixar Pacote ZIP'}
+                  </button>
+                </div>
+
+                {/* Seletores de Arquivos do ZIP */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-2 border-t border-purple-500/20 text-[11px]">
+                  <label className="flex items-center gap-2 text-slate-300 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={exportOptions.pages}
+                      onChange={e => setExportOptions({ ...exportOptions, pages: e.target.checked })}
+                      className="rounded bg-slate-900 border-slate-700 text-purple-600 focus:ring-0 cursor-pointer"
+                    />
+                    Páginas HTML (pages/)
+                  </label>
+                  <label className="flex items-center gap-2 text-slate-300 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={exportOptions.css}
+                      onChange={e => setExportOptions({ ...exportOptions, css: e.target.checked })}
+                      className="rounded bg-slate-900 border-slate-700 text-purple-600 focus:ring-0 cursor-pointer"
+                    />
+                    Estilos (css/)
+                  </label>
+                  <label className="flex items-center gap-2 text-slate-300 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={exportOptions.js}
+                      onChange={e => setExportOptions({ ...exportOptions, js: e.target.checked })}
+                      className="rounded bg-slate-900 border-slate-700 text-purple-600 focus:ring-0 cursor-pointer"
+                    />
+                    Scripts (js/)
+                  </label>
+                  <label className="flex items-center gap-2 text-slate-300 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={exportOptions.docker}
+                      onChange={e => setExportOptions({ ...exportOptions, docker: e.target.checked })}
+                      className="rounded bg-slate-900 border-slate-700 text-purple-600 focus:ring-0 cursor-pointer"
+                    />
+                    Dockerfile & Compose
+                  </label>
+                  <label className="flex items-center gap-2 text-slate-300 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={exportOptions.readme}
+                      onChange={e => setExportOptions({ ...exportOptions, readme: e.target.checked })}
+                      className="rounded bg-slate-900 border-slate-700 text-purple-600 focus:ring-0 cursor-pointer"
+                    />
+                    README.md
+                  </label>
+                </div>
               </div>
 
-              <textarea
-                readOnly
-                rows={10}
-                value={
-                  activeExportTab === 'html' ? getFullHtmlDocument() :
-                  activeExportTab === 'css' ? (activePage.css || '/* Nenhum CSS customizado */') :
-                  (activePage.js || '// Nenhum script interativo')
-                }
-                className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 font-mono text-xs text-slate-300 focus:outline-none resize-none"
-              />
+              {/* Prévia e Cópia Rápida de Código */}
+              <div>
+                <span className="text-[11px] font-bold text-slate-400 block mb-2">Prévia de Código da Página Atual ({activePage.name}):</span>
+                <div className="flex gap-2 border-b border-slate-900 pb-2 mb-2">
+                  <button
+                    onClick={() => setActiveExportTab('html')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${activeExportTab === 'html' ? 'bg-purple-600 text-white' : 'text-slate-400 hover:text-white'}`}
+                  >
+                    HTML Completo
+                  </button>
+                  <button
+                    onClick={() => setActiveExportTab('css')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${activeExportTab === 'css' ? 'bg-purple-600 text-white' : 'text-slate-400 hover:text-white'}`}
+                  >
+                    CSS Customizado
+                  </button>
+                  <button
+                    onClick={() => setActiveExportTab('js')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${activeExportTab === 'js' ? 'bg-purple-600 text-white' : 'text-slate-400 hover:text-white'}`}
+                  >
+                    JavaScript
+                  </button>
+                </div>
 
-              <div className="flex items-center justify-between pt-2">
-                <button
-                  onClick={() => {
-                    const text = activeExportTab === 'html' ? getFullHtmlDocument() : activeExportTab === 'css' ? activePage.css : activePage.js;
-                    navigator.clipboard.writeText(text);
-                    setCopiedCode(true);
-                    setTimeout(() => setCopiedCode(false), 2000);
-                  }}
-                  className="flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-850 text-slate-300 rounded-xl text-xs font-bold transition-all cursor-pointer"
-                >
-                  {copiedCode ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5 text-purple-400" />}
-                  {copiedCode ? 'Copiado!' : 'Copiar Código'}
-                </button>
+                <textarea
+                  readOnly
+                  rows={7}
+                  value={
+                    activeExportTab === 'html' ? getFullHtmlDocument() :
+                    activeExportTab === 'css' ? (activePage.css || '/* Nenhum CSS customizado */') :
+                    (activePage.js || '// Nenhum script interativo')
+                  }
+                  className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 font-mono text-xs text-slate-300 focus:outline-none resize-none"
+                />
 
-                <button
-                  onClick={handleDownloadCode}
-                  className="flex items-center gap-1.5 px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-xs font-bold transition-all shadow-[0_0_15px_rgba(168,85,247,0.3)] cursor-pointer"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  Baixar index.html
-                </button>
+                <div className="flex items-center justify-between pt-2">
+                  <button
+                    onClick={() => {
+                      const text = activeExportTab === 'html' ? getFullHtmlDocument() : activeExportTab === 'css' ? activePage.css : activePage.js;
+                      navigator.clipboard.writeText(text);
+                      setCopiedCode(true);
+                      setTimeout(() => setCopiedCode(false), 2000);
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-850 text-slate-300 rounded-xl text-xs font-bold transition-all cursor-pointer border border-slate-800"
+                  >
+                    {copiedCode ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5 text-purple-400" />}
+                    {copiedCode ? 'Copiado!' : 'Copiar Código da Aba'}
+                  </button>
+
+                  <button
+                    onClick={handleDownloadSingleHtml}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-300 rounded-xl text-xs font-semibold transition-all border border-slate-800 cursor-pointer"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    Baixar apenas {activePage.slug}.html
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -850,3 +973,4 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
     </div>
   );
 };
+
