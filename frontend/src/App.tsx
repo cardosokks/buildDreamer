@@ -6,7 +6,7 @@ import { VisualBuilder } from './components/VisualBuilder';
 
 export interface AppRoute {
   type: 'dashboard' | 'builder' | 'auth';
-  tab?: 'general' | 'projects' | 'leads' | 'saved-leads' | 'presets' | 'tunnels';
+  tab?: 'general' | 'projects' | 'leads' | 'saved-leads' | 'presets';
   projectId?: string;
 }
 
@@ -23,7 +23,6 @@ const parseUrlToRoute = (): AppRoute => {
   if (path === '/leads') return { type: 'dashboard', tab: 'leads' };
   if (path === '/saved-leads') return { type: 'dashboard', tab: 'saved-leads' };
   if (path === '/presets') return { type: 'dashboard', tab: 'presets' };
-  if (path === '/tunnels') return { type: 'dashboard', tab: 'tunnels' };
   if (path === '/auth') return { type: 'auth' };
 
   return { type: 'dashboard', tab: 'general' };

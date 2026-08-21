@@ -761,95 +761,11 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
     URL.revokeObjectURL(url);
   };
 
-  const [showPreviewDropdown, setShowPreviewDropdown] = useState(false);
-  const [ngrokActive, setNgrokActive] = useState(false);
-  const [ngrokUrl, setNgrokUrl] = useState<string | null>(null);
-  const [ngrokLoading, setNgrokLoading] = useState(false);
-
-  // Verificar status do Ngrok para este projeto
-  const checkNgrokStatus = useCallback(async () => {
-    try {
-      const res = await fetch(`${API_URL}/api/ngrok/status/${projectId}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.active) {
-          setNgrokActive(true);
-          setNgrokUrl(data.url);
-        } else {
-          setNgrokActive(false);
-          setNgrokUrl(null);
-        }
-      }
-    } catch {}
-  }, [projectId, token]);
-
-  useEffect(() => {
-    checkNgrokStatus();
-    const interval = setInterval(checkNgrokStatus, 3000);
-    return () => clearInterval(interval);
-  }, [checkNgrokStatus]);
-
   const handleOpenLivePreview = () => {
-    if (ngrokActive && ngrokUrl) {
-      // Se a página ativa for uma subpágina, abre a rota exata da subpágina no Ngrok
-      const pagePath = activePage && !activePage.isHomepage ? `/${activePage.slug}` : '';
-      const fullNgrokPreviewUrl = `${ngrokUrl}${pagePath}`;
-      window.open(fullNgrokPreviewUrl, '_blank');
-      setShowPreviewDropdown(false);
-      return;
-    }
-
     const content = getFullHtmlDocument();
     const blob = new Blob([content], { type: 'text/html;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     window.open(url, '_blank');
-    setShowPreviewDropdown(false);
-  };
-
-  const handleStartNgrok = async () => {
-    setNgrokLoading(true);
-    try {
-      const customToken = localStorage.getItem('ngrok_authtoken') || '';
-      const res = await fetch(`${API_URL}/api/ngrok/start/${projectId}`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          'x-ngrok-token': customToken
-        }
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Erro ao subir no Ngrok');
-
-      setNgrokActive(true);
-      setNgrokUrl(data.url);
-      window.open(data.url, '_blank');
-      setShowPreviewDropdown(false);
-    } catch (err: any) {
-      alert(`Falha ao iniciar Ngrok: ${err.message}`);
-    } finally {
-      setNgrokLoading(false);
-    }
-  };
-
-  const handleStopNgrok = async () => {
-    setNgrokLoading(true);
-    try {
-      await fetch(`${API_URL}/api/ngrok/stop/${projectId}`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      setNgrokActive(false);
-      setNgrokUrl(null);
-      setShowPreviewDropdown(false);
-    } catch (err: any) {
-      alert(`Falha ao parar Ngrok: ${err.message}`);
-    } finally {
-      setNgrokLoading(false);
-    }
   };
 
   return (
@@ -997,102 +913,15 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
             <Code2 className="w-4 h-4" />
           </button>
 
-          {/* Dropdown de Preview (Nova Aba / Ngrok) */}
-          <div className="relative">
-            <div className="flex items-center">
-              <button
-                onClick={handleOpenLivePreview}
-                className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-l-xl text-xs font-semibold transition-all cursor-pointer shadow-sm ${
-                  ngrokActive
-                    ? 'bg-cyan-950/60 border-cyan-500/50 text-cyan-300'
-                    : 'bg-slate-900 hover:bg-slate-800 border-slate-800 hover:border-cyan-500/40 text-cyan-300'
-                }`}
-                title="Abrir Preview do Site em Nova Janela"
-              >
-                <Eye className="w-3.5 h-3.5 text-cyan-400" />
-                <span className="hidden sm:inline">Preview</span>
-                {ngrokActive && (
-                  <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" title="Ngrok Ativo" />
-                )}
-              </button>
-
-              <button
-                onClick={() => setShowPreviewDropdown(!showPreviewDropdown)}
-                className={`p-1.5 border border-l-0 rounded-r-xl text-cyan-300 transition-all cursor-pointer ${
-                  ngrokActive
-                    ? 'bg-cyan-950/60 border-cyan-500/50 hover:bg-cyan-900/60'
-                    : 'bg-slate-900 hover:bg-slate-800 border-slate-800 hover:border-cyan-500/40'
-                }`}
-                title="Opções de Preview (Nova Aba / Ngrok)"
-              >
-                <ChevronDown className="w-3.5 h-3.5 text-cyan-400" />
-              </button>
-            </div>
-
-            {/* Menu Dropdown de Preview */}
-            {showPreviewDropdown && (
-              <div className="absolute right-0 top-full mt-1.5 w-64 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl p-2 z-50 space-y-1 backdrop-blur-md">
-                <button
-                  onClick={handleOpenLivePreview}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-slate-200 hover:bg-slate-800 hover:text-white rounded-lg transition-colors cursor-pointer text-left"
-                >
-                  <ExternalLink className="w-4 h-4 text-cyan-400 shrink-0" />
-                  <div>
-                    <span className="block font-bold">Visualizar em Nova Aba</span>
-                    <span className="text-[10px] text-slate-400">Preview local rápido em tempo real</span>
-                  </div>
-                </button>
-
-                <div className="border-t border-slate-800 my-1" />
-
-                {ngrokActive ? (
-                  <div className="space-y-1.5 p-1">
-                    <div className="flex items-center justify-between px-2 text-[10px]">
-                      <span className="text-emerald-400 font-bold flex items-center gap-1">
-                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                        Ngrok Online
-                      </span>
-                      <a 
-                        href={ngrokUrl || '#'} 
-                        target="_blank" 
-                        rel="noreferrer"
-                        className="text-cyan-400 hover:underline flex items-center gap-0.5"
-                      >
-                        Abrir <ExternalLink className="w-2.5 h-2.5" />
-                      </a>
-                    </div>
-                    <div className="px-2 py-1 bg-slate-950 rounded border border-slate-800 text-[10px] text-slate-300 font-mono truncate">
-                      {ngrokUrl}
-                    </div>
-                    <button
-                      onClick={handleStopNgrok}
-                      disabled={ngrokLoading}
-                      className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 bg-red-600/20 hover:bg-red-600/30 border border-red-500/30 text-red-300 text-xs font-bold rounded-lg transition-colors cursor-pointer"
-                    >
-                      {ngrokLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Square className="w-3.5 h-3.5" />}
-                      Parar Preview Ngrok
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={handleStartNgrok}
-                    disabled={ngrokLoading}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-slate-200 hover:bg-slate-800 hover:text-white rounded-lg transition-colors cursor-pointer text-left group"
-                  >
-                    {ngrokLoading ? (
-                      <Loader2 className="w-4 h-4 text-cyan-400 animate-spin shrink-0" />
-                    ) : (
-                      <Globe className="w-4 h-4 text-cyan-400 shrink-0 group-hover:scale-110 transition-transform" />
-                    )}
-                    <div>
-                      <span className="block font-bold">Subir Preview no Ngrok</span>
-                      <span className="text-[10px] text-slate-400">Gera link público para enviar a clientes</span>
-                    </div>
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
+          {/* Botão de Preview em Nova Aba */}
+          <button
+            onClick={handleOpenLivePreview}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-cyan-500/40 text-cyan-300 rounded-xl text-xs font-semibold transition-all cursor-pointer shadow-sm"
+            title="Abrir Preview do Site em Nova Janela"
+          >
+            <Eye className="w-3.5 h-3.5 text-cyan-400" />
+            <span className="hidden sm:inline">Preview</span>
+          </button>
 
           {/* Hidden ZIP File Input */}
           <input 

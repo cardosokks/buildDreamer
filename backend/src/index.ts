@@ -11,7 +11,6 @@ import { aiRouter } from './routes/ai';
 import { exportRouter } from './routes/export';
 import { leadsRouter } from './routes/leads';
 import { crawlerRouter } from './routes/crawler';
-import { ngrokRouter } from './routes/ngrok';
 import { authenticateToken } from './middleware/auth';
 
 dotenv.config();
@@ -37,7 +36,6 @@ app.use('/api/export', authenticateToken, exportRouter);
 app.use('/api/ai', authenticateToken, aiRouter);
 app.use('/api/leads', authenticateToken, leadsRouter);
 app.use('/api/crawler', authenticateToken, crawlerRouter);
-app.use('/api/ngrok', authenticateToken, ngrokRouter);
 app.use('/api', authenticateToken, pageRouter);
 
 app.get('/health', (req, res) => {
