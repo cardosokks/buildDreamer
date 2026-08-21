@@ -51,17 +51,30 @@ interface Lead {
 }
 
 interface DashboardProps {
+  initialTab?: 'general' | 'projects' | 'leads';
+  onTabChange?: (tab: 'general' | 'projects' | 'leads') => void;
   onSelectProject: (projectId: string) => void;
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ onSelectProject }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', onTabChange, onSelectProject }) => {
   const { token, logout, user } = useAuth();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
   // Tab layout selection: 'general' | 'projects' | 'leads'
-  const [activeTab, setActiveTab] = useState<'general' | 'projects' | 'leads'>('general');
+  const [activeTab, setActiveTabState] = useState<'general' | 'projects' | 'leads'>(initialTab);
+
+  const setActiveTab = (tab: 'general' | 'projects' | 'leads') => {
+    setActiveTabState(tab);
+    if (onTabChange) onTabChange(tab);
+  };
+
+  useEffect(() => {
+    if (initialTab && initialTab !== activeTab) {
+      setActiveTabState(initialTab);
+    }
+  }, [initialTab]);
 
   // Accessibility & UX Customization States
   const [navbarMinimized, setNavbarMinimized] = useState(false);
