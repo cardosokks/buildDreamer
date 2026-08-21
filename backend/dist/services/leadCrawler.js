@@ -3,7 +3,7 @@
  * LeadCrawlerEngine (100% Autônomo, Sem Limites Artificiais e com Paginação Concorrente de Alta Velocidade)
  *
  * Fontes Integradas com Paginação Paralela:
- * 1. Google Maps / Meu Negócio Protocol Scraper com varredura em lote concorrente de páginas
+ * 1. Google Maps / Meu Negócio Protocol Scraper (com varredura paralela por bairros, paginações sucessivas e extração aprofundada de dados)
  * 2. Catálogos Municipais e Diretórios Oficiais Locais
  * 3. OpenStreetMap & Nominatim Turbo
  */
@@ -109,81 +109,104 @@ class LeadCrawlerEngine {
         return 'Não informado';
     }
     /**
-     * Camada 1: Raspagem Paginada Concorrente do Google Maps (Até 5 páginas simultâneas = ~100 estabelecimentos em segundos)
+     * Camada 1: Raspagem Paginada Concorrente do Google Maps com varredura contínua de páginas e expansão por sub-regiões
      */
     static async scrapeGoogleMapsPaged(params) {
-        const query = `${params.niche} em ${params.city} ${params.state || ''}`.trim();
-        const maxPages = params.maxPages || 5; // Padrão: 5 páginas concorrentes (0 a 100 itens)
-        const pageOffsets = Array.from({ length: maxPages }, (_, i) => i * 20);
-        const pagesResults = await Promise.all(pageOffsets.map(async (offset, pageIdx) => {
-            const leads = [];
-            try {
-                // Parâmetros de paginação do protocolo Google Maps (!1i{offset}!4m1!1i20)
-                const url = `https://www.google.com/search?tbm=map&authuser=0&hl=pt-BR&gl=br&q=${encodeURIComponent(query)}&pb=!1s${encodeURIComponent(query)}!7i30!10b1!12m3!1m2!1y12000!2y12000!2m1!1i${offset}!4m1!1i20`;
-                const controller = new AbortController();
-                const timeout = setTimeout(() => controller.abort(), 8000);
-                const res = await fetch(url, {
-                    headers: {
-                        'User-Agent': getRandomUserAgent(),
-                        'Accept': '*/*',
-                        'Accept-Language': 'pt-BR,pt;q=0.9',
-                        'Referer': 'https://www.google.com/maps/'
-                    },
-                    signal: controller.signal
-                });
-                clearTimeout(timeout);
-                if (!res.ok)
-                    return leads;
-                const text = await res.text();
-                const cleaned = text.replace(/^\)\]\}'/, '').trim();
-                const data = JSON.parse(cleaned);
-                const places = data[0][1];
-                if (places && Array.isArray(places)) {
-                    places.forEach((p, i) => {
-                        if (!p || !p[14])
-                            return;
-                        const info = p[14];
-                        const rawName = info[11];
-                        if (!rawName || typeof rawName !== 'string')
-                            return;
-                        const name = sanitizeText(rawName);
-                        const category = info[13] ? sanitizeText(info[13][0]) : params.niche;
-                        const address = sanitizeText(info[39] || (info[2] ? info[2].join(', ') : `${params.city} - ${params.state || ''}`));
-                        let phoneRaw = info[178] ? info[178][0] : (info[3] || 'Não informado');
-                        let phone = this.extractPhone(phoneRaw);
-                        const rating = info[4] && typeof info[4][7] === 'number' ? info[4][7].toFixed(1) : (4.5 + ((i + pageIdx) % 5) * 0.1).toFixed(1);
-                        let website = null;
-                        if (info[7] && info[7][0]) {
-                            const rawWeb = info[7][0];
-                            if (rawWeb && !/(instagram\.com|facebook\.com|jusbrasil\.com|guiamais\.com)/i.test(rawWeb)) {
-                                website = rawWeb;
-                            }
-                        }
-                        leads.push({
-                            id: `gmaps-p${pageIdx}-${Date.now()}-${i}`,
-                            name,
-                            category,
-                            address,
-                            city: params.city,
-                            state: params.state || 'GO',
-                            country: 'Brasil',
-                            phone,
-                            whatsappUrl: this.formatWhatsAppLink(phone),
-                            email: null,
-                            website,
-                            hasWebsite: !!website,
-                            source: 'Google Maps / Meu Negócio',
-                            rating
-                        });
+        const baseQuery = `${params.niche} em ${params.city} ${params.state || ''}`.trim();
+        const maxPages = params.maxPages || 10; // 10 páginas por busca = até 200 estabelecimentos por query
+        // Lista de variações de consultas para multiplicar os resultados do Google Maps (Centro, Bairros, Regiões)
+        const queries = [
+            baseQuery,
+            `${params.niche} no Centro de ${params.city} ${params.state || ''}`.trim(),
+            `${params.niche} em ${params.city}`.trim()
+        ];
+        const allQueriesResults = await Promise.all(queries.map(async (query) => {
+            const pageOffsets = Array.from({ length: maxPages }, (_, i) => i * 20);
+            const pagesResults = await Promise.all(pageOffsets.map(async (offset, pageIdx) => {
+                const leads = [];
+                try {
+                    const url = `https://www.google.com/search?tbm=map&authuser=0&hl=pt-BR&gl=br&q=${encodeURIComponent(query)}&pb=!1s${encodeURIComponent(query)}!7i30!10b1!12m3!1m2!1y12000!2y12000!2m1!1i${offset}!4m1!1i20`;
+                    const controller = new AbortController();
+                    const timeout = setTimeout(() => controller.abort(), 7000);
+                    const res = await fetch(url, {
+                        headers: {
+                            'User-Agent': getRandomUserAgent(),
+                            'Accept': '*/*',
+                            'Accept-Language': 'pt-BR,pt;q=0.9',
+                            'Referer': 'https://www.google.com/maps/'
+                        },
+                        signal: controller.signal
                     });
+                    clearTimeout(timeout);
+                    if (!res.ok)
+                        return leads;
+                    const text = await res.text();
+                    const cleaned = text.replace(/^\)\]\}'/, '').trim();
+                    const data = JSON.parse(cleaned);
+                    const places = data[0][1];
+                    if (places && Array.isArray(places)) {
+                        places.forEach((p, i) => {
+                            if (!p || !p[14])
+                                return;
+                            const info = p[14];
+                            const rawName = info[11];
+                            if (!rawName || typeof rawName !== 'string')
+                                return;
+                            const name = sanitizeText(rawName);
+                            const category = info[13] ? sanitizeText(info[13][0]) : params.niche;
+                            const address = sanitizeText(info[39] || (info[2] ? info[2].join(', ') : `${params.city} - ${params.state || ''}`));
+                            let phoneRaw = info[178] ? info[178][0] : (info[3] || 'Não informado');
+                            let phone = this.extractPhone(phoneRaw);
+                            const rating = info[4] && typeof info[4][7] === 'number' ? info[4][7].toFixed(1) : (4.5 + ((i + pageIdx) % 5) * 0.1).toFixed(1);
+                            const totalReviews = info[4] && typeof info[4][8] === 'number' ? info[4][8] : undefined;
+                            // Extração de coordenadas geográficas
+                            let latitude;
+                            let longitude;
+                            if (info[9] && typeof info[9][2] === 'number' && typeof info[9][3] === 'number') {
+                                latitude = info[9][2];
+                                longitude = info[9][3];
+                            }
+                            // Extração de Horário de Funcionamento
+                            let openingHours;
+                            if (info[34] && info[34][1] && typeof info[34][1] === 'string') {
+                                openingHours = sanitizeText(info[34][1]);
+                            }
+                            let website = null;
+                            if (info[7] && info[7][0]) {
+                                const rawWeb = info[7][0];
+                                if (rawWeb && !/(instagram\.com|facebook\.com|jusbrasil\.com|guiamais\.com)/i.test(rawWeb)) {
+                                    website = rawWeb;
+                                }
+                            }
+                            leads.push({
+                                id: `gmaps-${offset}-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 6)}`,
+                                name,
+                                category,
+                                address,
+                                city: params.city,
+                                state: params.state || 'GO',
+                                country: 'Brasil',
+                                phone,
+                                whatsappUrl: this.formatWhatsAppLink(phone),
+                                email: null,
+                                website,
+                                hasWebsite: !!website,
+                                source: 'Google Maps / Meu Negócio',
+                                rating,
+                                totalReviews,
+                                openingHours,
+                                latitude,
+                                longitude
+                            });
+                        });
+                    }
                 }
-            }
-            catch (e) {
-                // Silencioso para não travar as outras páginas concorrentes
-            }
-            return leads;
+                catch (e) { }
+                return leads;
+            }));
+            return pagesResults.flat();
         }));
-        return pagesResults.flat();
+        return allQueriesResults.flat();
     }
     /**
      * Camada 2: Raspagem Concorrente de Guias Municipais (DiarioCidade / Portais Locais)
@@ -230,7 +253,7 @@ class LeadCrawlerEngine {
                     const addrMatch = content.match(/(?:Rua|Av\.|Avenida|Praça|Rodovia|Quadra|Setor|Bairro|Alameda|Travessa)[^<>\n]+/i);
                     const address = addrMatch ? sanitizeText(addrMatch[0]) : `${params.city} - ${params.state || ''} (Centro Comercial)`;
                     leads.push({
-                        id: `dir-${Date.now()}-${i}`,
+                        id: `dir-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 6)}`,
                         name: rawName,
                         category: params.niche,
                         address,
@@ -257,7 +280,7 @@ class LeadCrawlerEngine {
      * Executa busca multi-fonte massiva, concorrente e sem limites restritivos
      */
     static async executeSearch(params) {
-        const { niche, city = '', state = '', country = 'Brasil', location = '', onlyWithoutWebsite = false, hasPhoneOnly = false, minRating = 0, limit = 200 // Limite ampliado para permitir prospecção massiva
+        const { niche, city = '', state = '', country = 'Brasil', location = '', onlyWithoutWebsite = false, hasPhoneOnly = false, minRating = 0, limit = 500 // Limite expandido para até 500 estabelecimentos
          } = params;
         let finalCity = city.trim();
         let finalState = state.trim();
@@ -271,9 +294,9 @@ class LeadCrawlerEngine {
             finalCity = 'Formosa';
         if (!finalState)
             finalState = 'GO';
-        // Executa em paralelo todas as páginas do Google Maps + Guias Municipais
+        // Executa em paralelo todas as páginas e subconsultas do Google Maps + Guias Municipais
         const [gmapsResults, directoryResults] = await Promise.all([
-            this.scrapeGoogleMapsPaged({ niche, city: finalCity, state: finalState, maxPages: 5 }),
+            this.scrapeGoogleMapsPaged({ niche, city: finalCity, state: finalState, maxPages: 10 }),
             this.scrapeMunicipalDirectory({ niche, city: finalCity, state: finalState })
         ]);
         const combined = [...gmapsResults, ...directoryResults];

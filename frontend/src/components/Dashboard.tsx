@@ -69,6 +69,7 @@ interface Lead {
   name: string;
   category?: string;
   address: string;
+  neighborhood?: string;
   city?: string;
   state?: string;
   country?: string;
@@ -79,6 +80,8 @@ interface Lead {
   hasWebsite?: boolean;
   source?: string;
   rating: string;
+  totalReviews?: number;
+  openingHours?: string;
   needsWebsite?: boolean;
 }
 
@@ -2377,10 +2380,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                                     </td>
 
                                     <td className="py-3.5 px-4 text-center">
-                                      <span className="inline-flex items-center gap-1 bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 px-2 py-0.5 rounded-lg text-xs font-bold">
-                                        <Star className="w-3 h-3 fill-yellow-400" />
-                                        {lead.rating}
-                                      </span>
+                                      <div className="flex flex-col items-center gap-0.5">
+                                        <span className="inline-flex items-center gap-1 bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 px-2 py-0.5 rounded-lg text-xs font-bold">
+                                          <Star className="w-3 h-3 fill-yellow-400" />
+                                          {lead.rating}
+                                        </span>
+                                        {lead.totalReviews !== undefined && (
+                                          <span className="text-[10px] text-slate-500 font-mono">
+                                            ({lead.totalReviews} avaliações)
+                                          </span>
+                                        )}
+                                      </div>
                                     </td>
 
                                     <td className="py-3.5 px-4 text-right">
@@ -2502,6 +2512,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                                   <Phone className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
                                   <span>{lead.phone}</span>
                                 </p>
+
+                                {lead.openingHours && (
+                                  <p className="text-[11px] text-emerald-400/90 flex items-center gap-1.5 font-sans">
+                                    <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
+                                    <span>{lead.openingHours}</span>
+                                  </p>
+                                )}
 
                                 <p className="text-xs flex items-center gap-1.5">
                                   <Globe className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
