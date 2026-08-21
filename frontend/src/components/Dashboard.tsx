@@ -44,7 +44,8 @@ import {
   Server,
   Code2,
   Upload,
-  FileArchive
+  FileArchive,
+  Loader2
 } from 'lucide-react';
 
 import { useTheme } from '../context/ThemeContext';
@@ -131,39 +132,72 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
     } catch {}
   };
 
-  // Ngrok Active Tunnels State
-  const [activeTunnels, setActiveTunnels] = useState<NgrokTunnel[]>([]);
-  const [loadingTunnels, setLoadingTunnels] = useState(false);
+  // Ngrok Global Tunnel State
+  const [globalNgrokActive, setGlobalNgrokActive] = useState(false);
+  const [globalNgrokUrl, setGlobalNgrokUrl] = useState<string | null>(null);
+  const [globalNgrokLoading, setGlobalNgrokLoading] = useState(false);
 
-  const fetchActiveTunnels = async () => {
+  const activeTunnels: NgrokTunnel[] = globalNgrokActive && globalNgrokUrl ? [{
+    projectId: 'global-app',
+    projectName: 'Sistema Global (buildDreamer Gateway)',
+    url: globalNgrokUrl,
+    startedAt: new Date().toISOString()
+  }] : [];
+
+  const fetchActiveTunnels = () => fetchGlobalNgrokStatus();
+  const handleStopTunnel = (_projectId?: string) => handleToggleGlobalNgrok();
+
+  const fetchGlobalNgrokStatus = async () => {
     try {
-      const res = await fetch(`${API_URL}/api/ngrok/tunnels`, {
+      const res = await fetch(`${API_URL}/api/ngrok/status`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
         const data = await res.json();
-        setActiveTunnels(data.tunnels || []);
+        setGlobalNgrokActive(!!data.active);
+        setGlobalNgrokUrl(data.url || null);
       }
     } catch (err) {
-      console.error('Erro ao buscar túneis Ngrok:', err);
+      console.error('Erro ao buscar status global do Ngrok:', err);
     }
   };
 
-  const handleStopTunnel = async (projectId: string) => {
+  const handleToggleGlobalNgrok = async () => {
+    setGlobalNgrokLoading(true);
     try {
-      await fetch(`${API_URL}/api/ngrok/stop/${projectId}`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      fetchActiveTunnels();
+      if (globalNgrokActive) {
+        await fetch(`${API_URL}/api/ngrok/stop`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        setGlobalNgrokActive(false);
+        setGlobalNgrokUrl(null);
+      } else {
+        const customToken = localStorage.getItem('ngrok_authtoken') || '';
+        const res = await fetch(`${API_URL}/api/ngrok/start`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+            'x-ngrok-token': customToken
+          }
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Falha ao iniciar Ngrok');
+        setGlobalNgrokActive(true);
+        setGlobalNgrokUrl(data.url);
+      }
     } catch (err: any) {
-      alert(`Erro ao parar túnel: ${err.message}`);
+      alert(`Erro no Ngrok: ${err.message}`);
+    } finally {
+      setGlobalNgrokLoading(false);
+      fetchGlobalNgrokStatus();
     }
   };
 
   useEffect(() => {
-    fetchActiveTunnels();
-    const interval = setInterval(fetchActiveTunnels, 6000);
+    fetchGlobalNgrokStatus();
+    const interval = setInterval(fetchGlobalNgrokStatus, 5000);
     return () => clearInterval(interval);
   }, []);
 
@@ -741,6 +775,49 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
 
           {/* Accessibility & Theme Controls */}
           <div className="flex items-center gap-2.5">
+            {/* Botão Global de Controle do Ngrok */}
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={handleToggleGlobalNgrok}
+                disabled={globalNgrokLoading}
+                className={`px-3 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm ${
+                  globalNgrokActive
+                    ? 'bg-emerald-950/60 border-emerald-500/50 text-emerald-300 hover:bg-emerald-900/60'
+                    : theme === 'light'
+                    ? 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-700'
+                    : 'bg-slate-900/80 hover:bg-slate-800 border-slate-800 text-slate-300'
+                }`}
+                title={globalNgrokActive ? `Ngrok Online (${globalNgrokUrl}) - Clique para desligar` : 'Subir túnel global no Ngrok para prévias'}
+              >
+                {globalNgrokLoading ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-400" />
+                ) : globalNgrokActive ? (
+                  <>
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                    <Globe className="w-3.5 h-3.5 text-emerald-400" />
+                    <span className="hidden sm:inline">Ngrok Online</span>
+                  </>
+                ) : (
+                  <>
+                    <Globe className="w-3.5 h-3.5 text-slate-400" />
+                    <span className="hidden sm:inline">Ligar Ngrok</span>
+                  </>
+                )}
+              </button>
+
+              {globalNgrokActive && globalNgrokUrl && (
+                <a
+                  href={globalNgrokUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="p-1.5 rounded-xl bg-slate-900 border border-slate-800 text-cyan-400 hover:text-cyan-300 hover:bg-slate-850 transition-all cursor-pointer"
+                  title="Abrir Gateway Global do Ngrok"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+              )}
+            </div>
+
             {/* Botão de Alternar Modo Escuro / Modo Claro */}
             <button
               onClick={toggleTheme}

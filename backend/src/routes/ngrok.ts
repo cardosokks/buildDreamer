@@ -2,83 +2,93 @@ import { Router } from 'express';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { 
   activeNgrokTunnels, 
-  startNgrokPreview, 
-  stopNgrokPreview 
+  startGlobalNgrokTunnel, 
+  stopNgrokPreview,
+  stopAllNgrokPreviews
 } from '../services/ngrokService';
 
 const router = Router();
 
 /**
- * Listar todos os túneis Ngrok ativos no momento
+ * Retorna o status do túnel Ngrok global do sistema
  */
-router.get('/tunnels', (req: AuthenticatedRequest, res: any) => {
-  const tunnels = Object.values(activeNgrokTunnels).map(t => ({
-    projectId: t.projectId,
-    projectName: t.projectName,
-    url: t.url,
-    startedAt: t.startedAt
-  }));
+router.get('/status', (req: AuthenticatedRequest, res: any) => {
+  const globalTunnel = activeNgrokTunnels['global-app'] || Object.values(activeNgrokTunnels)[0];
 
-  return res.json({ tunnels });
-});
-
-/**
- * Consultar status do túnel Ngrok de um projeto específico
- */
-router.get('/status/:projectId', (req: AuthenticatedRequest, res: any) => {
-  const projectId = req.params.projectId as string;
-  const tunnel = activeNgrokTunnels[projectId];
-
-  if (!tunnel) {
+  if (!globalTunnel) {
     return res.json({ active: false });
   }
 
   return res.json({
     active: true,
-    url: tunnel.url,
-    projectName: tunnel.projectName,
-    startedAt: tunnel.startedAt
+    url: globalTunnel.url,
+    startedAt: globalTunnel.startedAt
   });
 });
 
 /**
- * Iniciar preview via Ngrok
+ * Iniciar túnel Ngrok global do sistema
  */
-router.post('/start/:projectId', async (req: AuthenticatedRequest, res: any) => {
+router.post('/start', async (req: AuthenticatedRequest, res: any) => {
   try {
-    const projectId = req.params.projectId as string;
     const clientAuthtoken = (req.headers['x-ngrok-token'] || req.headers['X-Ngrok-Token']) as string;
-
-    const url = await startNgrokPreview(projectId, clientAuthtoken);
+    const url = await startGlobalNgrokTunnel(clientAuthtoken);
     return res.json({ success: true, url });
   } catch (err: any) {
-    console.error('Erro ao iniciar preview Ngrok:', err);
+    console.error('Erro ao iniciar túnel Ngrok:', err);
     return res.status(500).json({ error: err.message || 'Falha ao iniciar túnel Ngrok' });
   }
 });
 
 /**
- * Parar preview via Ngrok de um projeto específico
+ * Parar túnel Ngrok global do sistema
  */
-router.post('/stop/:projectId', async (req: AuthenticatedRequest, res: any) => {
+router.post('/stop', async (req: AuthenticatedRequest, res: any) => {
   try {
-    const projectId = req.params.projectId as string;
-    const stopped = await stopNgrokPreview(projectId);
-    return res.json({ success: true, stopped });
+    await stopAllNgrokPreviews();
+    return res.json({ success: true, stopped: true });
   } catch (err: any) {
-    console.error('Erro ao parar preview Ngrok:', err);
+    console.error('Erro ao parar túnel Ngrok:', err);
     return res.status(500).json({ error: err.message });
   }
 });
 
 /**
- * Parar e liberar todos os túneis Ngrok presos
+ * Compatibilidade com rotas legadas /status/:projectId, /start/:projectId e /stop/:projectId
  */
-router.post('/stop-all', async (req: AuthenticatedRequest, res: any) => {
+router.get('/status/:projectId', (req: AuthenticatedRequest, res: any) => {
+  const projectId = req.params.projectId as string;
+  const globalTunnel = activeNgrokTunnels['global-app'] || activeNgrokTunnels[projectId];
+
+  if (!globalTunnel) {
+    return res.json({ active: false });
+  }
+
+  const projectPreviewUrl = `${globalTunnel.url}/preview/${projectId}`;
+  return res.json({
+    active: true,
+    url: projectPreviewUrl,
+    globalUrl: globalTunnel.url,
+    startedAt: globalTunnel.startedAt
+  });
+});
+
+router.post('/start/:projectId', async (req: AuthenticatedRequest, res: any) => {
   try {
-    const { stopAllNgrokPreviews } = await import('../services/ngrokService');
+    const projectId = req.params.projectId as string;
+    const clientAuthtoken = (req.headers['x-ngrok-token'] || req.headers['X-Ngrok-Token']) as string;
+    const globalUrl = await startGlobalNgrokTunnel(clientAuthtoken);
+    const projectPreviewUrl = `${globalUrl}/preview/${projectId}`;
+    return res.json({ success: true, url: projectPreviewUrl, globalUrl });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/stop/:projectId', async (req: AuthenticatedRequest, res: any) => {
+  try {
     await stopAllNgrokPreviews();
-    return res.json({ success: true, message: 'Todos os túneis foram liberados com sucesso!' });
+    return res.json({ success: true, stopped: true });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }

@@ -3,20 +3,16 @@ import { prisma } from '../db';
 import http from 'http';
 
 export interface ActiveTunnel {
-  projectId: string;
+  projectId: string; // 'global-app' ou ID do projeto
   projectName: string;
   url: string;
   localServer?: http.Server;
   listener?: any;
-  session?: any;
   startedAt: string;
 }
 
 // In-memory active tunnels registry
 export const activeNgrokTunnels: Record<string, ActiveTunnel> = {};
-
-// In-flight tunnel lock to prevent race conditions on double-click
-const tunnelLocks: Record<string, boolean> = {};
 
 // Instância única global de Session do Ngrok reutilizada para evitar erro de limite de conexões simultâneas
 let globalNgrokSession: any = null;
@@ -25,7 +21,7 @@ let currentSessionToken: string = '';
 /**
  * Monta o documento HTML completo de uma página para ser renderizado pelo Ngrok
  */
-function buildFullHtml(page: { name: string; html: string; css: string; js: string; title?: string | null }) {
+export function buildFullHtml(page: { name: string; html: string; css: string; js: string; title?: string | null }) {
   return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -77,141 +73,140 @@ async function getOrCreateSession(authtoken: string) {
 }
 
 /**
- * Inicia um túnel Ngrok para um projeto específico servindo o site completo
+ * Inicia túnel global do Ngrok para todo o sistema (Dashboard / Prévia Global de todos os projetos)
+ * Roteia automaticamente:
+ * - / -> Tela de status ou redirecionamento
+ * - /preview/:projectId -> Renderiza a Home do projeto
+ * - /preview/:projectId/:slug -> Renderiza uma subpágina específica do projeto
  */
-export async function startNgrokPreview(projectId: string, customAuthtoken?: string): Promise<string> {
-  // Se já houver um túnel ativo para este projeto, retorna a URL imediatamente
-  if (activeNgrokTunnels[projectId]?.url) {
-    return activeNgrokTunnels[projectId].url;
+export async function startGlobalNgrokTunnel(customAuthtoken?: string): Promise<string> {
+  if (activeNgrokTunnels['global-app']?.url) {
+    return activeNgrokTunnels['global-app'].url;
   }
 
-  // Prevenção de concorrência / duplo clique rápido
-  if (tunnelLocks[projectId]) {
-    for (let i = 0; i < 8; i++) {
-      await new Promise(r => setTimeout(r, 500));
-      if (activeNgrokTunnels[projectId]?.url) {
-        return activeNgrokTunnels[projectId].url;
-      }
-    }
+  const authtoken = customAuthtoken || process.env.NGROK_AUTHTOKEN;
+  if (!authtoken) {
+    throw new Error('Token do Ngrok não configurado. Adicione seu NGROK_AUTHTOKEN nas configurações ou no backend.');
   }
 
-  tunnelLocks[projectId] = true;
+  // 1. Cria servidor HTTP local para servir qualquer projeto do sistema
+  const localServer = http.createServer(async (req, res) => {
+    try {
+      const urlObj = new URL(req.url || '/', 'http://127.0.0.1');
+      const parts = urlObj.pathname.split('/').filter(Boolean);
 
-  try {
-    const project = await prisma.project.findUnique({
-      where: { id: projectId },
-      include: { pages: true }
-    });
+      // Ex: /preview/:projectId ou /preview/:projectId/:slug
+      if (parts[0] === 'preview' && parts[1]) {
+        const projectId = parts[1];
+        const pageSlug = (parts[2] || '').replace(/\.html$/i, '');
 
-    if (!project) {
-      throw new Error('Projeto não encontrado');
-    }
-
-    const authtoken = customAuthtoken || process.env.NGROK_AUTHTOKEN;
-    if (!authtoken) {
-      throw new Error('Token do Ngrok não configurado. Adicione seu NGROK_AUTHTOKEN nas configurações ou no backend.');
-    }
-
-    // 1. Cria servidor HTTP local dedicado
-    const localServer = http.createServer(async (req, res) => {
-      try {
-        const freshProject = await prisma.project.findUnique({
+        const project = await prisma.project.findUnique({
           where: { id: projectId },
           include: { pages: true }
         });
 
-        const pages = freshProject?.pages || project.pages;
-        const reqPath = (req.url || '/').replace(/^\//, '').split('?')[0];
-        let targetPage = pages.find(p => p.slug === reqPath);
-        if (!targetPage) {
-          targetPage = pages.find(p => p.isHomepage) || pages[0];
+        if (!project || !project.pages.length) {
+          res.writeHead(404, { 'Content-Type': 'text/html; charset=utf-8' });
+          return res.end(`
+            <body style="background:#090410;color:#fff;font-family:sans-serif;text-align:center;padding:50px;">
+              <h2>Projeto não encontrado</h2>
+              <p>O projeto ID ${projectId} não possui páginas cadastradas.</p>
+            </body>
+          `);
         }
 
-        const responseBody = buildFullHtml(targetPage);
+        let targetPage = project.pages.find(p => p.slug === pageSlug);
+        if (!targetPage) {
+          targetPage = project.pages.find(p => p.isHomepage) || project.pages[0];
+        }
+
+        let responseBody = buildFullHtml(targetPage);
+
+        // Reescreve links relativos para manter o preview dentro do túnel Ngrok
+        responseBody = responseBody.replace(/href=["']([a-zA-Z0-9-_]+)\.html["']/gi, `href="/preview/${projectId}/$1"`);
+        responseBody = responseBody.replace(/href=["']index\.html["']/gi, `href="/preview/${projectId}"`);
+
         res.writeHead(200, {
           'Content-Type': 'text/html; charset=utf-8',
           'Content-Length': Buffer.byteLength(responseBody, 'utf-8')
         });
-        res.end(responseBody);
-      } catch {
-        res.writeHead(500);
-        res.end('Erro interno');
+        return res.end(responseBody);
       }
-    });
 
-    await new Promise<void>((resolve) => {
-      localServer.listen(0, '127.0.0.1', () => resolve());
-    });
-
-    const addressInfo = localServer.address() as any;
-    const localPort = addressInfo.port;
-
-    // 2. Conecta ao Ngrok reutilizando a sessão única (evita limite de sessões simultâneas)
-    let listener: any = null;
-    let url = '';
-
-    try {
-      const session = await getOrCreateSession(authtoken);
-      listener = await session.httpEndpoint().listen();
-      await listener.forward(`http://127.0.0.1:${localPort}`);
-      url = listener.url() || '';
-    } catch (ngErr: any) {
-      console.warn('[Ngrok Engine] Falha na primeira tentativa, limpando sessões residuais...', ngErr.message);
-      
-      // Se houver limite de túneis ou sessão presa, força limpeza e recria
-      try {
-        await stopAllNgrokPreviews();
-      } catch {}
-
-      const session = await getOrCreateSession(authtoken);
-      listener = await session.httpEndpoint().listen();
-      await listener.forward(`http://127.0.0.1:${localPort}`);
-      url = listener.url() || '';
+      // Root Landing Preview
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      return res.end(`
+        <!DOCTYPE html>
+        <html lang="pt-BR">
+        <head>
+          <meta charset="UTF-8">
+          <script src="https://cdn.tailwindcss.com"></script>
+          <title>buildDreamer Ngrok Live Gateway</title>
+        </head>
+        <body class="bg-[#090410] text-slate-100 flex items-center justify-center min-h-screen p-6 font-sans">
+          <div class="max-w-md w-full bg-slate-900 border border-purple-500/30 rounded-2xl p-6 text-center shadow-2xl space-y-4">
+            <div class="w-12 h-12 rounded-xl bg-purple-600/20 border border-purple-500/40 text-purple-400 flex items-center justify-center mx-auto text-xl font-bold">
+              ✨
+            </div>
+            <h1 class="text-xl font-bold text-white">buildDreamer Live Gateway</h1>
+            <p class="text-xs text-slate-400">O gateway global do Ngrok está ativo e servindo os previews de todos os seus sites em tempo real.</p>
+            <div class="p-3 bg-slate-950 rounded-xl border border-slate-800 text-[11px] text-purple-300 font-mono">
+              Status: 🟢 Online
+            </div>
+          </div>
+        </body>
+        </html>
+      `);
+    } catch (e) {
+      res.writeHead(500);
+      res.end('Erro interno no Gateway Ngrok');
     }
+  });
 
-    activeNgrokTunnels[projectId] = {
-      projectId,
-      projectName: project.name,
-      url,
-      localServer,
-      listener,
-      startedAt: new Date().toISOString()
-    };
+  await new Promise<void>((resolve) => {
+    localServer.listen(0, '127.0.0.1', () => resolve());
+  });
 
-    console.log(`[Ngrok Engine] Preview online para "${project.name}": ${url}`);
-    return url;
-  } finally {
-    delete tunnelLocks[projectId];
-  }
+  const addressInfo = localServer.address() as any;
+  const localPort = addressInfo.port;
+
+  // 2. Conecta ao Ngrok
+  const session = await getOrCreateSession(authtoken);
+  const listener = await session.httpEndpoint().listen();
+  await listener.forward(`http://127.0.0.1:${localPort}`);
+  const url = listener.url() || '';
+
+  activeNgrokTunnels['global-app'] = {
+    projectId: 'global-app',
+    projectName: 'Sistema Global',
+    url,
+    localServer,
+    listener,
+    startedAt: new Date().toISOString()
+  };
+
+  console.log(`[Ngrok Gateway] Túnel global ativo: ${url}`);
+  return url;
 }
 
 /**
- * Encerra o túnel Ngrok de um projeto
+ * Encerra o túnel global ou de um projeto
  */
-export async function stopNgrokPreview(projectId: string): Promise<boolean> {
+export async function stopNgrokPreview(projectId: string = 'global-app'): Promise<boolean> {
   const tunnel = activeNgrokTunnels[projectId];
   
   if (tunnel) {
     try {
-      if (tunnel.listener && typeof tunnel.listener.close === 'function') {
-        await tunnel.listener.close();
-      }
-    } catch (err) {
-      console.warn(`[Ngrok Engine] Erro ao fechar listener:`, err);
-    }
+      if (tunnel.listener?.close) await tunnel.listener.close();
+    } catch {}
 
     try {
-      if (tunnel.localServer) {
-        tunnel.localServer.close();
-      }
-    } catch (err) {
-      console.warn(`[Ngrok Engine] Erro ao fechar localServer:`, err);
-    }
+      if (tunnel.localServer) tunnel.localServer.close();
+    } catch {}
 
     delete activeNgrokTunnels[projectId];
   }
 
-  // Se não houver mais nenhum túnel ativo, encerra a sessão global do Ngrok
   if (Object.keys(activeNgrokTunnels).length === 0) {
     if (globalNgrokSession) {
       try {
@@ -224,23 +219,23 @@ export async function stopNgrokPreview(projectId: string): Promise<boolean> {
     } catch {}
   }
 
-  console.log(`[Ngrok Engine] Túnel do projeto ${projectId} finalizado.`);
+  console.log(`[Ngrok Engine] Túnel ${projectId} finalizado.`);
   return true;
 }
 
 /**
- * Encerra todos os túneis ativos e fecha qualquer sessão presa
+ * Encerra todos os túneis ativos
  */
 export async function stopAllNgrokPreviews(): Promise<void> {
-  for (const projectId of Object.keys(activeNgrokTunnels)) {
-    const tunnel = activeNgrokTunnels[projectId];
+  for (const pid of Object.keys(activeNgrokTunnels)) {
+    const tunnel = activeNgrokTunnels[pid];
     try {
       if (tunnel.listener?.close) await tunnel.listener.close();
     } catch {}
     try {
       if (tunnel.localServer) tunnel.localServer.close();
     } catch {}
-    delete activeNgrokTunnels[projectId];
+    delete activeNgrokTunnels[pid];
   }
 
   if (globalNgrokSession) {
@@ -253,6 +248,4 @@ export async function stopAllNgrokPreviews(): Promise<void> {
   try {
     await ngrok.disconnect();
   } catch {}
-
-  console.log(`[Ngrok Engine] Todos os túneis e sessões do Ngrok foram encerrados.`);
 }

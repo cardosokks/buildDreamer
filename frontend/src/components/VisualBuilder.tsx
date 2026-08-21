@@ -792,6 +792,15 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
   }, [checkNgrokStatus]);
 
   const handleOpenLivePreview = () => {
+    if (ngrokActive && ngrokUrl) {
+      // Se a página ativa for uma subpágina, abre a rota exata da subpágina no Ngrok
+      const pagePath = activePage && !activePage.isHomepage ? `/${activePage.slug}` : '';
+      const fullNgrokPreviewUrl = `${ngrokUrl}${pagePath}`;
+      window.open(fullNgrokPreviewUrl, '_blank');
+      setShowPreviewDropdown(false);
+      return;
+    }
+
     const content = getFullHtmlDocument();
     const blob = new Blob([content], { type: 'text/html;charset=utf-8' });
     const url = URL.createObjectURL(blob);
