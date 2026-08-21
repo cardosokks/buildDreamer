@@ -66,8 +66,6 @@ const generateAIResponse = async (prompt, context, customApiKey, customModel, re
             onModelAttempt(modelToTry, i + 1, candidateModels.length);
         }
         try {
-            // Endpoint oficial da API do Gemini v1beta
-            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelToTry}:generateContent?key=${activeKey}`;
             const payload = {
                 contents: [
                     {
@@ -81,7 +79,11 @@ const generateAIResponse = async (prompt, context, customApiKey, customModel, re
                 ],
                 generationConfig: {
                     responseMimeType: 'application/json',
-                    temperature: 0.7
+                    temperature: 0.7,
+                    // Desativa o raciocínio estendido (Thinking/Chain-of-Thought excessivo) nos modelos 2.5 Flash / 2.0 Flash para geração instantânea
+                    thinkingConfig: {
+                        thinkingBudget: 0
+                    }
                 }
             };
             const fetchOptions = {
@@ -94,6 +96,8 @@ const generateAIResponse = async (prompt, context, customApiKey, customModel, re
             if (proxyUrl) {
                 fetchOptions.dispatcher = new undici_1.ProxyAgent(proxyUrl);
             }
+            // Endpoint oficial da API do Gemini v1beta
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelToTry}:generateContent?key=${activeKey}`;
             const response = await (0, undici_1.fetch)(apiUrl, fetchOptions);
             if (!response.ok) {
                 const errText = await response.text();

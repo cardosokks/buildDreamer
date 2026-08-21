@@ -77,10 +77,7 @@ export const generateAIResponse = async (
     }
 
     try {
-      // Endpoint oficial da API do Gemini v1beta
-      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelToTry}:generateContent?key=${activeKey}`;
-
-      const payload = {
+      const payload: any = {
         contents: [
           {
             role: 'user',
@@ -93,7 +90,11 @@ export const generateAIResponse = async (
         ],
         generationConfig: {
           responseMimeType: 'application/json',
-          temperature: 0.7
+          temperature: 0.7,
+          // Desativa o raciocínio estendido (Thinking/Chain-of-Thought excessivo) nos modelos 2.5 Flash / 2.0 Flash para geração instantânea
+          thinkingConfig: {
+            thinkingBudget: 0
+          }
         }
       };
 
@@ -108,6 +109,9 @@ export const generateAIResponse = async (
       if (proxyUrl) {
         fetchOptions.dispatcher = new ProxyAgent(proxyUrl);
       }
+
+      // Endpoint oficial da API do Gemini v1beta
+      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelToTry}:generateContent?key=${activeKey}`;
 
       const response = await undiciFetch(apiUrl, fetchOptions);
 
