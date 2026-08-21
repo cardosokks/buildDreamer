@@ -50,23 +50,52 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ pageId, onApplyChanges, on
     localStorage.setItem(`chat_history_${pageId}`, JSON.stringify(messages));
   }, [messages, pageId]);
 
-  useEffect(() => {
-    const stored = localStorage.getItem(`chat_history_${pageId}`);
-    if (stored) {
-      setMessages(JSON.parse(stored));
-    }
-  }, [pageId]);
-
-  const getInitialModel = () => {
+  const [availableModels, setAvailableModels] = useState<Array<{ id: string; name: string }>>(() => {
     const stored = localStorage.getItem('custom_gemini_models');
     if (stored) {
-      const parsed = JSON.parse(stored);
-      if (parsed.length > 0) return parsed[0].id;
+      try {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch {}
+    }
+    return [
+      { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash (Recomendado)' },
+      { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash' },
+      { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro' }
+    ];
+  });
+
+  const [selectedModel, setSelectedModel] = useState<string>(() => {
+    const stored = localStorage.getItem('custom_gemini_models');
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        if (parsed.length > 0) return parsed[0].id;
+      } catch {}
     }
     return 'gemini-2.5-flash';
-  };
+  });
 
-  const [selectedModel, setSelectedModel] = useState(getInitialModel());
+  // Atualiza a lista de modelos se o usuário alterar no SettingsModal
+  useEffect(() => {
+    const loadStoredModels = () => {
+      const stored = localStorage.getItem('custom_gemini_models');
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setAvailableModels(parsed);
+            if (!parsed.some((m: any) => m.id === selectedModel)) {
+              setSelectedModel(parsed[0].id);
+            }
+          }
+        } catch {}
+      }
+    };
+    loadStoredModels();
+  }, []);
+
+
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -177,31 +206,51 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ pageId, onApplyChanges, on
     }
   };
 
+
+
   return (
     <aside className="w-80 border-l border-slate-900 bg-[#090410] flex flex-col h-full shrink-0 shadow-2xl select-none">
-      {/* Header */}
-      <div className="p-3.5 border-b border-slate-900/80 flex items-center justify-between gap-2 shrink-0 bg-slate-950/60">
-        <div className="flex items-center gap-2">
-          <div className="p-1.5 rounded-lg bg-purple-500/20 text-purple-400 border border-purple-500/30">
-            <Sparkles className="w-4 h-4" />
+      {/* Header com Seletor de Modelos */}
+      <div className="p-3.5 border-b border-slate-900/80 space-y-2.5 shrink-0 bg-slate-950/60">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 rounded-lg bg-purple-500/20 text-purple-400 border border-purple-500/30">
+              <Sparkles className="w-4 h-4" />
+            </div>
+            <div>
+              <span className="text-xs font-bold text-white tracking-wide block">AI Copilot</span>
+              <span className="text-[10px] text-slate-500 font-mono">Webflow & v0 Style</span>
+            </div>
           </div>
-          <div>
-            <span className="text-xs font-bold text-white tracking-wide block">AI Copilot</span>
-            <span className="text-[10px] text-slate-500 font-mono">Webflow & v0 Style</span>
-          </div>
+
+          {/* Undo Action Button */}
+          {canUndo && onUndo && (
+            <button
+              onClick={onUndo}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 text-[11px] font-medium transition-all border border-slate-800 cursor-pointer"
+              title="Desfazer última alteração"
+            >
+              <Undo2 className="w-3.5 h-3.5 text-purple-400" />
+              Desfazer
+            </button>
+          )}
         </div>
 
-        {/* Undo Action Button */}
-        {canUndo && onUndo && (
-          <button
-            onClick={onUndo}
-            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 text-[11px] font-medium transition-all border border-slate-800 cursor-pointer"
-            title="Desfazer última alteração"
+        {/* Seletor de Modelo Configurado */}
+        <div className="flex items-center gap-1.5 bg-slate-900/90 border border-slate-800/80 rounded-xl px-2 py-1">
+          <span className="text-[10px] font-bold uppercase text-purple-400 font-mono shrink-0">Modelo:</span>
+          <select
+            value={selectedModel}
+            onChange={(e) => setSelectedModel(e.target.value)}
+            className="w-full bg-transparent text-[11px] font-medium text-white focus:outline-none cursor-pointer truncate"
           >
-            <Undo2 className="w-3.5 h-3.5 text-purple-400" />
-            Desfazer
-          </button>
-        )}
+            {availableModels.map((m) => (
+              <option key={m.id} value={m.id} className="bg-slate-950 text-white">
+                {m.name || m.id}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* Messages Feed */}
