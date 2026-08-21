@@ -5,11 +5,14 @@ const express_1 = require("express");
 const db_1 = require("../db");
 const ftp_1 = require("../services/ftp");
 const router = (0, express_1.Router)();
-// Create Page
-router.post('/projects/:projectId/pages', async (req, res) => {
+// Create Page (supports /projects/:projectId/pages and /pages)
+router.post(['/projects/:projectId/pages', '/pages'], async (req, res) => {
     try {
-        const projectId = req.params.projectId;
+        const projectId = (req.params.projectId || req.body.projectId);
         const { name, slug, title, description, html, css, js } = req.body;
+        if (!projectId) {
+            return res.status(400).json({ error: 'ProjectId is required' });
+        }
         if (!name || !slug) {
             return res.status(400).json({ error: 'Name and slug are required' });
         }

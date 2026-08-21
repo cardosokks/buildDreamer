@@ -788,6 +788,19 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
                 if (remaining.length > 0) setActivePageId(remaining[0].id);
               }
             }}
+            onSetHomepage={async (id) => {
+              const res = await fetch(`${API_URL}/api/pages/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({ isHomepage: true })
+              });
+              if (res.ok) {
+                setProject(prev => prev ? {
+                  ...prev,
+                  pages: prev.pages.map(p => ({ ...p, isHomepage: p.id === id }))
+                } : null);
+              }
+            }}
             layers={layers}
             onSelectLayer={(selector, path) => {
               setSelectedSelector(selector);

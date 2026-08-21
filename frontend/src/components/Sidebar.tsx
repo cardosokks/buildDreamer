@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import {
   Type,
   Square,
@@ -27,7 +27,9 @@ import {
   MessageCircle,
   CreditCard,
   Eye,
-  EyeOff
+  EyeOff,
+  Edit2,
+  Home
 } from 'lucide-react';
 
 export interface ElementNode {
@@ -46,6 +48,7 @@ interface SidebarProps {
   onCreatePage: () => void;
   onDuplicatePage: (id: string) => void;
   onDeletePage: (id: string) => void;
+  onSetHomepage?: (id: string) => void;
   layers: ElementNode[];
   onSelectLayer: (selector: string, path: string) => void;
   onHoverLayer?: (path: string | null) => void;
@@ -91,6 +94,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onCreatePage,
   onDuplicatePage,
   onDeletePage,
+  onSetHomepage,
   layers,
   onSelectLayer,
   onHoverLayer,
@@ -105,6 +109,35 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set(['0', '1', '2', '0.0', '0.1']));
   const [dragSource, setDragSource] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState<string | null>(null);
+
+  // Context Menu State (Botão Direito)
+  const [contextMenu, setContextMenu] = useState<{
+    visible: boolean;
+    x: number;
+    y: number;
+    type: 'page' | 'layer';
+    idOrPath: string;
+    isHomepage?: boolean;
+  }>({ visible: false, x: 0, y: 0, type: 'layer', idOrPath: '' });
+
+  const handleContextMenu = (e: React.MouseEvent, type: 'page' | 'layer', idOrPath: string, isHomepage = false) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({
+      visible: true,
+      x: e.clientX,
+      y: e.clientY,
+      type,
+      idOrPath,
+      isHomepage
+    });
+  };
+
+  const closeContextMenu = () => {
+    if (contextMenu.visible) {
+      setContextMenu(prev => ({ ...prev, visible: false }));
+    }
+  };
 
   const toggleExpanded = (path: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -139,6 +172,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             }`}
             style={{ paddingLeft: `${depth * 12 + 6}px`, paddingRight: '6px', paddingTop: '4px', paddingBottom: '4px' }}
             onClick={() => onSelectLayer(selector, path)}
+            onContextMenu={(e) => handleContextMenu(e, 'layer', path)}
             onMouseEnter={() => onHoverLayer && onHoverLayer(path)}
             onMouseLeave={() => onHoverLayer && onHoverLayer(null)}
             draggable
@@ -177,21 +211,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <span className="truncate font-mono text-[11px]">{label}</span>
             </div>
 
-            {/* Ações rápidas no hover */}
-            <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 shrink-0 transition-opacity">
+            {/* Ações rápidas discretas */}
+            <div className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 shrink-0 transition-opacity">
               <button
-                onClick={(e) => { e.stopPropagation(); onDuplicateElement(path); }}
-                className="p-1 hover:text-purple-400 rounded transition-colors"
-                title="Duplicar Elemento"
+                onClick={(e) => handleContextMenu(e, 'layer', path)}
+                className="p-1 hover:text-white rounded transition-colors text-slate-500"
+                title="Mais opções (Botão direito)"
               >
-                <Copy className="w-3 h-3" />
-              </button>
-              <button
-                onClick={(e) => { e.stopPropagation(); onDeleteElement(path); }}
-                className="p-1 hover:text-red-400 rounded transition-colors"
-                title="Excluir Elemento"
-              >
-                <Trash2 className="w-3 h-3" />
+                <MoreVertical className="w-3 h-3" />
               </button>
             </div>
           </div>
@@ -248,59 +275,55 @@ export const Sidebar: React.FC<SidebarProps> = ({
   </div>
   <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px;">
     <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 28px; transition: transform 0.2s;">
-      <div style="width: 44px; height: 44px; background: rgba(168,85,247,0.2); border-radius: 10px; display: flex; align-items: center; justify-content: center; margin-bottom: 16px; font-size: 20px;">⚡</div>
+      <div style="width: 44px; height: 44px; background: rgba(168,85,247,0.2); border: 1px solid rgba(168,85,247,0.4); border-radius: 12px; display: flex; align-items: center; justify-content: center; color: #c084fc; margin-bottom: 16px; font-size: 20px;">⚡</div>
       <h3 style="color: #ffffff; font-size: 18px; font-weight: 600; margin-bottom: 8px;">Alta Performance</h3>
-      <p style="color: #94a3b8; font-size: 14px; line-height: 1.5;">Sites otimizados para carregamento instantâneo em qualquer velocidade de rede.</p>
+      <p style="color: #94a3b8; font-size: 14px; line-height: 1.5;">Sites otimizados com pontuação máxima no Google PageSpeed.</p>
     </div>
     <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 28px; transition: transform 0.2s;">
-      <div style="width: 44px; height: 44px; background: rgba(6,182,212,0.2); border-radius: 10px; display: flex; align-items: center; justify-content: center; margin-bottom: 16px; font-size: 20px;">📱</div>
+      <div style="width: 44px; height: 44px; background: rgba(6,182,212,0.2); border: 1px solid rgba(6,182,212,0.4); border-radius: 12px; display: flex; align-items: center; justify-content: center; color: #22d3ee; margin-bottom: 16px; font-size: 20px;">📱</div>
       <h3 style="color: #ffffff; font-size: 18px; font-weight: 600; margin-bottom: 8px;">100% Responsivo</h3>
-      <p style="color: #94a3b8; font-size: 14px; line-height: 1.5;">Perfeição visual tanto em smartphones Android e iOS quanto em telas ultrawide.</p>
+      <p style="color: #94a3b8; font-size: 14px; line-height: 1.5;">Perfeição visual garantida em celulares Android, iOS e computadores.</p>
+    </div>
+    <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 28px; transition: transform 0.2s;">
+      <div style="width: 44px; height: 44px; background: rgba(236,72,153,0.2); border: 1px solid rgba(236,72,153,0.4); border-radius: 12px; display: flex; align-items: center; justify-content: center; color: #f472b6; margin-bottom: 16px; font-size: 20px;">🛡️</div>
+      <h3 style="color: #ffffff; font-size: 18px; font-weight: 600; margin-bottom: 8px;">Segurança & SEO</h3>
+      <p style="color: #94a3b8; font-size: 14px; line-height: 1.5;">Estrutura semântica configurada para ranquear no topo do Google.</p>
     </div>
   </div>
 </section>`
     },
     {
-      id: 'whatsapp-cta',
-      title: 'Botão Flutuante / CTA WhatsApp',
+      id: 'cta-banner',
+      title: 'Chamada para Ação (CTA)',
       category: 'Conversão',
-      icon: <MessageCircle className="w-4 h-4 text-green-400" />,
+      icon: <Sparkles className="w-4 h-4 text-emerald-400" />,
       html: `
-<div style="padding: 40px 20px; text-align: center; background: rgba(34,197,94,0.08); border: 1px solid rgba(34,197,94,0.25); border-radius: 20px; max-width: 800px; margin: 40px auto;">
-  <h3 style="color: #ffffff; font-size: 24px; font-weight: 700; margin-bottom: 12px;">Dúvidas ou Orçamentos Imediatos?</h3>
-  <p style="color: #cbd5e1; font-size: 15px; margin-bottom: 24px;">Fale diretamente com nossa equipe de especialistas pelo WhatsApp.</p>
-  <a href="https://wa.me/5561999999999?text=Ol%C3%A1,%20gostaria%20de%20um%20or%C3%A7amento!" target="_blank" style="display: inline-flex; align-items: center; gap: 10px; padding: 14px 28px; background: #22c55e; color: #ffffff; font-weight: 700; text-decoration: none; border-radius: 12px; box-shadow: 0 0 20px rgba(34,197,94,0.4);">
-    <span>💬</span> Conversar no WhatsApp
+<section style="padding: 60px 20px; max-width: 900px; margin: 40px auto; background: linear-gradient(135deg, #7e22ce 0%, #3b82f6 100%); border-radius: 24px; text-align: center; box-shadow: 0 10px 40px rgba(126,34,206,0.3);">
+  <h2 style="font-size: 32px; font-weight: 800; color: #ffffff; margin-bottom: 12px;">Pronto para Elevar Seu Negócio?</h2>
+  <p style="color: #e2e8f0; font-size: 16px; max-width: 550px; margin: 0 auto 28px auto;">Entre em contato hoje mesmo e solicite uma demonstração exclusiva.</p>
+  <a href="https://wa.me/5500000000000" target="_blank" style="display: inline-block; padding: 14px 36px; background: #ffffff; color: #7e22ce; font-weight: 800; text-decoration: none; border-radius: 12px; font-size: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.2);">
+    Falar no WhatsApp
   </a>
-</div>`
+</section>`
     },
     {
-      id: 'pricing-table',
-      title: 'Tabela de Preços / Planos',
-      category: 'Vendas',
-      icon: <CreditCard className="w-4 h-4 text-yellow-400" />,
+      id: 'footer-clean',
+      title: 'Rodapé Completo',
+      category: 'Rodapé',
+      icon: <Layout className="w-4 h-4 text-slate-400" />,
       html: `
-<section style="padding: 70px 20px; max-width: 1000px; margin: 0 auto; text-align: center;">
-  <h2 style="font-size: 32px; font-weight: 700; color: #ffffff; margin-bottom: 10px;">Planos Flexíveis</h2>
-  <p style="color: #94a3b8; margin-bottom: 40px;">Escolha o pacote ideal para alavancar sua presença online.</p>
-  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 24px; text-align: left;">
-    <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 18px; padding: 30px;">
-      <h3 style="color: #ffffff; font-size: 20px; font-weight: 600; margin-bottom: 6px;">Básico</h3>
-      <div style="font-size: 32px; font-weight: 800; color: #ffffff; margin-bottom: 16px;">R$ 97 <span style="font-size: 14px; color: #94a3b8; font-weight: normal;">/mês</span></div>
-      <ul style="color: #94a3b8; font-size: 14px; line-height: 2; list-style: none; padding: 0; margin-bottom: 24px;">
-        <li>✔ 1 Website Profissional</li>
-        <li>✔ Domínio Próprio Incluso</li>
-        <li>✔ Suporte por Email</li>
-      </ul>
-      <button style="width: 100%; padding: 12px; background: rgba(255,255,255,0.1); color: #ffffff; border: none; border-radius: 10px; font-weight: 600; cursor: pointer;">Assinar</button>
-    </div>
-  </div>
-</section>`
+<footer style="padding: 40px 20px; background: #030007; border-top: 1px solid rgba(255,255,255,0.06); text-align: center; color: #64748b; font-size: 13px;">
+  <p style="margin-bottom: 8px; color: #cbd5e1;">© 2026 Minha Empresa. Todos os direitos reservados.</p>
+  <p>Desenvolvido com excelência visual e alta tecnologia.</p>
+</footer>`
     }
   ];
 
   return (
-    <aside className="w-64 border-r border-slate-900 bg-[#090410] flex flex-col h-full shrink-0 select-none">
+    <aside 
+      className="w-64 border-r border-slate-900 bg-[#090410] flex flex-col h-full shrink-0 select-none relative"
+      onClick={closeContextMenu}
+    >
       {/* Pages Section */}
       <div className="border-b border-slate-900/80 flex flex-col min-h-0">
         <div className="px-3.5 py-3 flex items-center justify-between">
@@ -310,14 +333,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
           >
             {pagesCollapsed ? <ChevronRight className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
             <FileText className="w-3.5 h-3.5" />
-            Páginas
+            Páginas ({pages.length})
           </button>
+          
           <button
-            onClick={onCreatePage}
-            className="p-1 hover:bg-slate-800 rounded-md text-slate-500 hover:text-white transition-colors cursor-pointer"
-            title="Nova página"
+            onClick={(e) => {
+              e.stopPropagation();
+              onCreatePage();
+            }}
+            className="flex items-center gap-1 px-2 py-1 bg-purple-600/20 hover:bg-purple-600 text-purple-300 hover:text-white border border-purple-500/30 rounded-lg text-[10px] font-bold transition-all cursor-pointer shadow-sm"
+            title="Criar nova página no site"
           >
-            <Plus className="w-3.5 h-3.5" />
+            <Plus className="w-3 h-3" />
+            Nova
           </button>
         </div>
 
@@ -326,6 +354,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {pages.map(page => (
               <div
                 key={page.id}
+                onContextMenu={(e) => handleContextMenu(e, 'page', page.id, page.isHomepage)}
                 className={`flex items-center justify-between px-2 py-1.5 rounded-lg text-xs transition-all group ${
                   page.id === activePageId
                     ? 'bg-purple-600/20 border border-purple-500/30 text-purple-300'
@@ -343,21 +372,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
                 <div className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 shrink-0 transition-opacity">
                   <button
-                    onClick={() => onDuplicatePage(page.id)}
-                    className="p-1 hover:text-purple-400 rounded transition-colors cursor-pointer"
-                    title="Duplicar página"
+                    onClick={(e) => handleContextMenu(e, 'page', page.id, page.isHomepage)}
+                    className="p-1 hover:text-white text-slate-500 rounded transition-colors cursor-pointer"
+                    title="Menu de opções (Botão direito)"
                   >
-                    <Copy className="w-3 h-3" />
+                    <MoreVertical className="w-3 h-3" />
                   </button>
-                  {!page.isHomepage && (
-                    <button
-                      onClick={() => onDeletePage(page.id)}
-                      className="p-1 hover:text-red-400 rounded transition-colors cursor-pointer"
-                      title="Deletar página"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </button>
-                  )}
                 </div>
               </div>
             ))}
@@ -425,6 +445,77 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <span className="text-[10px] text-slate-500 font-medium">Categoria: {block.category}</span>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* ─── Context Menu (Botão Direito) ─── */}
+      {contextMenu.visible && (
+        <div
+          className="fixed z-50 bg-[#0f0b18] border border-purple-500/30 rounded-xl shadow-2xl py-1.5 w-44 animate-in fade-in zoom-in-95 duration-100"
+          style={{ top: Math.min(contextMenu.y, window.innerHeight - 150), left: Math.min(contextMenu.x, window.innerWidth - 180) }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {contextMenu.type === 'page' ? (
+            <>
+              <button
+                onClick={() => {
+                  onDuplicatePage(contextMenu.idOrPath);
+                  closeContextMenu();
+                }}
+                className="w-full px-3 py-2 text-left text-xs text-slate-200 hover:bg-purple-600 hover:text-white flex items-center gap-2 transition-colors cursor-pointer"
+              >
+                <Copy className="w-3.5 h-3.5" />
+                Duplicar Página
+              </button>
+              {onSetHomepage && !contextMenu.isHomepage && (
+                <button
+                  onClick={() => {
+                    onSetHomepage(contextMenu.idOrPath);
+                    closeContextMenu();
+                  }}
+                  className="w-full px-3 py-2 text-left text-xs text-slate-200 hover:bg-purple-600 hover:text-white flex items-center gap-2 transition-colors cursor-pointer"
+                >
+                  <Home className="w-3.5 h-3.5" />
+                  Definir como Home
+                </button>
+              )}
+              {!contextMenu.isHomepage && (
+                <button
+                  onClick={() => {
+                    onDeletePage(contextMenu.idOrPath);
+                    closeContextMenu();
+                  }}
+                  className="w-full px-3 py-2 text-left text-xs text-red-400 hover:bg-red-600 hover:text-white flex items-center gap-2 transition-colors cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Excluir Página
+                </button>
+              )}
+            </>
+          ) : (
+            <>
+              <button
+                onClick={() => {
+                  onDuplicateElement(contextMenu.idOrPath);
+                  closeContextMenu();
+                }}
+                className="w-full px-3 py-2 text-left text-xs text-slate-200 hover:bg-purple-600 hover:text-white flex items-center gap-2 transition-colors cursor-pointer"
+              >
+                <Copy className="w-3.5 h-3.5" />
+                Duplicar (Ctrl+D)
+              </button>
+              <button
+                onClick={() => {
+                  onDeleteElement(contextMenu.idOrPath);
+                  closeContextMenu();
+                }}
+                className="w-full px-3 py-2 text-left text-xs text-red-400 hover:bg-red-600 hover:text-white flex items-center gap-2 transition-colors cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Excluir (Del)
+              </button>
+            </>
+          )}
         </div>
       )}
     </aside>
