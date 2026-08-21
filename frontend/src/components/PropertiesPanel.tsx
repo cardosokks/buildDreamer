@@ -55,6 +55,8 @@ const cleanComputedValue = (val: string, prop: string): string => {
 };
 
 
+import { Globe, Search, Share2 } from 'lucide-react';
+
 interface PropertiesPanelProps {
   selectedSelector: string | null;
   selectedPath?: string | null;
@@ -62,6 +64,12 @@ interface PropertiesPanelProps {
   selectedAttrs: Record<string, string>;
   onStyleChange: (property: string, value: string) => void;
   onAttrChange: (attr: string, value: string) => void;
+  pageSeo?: {
+    title?: string;
+    description?: string;
+    ogImage?: string;
+  };
+  onPageSeoChange?: (key: 'title' | 'description' | 'ogImage', value: string) => void;
 }
 
 // Reusable building blocks
@@ -232,17 +240,10 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   selectedAttrs,
   onStyleChange,
   onAttrChange,
+  pageSeo,
+  onPageSeoChange,
 }) => {
-  if (!selectedSelector) {
-    return (
-      <aside className="w-64 border-l border-slate-900 bg-slate-950 flex flex-col h-full shrink-0 items-center justify-center">
-        <div className="text-center p-6 space-y-2">
-          <Settings className="w-8 h-8 text-slate-700 mx-auto" />
-          <p className="text-xs text-slate-600 italic">Selecione um elemento<br />para editar as propriedades</p>
-        </div>
-      </aside>
-    );
-  }
+  const [panelTab, setPanelTab] = useState<'styles' | 'seo'>('styles');
 
   const get = (prop: string) => cleanComputedValue(selectedStyles[prop] || '', prop);
   const S = (p: string, v: string) => onStyleChange(p, v);
@@ -253,18 +254,105 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const position = get('position') || 'static';
   const isPositioned = position !== 'static';
 
-  const cleanSelector = selectedSelector.split('>').pop()?.trim() || selectedSelector;
-
   return (
-    <aside className="w-64 border-l border-slate-900 bg-slate-950 flex flex-col h-full shrink-0">
-
-      {/* Header */}
-      <div className="px-3 py-2.5 border-b border-slate-900 flex items-center gap-2 shrink-0">
-        <Settings className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 truncate">{cleanSelector}</span>
+    <aside className="w-64 border-l border-slate-900 bg-slate-950 flex flex-col h-full shrink-0 select-none">
+      {/* Panel Top Tabs (Estilos vs SEO / Meta Tags) */}
+      <div className="flex border-b border-slate-900 bg-slate-900/40 p-1 gap-1">
+        <button
+          onClick={() => setPanelTab('styles')}
+          className={`flex-1 py-1.5 text-[11px] font-semibold rounded-md flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+            panelTab === 'styles'
+              ? 'bg-purple-600/20 text-purple-300 border border-purple-500/30'
+              : 'text-slate-500 hover:text-slate-300'
+          }`}
+        >
+          <Palette className="w-3 h-3" />
+          Estilos
+        </button>
+        <button
+          onClick={() => setPanelTab('seo')}
+          className={`flex-1 py-1.5 text-[11px] font-semibold rounded-md flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+            panelTab === 'seo'
+              ? 'bg-purple-600/20 text-purple-300 border border-purple-500/30'
+              : 'text-slate-500 hover:text-slate-300'
+          }`}
+        >
+          <Globe className="w-3 h-3" />
+          SEO & Meta
+        </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      {panelTab === 'seo' ? (
+        <div className="flex-1 overflow-y-auto p-3 space-y-4">
+          <div>
+            <span className="text-[10px] uppercase font-bold text-purple-400 tracking-wider flex items-center gap-1.5 mb-2">
+              <Search className="w-3 h-3" />
+              Otimização Para Buscas (Google)
+            </span>
+            <Label>Título da Página (SEO Title)</Label>
+            <input
+              type="text"
+              placeholder="Ex: Minha Empresa | Soluções em Tecnologia"
+              value={pageSeo?.title || ''}
+              onChange={(e) => onPageSeoChange && onPageSeoChange('title', e.target.value)}
+              className={inputCls}
+            />
+          </div>
+
+          <div>
+            <Label>Descrição da Página (Meta Description)</Label>
+            <textarea
+              rows={3}
+              placeholder="Breve resumo do seu site para atrair cliques nos resultados de busca do Google."
+              value={pageSeo?.description || ''}
+              onChange={(e) => onPageSeoChange && onPageSeoChange('description', e.target.value)}
+              className={`${inputCls} resize-none`}
+            />
+          </div>
+
+          <div>
+            <span className="text-[10px] uppercase font-bold text-pink-400 tracking-wider flex items-center gap-1.5 mb-2">
+              <Share2 className="w-3 h-3" />
+              Compartilhamento WhatsApp / Redes (OG)
+            </span>
+            <Label>URL da Imagem de Prévia (og:image)</Label>
+            <input
+              type="text"
+              placeholder="https://exemplo.com/banner-social.jpg"
+              value={pageSeo?.ogImage || ''}
+              onChange={(e) => onPageSeoChange && onPageSeoChange('ogImage', e.target.value)}
+              className={inputCls}
+            />
+          </div>
+
+          {/* Live SERP Google Card Preview */}
+          <div className="mt-4 p-3 bg-slate-900 border border-slate-800 rounded-xl space-y-1">
+            <span className="text-[9px] uppercase font-semibold text-slate-500 block">Prévia no Google</span>
+            <div className="text-[11px] text-blue-400 font-medium truncate">
+              {pageSeo?.title || 'Título da Sua Página'}
+            </div>
+            <div className="text-[10px] text-emerald-400 truncate">
+              https://seusite.com.br
+            </div>
+            <div className="text-[10px] text-slate-400 line-clamp-2 leading-tight">
+              {pageSeo?.description || 'Adicione uma descrição para visualizar a prévia nos buscadores.'}
+            </div>
+          </div>
+        </div>
+      ) : !selectedSelector ? (
+        <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
+          <Settings className="w-8 h-8 text-slate-700 mx-auto mb-2" />
+          <p className="text-xs text-slate-600 italic">Selecione um elemento no canvas<br />para editar propriedades</p>
+        </div>
+      ) : (
+        <div className="flex-1 overflow-y-auto">
+          {/* Header do elemento selecionado */}
+          <div className="px-3 py-2 border-b border-slate-900 flex items-center gap-2 shrink-0 bg-slate-900/30">
+            <Settings className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 truncate">
+              {selectedSelector.split('>').pop()?.trim() || selectedSelector}
+            </span>
+          </div>
 
         {/* CONTEÚDO DO ELEMENTO (text editing) */}
         {selectedAttrs['_hasChildren'] !== 'true' && selectedAttrs['_tag'] && !['img','input','hr','br','meta','link'].includes(selectedAttrs['_tag']) && (
@@ -701,8 +789,8 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               value={get('transform')} onChange={e => S('transform', e.target.value)} />
           </div>
         </Section>
-
       </div>
-    </aside>
+    )}
+  </aside>
   );
 };

@@ -434,7 +434,6 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
   // Move element: drag sourcePath into targetPath container
   const handleMoveElement = (sourcePath: string, targetPath: string) => {
     if (!activePage || sourcePath === targetPath) return;
-    // Prevent moving into own descendant
     if (targetPath.startsWith(sourcePath + '.')) return;
     const doc = parseDocFromHtml(activePage.html);
     const root = doc.getElementById('canvas-root') || doc.body;
@@ -446,6 +445,45 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
       const newHtml = serializeBodyContent(doc);
       handleCodeChange('html', newHtml);
       setSelectedPath(null); setSelectedSelector(null);
+    }
+  };
+
+  // Inserir bloco de template pronto no final do canvas
+  const handleInsertBlock = (htmlBlock: string, cssBlock?: string) => {
+    if (!activePage) return;
+    const currentHtml = activePage.html || '';
+    const newHtml = currentHtml ? `${currentHtml}\n${htmlBlock}` : htmlBlock;
+    const newCss = cssBlock ? `${activePage.css || ''}\n${cssBlock}` : activePage.css;
+    handleCodeChange('html', newHtml);
+    if (cssBlock) handleCodeChange('css', newCss);
+  };
+
+  // Atualizar metadados de SEO da página
+  const handlePageSeoChange = async (key: 'title' | 'description' | 'ogImage', value: string) => {
+    if (!activePage) return;
+    try {
+      const updateData: any = {};
+      if (key === 'title') updateData.seoTitle = value;
+      if (key === 'description') updateData.seoDescription = value;
+
+      await fetch(`${API_URL}/api/pages/${activePage.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(updateData)
+      });
+
+      setProject(prev => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          pages: prev.pages.map(p => p.id === activePage.id ? { ...p, [key === 'title' ? 'seoTitle' : 'seoDescription']: value } : p)
+        };
+      });
+    } catch (e) {
+      console.error("Erro ao salvar SEO:", e);
     }
   };
 
@@ -867,6 +905,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
                   onMoveElement={handleMoveElement}
                   onWrapElement={handleWrapElement}
                   onAddChildElement={handleAddChildElement}
+                  onInsertBlock={handleInsertBlock}
                   selectedPath={selectedPath}
                 />
                 
@@ -929,6 +968,12 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
                   selectedAttrs={selectedAttrs}
                   onStyleChange={handleStyleChange}
                   onAttrChange={handleAttrChange}
+                  pageSeo={{
+                    title: (activePage as any)?.seoTitle || activePage?.name || '',
+                    description: (activePage as any)?.seoDescription || '',
+                    ogImage: ''
+                  }}
+                  onPageSeoChange={handlePageSeoChange}
                 />
               </div>
             )}

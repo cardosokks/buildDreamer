@@ -24,6 +24,14 @@ import {
   ArrowDown,
   Navigation,
   Layers,
+  Sparkles,
+  Component,
+  Boxes,
+  Send,
+  MessageCircle,
+  CreditCard,
+  PhoneCall,
+  CheckCircle2
 } from 'lucide-react';
 
 interface ElementNode {
@@ -50,6 +58,7 @@ interface SidebarProps {
   onMoveElement: (sourcePath: string, targetPath: string) => void;
   onWrapElement: (path: string) => void;
   onAddChildElement?: (parentPath: string, tag: string, text?: string) => void;
+  onInsertBlock?: (htmlBlock: string, cssBlock?: string) => void;
   selectedPath?: string | null;
 }
 
@@ -97,6 +106,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onMoveElement,
   onWrapElement,
   onAddChildElement,
+  onInsertBlock,
   selectedPath,
 }) => {
   const [pagesCollapsed, setPagesCollapsed] = useState(false);
@@ -282,6 +292,146 @@ export const Sidebar: React.FC<SidebarProps> = ({
     });
   };
 
+  const [activeTab, setActiveTab] = useState<'layers' | 'blocks'>('layers');
+
+  // Biblioteca de Blocos Prontos Modernos e Responsivos
+  const readyBlocks = [
+    {
+      id: 'hero-modern',
+      title: 'Hero Banner Neon',
+      category: 'Cabeçalho',
+      icon: <Sparkles className="w-4 h-4 text-purple-400" />,
+      html: `
+<section class="hero-section" style="padding: 80px 20px; text-align: center; background: radial-gradient(circle at center, rgba(168,85,247,0.15) 0%, rgba(13,7,20,0.9) 100%); border-bottom: 1px solid rgba(168,85,247,0.2);">
+  <div style="max-width: 900px; margin: 0 auto;">
+    <span style="display: inline-block; padding: 6px 16px; background: rgba(168,85,247,0.15); border: 1px solid rgba(168,85,247,0.4); border-radius: 99px; color: #d8b4fe; font-size: 13px; font-weight: 600; margin-bottom: 20px;">
+      ✨ NOVIDADE EXCLUSIVA
+    </span>
+    <h1 style="font-size: 42px; font-weight: 800; color: #ffffff; line-height: 1.2; margin-bottom: 20px; text-shadow: 0 0 20px rgba(168,85,247,0.3);">
+      Transforme Ideias em Realidade Digital
+    </h1>
+    <p style="font-size: 17px; color: #94a3b8; line-height: 1.6; max-width: 650px; margin: 0 auto 32px auto;">
+      Construa interfaces extraordinárias, rápidas e responsivas para computadores e dispositivos móveis com total precisão.
+    </p>
+    <div style="display: flex; gap: 16px; justify-content: center; flex-wrap: wrap;">
+      <a href="#contato" style="padding: 14px 32px; background: #9333ea; color: #ffffff; text-decoration: none; border-radius: 12px; font-weight: 700; box-shadow: 0 0 20px rgba(147,51,234,0.4); transition: transform 0.2s;">
+        Começar Agora
+      </a>
+      <a href="#saiba-mais" style="padding: 14px 32px; background: rgba(255,255,255,0.05); color: #ffffff; text-decoration: none; border-radius: 12px; font-weight: 600; border: 1px solid rgba(255,255,255,0.1);">
+        Saiba Mais
+      </a>
+    </div>
+  </div>
+</section>`
+    },
+    {
+      id: 'features-grid',
+      title: 'Grade de Recursos / Serviços',
+      category: 'Conteúdo',
+      icon: <Boxes className="w-4 h-4 text-cyan-400" />,
+      html: `
+<section style="padding: 70px 20px; max-width: 1100px; margin: 0 auto;">
+  <div style="text-align: center; margin-bottom: 50px;">
+    <h2 style="font-size: 32px; font-weight: 700; color: #ffffff; margin-bottom: 12px;">Nossos Diferenciais</h2>
+    <p style="color: #94a3b8; font-size: 15px;">Soluções sob medida para acelerar seu negócio.</p>
+  </div>
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px;">
+    <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 28px; transition: transform 0.2s;">
+      <div style="width: 44px; height: 44px; background: rgba(168,85,247,0.2); border-radius: 10px; display: flex; align-items: center; justify-content: center; margin-bottom: 16px; font-size: 20px;">⚡</div>
+      <h3 style="color: #ffffff; font-size: 18px; font-weight: 600; margin-bottom: 8px;">Alta Performance</h3>
+      <p style="color: #94a3b8; font-size: 14px; line-height: 1.5;">Sites otimizados para carregamento instantâneo em qualquer velocidade de rede.</p>
+    </div>
+    <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 28px; transition: transform 0.2s;">
+      <div style="width: 44px; height: 44px; background: rgba(6,182,212,0.2); border-radius: 10px; display: flex; align-items: center; justify-content: center; margin-bottom: 16px; font-size: 20px;">📱</div>
+      <h3 style="color: #ffffff; font-size: 18px; font-weight: 600; margin-bottom: 8px;">100% Responsivo</h3>
+      <p style="color: #94a3b8; font-size: 14px; line-height: 1.5;">Perfeição visual tanto em smartphones Android e iOS quanto em telas ultrawide.</p>
+    </div>
+    <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 28px; transition: transform 0.2s;">
+      <div style="width: 44px; height: 44px; background: rgba(236,72,153,0.2); border-radius: 10px; display: flex; align-items: center; justify-content: center; margin-bottom: 16px; font-size: 20px;">🔒</div>
+      <h3 style="color: #ffffff; font-size: 18px; font-weight: 600; margin-bottom: 8px;">Segurança Máxima</h3>
+      <p style="color: #94a3b8; font-size: 14px; line-height: 1.5;">Certificado SSL automático e infraestrutura blindada em nuvem de alta disponibilidade.</p>
+    </div>
+  </div>
+</section>`
+    },
+    {
+      id: 'whatsapp-cta',
+      title: 'Botão Flutuante / CTA WhatsApp',
+      category: 'Conversão',
+      icon: <MessageCircle className="w-4 h-4 text-green-400" />,
+      html: `
+<div style="padding: 40px 20px; text-align: center; background: rgba(34,197,94,0.08); border: 1px solid rgba(34,197,94,0.25); border-radius: 20px; max-width: 800px; margin: 40px auto;">
+  <h3 style="color: #ffffff; font-size: 24px; font-weight: 700; margin-bottom: 12px;">Dúvidas ou Orçamentos Imediatos?</h3>
+  <p style="color: #cbd5e1; font-size: 15px; margin-bottom: 24px;">Fale diretamente com nossa equipe de especialistas pelo WhatsApp.</p>
+  <a href="https://wa.me/5561999999999?text=Ol%C3%A1,%20gostaria%20de%20um%20or%C3%A7amento!" target="_blank" style="display: inline-flex; align-items: center; gap: 10px; padding: 14px 28px; background: #22c55e; color: #ffffff; font-weight: 700; text-decoration: none; border-radius: 12px; box-shadow: 0 0 20px rgba(34,197,94,0.4);">
+    <span>💬</span> Conversar no WhatsApp
+  </a>
+</div>`
+    },
+    {
+      id: 'pricing-table',
+      title: 'Tabela de Preços / Planos',
+      category: 'Vendas',
+      icon: <CreditCard className="w-4 h-4 text-yellow-400" />,
+      html: `
+<section style="padding: 70px 20px; max-width: 1000px; margin: 0 auto; text-align: center;">
+  <h2 style="font-size: 32px; font-weight: 700; color: #ffffff; margin-bottom: 10px;">Planos Flexíveis</h2>
+  <p style="color: #94a3b8; margin-bottom: 40px;">Escolha o pacote ideal para alavancar sua presença online.</p>
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 24px; text-align: left;">
+    <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 18px; padding: 30px;">
+      <h3 style="color: #ffffff; font-size: 20px; font-weight: 600; margin-bottom: 6px;">Básico</h3>
+      <div style="font-size: 32px; font-weight: 800; color: #ffffff; margin-bottom: 16px;">R$ 97 <span style="font-size: 14px; color: #94a3b8; font-weight: normal;">/mês</span></div>
+      <ul style="color: #94a3b8; font-size: 14px; line-height: 2; list-style: none; padding: 0; margin-bottom: 24px;">
+        <li>✔ 1 Website Profissional</li>
+        <li>✔ Domínio Próprio Incluso</li>
+        <li>✔ Suporte por Email</li>
+      </ul>
+      <button style="width: 100%; padding: 12px; background: rgba(255,255,255,0.1); color: #ffffff; border: none; border-radius: 10px; font-weight: 600; cursor: pointer;">Assinar</button>
+    </div>
+    <div style="background: linear-gradient(180deg, rgba(147,51,234,0.15) 0%, rgba(13,7,20,0.9) 100%); border: 1px solid rgba(168,85,247,0.5); border-radius: 18px; padding: 30px; box-shadow: 0 0 25px rgba(168,85,247,0.2);">
+      <div style="color: #d8b4fe; font-size: 12px; font-weight: bold; text-transform: uppercase; margin-bottom: 4px;">Mais Popular</div>
+      <h3 style="color: #ffffff; font-size: 20px; font-weight: 600; margin-bottom: 6px;">Profissional Pro</h3>
+      <div style="font-size: 32px; font-weight: 800; color: #ffffff; margin-bottom: 16px;">R$ 197 <span style="font-size: 14px; color: #94a3b8; font-weight: normal;">/mês</span></div>
+      <ul style="color: #cbd5e1; font-size: 14px; line-height: 2; list-style: none; padding: 0; margin-bottom: 24px;">
+        <li>✔ Websites Ilimitados</li>
+        <li>✔ IA Construtora Ilimitada</li>
+        <li>✔ WhatsApp & Chatbot Ativo</li>
+        <li>✔ Suporte Prioritário 24/7</li>
+      </ul>
+      <button style="width: 100%; padding: 12px; background: #9333ea; color: #ffffff; border: none; border-radius: 10px; font-weight: 700; box-shadow: 0 0 15px rgba(147,51,234,0.4); cursor: pointer;">Assinar Pro</button>
+    </div>
+  </div>
+</section>`
+    },
+    {
+      id: 'footer-modern',
+      title: 'Rodapé Completo',
+      category: 'Rodapé',
+      icon: <Navigation className="w-4 h-4 text-pink-400" />,
+      html: `
+<footer style="padding: 50px 20px; background: #05010a; border-top: 1px solid rgba(255,255,255,0.08); margin-top: 60px;">
+  <div style="max-width: 1100px; margin: 0 auto; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 30px;">
+    <div style="max-width: 320px;">
+      <div style="font-size: 20px; font-weight: 800; color: #ffffff; margin-bottom: 10px;">Empresa Digital</div>
+      <p style="color: #64748b; font-size: 14px; line-height: 1.5;">Criando soluções online elegantes, eficientes e de alto impacto para todo o Brasil.</p>
+    </div>
+    <div>
+      <h4 style="color: #ffffff; font-size: 14px; font-weight: 700; margin-bottom: 12px; text-transform: uppercase;">Navegação</h4>
+      <div style="display: flex; flex-direction: column; gap: 8px; font-size: 13px;">
+        <a href="#home" style="color: #94a3b8; text-decoration: none;">Início</a>
+        <a href="#sobre" style="color: #94a3b8; text-decoration: none;">Sobre Nós</a>
+        <a href="#servicos" style="color: #94a3b8; text-decoration: none;">Serviços</a>
+        <a href="#contato" style="color: #94a3b8; text-decoration: none;">Contato</a>
+      </div>
+    </div>
+  </div>
+  <div style="max-width: 1100px; margin: 30px auto 0 auto; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.05); text-align: center; color: #64748b; font-size: 12px;">
+    © 2026 Todos os direitos reservados.
+  </div>
+</footer>`
+    }
+  ];
+
   return (
     <aside className="w-60 border-r border-slate-900 bg-slate-950 flex flex-col h-full shrink-0 select-none">
 
@@ -306,7 +456,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         {!pagesCollapsed && (
-          <div className="px-2 pb-3 space-y-0.5 max-h-44 overflow-y-auto min-h-0">
+          <div className="px-2 pb-3 space-y-0.5 max-h-36 overflow-y-auto min-h-0">
             {pages.map(page => (
               <div
                 key={page.id}
@@ -349,32 +499,68 @@ export const Sidebar: React.FC<SidebarProps> = ({
         )}
       </div>
 
-      {/* Layers Section */}
-      <div className="flex-1 flex flex-col min-h-0">
-        <div className="px-3 py-3 flex items-center justify-between border-b border-slate-900/50">
-          <button
-            onClick={() => setLayersCollapsed(!layersCollapsed)}
-            className="text-[10px] font-bold uppercase tracking-widest text-slate-500 flex items-center gap-1.5 cursor-pointer hover:text-slate-300 transition-colors"
-          >
-            {layersCollapsed ? <ChevronRight className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-            <MousePointer className="w-3.5 h-3.5" />
-            Estrutura / Layers
-          </button>
-        </div>
+      {/* Tabs Selector: Layers vs Ready Blocks */}
+      <div className="flex border-b border-slate-900 bg-slate-900/40 p-1 gap-1">
+        <button
+          onClick={() => setActiveTab('layers')}
+          className={`flex-1 py-1.5 text-[11px] font-semibold rounded-md flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+            activeTab === 'layers'
+              ? 'bg-purple-600/20 text-purple-300 border border-purple-500/30'
+              : 'text-slate-500 hover:text-slate-300'
+          }`}
+        >
+          <MousePointer className="w-3 h-3" />
+          Estrutura
+        </button>
+        <button
+          onClick={() => setActiveTab('blocks')}
+          className={`flex-1 py-1.5 text-[11px] font-semibold rounded-md flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+            activeTab === 'blocks'
+              ? 'bg-purple-600/20 text-purple-300 border border-purple-500/30'
+              : 'text-slate-500 hover:text-slate-300'
+          }`}
+        >
+          <Component className="w-3 h-3" />
+          Blocos Prontos
+        </button>
+      </div>
 
-        {!layersCollapsed && (
-          <div
-            className="flex-1 overflow-y-auto py-2 px-2 min-h-0 space-y-0.5"
-            onClick={() => setMenuOpenPath(null)}
-          >
+      {/* Main Body depending on Active Tab */}
+      {activeTab === 'layers' ? (
+        <div className="flex-1 flex flex-col min-h-0">
+          <div className="flex-1 overflow-y-auto py-2 px-2 min-h-0 space-y-0.5" onClick={() => setMenuOpenPath(null)}>
             {layers.length > 0 ? (
               renderLayers(layers)
             ) : (
               <p className="text-[10px] text-slate-600 italic p-3 text-center">Nenhum elemento no canvas.</p>
             )}
           </div>
-        )}
-      </div>
+        </div>
+      ) : (
+        <div className="flex-1 overflow-y-auto p-2.5 space-y-3 min-h-0">
+          <span className="text-[10px] uppercase tracking-wider font-bold text-slate-500 block px-1">
+            Clique para Adicionar à Página:
+          </span>
+          {readyBlocks.map((block) => (
+            <div
+              key={block.id}
+              onClick={() => onInsertBlock && onInsertBlock(block.html)}
+              className="p-3 bg-slate-900/70 hover:bg-purple-950/40 border border-slate-850 hover:border-purple-500/50 rounded-xl transition-all group cursor-pointer shadow-sm hover:shadow-[0_0_15px_rgba(168,85,247,0.15)]"
+            >
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center gap-2">
+                  {block.icon}
+                  <span className="text-xs font-bold text-white group-hover:text-purple-300 transition-colors">
+                    {block.title}
+                  </span>
+                </div>
+                <Plus className="w-3.5 h-3.5 text-slate-500 group-hover:text-purple-400 transition-colors" />
+              </div>
+              <span className="text-[10px] text-slate-500 font-medium">Categoria: {block.category}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </aside>
   );
 };

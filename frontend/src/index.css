@@ -1,22 +1,33 @@
 @import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800;900&family=Fira+Code:wght@400;500;600&display=swap');
 
 /* ─── Neon Theme Variables ────────────────────────────────────────── */
 :root {
   --neon-purple: #a855f7;
   --neon-purple-glow: rgba(168, 85, 247, 0.4);
+  --neon-cyan: #06b6d4;
+  --neon-pink: #ec4899;
   --dark-bg: #07020d;
+  --panel-bg: #0d0714;
 }
 
 body {
   background-color: var(--dark-bg);
   color: #f8fafc;
+  font-family: 'Inter', sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+h1, h2, h3, h4, .font-heading {
+  font-family: 'Outfit', sans-serif;
 }
 
 /* ─── Custom Scrollbar ────────────────────────────────────────────── */
-/* Webkit (Chrome, Edge, Safari) */
+/* Webkit (Chrome, Edge, Safari, Android Webview) */
 ::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
@@ -47,4 +58,22 @@ body {
 
 *:hover {
   scrollbar-color: #a855f7 #0f0b18;
+}
+
+/* Touch Friendly Utilities */
+.touch-pan-y {
+  touch-action: pan-y;
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    box-shadow: 0 0 15px rgba(168, 85, 247, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 25px rgba(168, 85, 247, 0.6);
+  }
+}
+
+.animate-neon-glow {
+  animation: pulseGlow 2.5s infinite ease-in-out;
 }

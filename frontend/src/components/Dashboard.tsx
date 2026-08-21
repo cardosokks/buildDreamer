@@ -914,6 +914,51 @@ export const Dashboard: React.FC<DashboardProps> = ({ onSelectProject }) => {
         </div>
       )}
 
+      {/* Mobile Bottom Navigation Bar (Android / Smartphone) */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-[#0c0616]/95 border-t border-purple-500/20 backdrop-blur-lg flex items-center justify-around px-2 z-40 shadow-[0_-4px_20px_rgba(0,0,0,0.5)]">
+        <button
+          onClick={() => setActiveTab('general')}
+          className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all cursor-pointer ${
+            activeTab === 'general' ? 'text-purple-400 font-bold' : 'text-slate-500 hover:text-slate-300'
+          }`}
+        >
+          <Sparkles className="w-5 h-5" />
+          <span className="text-[10px]">Geral</span>
+        </button>
+        <button
+          onClick={() => setActiveTab('projects')}
+          className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all cursor-pointer ${
+            activeTab === 'projects' ? 'text-indigo-400 font-bold' : 'text-slate-500 hover:text-slate-300'
+          }`}
+        >
+          <Layout className="w-5 h-5" />
+          <span className="text-[10px]">Sites</span>
+        </button>
+        <button
+          onClick={() => setShowCreateModal(true)}
+          className="flex flex-col items-center justify-center -mt-5 w-12 h-12 rounded-full bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-[0_0_15px_rgba(168,85,247,0.5)] cursor-pointer"
+          title="Novo Projeto"
+        >
+          <FolderPlus className="w-6 h-6" />
+        </button>
+        <button
+          onClick={() => setActiveTab('leads')}
+          className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all cursor-pointer ${
+            activeTab === 'leads' ? 'text-pink-400 font-bold' : 'text-slate-500 hover:text-slate-300'
+          }`}
+        >
+          <Users className="w-5 h-5" />
+          <span className="text-[10px]">Clientes</span>
+        </button>
+        <button
+          onClick={() => setShowSettings(true)}
+          className="flex flex-col items-center gap-1 py-1 px-3 rounded-xl text-slate-500 hover:text-slate-300 transition-all cursor-pointer"
+        >
+          <Settings className="w-5 h-5" />
+          <span className="text-[10px]">Ajustes</span>
+        </button>
+      </nav>
+
       {/* Settings Modal */}
       {showSettings && (
         <SettingsModal onClose={() => setShowSettings(false)} />
