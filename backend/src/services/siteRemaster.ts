@@ -335,19 +335,24 @@ export async function processWebsiteRemasterJob(
       });
     }
 
-    // 4. Gerar todas as subpáginas identificadas ou arquitetadas
+    // 4. Gerar todas as subpáginas identificadas baseando-se estritamente no seu próprio conteúdo original
     for (let i = 0; i < targetPagesList.length; i++) {
       const sub = targetPagesList[i];
-      if (onProgress) onProgress(`Criando subpágina: ${sub.name} (${i + 1}/${targetPagesList.length})...`, 3, 4);
+      if (onProgress) onProgress(`Remasterizando ${sub.name} com base no conteúdo original (${i + 1}/${targetPagesList.length})...`, 3, 4);
 
       const subPrompt = `
         Você é um Arquiteto de Software e UI/UX Designer de Elite.
-        Estamos criando a subpágina "${sub.name}" (slug: ${sub.slug}) da empresa "${businessName}".
-        Foco da página: ${sub.description}.
-        ${sub.cleanText ? `Conteúdo Original Extraído: ${sub.cleanText}` : ''}
+        Estamos modernizando a página "${sub.name}" (slug: ${sub.slug}) da empresa "${businessName}".
 
-        SUA MISSÃO:
-        Crie o código completo HTML + Tailwind CSS para esta subpágina "${sub.name}", incluindo header com navegação, hero específico da página, seções detalhadas, formulários/tabelas de preços correspondentes e footer consistente com a Home.
+        CONTEÚDO ORIGINAL EXTRAÍDO DESTA PÁGINA ESPECÍFICA:
+        """
+        ${sub.cleanText || sub.description}
+        """
+
+        DIRETRIZES FUNDAMENTAIS:
+        1. PRESERVAÇÃO TOTAL DE INFORMAÇÕES: Não invente nem descarte dados reais. Mantenha todos os textos, descrições de serviços, planos, tabelas, perguntas frequentes, canais de contato e diferenciais que constam no conteúdo original acima.
+        2. EXCELÊNCIA VISUAL 10x SUPERIOR: Transforme esse conteúdo em uma página moderna, limpa e elegante utilizando Tailwind CSS completo, cards bem distribuídos, ícones contextualizados, títulos expressivos e rodapé harmonizado.
+        3. Retorne SEMPRE o objeto JSON com o código HTML completo da página "${sub.name}".
       `;
 
       try {
