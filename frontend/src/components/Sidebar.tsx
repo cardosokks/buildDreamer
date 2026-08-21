@@ -3,10 +3,8 @@ import {
   Type,
   Square,
   Layout,
-  MousePointer,
   Plus,
   Trash2,
-  FileText,
   Copy,
   FolderOpen,
   ChevronDown,
@@ -23,13 +21,12 @@ import {
   Layers,
   Sparkles,
   Component,
-  Boxes,
-  MessageCircle,
-  CreditCard,
+  ArrowUp,
+  ArrowDown,
   Eye,
-  EyeOff,
-  Edit2,
-  Home
+  CornerDownRight,
+  Home,
+  GripVertical
 } from 'lucide-react';
 
 export interface ElementNode {
@@ -55,35 +52,49 @@ interface SidebarProps {
   onDeleteElement: (path: string) => void;
   onDuplicateElement: (path: string) => void;
   onMoveElement: (sourcePath: string, targetPath: string) => void;
+  onMoveElementDirection?: (path: string, direction: 'up' | 'down') => void;
   onInsertBlock?: (htmlBlock: string, cssBlock?: string) => void;
   selectedPath?: string | null;
 }
 
-function getTagIcon(tag: string) {
+function getTagDetails(tag: string) {
   const cls = 'w-3.5 h-3.5 shrink-0';
-  switch (tag.toLowerCase()) {
-    case 'h1': case 'h2': case 'h3': case 'h4': case 'h5': case 'h6':
-      return <Type className={`${cls} text-yellow-400`} />;
-    case 'p': case 'span': case 'label': case 'strong': case 'em':
-      return <AlignLeft className={`${cls} text-blue-400`} />;
-    case 'a':
-      return <Link className={`${cls} text-cyan-400`} />;
-    case 'img':
-      return <Image className={`${cls} text-green-400`} />;
-    case 'button': case 'input': case 'textarea': case 'select':
-      return <FormInput className={`${cls} text-orange-400`} />;
-    case 'ul': case 'ol': case 'li':
-      return <List className={`${cls} text-slate-400`} />;
-    case 'nav': case 'header': case 'footer':
-      return <Navigation className={`${cls} text-pink-400`} />;
-    case 'section': case 'article': case 'main': case 'aside':
-      return <Layout className={`${cls} text-purple-400`} />;
+  const t = tag.toLowerCase();
+  switch (t) {
+    case 'header':
+      return { icon: <Navigation className={`${cls} text-pink-400`} />, name: 'Header / Topo' };
+    case 'nav':
+      return { icon: <Navigation className={`${cls} text-pink-400`} />, name: 'Navegação' };
+    case 'footer':
+      return { icon: <Navigation className={`${cls} text-rose-400`} />, name: 'Footer / Rodapé' };
+    case 'section':
+      return { icon: <Layout className={`${cls} text-purple-400`} />, name: 'Seção' };
+    case 'article': case 'main': case 'aside':
+      return { icon: <Layout className={`${cls} text-purple-400`} />, name: t.toUpperCase() };
     case 'div':
-      return <Layers className={`${cls} text-indigo-400`} />;
+      return { icon: <Layers className={`${cls} text-indigo-400`} />, name: 'Container' };
+    case 'h1': case 'h2': case 'h3': case 'h4': case 'h5': case 'h6':
+      return { icon: <Type className={`${cls} text-yellow-400`} />, name: `Título (${t.toUpperCase()})` };
+    case 'p':
+      return { icon: <AlignLeft className={`${cls} text-blue-400`} />, name: 'Parágrafo' };
+    case 'span': case 'strong': case 'em':
+      return { icon: <AlignLeft className={`${cls} text-cyan-400`} />, name: 'Texto Inline' };
+    case 'a':
+      return { icon: <Link className={`${cls} text-emerald-400`} />, name: 'Link / Botão' };
+    case 'img':
+      return { icon: <Image className={`${cls} text-teal-400`} />, name: 'Imagem' };
+    case 'button':
+      return { icon: <FormInput className={`${cls} text-orange-400`} />, name: 'Botão' };
+    case 'input': case 'textarea': case 'select': case 'form':
+      return { icon: <FormInput className={`${cls} text-amber-400`} />, name: 'Formulário' };
+    case 'ul': case 'ol':
+      return { icon: <List className={`${cls} text-slate-400`} />, name: 'Lista' };
+    case 'li':
+      return { icon: <List className={`${cls} text-slate-400`} />, name: 'Item da Lista' };
     case 'video': case 'iframe':
-      return <Video className={`${cls} text-rose-400`} />;
+      return { icon: <Video className={`${cls} text-red-400`} />, name: 'Vídeo / Iframe' };
     default:
-      return <Square className={`${cls} text-slate-500`} />;
+      return { icon: <Square className={`${cls} text-slate-500`} />, name: tag.toLowerCase() };
   }
 }
 
@@ -101,16 +112,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onDeleteElement,
   onDuplicateElement,
   onMoveElement,
+  onMoveElementDirection,
   onInsertBlock,
   selectedPath,
 }) => {
   const [activeTab, setActiveTab] = useState<'layers' | 'blocks'>('layers');
   const [pagesCollapsed, setPagesCollapsed] = useState(false);
-  const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set(['0', '1', '2', '0.0', '0.1']));
+  const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set(['0', '1', '2', '3', '0.0', '0.1', '1.0']));
   const [dragSource, setDragSource] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState<string | null>(null);
 
-  // Context Menu State (Botão Direito)
+  // Context Menu State (WordPress Block Actions)
   const [contextMenu, setContextMenu] = useState<{
     visible: boolean;
     x: number;
@@ -148,12 +160,29 @@ export const Sidebar: React.FC<SidebarProps> = ({
     });
   };
 
+  const expandAll = () => {
+    const all = new Set<string>();
+    function collect(nodes: ElementNode[], parent = '') {
+      nodes.forEach((n, idx) => {
+        const p = parent ? `${parent}.${idx}` : `${idx}`;
+        all.add(p);
+        if (n.children) collect(n.children, p);
+      });
+    }
+    collect(layers);
+    setExpandedPaths(all);
+  };
+
+  const collapseAll = () => {
+    setExpandedPaths(new Set());
+  };
+
   const renderLayers = (nodes: ElementNode[], depth = 0, parentPath = '') => {
     return nodes.map((node, index) => {
       const path = parentPath ? `${parentPath}.${index}` : `${index}`;
       const className = typeof node.className === 'string' ? node.className : '';
       const cleanClass = className ? className.split(' ').filter(c => !c.startsWith('studio-'))[0] : '';
-      const label = `${node.tag}${cleanClass ? '.' + cleanClass : ''}${node.id ? '#' + node.id : ''}`;
+      const { icon, name } = getTagDetails(node.tag);
       const selector = node.tag + (cleanClass ? '.' + cleanClass : '');
       const hasChildren = node.children && node.children.length > 0;
       const isExpanded = expandedPaths.has(path);
@@ -163,14 +192,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
       return (
         <div key={path} role="treeitem" aria-expanded={hasChildren ? isExpanded : undefined} aria-selected={isSelected}>
           <div
-            className={`group flex items-center justify-between gap-1 rounded-lg text-xs transition-all duration-100 cursor-pointer ${
+            className={`group relative flex items-center justify-between gap-1.5 rounded-lg text-xs transition-all duration-100 cursor-pointer select-none ${
               isSelected
-                ? 'bg-purple-600/30 text-purple-200 border border-purple-500/50 shadow-sm'
+                ? 'bg-purple-600/35 text-white border border-purple-500/60 shadow-sm font-semibold'
                 : isDragOver
-                ? 'bg-indigo-600/30 border border-indigo-500/50 text-indigo-200'
-                : 'hover:bg-slate-900/80 text-slate-400 hover:text-slate-200 border border-transparent'
+                ? 'bg-indigo-600/30 border-2 border-indigo-400 text-indigo-200'
+                : 'hover:bg-slate-900/90 text-slate-300 hover:text-white border border-transparent'
             }`}
-            style={{ paddingLeft: `${depth * 12 + 6}px`, paddingRight: '6px', paddingTop: '4px', paddingBottom: '4px' }}
+            style={{ 
+              paddingLeft: `${Math.max(6, depth * 14 + 6)}px`, 
+              paddingRight: '6px', 
+              paddingTop: '5px', 
+              paddingBottom: '5px' 
+            }}
             onClick={() => onSelectLayer(selector, path)}
             onContextMenu={(e) => handleContextMenu(e, 'layer', path)}
             onMouseEnter={() => onHoverLayer && onHoverLayer(path)}
@@ -196,35 +230,88 @@ export const Sidebar: React.FC<SidebarProps> = ({
               }
             }}
           >
-            <div className="flex items-center gap-1.5 min-w-0">
+            <div className="flex items-center gap-1.5 min-w-0 flex-1">
+              <GripVertical className="w-3 h-3 text-slate-600 group-hover:text-slate-400 cursor-grab shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+              
               {hasChildren ? (
                 <button
                   onClick={(e) => toggleExpanded(path, e)}
-                  className="p-0.5 hover:bg-slate-800 rounded text-slate-500 hover:text-slate-300"
+                  className="p-0.5 hover:bg-slate-800 rounded text-slate-400 hover:text-white shrink-0"
                 >
-                  {isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                  {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
                 </button>
               ) : (
-                <span className="w-3 h-3 inline-block" />
+                <span className="w-3.5 h-3.5 shrink-0 inline-block" />
               )}
-              {getTagIcon(node.tag)}
-              <span className="truncate font-mono text-[11px]">{label}</span>
+
+              {icon}
+
+              <div className="flex items-center gap-1.5 truncate">
+                <span className="truncate font-sans text-xs">{name}</span>
+                {node.id && (
+                  <span className="text-[10px] text-cyan-400 font-mono bg-cyan-950/60 px-1 rounded border border-cyan-500/20">
+                    #{node.id}
+                  </span>
+                )}
+                {cleanClass && !node.id && (
+                  <span className="text-[10px] text-purple-400 font-mono truncate opacity-70">
+                    .{cleanClass.slice(0, 10)}
+                  </span>
+                )}
+              </div>
             </div>
 
-            {/* Ações rápidas discretas */}
+            {/* Quick Actions (WordPress Gutenberg Style) */}
             <div className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 shrink-0 transition-opacity">
+              {onMoveElementDirection && (
+                <>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onMoveElementDirection(path, 'up');
+                    }}
+                    className="p-1 hover:text-white rounded hover:bg-slate-800 text-slate-400"
+                    title="Mover para Cima"
+                  >
+                    <ArrowUp className="w-3 h-3" />
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onMoveElementDirection(path, 'down');
+                    }}
+                    className="p-1 hover:text-white rounded hover:bg-slate-800 text-slate-400"
+                    title="Mover para Baixo"
+                  >
+                    <ArrowDown className="w-3 h-3" />
+                  </button>
+                </>
+              )}
               <button
-                onClick={(e) => handleContextMenu(e, 'layer', path)}
-                className="p-1 hover:text-white rounded transition-colors text-slate-500"
-                title="Mais opções (Botão direito)"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDuplicateElement(path);
+                }}
+                className="p-1 hover:text-white rounded hover:bg-slate-800 text-slate-400"
+                title="Duplicar Bloco (Ctrl+D)"
               >
-                <MoreVertical className="w-3 h-3" />
+                <Copy className="w-3 h-3" />
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDeleteElement(path);
+                }}
+                className="p-1 hover:text-red-400 rounded hover:bg-red-500/20 text-slate-400"
+                title="Excluir Bloco (Delete)"
+              >
+                <Trash2 className="w-3 h-3" />
               </button>
             </div>
           </div>
 
           {hasChildren && isExpanded && (
-            <div role="group">
+            <div role="group" className="border-l border-slate-800/80 ml-3 pl-0.5">
               {renderLayers(node.children!, depth + 1, path)}
             </div>
           )}
@@ -260,92 +347,63 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </a>
     </div>
   </div>
-</section>`
+</section>
+      `
     },
     {
       id: 'features-grid',
-      title: 'Grade de Recursos / Serviços',
-      category: 'Conteúdo',
-      icon: <Boxes className="w-4 h-4 text-cyan-400" />,
+      title: 'Grid de Benefícios / Serviços',
+      category: 'Seções',
+      icon: <Layout className="w-4 h-4 text-indigo-400" />,
       html: `
-<section style="padding: 70px 20px; max-width: 1100px; margin: 0 auto;">
-  <div style="text-align: center; margin-bottom: 50px;">
-    <h2 style="font-size: 32px; font-weight: 700; color: #ffffff; margin-bottom: 12px;">Nossos Diferenciais</h2>
-    <p style="color: #94a3b8; font-size: 15px;">Soluções sob medida para acelerar seu negócio.</p>
+<section style="padding: 80px 20px; background: #090410; border-bottom: 1px solid rgba(255,255,255,0.05);">
+  <div style="max-width: 1100px; margin: 0 auto;">
+    <div style="text-align: center; margin-bottom: 50px;">
+      <h2 style="font-size: 32px; font-weight: 800; color: #ffffff; margin-bottom: 12px;">Nossos Diferenciais Exclusivos</h2>
+      <p style="color: #94a3b8; font-size: 15px;">Desenvolvido com tecnologia de ponta para alavancar seus resultados.</p>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px;">
+      <div style="padding: 30px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px;">
+        <h3 style="font-size: 18px; font-weight: 700; color: #ffffff; margin-bottom: 10px;">⚡ Velocidade Extrema</h3>
+        <p style="font-size: 14px; color: #94a3b8; line-height: 1.6;">Carregamento ultrarrápido com código otimizado e arquitetura moderna.</p>
+      </div>
+      <div style="padding: 30px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px;">
+        <h3 style="font-size: 18px; font-weight: 700; color: #ffffff; margin-bottom: 10px;">📱 100% Responsivo</h3>
+        <p style="font-size: 14px; color: #94a3b8; line-height: 1.6;">Adaptação impecável para celulares, tablets e telas de computador.</p>
+      </div>
+      <div style="padding: 30px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px;">
+        <h3 style="font-size: 18px; font-weight: 700; color: #ffffff; margin-bottom: 10px;">🛡️ Segurança Blindada</h3>
+        <p style="font-size: 14px; color: #94a3b8; line-height: 1.6;">Proteção e confiabilidade garantidas em todas as etapas da navegação.</p>
+      </div>
+    </div>
   </div>
-  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px;">
-    <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 28px; transition: transform 0.2s;">
-      <div style="width: 44px; height: 44px; background: rgba(168,85,247,0.2); border: 1px solid rgba(168,85,247,0.4); border-radius: 12px; display: flex; align-items: center; justify-content: center; color: #c084fc; margin-bottom: 16px; font-size: 20px;">⚡</div>
-      <h3 style="color: #ffffff; font-size: 18px; font-weight: 600; margin-bottom: 8px;">Alta Performance</h3>
-      <p style="color: #94a3b8; font-size: 14px; line-height: 1.5;">Sites otimizados com pontuação máxima no Google PageSpeed.</p>
-    </div>
-    <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 28px; transition: transform 0.2s;">
-      <div style="width: 44px; height: 44px; background: rgba(6,182,212,0.2); border: 1px solid rgba(6,182,212,0.4); border-radius: 12px; display: flex; align-items: center; justify-content: center; color: #22d3ee; margin-bottom: 16px; font-size: 20px;">📱</div>
-      <h3 style="color: #ffffff; font-size: 18px; font-weight: 600; margin-bottom: 8px;">100% Responsivo</h3>
-      <p style="color: #94a3b8; font-size: 14px; line-height: 1.5;">Perfeição visual garantida em celulares Android, iOS e computadores.</p>
-    </div>
-    <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 28px; transition: transform 0.2s;">
-      <div style="width: 44px; height: 44px; background: rgba(236,72,153,0.2); border: 1px solid rgba(236,72,153,0.4); border-radius: 12px; display: flex; align-items: center; justify-content: center; color: #f472b6; margin-bottom: 16px; font-size: 20px;">🛡️</div>
-      <h3 style="color: #ffffff; font-size: 18px; font-weight: 600; margin-bottom: 8px;">Segurança & SEO</h3>
-      <p style="color: #94a3b8; font-size: 14px; line-height: 1.5;">Estrutura semântica configurada para ranquear no topo do Google.</p>
-    </div>
-  </div>
-</section>`
-    },
-    {
-      id: 'cta-banner',
-      title: 'Chamada para Ação (CTA)',
-      category: 'Conversão',
-      icon: <Sparkles className="w-4 h-4 text-emerald-400" />,
-      html: `
-<section style="padding: 60px 20px; max-width: 900px; margin: 40px auto; background: linear-gradient(135deg, #7e22ce 0%, #3b82f6 100%); border-radius: 24px; text-align: center; box-shadow: 0 10px 40px rgba(126,34,206,0.3);">
-  <h2 style="font-size: 32px; font-weight: 800; color: #ffffff; margin-bottom: 12px;">Pronto para Elevar Seu Negócio?</h2>
-  <p style="color: #e2e8f0; font-size: 16px; max-width: 550px; margin: 0 auto 28px auto;">Entre em contato hoje mesmo e solicite uma demonstração exclusiva.</p>
-  <a href="https://wa.me/5500000000000" target="_blank" style="display: inline-block; padding: 14px 36px; background: #ffffff; color: #7e22ce; font-weight: 800; text-decoration: none; border-radius: 12px; font-size: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.2);">
-    Falar no WhatsApp
-  </a>
-</section>`
-    },
-    {
-      id: 'footer-clean',
-      title: 'Rodapé Completo',
-      category: 'Rodapé',
-      icon: <Layout className="w-4 h-4 text-slate-400" />,
-      html: `
-<footer style="padding: 40px 20px; background: #030007; border-top: 1px solid rgba(255,255,255,0.06); text-align: center; color: #64748b; font-size: 13px;">
-  <p style="margin-bottom: 8px; color: #cbd5e1;">© 2026 Minha Empresa. Todos os direitos reservados.</p>
-  <p>Desenvolvido com excelência visual e alta tecnologia.</p>
-</footer>`
+</section>
+      `
     }
   ];
 
   return (
     <aside 
-      className="w-64 border-r border-slate-900 bg-[#090410] flex flex-col h-full shrink-0 select-none relative"
+      className="w-72 border-r border-slate-900 bg-[#090410] flex flex-col h-full shrink-0 select-none shadow-xl z-20"
       onClick={closeContextMenu}
     >
       {/* Pages Section */}
-      <div className="border-b border-slate-900/80 flex flex-col min-h-0">
-        <div className="px-3.5 py-3 flex items-center justify-between">
+      <div className="border-b border-slate-900 flex flex-col">
+        <div className="px-3.5 py-2.5 flex items-center justify-between">
           <button
             onClick={() => setPagesCollapsed(!pagesCollapsed)}
-            className="text-[10px] font-bold uppercase tracking-widest text-slate-500 flex items-center gap-1.5 cursor-pointer hover:text-slate-300 transition-colors"
+            className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-400 hover:text-white cursor-pointer"
           >
-            {pagesCollapsed ? <ChevronRight className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-            <FileText className="w-3.5 h-3.5" />
-            Páginas ({pages.length})
+            {pagesCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            <span>Páginas ({pages.length})</span>
           </button>
           
           <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onCreatePage();
-            }}
-            className="flex items-center gap-1 px-2 py-1 bg-purple-600/20 hover:bg-purple-600 text-purple-300 hover:text-white border border-purple-500/30 rounded-lg text-[10px] font-bold transition-all cursor-pointer shadow-sm"
-            title="Criar nova página no site"
+            onClick={onCreatePage}
+            className="p-1 hover:bg-purple-600/30 text-purple-400 hover:text-purple-300 rounded-md transition-colors cursor-pointer"
+            title="Adicionar Nova Página"
           >
-            <Plus className="w-3 h-3" />
-            Nova
+            <Plus className="w-3.5 h-3.5" />
           </button>
         </div>
 
@@ -374,7 +432,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <button
                     onClick={(e) => handleContextMenu(e, 'page', page.id, page.isHomepage)}
                     className="p-1 hover:text-white text-slate-500 rounded transition-colors cursor-pointer"
-                    title="Menu de opções (Botão direito)"
+                    title="Menu de opções"
                   >
                     <MoreVertical className="w-3 h-3" />
                   </button>
@@ -385,7 +443,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         )}
       </div>
 
-      {/* Tabs Selector: Layers vs Ready Blocks */}
+      {/* Tabs Selector: DOM Tree vs Blocos Prontos */}
       <div className="flex border-b border-slate-900 bg-slate-950/60 p-1 gap-1">
         <button
           onClick={() => setActiveTab('layers')}
@@ -395,8 +453,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
               : 'text-slate-500 hover:text-slate-300'
           }`}
         >
-          <MousePointer className="w-3 h-3" />
-          DOM Tree
+          <Layers className="w-3 h-3" />
+          Árvore de Blocos (DOM)
         </button>
         <button
           onClick={() => setActiveTab('blocks')}
@@ -407,13 +465,35 @@ export const Sidebar: React.FC<SidebarProps> = ({
           }`}
         >
           <Component className="w-3 h-3" />
-          Blocos Prontos
+          Blocos
         </button>
       </div>
 
       {/* Main Body */}
       {activeTab === 'layers' ? (
         <div className="flex-1 flex flex-col min-h-0" role="tree">
+          {/* Header da Árvore com Expand/Collapse rápido */}
+          <div className="px-3 py-1.5 bg-slate-950/40 border-b border-slate-900 flex items-center justify-between text-[10px] text-slate-400">
+            <span>Estrutura Hierárquica</span>
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={expandAll}
+                className="hover:text-purple-300 cursor-pointer"
+                title="Expandir todos os nós"
+              >
+                Expandir
+              </button>
+              <span>•</span>
+              <button 
+                onClick={collapseAll}
+                className="hover:text-purple-300 cursor-pointer"
+                title="Recolher todos os nós"
+              >
+                Recolher
+              </button>
+            </div>
+          </div>
+
           <div className="flex-1 overflow-y-auto py-2 px-2 min-h-0 space-y-0.5">
             {layers.length > 0 ? (
               renderLayers(layers)
@@ -425,7 +505,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       ) : (
         <div className="flex-1 overflow-y-auto p-2.5 space-y-3 min-h-0">
           <span className="text-[10px] uppercase tracking-wider font-bold text-slate-500 block px-1">
-            Clique para Adicionar à Página:
+            Clique para Inserir na Página:
           </span>
           {readyBlocks.map((block) => (
             <div
@@ -448,11 +528,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
       )}
 
-      {/* ─── Context Menu (Botão Direito) ─── */}
+      {/* Context Menu (Botão Direito Estilo WordPress Gutenberg) */}
       {contextMenu.visible && (
         <div
-          className="fixed z-50 bg-[#0f0b18] border border-purple-500/30 rounded-xl shadow-2xl py-1.5 w-44 animate-in fade-in zoom-in-95 duration-100"
-          style={{ top: Math.min(contextMenu.y, window.innerHeight - 150), left: Math.min(contextMenu.x, window.innerWidth - 180) }}
+          className="fixed z-50 bg-[#0f0b18] border border-purple-500/30 rounded-xl shadow-2xl py-1.5 w-48 animate-in fade-in zoom-in-95 duration-100"
+          style={{ top: Math.min(contextMenu.y, window.innerHeight - 200), left: Math.min(contextMenu.x, window.innerWidth - 200) }}
           onClick={(e) => e.stopPropagation()}
         >
           {contextMenu.type === 'page' ? (
@@ -494,6 +574,30 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </>
           ) : (
             <>
+              {onMoveElementDirection && (
+                <>
+                  <button
+                    onClick={() => {
+                      onMoveElementDirection(contextMenu.idOrPath, 'up');
+                      closeContextMenu();
+                    }}
+                    className="w-full px-3 py-2 text-left text-xs text-slate-200 hover:bg-purple-600 hover:text-white flex items-center gap-2 transition-colors cursor-pointer"
+                  >
+                    <ArrowUp className="w-3.5 h-3.5" />
+                    Mover para Cima
+                  </button>
+                  <button
+                    onClick={() => {
+                      onMoveElementDirection(contextMenu.idOrPath, 'down');
+                      closeContextMenu();
+                    }}
+                    className="w-full px-3 py-2 text-left text-xs text-slate-200 hover:bg-purple-600 hover:text-white flex items-center gap-2 transition-colors cursor-pointer"
+                  >
+                    <ArrowDown className="w-3.5 h-3.5" />
+                    Mover para Baixo
+                  </button>
+                </>
+              )}
               <button
                 onClick={() => {
                   onDuplicateElement(contextMenu.idOrPath);
@@ -502,7 +606,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 className="w-full px-3 py-2 text-left text-xs text-slate-200 hover:bg-purple-600 hover:text-white flex items-center gap-2 transition-colors cursor-pointer"
               >
                 <Copy className="w-3.5 h-3.5" />
-                Duplicar (Ctrl+D)
+                Duplicar Bloco (Ctrl+D)
               </button>
               <button
                 onClick={() => {
@@ -512,7 +616,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 className="w-full px-3 py-2 text-left text-xs text-red-400 hover:bg-red-600 hover:text-white flex items-center gap-2 transition-colors cursor-pointer"
               >
                 <Trash2 className="w-3.5 h-3.5" />
-                Excluir (Del)
+                Excluir Bloco (Delete)
               </button>
             </>
           )}

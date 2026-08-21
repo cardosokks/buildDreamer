@@ -1275,6 +1275,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
             onDeleteElement={handleDeleteElement}
             onDuplicateElement={handleDuplicateElement}
             onMoveElement={handleMoveElement}
+            onMoveElementDirection={handleMoveElementDirection}
             onInsertBlock={handleInsertBlock}
             selectedPath={selectedPath}
           />
