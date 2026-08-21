@@ -584,8 +584,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
           'X-Proxy-Url': localStorage.getItem('ai_proxy_url') || ''
         },
         body: JSON.stringify({ 
-          name: `${lead.name} (Remaster)`, 
-          description: `Site completo remasterizado a partir de ${lead.website}`,
+          name: lead.name, 
+          description: `Site profissional e moderno para ${lead.name}`,
           remasterWebsiteUrl: lead.website
         })
       });
