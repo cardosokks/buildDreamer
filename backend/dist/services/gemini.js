@@ -25,6 +25,45 @@ if (defaultProxyUrl) {
         console.error('[AI Proxy Engine] Falha ao configurar proxy global:', err);
     }
 }
+/**
+ * Tenta fazer o parse de JSON de forma ultra resiliente mesmo se houver caracteres de controle / quebras de linha não escapadas
+ */
+function resilientJsonParse(rawString) {
+    let text = rawString.trim();
+    // Remove marcações markdown ```json ... ```
+    if (text.startsWith('```')) {
+        text = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
+    }
+    // Tenta parse direto
+    try {
+        return JSON.parse(text);
+    }
+    catch { }
+    // Localiza o bloco JSON mais externo
+    const firstBrace = text.indexOf('{');
+    const lastBrace = text.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+        const trimmed = text.slice(firstBrace, lastBrace + 1);
+        try {
+            return JSON.parse(trimmed);
+        }
+        catch { }
+    }
+    // Se ainda falhou, extrai campos html, css, js ou explanation via regex
+    const htmlMatch = text.match(/"html"\s*:\s*"([\s\S]*?)"\s*,\s*"(?:css|js|explanation)"/);
+    const cssMatch = text.match(/"css"\s*:\s*"([\s\S]*?)"\s*,\s*"(?:js|html|explanation)"/);
+    const jsMatch = text.match(/"js"\s*:\s*"([\s\S]*?)"\s*,\s*"(?:css|html|explanation)"/);
+    const explMatch = text.match(/"explanation"\s*:\s*"([\s\S]*?)"/);
+    if (htmlMatch) {
+        return {
+            explanation: explMatch ? explMatch[1] : 'Página gerada pela IA.',
+            html: htmlMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"'),
+            css: cssMatch ? cssMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"') : '',
+            js: jsMatch ? jsMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"') : ''
+        };
+    }
+    throw new Error('Falha ao processar resposta JSON da IA.');
+}
 const generateAIResponse = async (prompt, context, customApiKey, customModel, registeredModels, onModelAttempt, customProxyUrl) => {
     const activeKey = customApiKey || process.env.GEMINI_API_KEY;
     const proxyUrl = isValidHttpUrl(customProxyUrl) ? customProxyUrl.trim() : defaultProxyUrl;
@@ -52,13 +91,12 @@ const generateAIResponse = async (prompt, context, customApiKey, customModel, re
     - JS Atual
 
     INSTRUÇÕES MANDATÓRIAS:
-    1. Analise o pedido do usuário ("adicione uma hero section neon", "mude o título para azul", "crie uma tabela de preços responsiva", etc.).
-    2. Modifique o HTML/CSS/JS com máxima excelência estética:
+    1. Modifique o HTML/CSS/JS com máxima excelência estética:
        - Use Tailwind CSS moderno, gradientes sutis, glassmorphism e design limpo.
        - Garanta que o layout seja 100% responsivo para mobile (375px) e desktop (1280px).
        - Mantenha IDs e classes semânticas.
        - Preserve o container <div id="canvas-root"> como nó raiz do conteúdo.
-    3. Retorne SEMPRE um objeto JSON estrito com o código completo atualizado e uma explicação amigável do que foi feito.
+    2. Retorne SEMPRE um objeto JSON estrito com o código completo atualizado e uma explicação amigável do que foi feito.
 
     Formato da Resposta JSON OBRIGATÓRIO:
     {
@@ -85,7 +123,6 @@ const generateAIResponse = async (prompt, context, customApiKey, customModel, re
                 topP: 0.95,
                 maxOutputTokens: 8192
             };
-            // thinkingConfig desativado (thinkingBudget: 0) força o Gemini a responder na hora sem overhead
             if (isGemini25) {
                 generationConfig.thinkingConfig = {
                     thinkingBudget: 0
@@ -114,7 +151,6 @@ const generateAIResponse = async (prompt, context, customApiKey, customModel, re
             if (proxyUrl) {
                 fetchOptions.dispatcher = new undici_1.ProxyAgent(proxyUrl);
             }
-            // Endpoint oficial da API do Gemini v1beta
             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelToTry}:generateContent?key=${activeKey}`;
             const response = await (0, undici_1.fetch)(apiUrl, fetchOptions);
             if (!response.ok) {
@@ -123,32 +159,7 @@ const generateAIResponse = async (prompt, context, customApiKey, customModel, re
             }
             const resJson = await response.json();
             const rawText = resJson?.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
-            // Extração estrita do JSON retornado pela IA
-            let text = rawText.trim();
-            const firstBrace = text.indexOf('{');
-            const lastBrace = text.lastIndexOf('}');
-            if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-                text = text.slice(firstBrace, lastBrace + 1);
-            }
-            else {
-                text = text.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim();
-            }
-            let parsed;
-            try {
-                parsed = JSON.parse(text);
-            }
-            catch (parseErr) {
-                const sanitized = text
-                    .replace(/\\n/g, "\\n")
-                    .replace(/\\'/g, "\\'")
-                    .replace(/\\"/g, '\\"')
-                    .replace(/\\&/g, "\\&")
-                    .replace(/\\r/g, "\\r")
-                    .replace(/\\t/g, "\\t")
-                    .replace(/\\b/g, "\\b")
-                    .replace(/\\f/g, "\\f");
-                parsed = JSON.parse(sanitized);
-            }
+            const parsed = resilientJsonParse(rawText);
             parsed._usedModel = modelToTry;
             return parsed;
         }
