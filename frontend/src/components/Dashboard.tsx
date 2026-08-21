@@ -69,7 +69,9 @@ interface FilterPreset {
   id: string;
   name: string;
   niche: string;
-  location: string;
+  city: string;
+  state: string;
+  country: string;
   onlyWithoutWebsite: boolean;
   hasPhoneOnly: boolean;
   minRating: number;
@@ -111,9 +113,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
   // User Profile Dropdown state
   const [showUserDropdown, setShowUserDropdown] = useState(false);
 
-  // Leads search states
+  // Leads search states segmentados
   const [leadQuery, setLeadQuery] = useState('');
-  const [leadLocation, setLeadLocation] = useState('');
+  const [leadCity, setLeadCity] = useState('');
+  const [leadState, setLeadState] = useState('');
+  const [leadCountry, setLeadCountry] = useState('Brasil');
   const [onlyWithoutWebsite, setOnlyWithoutWebsite] = useState(false);
   const [hasPhoneOnly, setHasPhoneOnly] = useState(false);
   const [minRating, setMinRating] = useState('0');
@@ -151,10 +155,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
       if (stored) return JSON.parse(stored);
     } catch {}
     return [
-      { id: '1', name: 'Padarias Sem Site', niche: 'Padaria', location: 'Brasília DF', onlyWithoutWebsite: true, hasPhoneOnly: true, minRating: 4 },
-      { id: '2', name: 'Dentistas com Telefone', niche: 'Dentista', location: 'Formosa GO', onlyWithoutWebsite: false, hasPhoneOnly: true, minRating: 4.5 },
-      { id: '3', name: 'Restaurantes & Pizzarias', niche: 'Pizzaria', location: 'Goiânia GO', onlyWithoutWebsite: true, hasPhoneOnly: false, minRating: 0 },
-      { id: '4', name: 'Academias & Fitness', niche: 'Academia', location: 'São Paulo SP', onlyWithoutWebsite: true, hasPhoneOnly: true, minRating: 4 }
+      { id: '1', name: 'Padarias Sem Site (DF)', niche: 'Padaria', city: 'Brasília', state: 'DF', country: 'Brasil', onlyWithoutWebsite: true, hasPhoneOnly: true, minRating: 4 },
+      { id: '2', name: 'Dentistas em Formosa (GO)', niche: 'Dentista', city: 'Formosa', state: 'GO', country: 'Brasil', onlyWithoutWebsite: false, hasPhoneOnly: true, minRating: 4.5 },
+      { id: '3', name: 'Pizzarias em Goiânia (GO)', niche: 'Pizzaria', city: 'Goiânia', state: 'GO', country: 'Brasil', onlyWithoutWebsite: true, hasPhoneOnly: false, minRating: 0 },
+      { id: '4', name: 'Academias em São Paulo (SP)', niche: 'Academia', city: 'São Paulo', state: 'SP', country: 'Brasil', onlyWithoutWebsite: true, hasPhoneOnly: true, minRating: 4 }
     ];
   });
 
@@ -163,7 +167,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
   const [presetForm, setPresetForm] = useState<Omit<FilterPreset, 'id'>>({
     name: '',
     niche: '',
-    location: '',
+    city: '',
+    state: '',
+    country: 'Brasil',
     onlyWithoutWebsite: true,
     hasPhoneOnly: false,
     minRating: 0
@@ -195,7 +201,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
 
   const handleApplyPreset = (preset: FilterPreset) => {
     setLeadQuery(preset.niche);
-    setLeadLocation(preset.location);
+    setLeadCity(preset.city);
+    setLeadState(preset.state);
+    setLeadCountry(preset.country || 'Brasil');
     setOnlyWithoutWebsite(preset.onlyWithoutWebsite);
     setHasPhoneOnly(preset.hasPhoneOnly);
     setMinRating(preset.minRating.toString());
@@ -267,15 +275,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
     setLoadingLeads(true);
 
     try {
-      // Dynamic map iframe sync on text location searches
-      if (leadLocation) {
-        const iframe = document.querySelector('iframe[title="Seletor de Região Leaflet"]') as HTMLIFrameElement;
-        if (iframe) {
-          iframe.src = `https://maps.google.com/maps?q=${encodeURIComponent(leadLocation)}&t=&z=12&ie=UTF8&iwloc=&output=embed`;
-        }
-      }
-
-      // 1. Tentar Crawler Autônomo
+      // 1. Chamar Crawler Autônomo com parâmetros segmentados
       const crawlerRes = await fetch(`${API_URL}/api/crawler/search`, {
         method: 'POST',
         headers: {
@@ -284,9 +284,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
         },
         body: JSON.stringify({
           niche: leadQuery,
-          location: leadLocation || 'Brasil',
+          city: leadCity,
+          state: leadState,
+          country: leadCountry,
           onlyWithoutWebsite,
-          limit: 30
+          hasPhoneOnly,
+          minRating,
+          limit: 40
         })
       });
 
@@ -301,14 +305,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
         }
       }
 
-      // 2. Fallback para rota de diretórios / leads anterior
+      // 2. Fallback para busca anterior
       const res = await fetch(`${API_URL}/api/leads/search-leads`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ query: leadQuery, location: leadLocation })
+        body: JSON.stringify({ query: leadQuery, location: `${leadCity} ${leadState} ${leadCountry}`.trim() })
       });
       if (!res.ok) throw new Error('Erro ao buscar clientes');
       const data = await res.json();
@@ -926,7 +930,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                     setPresetForm({
                       name: '',
                       niche: '',
-                      location: '',
+                      city: '',
+                      state: '',
+                      country: 'Brasil',
                       onlyWithoutWebsite: true,
                       hasPhoneOnly: false,
                       minRating: 0
@@ -957,7 +963,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                       <div className="space-y-1.5 text-xs text-slate-400 mt-3">
                         <p className="flex items-center gap-1.5">
                           <MapPin className="w-3.5 h-3.5 text-pink-400" />
-                          <span>Localização: <strong>{preset.location || 'Brasil'}</strong></span>
+                          <span>Região: <strong>{preset.city}{preset.state ? ` - ${preset.state}` : ''} ({preset.country || 'Brasil'})</strong></span>
                         </p>
                         <p className="flex items-center gap-1.5">
                           <Globe className="w-3.5 h-3.5 text-cyan-400" />
@@ -984,7 +990,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                             setPresetForm({
                               name: preset.name,
                               niche: preset.niche,
-                              location: preset.location,
+                              city: preset.city,
+                              state: preset.state,
+                              country: preset.country || 'Brasil',
                               onlyWithoutWebsite: preset.onlyWithoutWebsite,
                               hasPhoneOnly: preset.hasPhoneOnly,
                               minRating: preset.minRating
@@ -1047,28 +1055,47 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                 </div>
               </div>
 
-              {/* Formulário de Busca Avançada */}
+              {/* Formulário de Busca Avançada Segmentada */}
               <form onSubmit={handleSearchLeads} className="bg-[#0f0b18] border border-slate-850 rounded-2xl p-5 shadow-xl space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
-                  <div className="md:col-span-6 relative">
+                  <div className="md:col-span-4 relative">
                     <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-slate-500" />
                     <input 
                       type="text"
                       required
-                      placeholder="Nicho ou termo: Padaria, Dentista, Supermercado, Pizzaria..."
+                      placeholder="Nicho: Padaria, Dentista, Supermercado..."
                       value={leadQuery}
                       onChange={(e) => setLeadQuery(e.target.value)}
                       className="w-full pl-11 pr-4 py-3 bg-slate-950 border border-slate-800 rounded-xl focus:outline-none focus:ring-1 focus:ring-purple-500 text-sm text-white placeholder-slate-600"
                     />
                   </div>
-                  <div className="md:col-span-4 relative">
+                  <div className="md:col-span-3 relative">
                     <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-slate-500" />
                     <input 
                       type="text"
-                      placeholder="Cidade/Estado (Ex: Formosa GO, Brasília, São Paulo)"
-                      value={leadLocation}
-                      onChange={(e) => setLeadLocation(e.target.value)}
+                      required
+                      placeholder="Cidade (ex: Formosa, Brasília)"
+                      value={leadCity}
+                      onChange={(e) => setLeadCity(e.target.value)}
                       className="w-full pl-11 pr-4 py-3 bg-slate-950 border border-slate-800 rounded-xl focus:outline-none focus:ring-1 focus:ring-purple-500 text-sm text-white placeholder-slate-600"
+                    />
+                  </div>
+                  <div className="md:col-span-2 relative">
+                    <input 
+                      type="text"
+                      placeholder="Estado (ex: GO, DF, SP)"
+                      value={leadState}
+                      onChange={(e) => setLeadState(e.target.value)}
+                      className="w-full px-3.5 py-3 bg-slate-950 border border-slate-800 rounded-xl focus:outline-none focus:ring-1 focus:ring-purple-500 text-sm text-white placeholder-slate-600 uppercase"
+                    />
+                  </div>
+                  <div className="md:col-span-1 relative">
+                    <input 
+                      type="text"
+                      placeholder="País"
+                      value={leadCountry}
+                      onChange={(e) => setLeadCountry(e.target.value)}
+                      className="w-full px-3 py-3 bg-slate-950 border border-slate-800 rounded-xl focus:outline-none focus:ring-1 focus:ring-purple-500 text-sm text-white placeholder-slate-600"
                     />
                   </div>
                   <div className="md:col-span-2">
@@ -1257,25 +1284,46 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="md:col-span-3">
                   <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Nicho / Categoria</label>
                   <input 
                     type="text"
                     required
-                    placeholder="Ex: Padaria"
+                    placeholder="Ex: Padaria, Dentista, Pizzaria"
                     value={presetForm.niche}
                     onChange={(e) => setPresetForm(p => ({ ...p, niche: e.target.value }))}
                     className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white focus:outline-none focus:ring-1 focus:ring-cyan-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Localização Padrão</label>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Cidade</label>
                   <input 
                     type="text"
-                    placeholder="Ex: Brasília DF"
-                    value={presetForm.location}
-                    onChange={(e) => setPresetForm(p => ({ ...p, location: e.target.value }))}
+                    required
+                    placeholder="Ex: Formosa"
+                    value={presetForm.city}
+                    onChange={(e) => setPresetForm(p => ({ ...p, city: e.target.value }))}
+                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Estado (UF)</label>
+                  <input 
+                    type="text"
+                    placeholder="Ex: GO"
+                    value={presetForm.state}
+                    onChange={(e) => setPresetForm(p => ({ ...p, state: e.target.value }))}
+                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white focus:outline-none focus:ring-1 focus:ring-cyan-500 uppercase"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">País</label>
+                  <input 
+                    type="text"
+                    placeholder="Ex: Brasil"
+                    value={presetForm.country}
+                    onChange={(e) => setPresetForm(p => ({ ...p, country: e.target.value }))}
                     className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white focus:outline-none focus:ring-1 focus:ring-cyan-500"
                   />
                 </div>

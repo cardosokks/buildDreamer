@@ -7,9 +7,8 @@ const router = Router();
 // Endpoint de Crawler Autônomo para Busca de Estabelecimentos e Leads
 router.post('/search', async (req: AuthenticatedRequest, res: any) => {
   try {
-    const { niche, location, query, onlyWithoutWebsite, hasPhoneOnly, minRating, limit } = req.body;
+    const { niche, city, state, country, location, query, onlyWithoutWebsite, hasPhoneOnly, minRating, limit } = req.body;
     const finalNiche = niche || query;
-    const finalLocation = location || 'Brasil';
 
     if (!finalNiche) {
       return res.status(400).json({ error: 'Nicho ou termo de busca é obrigatório (ex: Supermercado, Pizzaria, Dentista)' });
@@ -17,11 +16,14 @@ router.post('/search', async (req: AuthenticatedRequest, res: any) => {
 
     const leads = await LeadCrawlerEngine.executeSearch({
       niche: finalNiche,
-      location: finalLocation,
+      city: city || '',
+      state: state || '',
+      country: country || 'Brasil',
+      location: location || '',
       onlyWithoutWebsite: onlyWithoutWebsite === true || onlyWithoutWebsite === 'true',
       hasPhoneOnly: hasPhoneOnly === true || hasPhoneOnly === 'true',
       minRating: parseFloat(minRating || '0'),
-      limit: parseInt(limit || '35', 10)
+      limit: parseInt(limit || '40', 10)
     });
 
     return res.json({
