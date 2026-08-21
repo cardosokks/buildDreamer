@@ -1,35 +1,36 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { API_URL } from '../config';
+import { useTheme } from '../context/ThemeContext';
+import {
+  ArrowLeft,
+  Eye,
+  Download,
+  Code2,
+  Undo2,
+  Redo2,
+  Check,
+  PanelLeftClose,
+  PanelRightClose,
+  MessageSquare,
+  Sparkles,
+  Smartphone,
+  Tablet,
+  Monitor,
+  ZoomIn,
+  ZoomOut,
+  RefreshCw,
+  ExternalLink,
+  Copy,
+  Sun,
+  Moon
+} from 'lucide-react';
 import { Sidebar } from './Sidebar';
 import type { ElementNode } from './Sidebar';
 import { Canvas } from './Canvas';
 import { PropertiesPanel } from './PropertiesPanel';
 import { CodeEditor } from './CodeEditor';
 import { ChatPanel } from './ChatPanel';
-import { 
-  Sparkles, 
-  Code2, 
-  Eye, 
-  ArrowLeft, 
-  Download, 
-  Smartphone, 
-  Tablet, 
-  Monitor,
-  Undo2,
-  Redo2,
-  Sliders,
-  History,
-  RotateCcw,
-  PanelLeftClose,
-  PanelRightClose,
-  MessageSquare,
-  Copy,
-  Check,
-  ZoomIn,
-  ZoomOut,
-  Maximize2
-} from 'lucide-react';
+import { API_URL } from '../config';
 
 interface Page {
   id: string;
@@ -64,6 +65,7 @@ interface HistoryState {
 
 export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack }) => {
   const { token } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const [project, setProject] = useState<ProjectData | null>(null);
   const [activePageId, setActivePageId] = useState<string>('');
   
@@ -818,6 +820,19 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
           >
             <Download className="w-3.5 h-3.5" />
             Exportar
+          </button>
+
+          {/* Botão de Alternar Modo Escuro / Modo Claro */}
+          <button
+            onClick={toggleTheme}
+            className={`p-1.5 rounded-xl border transition-all cursor-pointer flex items-center gap-1 ${
+              theme === 'light'
+                ? 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-800 shadow-sm'
+                : 'bg-slate-900 hover:bg-slate-800 border-slate-800 text-amber-300 shadow-sm'
+            }`}
+            title={theme === 'dark' ? 'Mudar para Modo Claro' : 'Mudar para Modo Escuro'}
+          >
+            {theme === 'dark' ? <Sun className="w-3.5 h-3.5 text-amber-400" /> : <Moon className="w-3.5 h-3.5 text-indigo-600" />}
           </button>
 
           {/* Toggle Styles Panel */}
