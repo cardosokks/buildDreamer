@@ -226,10 +226,13 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
     return el;
   };
 
-  // Update Page Code with Database Sync
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error'>('saved');
+
+  // Update Page Code with Database & FTP Sync
   const handleCodeChange = async (type: 'html' | 'css' | 'js', value: string) => {
     if (!activePage) return;
     pushHistorySnapshot(`Edição de ${type.toUpperCase()}`);
+    setSaveStatus('saving');
 
     const updatedPages = project?.pages.map(p => {
       if (p.id === activePage.id) return { ...p, [type]: value };
@@ -238,7 +241,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
     setProject(prev => prev ? { ...prev, pages: updatedPages || [] } : null);
 
     try {
-      await fetch(`${API_URL}/api/pages/${activePage.id}`, {
+      const res = await fetch(`${API_URL}/api/pages/${activePage.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -246,8 +249,44 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
         },
         body: JSON.stringify({ [type]: value })
       });
+      if (res.ok) {
+        setSaveStatus('saved');
+      } else {
+        setSaveStatus('error');
+      }
     } catch (e) {
-      console.error("Erro ao sincronizar com banco:", e);
+      console.error("Erro ao sincronizar com banco e FTP:", e);
+      setSaveStatus('error');
+    }
+  };
+
+  // Explicit Save Trigger
+  const handleManualSave = async () => {
+    if (!activePage) return;
+    setSaveStatus('saving');
+    try {
+      const res = await fetch(`${API_URL}/api/pages/${activePage.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          html: activePage.html,
+          css: activePage.css,
+          js: activePage.js,
+          seoTitle: activePage.seoTitle,
+          seoDescription: activePage.seoDescription
+        })
+      });
+      if (res.ok) {
+        setSaveStatus('saved');
+      } else {
+        setSaveStatus('error');
+      }
+    } catch (e) {
+      console.error("Erro ao salvar:", e);
+      setSaveStatus('error');
     }
   };
 
@@ -598,6 +637,36 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
 
         {/* Actions & Utilities */}
         <div className="flex items-center gap-2">
+          {/* Status de Salvamento / Sincronização FTP */}
+          <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-950/80 border border-slate-900 text-[11px] font-mono">
+            {saveStatus === 'saving' ? (
+              <>
+                <span className="w-2 h-2 rounded-full bg-yellow-400 animate-ping" />
+                <span className="text-yellow-400">Sincronizando FTP...</span>
+              </>
+            ) : saveStatus === 'error' ? (
+              <>
+                <span className="w-2 h-2 rounded-full bg-red-400" />
+                <span className="text-red-400">Erro ao Salvar</span>
+              </>
+            ) : (
+              <>
+                <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                <span className="text-emerald-400">Salvo & FTP OK</span>
+              </>
+            )}
+          </div>
+
+          {/* Botão Salvar Manual */}
+          <button
+            onClick={handleManualSave}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-200 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm"
+            title="Salvar Alterações (Ctrl+S)"
+          >
+            <Check className="w-3.5 h-3.5 text-purple-400" />
+            Salvar
+          </button>
+
           {/* Undo / Redo */}
           <div className="hidden md:flex items-center gap-1 bg-slate-950/80 border border-slate-900 rounded-xl p-1">
             <button

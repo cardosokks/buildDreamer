@@ -21,16 +21,23 @@ import {
   Wind,
   Zap,
   Code,
-  AlignStartHorizontal,
-  AlignEndHorizontal,
-  AlignVerticalJustifyCenter,
   FileText,
   Globe,
   Search,
   Share2,
   Tag,
   Plus,
-  X
+  X,
+  Link,
+  Image,
+  Sliders,
+  Sparkles,
+  Eye,
+  Lock,
+  Unlock,
+  Radio,
+  SlidersHorizontal,
+  Activity
 } from 'lucide-react';
 
 const rgbToHex = (color: string): string => {
@@ -44,9 +51,11 @@ const rgbToHex = (color: string): string => {
 
 const cleanComputedValue = (val: string, prop: string): string => {
   if (!val) return '';
-  const zerosProps = ['margin-top','margin-bottom','margin-left','margin-right',
+  const zerosProps = [
+    'margin-top','margin-bottom','margin-left','margin-right',
     'padding-top','padding-bottom','padding-left','padding-right',
-    'top','right','bottom','left','letter-spacing','gap'];
+    'top','right','bottom','left','letter-spacing','gap'
+  ];
   if (zerosProps.includes(prop) && (val === '0px' || val === '0' || val === 'normal' || val === 'auto')) return '';
   if (prop === 'opacity' && val === '1') return '';
   if (prop === 'z-index' && val === 'auto') return '';
@@ -80,7 +89,7 @@ const Section: React.FC<{ title: string; icon: React.ReactNode; children: React.
     <div className="border-b border-slate-900/80">
       <button
         onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-slate-900/40 transition-colors cursor-pointer"
+        className="w-full flex items-center justify-between px-3.5 py-2.5 hover:bg-slate-900/40 transition-colors cursor-pointer"
       >
         <span className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">
           {icon}
@@ -88,7 +97,7 @@ const Section: React.FC<{ title: string; icon: React.ReactNode; children: React.
         </span>
         {open ? <ChevronDown className="w-3 h-3 text-slate-500" /> : <ChevronRight className="w-3 h-3 text-slate-500" />}
       </button>
-      {open && <div className="px-3 pb-3.5 pt-1 space-y-3">{children}</div>}
+      {open && <div className="px-3.5 pb-3.5 pt-1 space-y-3">{children}</div>}
     </div>
   );
 };
@@ -97,7 +106,7 @@ const Label: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <span className="block text-[10px] text-slate-400 mb-1 font-medium">{children}</span>
 );
 
-const inputCls = "w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1.5 text-[11px] text-white focus:outline-none focus:ring-1 focus:ring-purple-500 focus:border-purple-500 transition-colors";
+const inputCls = "w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-[11px] text-white focus:outline-none focus:ring-1 focus:ring-purple-500 focus:border-purple-500 transition-colors";
 const selectCls = "w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1.5 text-[11px] text-white cursor-pointer focus:outline-none focus:ring-1 focus:ring-purple-500";
 
 const UnitInput: React.FC<{
@@ -278,7 +287,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   pageSeo,
   onPageSeoChange,
 }) => {
-  const [panelTab, setPanelTab] = useState<'styles' | 'seo'>('styles');
+  const [panelTab, setPanelTab] = useState<'styles' | 'attrs' | 'seo'>('styles');
   const [newClassInput, setNewClassInput] = useState('');
 
   const get = (prop: string) => cleanComputedValue(selectedStyles[prop] || '', prop);
@@ -305,9 +314,15 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     onAttrChange('class', updated);
   };
 
+  const tag = selectedAttrs['_tag'] || 'div';
+  const isImage = tag === 'img';
+  const isLink = tag === 'a';
+  const isButton = tag === 'button';
+  const isInput = ['input', 'textarea', 'select'].includes(tag);
+
   return (
     <aside className="w-72 border-l border-slate-900 bg-[#090410] flex flex-col h-full shrink-0 select-none shadow-2xl">
-      {/* Panel Top Tabs (Estilos vs SEO / Meta Tags) */}
+      {/* Panel Top Tabs (Estilos vs Atributos HTML vs SEO) */}
       <div className="flex border-b border-slate-900 bg-slate-950/60 p-1 gap-1">
         <button
           onClick={() => setPanelTab('styles')}
@@ -318,7 +333,18 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           }`}
         >
           <Palette className="w-3 h-3" />
-          Inspector
+          Estilos
+        </button>
+        <button
+          onClick={() => setPanelTab('attrs')}
+          className={`flex-1 py-1.5 text-[11px] font-semibold rounded-md flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+            panelTab === 'attrs'
+              ? 'bg-purple-600/25 text-purple-300 border border-purple-500/30 shadow-sm'
+              : 'text-slate-500 hover:text-slate-300'
+          }`}
+        >
+          <Code className="w-3 h-3" />
+          Atributos
         </button>
         <button
           onClick={() => setPanelTab('seo')}
@@ -329,7 +355,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           }`}
         >
           <Globe className="w-3 h-3" />
-          SEO & Meta
+          SEO
         </button>
       </div>
 
@@ -395,7 +421,105 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           <Settings className="w-8 h-8 text-slate-700 mx-auto mb-2 animate-pulse" />
           <p className="text-xs text-slate-500 italic">Selecione um elemento no canvas<br />para inspecionar propriedades</p>
         </div>
+      ) : panelTab === 'attrs' ? (
+        /* PAINEL DE ATRIBUTOS HTML */
+        <div className="flex-1 overflow-y-auto p-3.5 space-y-3.5">
+          <div className="p-2.5 bg-slate-950/80 border border-slate-800 rounded-xl flex items-center gap-2">
+            <Tag className="w-4 h-4 text-purple-400" />
+            <span className="text-xs font-bold text-white font-mono">{tag}</span>
+          </div>
+
+          <div>
+            <Label>ID do Elemento</Label>
+            <input
+              type="text"
+              placeholder="Ex: header-principal"
+              value={selectedAttrs['id'] || ''}
+              onChange={e => onAttrChange('id', e.target.value)}
+              className={`${inputCls} font-mono`}
+            />
+          </div>
+
+          {isLink && (
+            <div>
+              <Label>Link de Destino (href)</Label>
+              <input
+                type="text"
+                placeholder="https://exemplo.com ou #secao"
+                value={selectedAttrs['href'] || ''}
+                onChange={e => onAttrChange('href', e.target.value)}
+                className={inputCls}
+              />
+              <div className="mt-2">
+                <Label>Alvo (Target)</Label>
+                <select
+                  value={selectedAttrs['target'] || '_self'}
+                  onChange={e => onAttrChange('target', e.target.value)}
+                  className={selectCls}
+                >
+                  <option value="_self">Mesma Aba (_self)</option>
+                  <option value="_blank">Nova Aba (_blank)</option>
+                </select>
+              </div>
+            </div>
+          )}
+
+          {isImage && (
+            <div className="space-y-2">
+              <div>
+                <Label>URL da Imagem (src)</Label>
+                <input
+                  type="text"
+                  placeholder="https://exemplo.com/foto.jpg"
+                  value={selectedAttrs['src'] || ''}
+                  onChange={e => onAttrChange('src', e.target.value)}
+                  className={inputCls}
+                />
+              </div>
+              <div>
+                <Label>Texto Alternativo (alt)</Label>
+                <input
+                  type="text"
+                  placeholder="Descrição da imagem para acessibilidade"
+                  value={selectedAttrs['alt'] || ''}
+                  onChange={e => onAttrChange('alt', e.target.value)}
+                  className={inputCls}
+                />
+              </div>
+            </div>
+          )}
+
+          {isInput && (
+            <div className="space-y-2">
+              <div>
+                <Label>Placeholder</Label>
+                <input
+                  type="text"
+                  placeholder="Digite seu nome..."
+                  value={selectedAttrs['placeholder'] || ''}
+                  onChange={e => onAttrChange('placeholder', e.target.value)}
+                  className={inputCls}
+                />
+              </div>
+              <div>
+                <Label>Tipo (Type)</Label>
+                <select
+                  value={selectedAttrs['type'] || 'text'}
+                  onChange={e => onAttrChange('type', e.target.value)}
+                  className={selectCls}
+                >
+                  <option value="text">Texto</option>
+                  <option value="email">E-mail</option>
+                  <option value="password">Senha</option>
+                  <option value="number">Número</option>
+                  <option value="tel">Telefone</option>
+                </select>
+              </div>
+            </div>
+          )}
+        </div>
       ) : (
+        /* PAINEL DE ESTILOS & INSPECTOR */
         <div className="flex-1 overflow-y-auto">
           {/* Header do Elemento Selecionado */}
           <div className="px-3.5 py-2.5 border-b border-slate-900 flex items-center justify-between gap-2 shrink-0 bg-slate-950/60">
@@ -492,7 +616,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                     <option value="stretch">Stretch</option>
                     <option value="flex-start">Flex Start</option>
                     <option value="center">Center</option>
-                    <option value="flex-end">Flex End</option>
+                    <option value="flex-end">End</option>
                   </select>
                 </div>
                 <UnitInput label="Gap" prop="gap" value={get('gap')} onChange={S} placeholder="16px" />
@@ -549,6 +673,13 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               <UnitInput label="Largura Borda" prop="border-width" value={get('border-width')} onChange={S} placeholder="1px" />
             </div>
             <ColorInput label="Cor da Borda" prop="border-color" value={get('border-color')} onChange={S} />
+          </Section>
+
+          {/* EFEITOS & SOMBRAS */}
+          <Section title="Efeitos & Sombras" icon={<Sparkles className="w-3 h-3 text-cyan-400" />} defaultOpen={false}>
+            <UnitInput label="Opacidade" prop="opacity" value={get('opacity')} onChange={S} placeholder="1 (0 a 1)" />
+            <UnitInput label="Sombra da Caixa (Box Shadow)" prop="box-shadow" value={get('box-shadow')} onChange={S} placeholder="0 10px 25px rgba(0,0,0,0.5)" />
+            <UnitInput label="Transformação (Transform)" prop="transform" value={get('transform')} onChange={S} placeholder="scale(1.05) rotate(0deg)" />
           </Section>
         </div>
       )}
