@@ -120,10 +120,12 @@ router.get('/', async (req: AuthenticatedRequest, res: any) => {
   }
 });
 
+import { processWebsiteRemasterJob } from '../services/siteRemaster';
+
 // Create Project
 router.post('/', async (req: AuthenticatedRequest, res: any) => {
   try {
-    const { name, description, isAIPrompt } = req.body;
+    const { name, description, isAIPrompt, remasterWebsiteUrl } = req.body;
     if (!name) {
       return res.status(400).json({ error: 'Project name is required' });
     }
@@ -159,16 +161,40 @@ router.post('/', async (req: AuthenticatedRequest, res: any) => {
       }
     });
 
-    // If generated using AI prompt, enqueue background job to build mockup
-    if (isAIPrompt || description?.includes('Segmento:')) {
-      const clientGeminiKey = (req.headers['x-gemini-key'] || req.headers['X-Gemini-Key']) as string || process.env.GEMINI_API_KEY;
-      const clientProxyUrl = (req.headers['x-proxy-url'] || req.headers['X-Proxy-Url']) as string || process.env.AI_PROXY_URL;
-      let registeredModels: string[] | undefined;
-      try {
-        const rawModels = (req.headers['x-gemini-models'] || req.headers['X-Gemini-Models']) as string;
-        if (rawModels) registeredModels = JSON.parse(rawModels);
-      } catch {}
+    const clientGeminiKey = (req.headers['x-gemini-key'] || req.headers['X-Gemini-Key']) as string || process.env.GEMINI_API_KEY;
+    const clientProxyUrl = (req.headers['x-proxy-url'] || req.headers['X-Proxy-Url']) as string || process.env.AI_PROXY_URL;
+    let registeredModels: string[] | undefined;
+    try {
+      const rawModels = (req.headers['x-gemini-models'] || req.headers['X-Gemini-Models']) as string;
+      if (rawModels) registeredModels = JSON.parse(rawModels);
+    } catch {}
 
+    // 1. Caso seja remasterização/melhoria de site existente (analisa páginas e subpáginas)
+    if (remasterWebsiteUrl) {
+      projectJobsQueue[project.id] = { status: 'pending' };
+      processWebsiteRemasterJob(
+        project.id,
+        remasterWebsiteUrl,
+        name,
+        clientGeminiKey,
+        registeredModels,
+        clientProxyUrl,
+        (status, attempt, total) => {
+          projectJobsQueue[project.id] = {
+            status: 'processing',
+            currentModel: status,
+            attempt,
+            total
+          };
+        }
+      ).then(() => {
+        projectJobsQueue[project.id] = { status: 'completed' };
+      }).catch((err) => {
+        projectJobsQueue[project.id] = { status: 'failed', error: err.message };
+      });
+    } 
+    // 2. Geração normal com IA a partir de prompt
+    else if (isAIPrompt || description?.includes('Segmento:')) {
       const aiPromptMessage = `Gere um mockup completo e profissional de site para a empresa "${name}". Descrição detalhada do negócio: ${description}. Crie uma paleta elegante, seções funcionais (Hero, Serviços, Contato, FAQ) e um design moderno responsivo.`;
       
       // Enqueue job immediately on process memory thread

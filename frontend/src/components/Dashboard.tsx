@@ -388,6 +388,54 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
     setShowCreateModal(true);
   };
 
+  // Melhorar/Remasterizar site existente analisando todas as páginas e subpáginas com IA
+  const handleRemasterClientWebsite = async (lead: Lead) => {
+    if (!lead.website) {
+      alert('Este lead não possui um website cadastrado.');
+      return;
+    }
+
+    if (!confirm(`Deseja analisar e remasterizar todo o site "${lead.website}" de ${lead.name} com IA? A IA irá clonar a estrutura de páginas e subpáginas gerando um design 10x superior.`)) {
+      return;
+    }
+
+    try {
+      let registeredModelIds: string[] = [];
+      try {
+        const stored = localStorage.getItem('custom_gemini_models');
+        if (stored) registeredModelIds = JSON.parse(stored).map((m: any) => m.id);
+      } catch {}
+
+      const res = await fetch(`${API_URL}/api/projects`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'X-Gemini-Key': localStorage.getItem('gemini_api_key') || '',
+          'X-Gemini-Models': JSON.stringify(registeredModelIds),
+          'X-Proxy-Url': localStorage.getItem('ai_proxy_url') || ''
+        },
+        body: JSON.stringify({ 
+          name: `${lead.name} (Remaster)`, 
+          description: `Site completo remasterizado a partir de ${lead.website}`,
+          remasterWebsiteUrl: lead.website
+        })
+      });
+
+      if (!res.ok) throw new Error('Falha ao iniciar remasterização com IA');
+      const newProject = await res.json();
+      
+      setProjects([newProject, ...projects]);
+      setGeneratingProjectJobs(prev => ({
+        ...prev,
+        [newProject.id]: { status: 'processing', currentModel: 'Analisando páginas do site original...' }
+      }));
+      setActiveTab('projects');
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
   const handleCreateProject = async (e: React.FormEvent) => {
     e.preventDefault();
     setCreating(true);
@@ -1198,12 +1246,24 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                                           <BookmarkCheck className="w-3.5 h-3.5 fill-yellow-400" />
                                         </button>
 
-                                        <button
-                                          onClick={() => handleCreateProjectFromLead(lead)}
-                                          className="px-3 py-1.5 bg-purple-700 hover:bg-purple-600 text-white font-bold rounded-lg text-xs transition-all shadow-md cursor-pointer"
-                                        >
-                                          Gerar Site
-                                        </button>
+                                        {lead.website ? (
+                                          <button
+                                            onClick={() => handleRemasterClientWebsite(lead)}
+                                            className="px-2.5 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold rounded-lg text-xs transition-all shadow-md cursor-pointer flex items-center gap-1"
+                                            title="Analisar todas as páginas e subpáginas e recriar versão moderna com IA"
+                                          >
+                                            <Sparkles className="w-3.5 h-3.5" />
+                                            Melhorar com IA
+                                          </button>
+                                        ) : (
+                                          <button
+                                            onClick={() => handleCreateProjectFromLead(lead)}
+                                            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg text-xs transition-all shadow-md cursor-pointer flex items-center gap-1"
+                                          >
+                                            <Sparkles className="w-3.5 h-3.5" />
+                                            Gerar Site
+                                          </button>
+                                        )}
                                       </div>
                                     </td>
                                   </tr>
@@ -1764,13 +1824,25 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                                           {isSaved ? <BookmarkCheck className="w-3.5 h-3.5 fill-yellow-400" /> : <Bookmark className="w-3.5 h-3.5" />}
                                         </button>
 
-                                        {/* Criar Site */}
-                                        <button
-                                          onClick={() => handleCreateProjectFromLead(lead)}
-                                          className="px-3 py-1.5 bg-purple-700 hover:bg-purple-600 text-white font-bold rounded-lg text-xs transition-all shadow-md cursor-pointer"
-                                        >
-                                          Gerar Site
-                                        </button>
+                                        {/* Criar Site ou Melhorar com IA caso tenha website */}
+                                        {lead.website ? (
+                                          <button
+                                            onClick={() => handleRemasterClientWebsite(lead)}
+                                            className="px-2.5 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold rounded-lg text-xs transition-all shadow-md cursor-pointer flex items-center gap-1"
+                                            title="Analisar todas as páginas e subpáginas e recriar versão moderna com IA"
+                                          >
+                                            <Sparkles className="w-3.5 h-3.5" />
+                                            Melhorar com IA
+                                          </button>
+                                        ) : (
+                                          <button
+                                            onClick={() => handleCreateProjectFromLead(lead)}
+                                            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg text-xs transition-all shadow-md cursor-pointer flex items-center gap-1"
+                                          >
+                                            <Sparkles className="w-3.5 h-3.5" />
+                                            Gerar Site
+                                          </button>
+                                        )}
                                       </div>
                                     </td>
                                   </tr>

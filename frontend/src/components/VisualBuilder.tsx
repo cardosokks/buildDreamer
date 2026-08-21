@@ -608,6 +608,13 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
     URL.revokeObjectURL(url);
   };
 
+  const handleOpenLivePreview = () => {
+    const content = getFullHtmlDocument();
+    const blob = new Blob([content], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+  };
+
   return (
     <div className="h-screen w-screen bg-[#07020d] flex flex-col font-sans text-slate-100 overflow-hidden select-none">
       
@@ -751,6 +758,16 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
             title="Editor de Código"
           >
             <Code2 className="w-4 h-4" />
+          </button>
+
+          {/* Abrir Preview em Nova Janela */}
+          <button
+            onClick={handleOpenLivePreview}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-cyan-500/40 text-cyan-300 rounded-xl text-xs font-semibold transition-all cursor-pointer shadow-sm"
+            title="Abrir Preview do Site em Nova Janela / Aba"
+          >
+            <Eye className="w-3.5 h-3.5 text-cyan-400" />
+            <span className="hidden sm:inline">Preview</span>
           </button>
 
           {/* Export Code Modal */}
