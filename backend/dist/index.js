@@ -50,5 +50,11 @@ io.on('connection', (socket) => {
 });
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+    console.log(`\n========================================================`);
+    console.log(`🚀 BUILD DREAMER - BACKEND INICIADO COM SUCESSO!`);
+    console.log(`========================================================`);
+    console.log(`📡 Porta interna do Backend: ${PORT}`);
+    console.log(`🔗 Healthcheck: http://localhost:${PORT}/health`);
+    console.log(`🤖 Fila de Jobs IA: Ativa`);
+    console.log(`========================================================\n`);
 });
