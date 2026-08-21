@@ -58,7 +58,7 @@ router.post('/start/:projectId', async (req: AuthenticatedRequest, res: any) => 
 });
 
 /**
- * Parar preview via Ngrok
+ * Parar preview via Ngrok de um projeto específico
  */
 router.post('/stop/:projectId', async (req: AuthenticatedRequest, res: any) => {
   try {
@@ -67,6 +67,19 @@ router.post('/stop/:projectId', async (req: AuthenticatedRequest, res: any) => {
     return res.json({ success: true, stopped });
   } catch (err: any) {
     console.error('Erro ao parar preview Ngrok:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * Parar e liberar todos os túneis Ngrok presos
+ */
+router.post('/stop-all', async (req: AuthenticatedRequest, res: any) => {
+  try {
+    const { stopAllNgrokPreviews } = await import('../services/ngrokService');
+    await stopAllNgrokPreviews();
+    return res.json({ success: true, message: 'Todos os túneis foram liberados com sucesso!' });
+  } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
 });

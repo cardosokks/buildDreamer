@@ -1892,12 +1892,34 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                   <p className="text-slate-400 mt-1">Gerencie todos os links públicos compartilhados com clientes em tempo real.</p>
                 </div>
 
-                <button
-                  onClick={fetchActiveTunnels}
-                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
-                >
-                  Atualizar Lista
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={async () => {
+                      if (!confirm('Deseja realmente derrubar e liberar todos os túneis Ngrok ativos?')) return;
+                      try {
+                        await fetch(`${API_URL}/api/ngrok/stop-all`, {
+                          method: 'POST',
+                          headers: { 'Authorization': `Bearer ${token}` }
+                        });
+                        fetchActiveTunnels();
+                      } catch (err: any) {
+                        alert(err.message);
+                      }
+                    }}
+                    className="px-4 py-2 bg-red-600/20 hover:bg-red-600/30 border border-red-500/30 text-red-300 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
+                    title="Desconecta todas as sessões e libera o limite da sua conta Ngrok"
+                  >
+                    <Square className="w-3.5 h-3.5" />
+                    Liberar Todos os Túneis
+                  </button>
+
+                  <button
+                    onClick={fetchActiveTunnels}
+                    className="px-4 py-2 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
+                  >
+                    Atualizar Lista
+                  </button>
+                </div>
               </div>
 
               {activeTunnels.length === 0 ? (

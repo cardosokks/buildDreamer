@@ -18,6 +18,10 @@ export const activeNgrokTunnels: Record<string, ActiveTunnel> = {};
 // In-flight tunnel lock to prevent race conditions on double-click
 const tunnelLocks: Record<string, boolean> = {};
 
+// Instância única global de Session do Ngrok reutilizada para evitar erro de limite de conexões simultâneas
+let globalNgrokSession: any = null;
+let currentSessionToken: string = '';
+
 /**
  * Monta o documento HTML completo de uma página para ser renderizado pelo Ngrok
  */
@@ -46,17 +50,43 @@ function buildFullHtml(page: { name: string; html: string; css: string; js: stri
 }
 
 /**
+ * Retorna ou cria a sessão global única do Ngrok
+ */
+async function getOrCreateSession(authtoken: string) {
+  if (globalNgrokSession && currentSessionToken === authtoken) {
+    return globalNgrokSession;
+  }
+
+  if (globalNgrokSession) {
+    try {
+      await globalNgrokSession.close();
+    } catch {}
+    globalNgrokSession = null;
+  }
+
+  try {
+    await ngrok.disconnect();
+  } catch {}
+
+  globalNgrokSession = await new ngrok.SessionBuilder()
+    .authtoken(authtoken)
+    .connect();
+  currentSessionToken = authtoken;
+
+  return globalNgrokSession;
+}
+
+/**
  * Inicia um túnel Ngrok para um projeto específico servindo o site completo
  */
 export async function startNgrokPreview(projectId: string, customAuthtoken?: string): Promise<string> {
-  // Se já houver um túnel ativo registrado para este projeto, retorna a URL diretamente
+  // Se já houver um túnel ativo para este projeto, retorna a URL imediatamente
   if (activeNgrokTunnels[projectId]?.url) {
     return activeNgrokTunnels[projectId].url;
   }
 
   // Prevenção de concorrência / duplo clique rápido
   if (tunnelLocks[projectId]) {
-    // Aguarda até 4 segundos caso uma inicialização esteja em andamento
     for (let i = 0; i < 8; i++) {
       await new Promise(r => setTimeout(r, 500));
       if (activeNgrokTunnels[projectId]?.url) {
@@ -116,38 +146,27 @@ export async function startNgrokPreview(projectId: string, customAuthtoken?: str
     const addressInfo = localServer.address() as any;
     const localPort = addressInfo.port;
 
-    // 2. Conecta ao Ngrok com tratamento resiliente de túnel anterior
-    let session: any = null;
+    // 2. Conecta ao Ngrok reutilizando a sessão única (evita limite de sessões simultâneas)
     let listener: any = null;
     let url = '';
 
     try {
-      session = await new ngrok.SessionBuilder()
-        .authtoken(authtoken)
-        .connect();
-
+      const session = await getOrCreateSession(authtoken);
       listener = await session.httpEndpoint().listen();
       await listener.forward(`http://127.0.0.1:${localPort}`);
       url = listener.url() || '';
     } catch (ngErr: any) {
-      // Se der erro que o endpoint já existe, tenta desconectar sessões antigas
-      if (ngErr.message?.includes('already bound') || ngErr.message?.includes('ERR_NGROK')) {
-        console.warn('[Ngrok Engine] Sessão anterior detectada, reconectando...');
-        try {
-          await ngrok.disconnect();
-        } catch {}
+      console.warn('[Ngrok Engine] Falha na primeira tentativa, limpando sessões residuais...', ngErr.message);
+      
+      // Se houver limite de túneis ou sessão presa, força limpeza e recria
+      try {
+        await stopAllNgrokPreviews();
+      } catch {}
 
-        session = await new ngrok.SessionBuilder()
-          .authtoken(authtoken)
-          .connect();
-
-        listener = await session.httpEndpoint().listen();
-        await listener.forward(`http://127.0.0.1:${localPort}`);
-        url = listener.url() || '';
-      } else {
-        localServer.close();
-        throw ngErr;
-      }
+      const session = await getOrCreateSession(authtoken);
+      listener = await session.httpEndpoint().listen();
+      await listener.forward(`http://127.0.0.1:${localPort}`);
+      url = listener.url() || '';
     }
 
     activeNgrokTunnels[projectId] = {
@@ -156,7 +175,6 @@ export async function startNgrokPreview(projectId: string, customAuthtoken?: str
       url,
       localServer,
       listener,
-      session,
       startedAt: new Date().toISOString()
     };
 
@@ -183,14 +201,6 @@ export async function stopNgrokPreview(projectId: string): Promise<boolean> {
     }
 
     try {
-      if (tunnel.session && typeof tunnel.session.close === 'function') {
-        await tunnel.session.close();
-      }
-    } catch (err) {
-      console.warn(`[Ngrok Engine] Erro ao fechar session:`, err);
-    }
-
-    try {
       if (tunnel.localServer) {
         tunnel.localServer.close();
       }
@@ -201,20 +211,48 @@ export async function stopNgrokPreview(projectId: string): Promise<boolean> {
     delete activeNgrokTunnels[projectId];
   }
 
-  // Desconecta qualquer endpoint residual na biblioteca
-  try {
-    await ngrok.disconnect();
-  } catch {}
+  // Se não houver mais nenhum túnel ativo, encerra a sessão global do Ngrok
+  if (Object.keys(activeNgrokTunnels).length === 0) {
+    if (globalNgrokSession) {
+      try {
+        await globalNgrokSession.close();
+      } catch {}
+      globalNgrokSession = null;
+    }
+    try {
+      await ngrok.disconnect();
+    } catch {}
+  }
 
   console.log(`[Ngrok Engine] Túnel do projeto ${projectId} finalizado.`);
   return true;
 }
 
 /**
- * Encerra todos os túneis ativos
+ * Encerra todos os túneis ativos e fecha qualquer sessão presa
  */
 export async function stopAllNgrokPreviews(): Promise<void> {
   for (const projectId of Object.keys(activeNgrokTunnels)) {
-    await stopNgrokPreview(projectId);
+    const tunnel = activeNgrokTunnels[projectId];
+    try {
+      if (tunnel.listener?.close) await tunnel.listener.close();
+    } catch {}
+    try {
+      if (tunnel.localServer) tunnel.localServer.close();
+    } catch {}
+    delete activeNgrokTunnels[projectId];
   }
+
+  if (globalNgrokSession) {
+    try {
+      await globalNgrokSession.close();
+    } catch {}
+    globalNgrokSession = null;
+  }
+
+  try {
+    await ngrok.disconnect();
+  } catch {}
+
+  console.log(`[Ngrok Engine] Todos os túneis e sessões do Ngrok foram encerrados.`);
 }
