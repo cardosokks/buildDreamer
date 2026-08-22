@@ -531,14 +531,76 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
     }
   };
 
-  // Insert ready block
-  const handleInsertBlock = (htmlBlock: string, cssBlock?: string) => {
+  // Insert template block at exact dropped position or append
+  const handleInsertBlock = (
+    htmlBlock: string, 
+    cssBlock?: string, 
+    targetPath?: string, 
+    position: 'before' | 'after' | 'inside' | 'append' = 'append'
+  ) => {
     if (!activePage) return;
-    const currentHtml = activePage.html || '';
-    const newHtml = currentHtml ? `${currentHtml}\n${htmlBlock}` : htmlBlock;
+    const doc = parseDocFromHtml(activePage.html);
+    const root = doc.getElementById('canvas-root') || doc.body;
+
+    // Criar nós a partir do bloco HTML
+    const tempContainer = doc.createElement('div');
+    tempContainer.innerHTML = htmlBlock.trim();
+    const newElements = Array.from(tempContainer.children);
+
+    if (newElements.length === 0) return;
+
+    if (targetPath && position !== 'append') {
+      const tgtEl = getElementByPath(root, targetPath);
+      if (tgtEl) {
+        if (position === 'before' && tgtEl.parentElement) {
+          newElements.forEach(el => tgtEl.parentElement!.insertBefore(el, tgtEl));
+        } else if (position === 'after' && tgtEl.parentElement) {
+          newElements.forEach(el => tgtEl.parentElement!.insertBefore(el, tgtEl.nextSibling));
+        } else {
+          newElements.forEach(el => tgtEl.appendChild(el));
+        }
+      } else {
+        newElements.forEach(el => root.appendChild(el));
+      }
+    } else {
+      newElements.forEach(el => root.appendChild(el));
+    }
+
+    const newHtml = serializeBodyContent(doc);
     const newCss = cssBlock ? `${activePage.css || ''}\n${cssBlock}` : activePage.css;
     handleCodeChange('html', newHtml);
     if (cssBlock) handleCodeChange('css', newCss);
+  };
+
+  // Save selected element as a custom template
+  const handleSaveSelectionAsTemplate = (title: string, category: string) => {
+    if (!activePage || !selectedPath) return;
+    const doc = parseDocFromHtml(activePage.html);
+    const root = doc.getElementById('canvas-root') || doc.body;
+    const el = getElementByPath(root, selectedPath);
+    if (!el) {
+      alert('Elemento selecionado não foi encontrado no documento.');
+      return;
+    }
+
+    const templateHtml = el.outerHTML;
+    const newTemplate = {
+      id: `tmpl-${Date.now()}`,
+      title: title.trim() || 'Template Personalizado',
+      category: category.trim() || 'Personalizados',
+      html: templateHtml,
+      createdAt: Date.now()
+    };
+
+    try {
+      const stored = localStorage.getItem('studio_custom_templates');
+      const list = stored ? JSON.parse(stored) : [];
+      list.unshift(newTemplate);
+      localStorage.setItem('studio_custom_templates', JSON.stringify(list));
+      alert(`Template "${newTemplate.title}" salvo com sucesso na biblioteca!`);
+    } catch {
+      alert('Erro ao salvar template localmente.');
+    }
   };
 
   // SEO updates
@@ -1221,6 +1283,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
             onMoveElement={handleMoveElement}
             onMoveElementDirection={handleMoveElementDirection}
             onInsertBlock={handleInsertBlock}
+            onSaveSelectionAsTemplate={handleSaveSelectionAsTemplate}
             selectedPath={selectedPath}
           />
         )}
@@ -1282,6 +1345,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
                 onDuplicateElement={handleDuplicateElement}
                 onMoveElementDirection={handleMoveElementDirection}
                 onHtmlChange={(newHtml) => handleCodeChange('html', newHtml)}
+                onInsertBlock={handleInsertBlock}
               />
             )}
           </div>

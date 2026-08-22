@@ -41,6 +41,15 @@ export interface ElementNode {
   path?: string;
 }
 
+export interface CustomTemplate {
+  id: string;
+  title: string;
+  category: string;
+  html: string;
+  css?: string;
+  createdAt: number;
+}
+
 interface SidebarProps {
   pages: { id: string; name: string; slug: string; isHomepage: boolean }[];
   activePageId: string;
@@ -57,7 +66,8 @@ interface SidebarProps {
   onDuplicateElement: (path: string) => void;
   onMoveElement: (sourcePath: string, targetPath: string, position?: 'before' | 'after' | 'inside') => void;
   onMoveElementDirection?: (path: string, direction: 'up' | 'down') => void;
-  onInsertBlock?: (htmlBlock: string, cssBlock?: string) => void;
+  onInsertBlock?: (htmlBlock: string, cssBlock?: string, targetPath?: string, position?: 'before' | 'after' | 'inside') => void;
+  onSaveSelectionAsTemplate?: (title: string, category: string) => void;
   selectedPath?: string | null;
 }
 
@@ -119,6 +129,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onMoveElement,
   onMoveElementDirection,
   onInsertBlock,
+  onSaveSelectionAsTemplate,
   selectedPath,
 }) => {
   const [activeTab, setActiveTab] = useState<'layers' | 'blocks'>('layers');
@@ -126,6 +137,57 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set(['0', '1', '2', '3', '0.0', '0.1', '1.0']));
   const [dragSource, setDragSource] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState<string | null>(null);
+
+  // Template Manager State
+  const [templateCategoryFilter, setTemplateCategoryFilter] = useState<string>('ALL');
+  const [showNewTemplateModal, setShowNewTemplateModal] = useState(false);
+  const [newTemplateForm, setNewTemplateForm] = useState({
+    title: '',
+    category: 'Geral',
+    html: '',
+    css: ''
+  });
+
+  const [customTemplates, setCustomTemplates] = useState<CustomTemplate[]>(() => {
+    try {
+      const stored = localStorage.getItem('studio_custom_templates');
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const saveCustomTemplatesToStorage = (list: CustomTemplate[]) => {
+    setCustomTemplates(list);
+    try {
+      localStorage.setItem('studio_custom_templates', JSON.stringify(list));
+    } catch {}
+  };
+
+  const handleCreateCustomTemplate = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTemplateForm.title.trim() || !newTemplateForm.html.trim()) return;
+
+    const newTemplate: CustomTemplate = {
+      id: `tmpl-${Date.now()}`,
+      title: newTemplateForm.title.trim(),
+      category: newTemplateForm.category.trim() || 'Geral',
+      html: newTemplateForm.html.trim(),
+      css: newTemplateForm.css.trim() || undefined,
+      createdAt: Date.now()
+    };
+
+    saveCustomTemplatesToStorage([newTemplate, ...customTemplates]);
+    setNewTemplateForm({ title: '', category: 'Geral', html: '', css: '' });
+    setShowNewTemplateModal(false);
+  };
+
+  const handleDeleteCustomTemplate = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!window.confirm('Deseja excluir este template personalizado?')) return;
+    const updated = customTemplates.filter(t => t.id !== id);
+    saveCustomTemplatesToStorage(updated);
+  };
 
   // Inline Page Renaming State
   const [editingPageId, setEditingPageId] = useState<string | null>(null);
@@ -144,7 +206,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     setEditingPageName('');
   };
 
-  // Context Menu State (WordPress Block Actions)
+  // Context Menu State
   const [contextMenu, setContextMenu] = useState<{
     visible: boolean;
     x: number;
@@ -217,7 +279,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       return (
         <div key={path} role="treeitem" aria-expanded={hasChildren ? isExpanded : undefined} aria-selected={isSelected} className="relative">
-          {/* Linha Indicadora de Drop 'Antes' */}
           {isDragOver && dragOverPosition === 'before' && (
             <div className="absolute top-0 left-0 right-0 h-1 bg-purple-500 rounded-full z-10 shadow-[0_0_8px_rgba(168,85,247,0.8)]" />
           )}
@@ -244,6 +305,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             onDragStart={(e) => {
               e.stopPropagation();
               setDragSource(path);
+              e.dataTransfer.setData('text/plain', `layer:${path}`);
               e.dataTransfer.effectAllowed = 'move';
             }}
             onDragOver={(e) => {
@@ -272,6 +334,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
               const pos = dragOverPosition || 'inside';
               setDragOver(null);
               setDragOverPosition(null);
+
+              const templateHtml = e.dataTransfer.getData('application/x-template-html');
+              const templateCss = e.dataTransfer.getData('application/x-template-css');
+
+              if (templateHtml && onInsertBlock) {
+                onInsertBlock(templateHtml, templateCss || undefined, path, pos);
+                return;
+              }
+
               if (dragSource && dragSource !== path) {
                 onMoveElement(dragSource, path, pos);
               }
@@ -293,7 +364,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
               {icon}
 
-              {/* Rótulo Legível e Expandido do Componente */}
               <div className="flex items-center gap-1.5 min-w-0 flex-1">
                 <span className="font-sans text-xs text-white font-medium truncate">{name}</span>
                 {node.id && (
@@ -309,13 +379,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </div>
             </div>
 
-            {/* Dica discreta ao passar o mouse */}
             <span className="text-[10px] text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity font-mono shrink-0">
-              Botão Direito
+              Menu
             </span>
           </div>
 
-          {/* Linha Indicadora de Drop 'Depois' */}
           {isDragOver && dragOverPosition === 'after' && (
             <div className="absolute bottom-0 left-0 right-0 h-1 bg-purple-500 rounded-full z-10 shadow-[0_0_8px_rgba(168,85,247,0.8)]" />
           )}
@@ -330,12 +398,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
     });
   };
 
-  const readyBlocks = [
+  const defaultTemplates: CustomTemplate[] = [
     {
       id: 'hero-modern',
-      title: 'Hero Banner Neon',
+      title: 'Hero Banner Neon Glow',
       category: 'Cabeçalho',
-      icon: <Sparkles className="w-4 h-4 text-purple-400" />,
       html: `
 <section class="hero-section" style="padding: 80px 20px; text-align: center; background: radial-gradient(circle at center, rgba(168,85,247,0.15) 0%, rgba(13,7,20,0.9) 100%); border-bottom: 1px solid rgba(168,85,247,0.2);">
   <div style="max-width: 900px; margin: 0 auto;">
@@ -358,13 +425,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
     </div>
   </div>
 </section>
-      `
+      `,
+      createdAt: 1
     },
     {
       id: 'features-grid',
-      title: 'Grid de Benefícios / Serviços',
+      title: 'Grid de Benefícios 3 Colunas',
       category: 'Seções',
-      icon: <Layout className="w-4 h-4 text-indigo-400" />,
       html: `
 <section style="padding: 80px 20px; background: #090410; border-bottom: 1px solid rgba(255,255,255,0.05);">
   <div style="max-width: 1100px; margin: 0 auto;">
@@ -388,16 +455,35 @@ export const Sidebar: React.FC<SidebarProps> = ({
     </div>
   </div>
 </section>
-      `
+      `,
+      createdAt: 2
+    },
+    {
+      id: 'cta-conversion',
+      title: 'Chamada de Conversão / CTA WhatsApp',
+      category: 'Conversão',
+      html: `
+<section style="padding: 60px 20px; background: linear-gradient(135deg, #4c1d95 0%, #1e1b4b 100%); text-align: center; border-radius: 24px; margin: 40px 20px;">
+  <h2 style="font-size: 30px; font-weight: 800; color: #ffffff; margin-bottom: 16px;">Pronto para transformar o seu negócio?</h2>
+  <p style="color: #cbd5e1; font-size: 16px; max-width: 600px; margin: 0 auto 28px auto;">Fale agora com nossa equipe de especialistas e receba uma proposta personalizada sem compromisso.</p>
+  <a href="https://wa.me/5511999999999" target="_blank" style="display: inline-flex; align-items: center; gap: 8px; padding: 14px 32px; background: #22c55e; color: #ffffff; text-decoration: none; border-radius: 12px; font-weight: 700; box-shadow: 0 0 25px rgba(34,197,94,0.4);">
+    <span>💬 Chamar no WhatsApp</span>
+  </a>
+</section>
+      `,
+      createdAt: 3
     }
   ];
+
+  const allTemplates = [...customTemplates, ...defaultTemplates];
+  const categories = ['ALL', ...Array.from(new Set(allTemplates.map(t => t.category)))];
+  const filteredTemplates = allTemplates.filter(t => templateCategoryFilter === 'ALL' || t.category === templateCategoryFilter);
 
   return (
     <aside 
       className="w-72 border-r border-slate-900 bg-[#090410] flex flex-col h-full shrink-0 select-none shadow-xl z-20"
       onClick={closeContextMenu}
     >
-      {/* Pages Section */}
       <div className="border-b border-slate-900 flex flex-col">
         <div className="px-3.5 py-2.5 flex items-center justify-between">
           <button
@@ -451,7 +537,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     </button>
                     <button
                       onClick={() => setEditingPageId(null)}
-                      className="p-0.5 text-slate-500 hover:text-white cursor-pointer"
+                      className="p-0.5 text-slate-500 hover:text-slate-300 cursor-pointer"
                       title="Cancelar"
                     >
                       <X className="w-3 h-3" />
@@ -461,31 +547,40 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <>
                     <button
                       onClick={() => onSelectPage(page.id)}
-                      className="flex items-center gap-2 truncate text-left w-full cursor-pointer min-w-0"
+                      className="flex items-center gap-2 truncate flex-1 text-left cursor-pointer"
                     >
-                      <FolderOpen className="w-3.5 h-3.5 shrink-0 text-purple-400" />
+                      {page.isHomepage ? (
+                        <Home className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                      ) : (
+                        <Square className="w-3 h-3 text-slate-500 shrink-0" />
+                      )}
                       <span className="truncate">{page.name}</span>
-                      {page.isHomepage && <span className="text-[9px] bg-slate-800 text-slate-400 px-1 py-0.5 rounded font-mono shrink-0">HOME</span>}
                     </button>
 
-                    <div className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 shrink-0 transition-opacity">
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          startRenamePage(page.id, page.name);
-                        }}
-                        className="p-1 hover:text-white text-slate-500 hover:bg-slate-800 rounded transition-colors cursor-pointer"
+                        onClick={() => startRenamePage(page.id, page.name)}
+                        className="p-1 text-slate-400 hover:text-white rounded hover:bg-slate-800 transition-colors"
                         title="Renomear Página"
                       >
                         <Edit2 className="w-3 h-3" />
                       </button>
                       <button
-                        onClick={(e) => handleContextMenu(e, 'page', page.id, page.isHomepage, page.name)}
-                        className="p-1 hover:text-white text-slate-500 hover:bg-slate-800 rounded transition-colors cursor-pointer"
-                        title="Opções da página"
+                        onClick={() => onDuplicatePage(page.id)}
+                        className="p-1 text-slate-400 hover:text-white rounded hover:bg-slate-800 transition-colors"
+                        title="Duplicar Página"
                       >
-                        <MoreVertical className="w-3 h-3" />
+                        <Copy className="w-3 h-3" />
                       </button>
+                      {!page.isHomepage && (
+                        <button
+                          onClick={() => onDeletePage(page.id)}
+                          className="p-1 text-slate-400 hover:text-red-400 rounded hover:bg-slate-800 transition-colors"
+                          title="Excluir Página"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      )}
                     </div>
                   </>
                 )}
@@ -495,58 +590,42 @@ export const Sidebar: React.FC<SidebarProps> = ({
         )}
       </div>
 
-      {/* Tabs Selector: DOM Tree vs Blocos Prontos */}
       <div className="flex border-b border-slate-900 bg-slate-950/60 p-1 gap-1">
         <button
           onClick={() => setActiveTab('layers')}
-          className={`flex-1 py-1.5 text-[11px] font-semibold rounded-md flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+          className={`flex-1 py-1.5 text-xs font-semibold rounded-md flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
             activeTab === 'layers'
               ? 'bg-purple-600/25 text-purple-300 border border-purple-500/30 shadow-sm'
-              : 'text-slate-500 hover:text-slate-300'
+              : 'text-slate-400 hover:text-slate-200'
           }`}
         >
-          <Layers className="w-3 h-3" />
-          Árvore de Blocos (DOM)
+          <Layers className="w-3.5 h-3.5" />
+          Árvore DOM
         </button>
         <button
           onClick={() => setActiveTab('blocks')}
-          className={`flex-1 py-1.5 text-[11px] font-semibold rounded-md flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+          className={`flex-1 py-1.5 text-xs font-semibold rounded-md flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
             activeTab === 'blocks'
               ? 'bg-purple-600/25 text-purple-300 border border-purple-500/30 shadow-sm'
-              : 'text-slate-500 hover:text-slate-300'
+              : 'text-slate-400 hover:text-slate-200'
           }`}
         >
-          <Component className="w-3 h-3" />
-          Blocos
+          <Component className="w-3.5 h-3.5" />
+          Templates
         </button>
       </div>
 
-      {/* Main Body */}
       {activeTab === 'layers' ? (
-        <div className="flex-1 flex flex-col min-h-0" role="tree">
-          {/* Header da Árvore com Expand/Collapse rápido */}
-          <div className="px-3 py-1.5 bg-slate-950/40 border-b border-slate-900 flex items-center justify-between text-[10px] text-slate-400">
-            <span>Estrutura Hierárquica</span>
+        <div className="flex-1 flex flex-col min-h-0">
+          <div className="p-2 border-b border-slate-900/60 flex items-center justify-between text-[11px] text-slate-500 px-3">
+            <span>Estrutura de Elementos</span>
             <div className="flex items-center gap-2">
-              <button 
-                onClick={expandAll}
-                className="hover:text-purple-300 cursor-pointer"
-                title="Expandir todos os nós"
-              >
-                Expandir
-              </button>
+              <button onClick={() => setExpandedPaths(new Set(['0', '1', '2', '3', '0.0', '1.0']))} className="hover:text-purple-300 transition-colors">Expandir</button>
               <span>•</span>
-              <button 
-                onClick={collapseAll}
-                className="hover:text-purple-300 cursor-pointer"
-                title="Recolher todos os nós"
-              >
-                Recolher
-              </button>
+              <button onClick={() => setExpandedPaths(new Set())} className="hover:text-purple-300 transition-colors">Recolher</button>
             </div>
           </div>
-
-          <div className="flex-1 overflow-y-auto py-2 px-2 min-h-0 space-y-0.5">
+          <div className="flex-1 overflow-y-auto p-2 space-y-0.5 min-h-0">
             {layers.length > 0 ? (
               renderLayers(layers)
             ) : (
@@ -555,32 +634,196 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         </div>
       ) : (
-        <div className="flex-1 overflow-y-auto p-2.5 space-y-3 min-h-0">
-          <span className="text-[10px] uppercase tracking-wider font-bold text-slate-500 block px-1">
-            Clique para Inserir na Página:
-          </span>
-          {readyBlocks.map((block) => (
-            <div
-              key={block.id}
-              onClick={() => onInsertBlock && onInsertBlock(block.html)}
-              className="p-3 bg-slate-900/70 hover:bg-purple-950/40 border border-slate-850 hover:border-purple-500/50 rounded-xl transition-all group cursor-pointer shadow-sm hover:shadow-[0_0_15px_rgba(168,85,247,0.15)]"
-            >
-              <div className="flex items-center justify-between mb-1.5">
-                <div className="flex items-center gap-2">
-                  {block.icon}
-                  <span className="text-xs font-bold text-white group-hover:text-purple-300 transition-colors">
-                    {block.title}
+        <div className="flex-1 flex flex-col min-h-0">
+          <div className="p-2.5 border-b border-slate-900 bg-slate-950/40 space-y-2">
+            <div className="flex items-center justify-between gap-1.5">
+              <button
+                type="button"
+                onClick={() => setShowNewTemplateModal(true)}
+                className="flex-1 py-1.5 px-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-lg text-[11px] font-bold shadow transition-all flex items-center justify-center gap-1 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Novo Template</span>
+              </button>
+
+              {selectedPath && onSaveSelectionAsTemplate && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const name = prompt('Nome do Template para o bloco selecionado:');
+                    if (!name) return;
+                    const cat = prompt('Categoria (ex: Cabeçalho, Seções, Conversão):', 'Personalizados') || 'Personalizados';
+                    onSaveSelectionAsTemplate(name, cat);
+                  }}
+                  className="py-1.5 px-2 bg-slate-900 hover:bg-slate-850 border border-purple-500/40 text-purple-300 rounded-lg text-[11px] font-semibold transition-all flex items-center gap-1 cursor-pointer"
+                  title="Salvar o elemento selecionado no canvas como um novo template"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-pink-400" />
+                  <span>Salvar Seleção</span>
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Filtrar:</span>
+              <select
+                value={templateCategoryFilter}
+                onChange={(e) => setTemplateCategoryFilter(e.target.value)}
+                className="bg-slate-900 border border-slate-800 text-[10px] text-slate-300 rounded-md px-1.5 py-1 focus:outline-none focus:border-purple-500 cursor-pointer flex-1"
+              >
+                <option value="ALL">Todas as Categorias ({allTemplates.length})</option>
+                {categories.filter(c => c !== 'ALL').map(c => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-2.5 space-y-2.5 min-h-0">
+            <span className="text-[10px] uppercase tracking-wider font-bold text-slate-500 block px-1">
+              Arraste para o Canvas ou Clique:
+            </span>
+            {filteredTemplates.map((block) => (
+              <div
+                key={block.id}
+                draggable
+                onDragStart={(e) => {
+                  e.dataTransfer.setData('text/plain', `template:${block.id}`);
+                  e.dataTransfer.setData('application/x-template-html', block.html);
+                  e.dataTransfer.setData('application/x-template-css', block.css || '');
+                  e.dataTransfer.effectAllowed = 'copyMove';
+                }}
+                onClick={() => onInsertBlock && onInsertBlock(block.html, block.css)}
+                className="p-3 bg-[#110c1e] hover:bg-[#19122c] border border-slate-800/80 hover:border-purple-500/60 rounded-xl transition-all group cursor-grab active:cursor-grabbing shadow-sm hover:shadow-[0_0_15px_rgba(168,85,247,0.2)] relative"
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-2 truncate">
+                    <GripVertical className="w-3.5 h-3.5 text-slate-600 group-hover:text-purple-400 shrink-0" />
+                    <span className="text-xs font-bold text-white group-hover:text-purple-300 transition-colors truncate">
+                      {block.title}
+                    </span>
+                  </div>
+                  
+                  {customTemplates.some(ct => ct.id === block.id) && (
+                    <button
+                      onClick={(e) => handleDeleteCustomTemplate(block.id, e)}
+                      className="p-1 text-slate-500 hover:text-red-400 rounded hover:bg-slate-900 transition-colors"
+                      title="Excluir Template"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between text-[10px] text-slate-400 pl-5">
+                  <span className="bg-purple-950/60 text-purple-300 border border-purple-500/30 px-1.5 py-0.2 rounded font-mono">
+                    {block.category}
+                  </span>
+                  <span className="text-slate-500 group-hover:text-purple-400 transition-colors flex items-center gap-1 font-semibold">
+                    <Plus className="w-3 h-3" />
+                    Inserir
                   </span>
                 </div>
-                <Plus className="w-3.5 h-3.5 text-slate-500 group-hover:text-purple-400 transition-colors" />
               </div>
-              <span className="text-[10px] text-slate-500 font-medium">Categoria: {block.category}</span>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       )}
 
-      {/* Context Menu (Botão Direito Estilo WordPress Gutenberg) */}
+      {showNewTemplateModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-lg bg-slate-950 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="px-5 py-3.5 bg-[#090410] border-b border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Component className="w-4 h-4 text-purple-400" />
+                <h3 className="text-sm font-bold text-white">Cadastrar Novo Template / Bloco</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowNewTemplateModal(false)}
+                className="p-1 text-slate-400 hover:text-white rounded-lg hover:bg-slate-900"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateCustomTemplate} className="p-5 space-y-3.5">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                    Nome do Template *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Ex: Tabela de Preços 3 Planos"
+                    value={newTemplateForm.title}
+                    onChange={(e) => setNewTemplateForm({ ...newTemplateForm, title: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                    Categoria
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ex: Preços, Depoimentos, Hero"
+                    value={newTemplateForm.category}
+                    onChange={(e) => setNewTemplateForm({ ...newTemplateForm, category: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                  Código HTML do Bloco *
+                </label>
+                <textarea
+                  rows={6}
+                  required
+                  placeholder="<section class='minha-secao'> ... </section>"
+                  value={newTemplateForm.html}
+                  onChange={(e) => setNewTemplateForm({ ...newTemplateForm, html: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white font-mono focus:outline-none focus:border-purple-500 resize-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                  CSS Customizado (Opcional)
+                </label>
+                <textarea
+                  rows={3}
+                  placeholder="/* CSS adicional exclusivo deste template */"
+                  value={newTemplateForm.css}
+                  onChange={(e) => setNewTemplateForm({ ...newTemplateForm, css: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white font-mono focus:outline-none focus:border-purple-500 resize-none"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-slate-850 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setShowNewTemplateModal(false)}
+                  className="px-4 py-2 bg-slate-900 hover:bg-slate-850 text-slate-300 rounded-xl text-xs font-semibold cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-purple-600/30 cursor-pointer"
+                >
+                  Salvar Template
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {contextMenu.visible && (
         <div
           className="fixed z-50 bg-[#0f0b18] border border-purple-500/30 rounded-xl shadow-2xl py-1.5 w-48 animate-in fade-in zoom-in-95 duration-100"
@@ -670,6 +913,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <Copy className="w-3.5 h-3.5" />
                 Duplicar Bloco (Ctrl+D)
               </button>
+              {onSaveSelectionAsTemplate && (
+                <button
+                  onClick={() => {
+                    const name = prompt('Nome do Template para este bloco:');
+                    if (name) {
+                      const cat = prompt('Categoria:', 'Personalizados') || 'Personalizados';
+                      onSaveSelectionAsTemplate(name, cat);
+                    }
+                    closeContextMenu();
+                  }}
+                  className="w-full px-3 py-2 text-left text-xs text-purple-300 hover:bg-purple-600 hover:text-white flex items-center gap-2 transition-colors cursor-pointer"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-pink-400" />
+                  Salvar como Template
+                </button>
+              )}
               <button
                 onClick={() => {
                   onDeleteElement(contextMenu.idOrPath);
@@ -678,7 +937,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 className="w-full px-3 py-2 text-left text-xs text-red-400 hover:bg-red-600 hover:text-white flex items-center gap-2 transition-colors cursor-pointer"
               >
                 <Trash2 className="w-3.5 h-3.5" />
-                Excluir Bloco (Delete)
+                Excluir Elemento (Del)
               </button>
             </>
           )}

@@ -14,6 +14,7 @@ interface CanvasProps {
   onMoveElementDirection?: (elementPath: string, direction: 'up' | 'down') => void;
   onSelectParentElement?: (elementPath: string) => void;
   onHtmlChange?: (newHtml: string) => void;
+  onInsertBlock?: (htmlBlock: string, cssBlock?: string, targetPath?: string, position?: 'before' | 'after' | 'inside') => void;
 }
 
 export const Canvas: React.FC<CanvasProps> = ({
@@ -29,7 +30,8 @@ export const Canvas: React.FC<CanvasProps> = ({
   onDuplicateElement,
   onMoveElementDirection,
   onSelectParentElement,
-  onHtmlChange
+  onHtmlChange,
+  onInsertBlock
 }) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const isInitializedRef = useRef(false);
@@ -508,6 +510,76 @@ export const Canvas: React.FC<CanvasProps> = ({
             if (hoverBox) hoverBox.style.display = 'none';
           });
 
+          // Drag and Drop Direct onto Canvas (Arrastar templates exatamente para a posição desejada)
+          document.body.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'copy';
+            const t = e.target;
+            if (t && t !== document.body && t !== document.documentElement && t.id !== 'canvas-root' && t.id !== 'studio-selection-box' && t.id !== 'studio-hover-box' && !t.closest('#studio-quick-toolbar')) {
+              const rect = t.getBoundingClientRect();
+              const scrollX = window.scrollX || window.pageXOffset || 0;
+              const scrollY = window.scrollY || window.pageYOffset || 0;
+              const offsetY = e.clientY - rect.top;
+              
+              hoverBox.style.display = 'block';
+              hoverBox.style.left = (rect.left + scrollX) + 'px';
+              hoverBox.style.width = rect.width + 'px';
+
+              if (offsetY < rect.height * 0.3) {
+                hoverBox.style.top = (rect.top + scrollY - 2) + 'px';
+                hoverBox.style.height = '4px';
+                hoverBox.style.borderColor = '#a855f7';
+              } else if (offsetY > rect.height * 0.7) {
+                hoverBox.style.top = (rect.bottom + scrollY - 2) + 'px';
+                hoverBox.style.height = '4px';
+                hoverBox.style.borderColor = '#a855f7';
+              } else {
+                hoverBox.style.top = (rect.top + scrollY) + 'px';
+                hoverBox.style.height = rect.height + 'px';
+                hoverBox.style.borderColor = '#06b6d4';
+              }
+            }
+          });
+
+          document.body.addEventListener('dragleave', () => {
+            if (hoverBox) hoverBox.style.display = 'none';
+          });
+
+          document.body.addEventListener('drop', (e) => {
+            e.preventDefault();
+            if (hoverBox) hoverBox.style.display = 'none';
+            const templateHtml = e.dataTransfer.getData('application/x-template-html');
+            const templateCss = e.dataTransfer.getData('application/x-template-css');
+            if (!templateHtml) return;
+
+            let targetEl = e.target;
+            const canvasRoot = document.getElementById('canvas-root');
+            if (!targetEl || targetEl === document.body || targetEl === document.documentElement || targetEl.id === 'canvas-root') {
+              window.parent.postMessage({
+                type: 'ACTION_INSERT_BLOCK',
+                html: templateHtml,
+                css: templateCss || '',
+                position: 'append'
+              }, '*');
+              return;
+            }
+
+            const targetPath = getIndexPath(targetEl);
+            const rect = targetEl.getBoundingClientRect();
+            const offsetY = e.clientY - rect.top;
+            let position = 'inside';
+            if (offsetY < rect.height * 0.3) position = 'before';
+            else if (offsetY > rect.height * 0.7) position = 'after';
+
+            window.parent.postMessage({
+              type: 'ACTION_INSERT_BLOCK',
+              html: templateHtml,
+              css: templateCss || '',
+              targetPath,
+              position
+            }, '*');
+          });
+
           // Incoming messages
           window.addEventListener('message', (msg) => {
             if (!msg.data) return;
@@ -656,11 +728,14 @@ export const Canvas: React.FC<CanvasProps> = ({
       if (event.data?.type === 'CANVAS_HTML_CHANGED' && onHtmlChange) {
         onHtmlChange(event.data.html);
       }
+      if (event.data?.type === 'ACTION_INSERT_BLOCK' && onInsertBlock) {
+        onInsertBlock(event.data.html, event.data.css, event.data.targetPath, event.data.position);
+      }
     };
 
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [onElementSelect, onInlineContentChange, onDeleteElement, onDuplicateElement, onMoveElementDirection, onHtmlChange]);
+  }, [onElementSelect, onInlineContentChange, onDeleteElement, onDuplicateElement, onMoveElementDirection, onHtmlChange, onInsertBlock]);
 
   const scale = zoom / 100;
 
