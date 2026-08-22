@@ -1039,19 +1039,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
       {/* Top Navbar with Size and Minimized State Toggle */}
       <header className={`border-b sticky top-0 z-30 shrink-0 transition-all duration-300 backdrop-blur-md ${
         theme === 'light'
-          ? 'bg-white/90 border-slate-200 shadow-sm'
-          : 'bg-[#0f1117]/90 border-slate-800/80 shadow-[0_4px_20px_rgba(0,0,0,0.3)]'
+          ? 'bg-white/95 border-slate-200 shadow-sm'
+          : 'bg-[#0f1117]/95 border-slate-800/80 shadow-[0_4px_20px_rgba(0,0,0,0.3)]'
       } ${
-        navbarMinimized ? 'h-8 py-0' : navbarSize === 'compact' ? 'h-12 py-1' : navbarSize === 'large' ? 'h-20 py-3' : 'h-16 py-2'
+        navbarMinimized ? 'h-9 py-0' : navbarSize === 'compact' ? 'h-13 py-1' : navbarSize === 'large' ? 'h-18 py-2' : 'h-15 py-1.5'
       }`}>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-full flex items-center justify-between">
+        <div className="w-full px-4 sm:px-6 h-full flex items-center justify-between gap-4">
           
-          {/* Logo & Mobile Menu Trigger */}
-          <div className="flex items-center gap-3">
+          {/* Logo & Brand Identity */}
+          <div className="flex items-center gap-3 shrink-0">
             {/* Mobile Hamburger Toggle */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className={`p-1.5 rounded-lg border md:hidden transition-all cursor-pointer ${
+              className={`p-2 rounded-xl border md:hidden transition-all cursor-pointer ${
                 theme === 'light'
                   ? 'bg-slate-100 border-slate-200 text-slate-600 hover:text-slate-900'
                   : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
@@ -1061,17 +1061,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
               {mobileMenuOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
             </button>
 
-            <div className={`w-8 h-8 rounded-full overflow-hidden border shrink-0 flex items-center justify-center ${
+            <div className={`w-8 h-8 rounded-xl overflow-hidden border shrink-0 flex items-center justify-center shadow-inner ${
               theme === 'light' ? 'border-amber-600/30 bg-amber-50' : 'border-amber-500/30 bg-black/40'
             }`}>
               <img src="/logo.png" alt="Real Premise" className="w-full h-full object-cover" />
             </div>
             {!navbarMinimized && (
               <div className="flex items-center gap-2">
-                <span className={`font-extrabold text-base sm:text-lg tracking-wider ${
+                <span className={`font-extrabold text-sm sm:text-base tracking-wider ${
                   theme === 'light' ? 'text-slate-900' : 'text-white'
                 }`}>REAL PREMISE</span>
-                <span className={`hidden sm:inline-block px-2 py-0.5 rounded border text-[9px] font-mono tracking-widest ${
+                <span className={`hidden sm:inline-block px-2 py-0.5 rounded-md border text-[9px] font-mono tracking-widest ${
                   theme === 'light'
                     ? 'border-slate-300 bg-slate-100 text-slate-600 font-semibold'
                     : 'border-slate-700 bg-slate-800/80 text-slate-300'
@@ -1080,14 +1080,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
             )}
           </div>
 
-          {/* Accessibility & Theme Controls */}
-          <div className="flex items-center gap-2.5">
-            {/* Botão de Conexão Ngrok do Sistema (Executado via Job) */}
+          {/* Quick Actions & Topbar Controls */}
+          <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
+            
+            {/* Botão de Conexão Ngrok do Sistema */}
             <div className="flex items-center gap-1.5">
               <button
                 onClick={handleToggleNgrok}
                 disabled={ngrokLoading || ngrokStatus === 'starting'}
-                className={`px-3 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm ${
+                className={`h-9 px-3 rounded-xl border text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer shadow-sm ${
                   ngrokOnline
                     ? 'bg-emerald-950/60 border-emerald-500/50 text-emerald-300 hover:bg-emerald-900/60'
                     : ngrokStatus === 'starting'
@@ -1128,19 +1129,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                   href={ngrokUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="px-2.5 py-1.5 rounded-xl bg-slate-900 border border-emerald-500/40 text-emerald-400 hover:text-emerald-300 hover:bg-slate-850 text-xs font-mono flex items-center gap-1.5 transition-all cursor-pointer shadow-md"
+                  className="h-9 px-2.5 rounded-xl bg-slate-900 border border-emerald-500/40 text-emerald-400 hover:text-emerald-300 hover:bg-slate-850 text-xs font-mono flex items-center gap-1.5 transition-all cursor-pointer shadow-md"
                   title="Abrir Dashboard no Link Público do Ngrok"
                 >
-                  <span className="max-w-[140px] truncate hidden md:inline">{ngrokUrl.replace('https://', '')}</span>
+                  <span className="max-w-[130px] truncate hidden md:inline">{ngrokUrl.replace('https://', '')}</span>
                   <ExternalLink className="w-3.5 h-3.5 shrink-0" />
                 </a>
               )}
             </div>
 
-            {/* Botão de Alternar Modo Escuro / Modo Claro */}
+            {/* Alternador de Modo Escuro / Claro */}
             <button
               onClick={toggleTheme}
-              className={`p-2 rounded-xl border transition-all cursor-pointer flex items-center gap-1.5 ${
+              className={`h-9 px-2.5 rounded-xl border transition-all cursor-pointer flex items-center gap-1.5 ${
                 theme === 'light'
                   ? 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-800 shadow-sm'
                   : 'bg-slate-900/80 hover:bg-slate-800 border-slate-800 text-amber-300 shadow-sm'
@@ -1160,8 +1161,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
               )}
             </button>
 
-            {/* Botões de Controle Rápido da Barra Lateral (Ícones / Ocultar) */}
-            <div className="hidden md:flex items-center gap-1 p-0.5 border rounded-xl bg-slate-950/40 border-slate-800">
+            {/* Controles de Visibilidade da Barra Lateral (Ícones / Ocultar) */}
+            <div className="hidden md:flex items-center gap-1 p-0.5 h-9 border rounded-xl bg-slate-950/40 border-slate-800">
               <button
                 onClick={() => {
                   if (sidebarHidden) {
@@ -1171,9 +1172,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                     setSidebarCollapsed(!sidebarCollapsed);
                   }
                 }}
-                className={`p-1.5 rounded-lg text-xs transition-all cursor-pointer flex items-center gap-1 ${
+                className={`h-7 px-2 rounded-lg text-xs transition-all cursor-pointer flex items-center gap-1.5 ${
                   sidebarCollapsed && !sidebarHidden
-                    ? 'bg-purple-600 text-white shadow-sm'
+                    ? 'bg-purple-600 text-white shadow-sm font-semibold'
                     : 'text-slate-400 hover:text-white hover:bg-slate-850'
                 }`}
                 title={sidebarCollapsed ? "Expandir Menu Lateral (Mostrar Textos)" : "Menu Lateral Compacto (Apenas Ícones)"}
@@ -1186,9 +1187,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
 
               <button
                 onClick={() => setSidebarHidden(!sidebarHidden)}
-                className={`p-1.5 rounded-lg text-xs transition-all cursor-pointer flex items-center gap-1 ${
+                className={`h-7 px-2 rounded-lg text-xs transition-all cursor-pointer flex items-center gap-1.5 ${
                   sidebarHidden
-                    ? 'bg-amber-600 text-white shadow-sm'
+                    ? 'bg-amber-600 text-white shadow-sm font-semibold'
                     : 'text-slate-400 hover:text-white hover:bg-slate-850'
                 }`}
                 title={sidebarHidden ? "Mostrar Menu Lateral" : "Ocultar Menu Lateral Totalmente (Ganhar Espaço Máximo)"}
@@ -1200,9 +1201,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
               </button>
             </div>
 
-            {/* Density Selector */}
+            {/* Seletor de Densidade */}
             {!navbarMinimized && (
-              <div className={`hidden lg:flex items-center gap-1.5 px-2.5 py-1 border rounded-xl ${
+              <div className={`hidden lg:flex items-center gap-1.5 h-9 px-2.5 border rounded-xl ${
                 theme === 'light' ? 'bg-slate-100 border-slate-200' : 'bg-slate-900/80 border-slate-800'
               }`}>
                 <span className={`text-[10px] font-semibold uppercase tracking-wider ${
@@ -1222,24 +1223,24 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
               </div>
             )}
 
-            {/* Minimize / Maximize Navbar Button */}
+            {/* Botão de Minimizar Cabeçalho */}
             <button
               onClick={() => setNavbarMinimized(!navbarMinimized)}
-              className={`p-1.5 border rounded-xl transition-all cursor-pointer shadow-sm ${
+              className={`w-9 h-9 border rounded-xl flex items-center justify-center transition-all cursor-pointer shadow-sm ${
                 theme === 'light'
                   ? 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-600 hover:text-slate-900'
                   : 'bg-slate-900/80 hover:bg-slate-800 border-slate-800 text-slate-400 hover:text-white'
               }`}
               title={navbarMinimized ? "Expandir Barra Superior" : "Minimizar Barra Superior"}
             >
-              {navbarMinimized ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
+              {navbarMinimized ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
             </button>
 
-            {/* User Profile Dropdown Menu */}
+            {/* Menu Dropdown do Usuário */}
             <div className="relative">
               <button
                 onClick={() => setShowUserDropdown(!showUserDropdown)}
-                className={`flex items-center gap-2.5 p-1 pl-2.5 rounded-xl border transition-all cursor-pointer shadow-sm ${
+                className={`h-9 flex items-center gap-2.5 p-1 pl-2.5 rounded-xl border transition-all cursor-pointer shadow-sm ${
                   theme === 'light'
                     ? 'bg-slate-100 hover:bg-slate-200 border-slate-200'
                     : 'bg-slate-900/80 hover:bg-slate-800 border-slate-800'
@@ -1250,7 +1251,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                     <p className={`text-xs font-bold leading-tight ${
                       theme === 'light' ? 'text-slate-900' : 'text-white'
                     }`}>{user?.name || 'Desenvolvedor'}</p>
-                    <p className={`text-[9px] font-mono ${
+                    <p className={`text-[9px] font-mono leading-tight ${
                       theme === 'light' ? 'text-slate-500' : 'text-slate-400'
                     }`}>{user?.email}</p>
                   </div>
@@ -1547,16 +1548,32 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
               </button>
             </div>
 
-            {!sidebarCollapsed && (
-              <div className={`p-3 border rounded-xl ${
-                theme === 'light' ? 'bg-slate-50 border-slate-200' : 'bg-slate-900/40 border-slate-800/80'
+            {/* Rodapé da Sidebar: Exibe link do Ngrok apenas quando online */}
+            {!sidebarCollapsed && ngrokOnline && ngrokUrl && (
+              <div className={`p-3 border rounded-xl animate-in fade-in duration-200 ${
+                theme === 'light' ? 'bg-emerald-50 border-emerald-200' : 'bg-emerald-950/30 border-emerald-500/30'
               }`}>
-                <span className={`block text-[10px] font-bold uppercase tracking-wider ${
-                  theme === 'light' ? 'text-slate-400' : 'text-slate-500'
-                }`}>Ambiente de Deploy</span>
-                <span className={`block text-xs mt-0.5 font-mono truncate ${
-                  theme === 'light' ? 'text-indigo-600 font-semibold' : 'text-indigo-400'
-                }`}>Real Premise Live FTP</span>
+                <div className="flex items-center justify-between gap-1 mb-1">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                    <span className={`text-[10px] font-bold uppercase tracking-wider ${
+                      theme === 'light' ? 'text-emerald-800' : 'text-emerald-400'
+                    }`}>Ngrok Online</span>
+                  </div>
+                  <Globe className="w-3.5 h-3.5 text-emerald-400" />
+                </div>
+                <a
+                  href={ngrokUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className={`text-xs font-mono truncate block hover:underline transition-colors flex items-center justify-between gap-1 ${
+                    theme === 'light' ? 'text-emerald-700' : 'text-emerald-300'
+                  }`}
+                  title={ngrokUrl}
+                >
+                  <span className="truncate">{ngrokUrl.replace('https://', '')}</span>
+                  <ExternalLink className="w-3 h-3 shrink-0" />
+                </a>
               </div>
             )}
 
