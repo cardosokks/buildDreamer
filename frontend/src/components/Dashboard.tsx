@@ -1372,6 +1372,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                 </button>
               </div>
 
+              {/* Seção 1: Criação & Projetos */}
+              {!sidebarCollapsed ? (
+                <div className={`pt-2 pb-1 px-3 text-[10px] font-bold uppercase tracking-wider ${
+                  theme === 'light' ? 'text-slate-400' : 'text-slate-500'
+                }`}>
+                  Principal
+                </div>
+              ) : (
+                <div className="border-t border-slate-850/60 my-2" />
+              )}
+
               <button
                 onClick={() => setActiveTab('general')}
                 className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2 py-2.5' : 'gap-3 px-3.5 py-2.5'} rounded-xl text-xs font-semibold transition-all cursor-pointer ${
@@ -1385,7 +1396,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                 }`}
                 title="Visão Geral"
               >
-                <Sparkles className="w-4 h-4 text-indigo-500 shrink-0" />
+                <Sparkles className="w-4 h-4 text-purple-400 shrink-0" />
                 {!sidebarCollapsed && <span className="truncate">Visão Geral</span>}
               </button>
 
@@ -1400,18 +1411,27 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                       ? 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                       : 'text-slate-400 hover:bg-slate-900/60 hover:text-slate-200'
                 }`}
-                title="Projetos / Sites"
+                title="Meus Sites"
               >
-                <Layout className="w-4 h-4 text-indigo-500 shrink-0" />
-                {!sidebarCollapsed && <span className="truncate">Projetos / Sites</span>}
+                <Layout className="w-4 h-4 text-indigo-400 shrink-0" />
+                {!sidebarCollapsed && (
+                  <>
+                    <span className="truncate flex-1 text-left">Meus Sites</span>
+                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                      theme === 'light' ? 'bg-slate-200 text-slate-700' : 'bg-slate-800 text-slate-300 border border-slate-700'
+                    }`}>
+                      {projects.length}
+                    </span>
+                  </>
+                )}
               </button>
               
-              {/* CRM & Vendas Section Divider */}
+              {/* Seção 2: CRM & Vendas */}
               {!sidebarCollapsed ? (
                 <div className={`pt-4 pb-1 px-3 text-[10px] font-bold uppercase tracking-wider ${
                   theme === 'light' ? 'text-slate-400' : 'text-slate-500'
                 }`}>
-                  CRM & Vendas
+                  Vendas & CRM
                 </div>
               ) : (
                 <div className="border-t border-slate-850/60 my-2" />
@@ -1428,25 +1448,25 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                       ? 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                       : 'text-slate-400 hover:bg-slate-900/60 hover:text-slate-200'
                 }`}
-                title="CRM de Vendas de Sites"
+                title="Funil de Vendas"
               >
                 <TrendingUp className="w-4 h-4 text-emerald-400 shrink-0" />
                 {!sidebarCollapsed && (
                   <>
-                    <span className="truncate flex-1 text-left">CRM de Vendas</span>
+                    <span className="truncate flex-1 text-left">Funil de Vendas</span>
                     <span className="text-[9px] px-1.5 py-0.2 rounded-full font-mono bg-emerald-950 border border-emerald-500/30 text-emerald-400 font-bold">
-                      Funil
+                      CRM
                     </span>
                   </>
                 )}
               </button>
 
-              {/* Prospecting Section Divider */}
+              {/* Seção 3: Prospecção & Captação */}
               {!sidebarCollapsed ? (
-                <div className={`pt-3 pb-1 px-3 text-[10px] font-bold uppercase tracking-wider ${
+                <div className={`pt-4 pb-1 px-3 text-[10px] font-bold uppercase tracking-wider ${
                   theme === 'light' ? 'text-slate-400' : 'text-slate-500'
                 }`}>
-                  Prospecção de Leads
+                  Prospecção
                 </div>
               ) : (
                 <div className="border-t border-slate-850/60 my-2" />
@@ -1454,7 +1474,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
 
               <button
                 onClick={() => setActiveTab('leads')}
-                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2 py-2.5' : 'gap-3 px-3.5 py-2'} rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2 py-2.5' : 'gap-3 px-3.5 py-2.5'} rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                   activeTab === 'leads'
                     ? theme === 'light'
                       ? 'bg-indigo-50 text-indigo-700 font-bold'
@@ -1465,13 +1485,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                 }`}
                 title="Buscador de Clientes"
               >
-                <Users className="w-4 h-4 text-indigo-500 shrink-0" />
+                <Users className="w-4 h-4 text-sky-400 shrink-0" />
                 {!sidebarCollapsed && <span className="truncate">Buscador de Clientes</span>}
               </button>
 
               <button
                 onClick={() => setActiveTab('saved-leads')}
-                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2 py-2.5 relative' : 'gap-3 px-3.5 py-2'} rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2 py-2.5 relative' : 'gap-3 px-3.5 py-2.5'} rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                   activeTab === 'saved-leads'
                     ? theme === 'light'
                       ? 'bg-amber-50 text-amber-800 font-bold'
@@ -1482,7 +1502,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                 }`}
                 title={`Leads Salvos (${savedLeads.length})`}
               >
-                <Bookmark className="w-4 h-4 text-amber-500 shrink-0" />
+                <Bookmark className="w-4 h-4 text-amber-400 shrink-0" />
                 {!sidebarCollapsed ? (
                   <>
                     <span className="truncate flex-1 text-left">Leads Salvos</span>
@@ -1499,7 +1519,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
 
               <button
                 onClick={() => setActiveTab('presets')}
-                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2 py-2.5 relative' : 'gap-3 px-3.5 py-2'} rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2 py-2.5 relative' : 'gap-3 px-3.5 py-2.5'} rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                   activeTab === 'presets'
                     ? theme === 'light'
                       ? 'bg-indigo-50 text-indigo-700 font-bold'
@@ -1508,12 +1528,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                       ? 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                       : 'text-slate-400 hover:bg-slate-900/60 hover:text-slate-200'
                 }`}
-                title={`Filtros Pré-Prontos (${filterPresets.length})`}
+                title={`Filtros Salvos (${filterPresets.length})`}
               >
-                <SlidersHorizontal className="w-4 h-4 text-indigo-500 shrink-0" />
+                <SlidersHorizontal className="w-4 h-4 text-indigo-400 shrink-0" />
                 {!sidebarCollapsed ? (
                   <>
-                    <span className="truncate flex-1 text-left">Filtros Pré-Prontos</span>
+                    <span className="truncate flex-1 text-left">Filtros Salvos</span>
                     <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
                       theme === 'light' ? 'bg-slate-200 text-slate-700' : 'bg-slate-800 text-slate-300 border border-slate-700'
                     }`}>
@@ -1525,12 +1545,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                 )}
               </button>
 
-              {/* Configurações do Sistema na Sidebar */}
+              {/* Seção 4: Configurações & Conta */}
               {!sidebarCollapsed ? (
                 <div className={`pt-4 pb-1 px-3 text-[10px] font-bold uppercase tracking-wider ${
                   theme === 'light' ? 'text-slate-400' : 'text-slate-500'
                 }`}>
-                  Sistema & Conta
+                  Geral
                 </div>
               ) : (
                 <div className="border-t border-slate-850/60 my-2" />
@@ -1547,7 +1567,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                       ? 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                       : 'text-slate-400 hover:bg-slate-900/60 hover:text-slate-200'
                 }`}
-                title="Configurações & Chaves"
+                title="Configurações"
               >
                 <Settings className="w-4 h-4 text-purple-400 shrink-0" />
                 {!sidebarCollapsed && <span className="truncate flex-1 text-left">Configurações</span>}
