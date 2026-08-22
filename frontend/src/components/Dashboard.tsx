@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { 
-  FolderPlus, 
-  Trash2, 
-  Settings, 
-  Calendar, 
-  FileText, 
+import {
+  FolderPlus,
+  Trash2,
+  Settings,
+  Calendar,
+  FileText,
   LogOut,
   ChevronRight,
   Sparkles,
@@ -120,14 +120,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
+
   const [activeTab, setActiveTabState] = useState<'general' | 'projects' | 'crm' | 'leads' | 'saved-leads' | 'presets' | 'settings'>(() => {
     try {
       const stored = localStorage.getItem('rp_dashboard_active_tab');
       if (stored === 'general' || stored === 'projects' || stored === 'crm' || stored === 'leads' || stored === 'saved-leads' || stored === 'presets' || stored === 'settings') {
         return stored;
       }
-    } catch {}
+    } catch { }
     return initialTab === 'tunnels' as any ? 'general' : initialTab;
   });
 
@@ -136,7 +136,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
     if (onTabChange) onTabChange(tab);
     try {
       localStorage.setItem('rp_dashboard_active_tab', tab);
-    } catch {}
+    } catch { }
   };
 
   useEffect(() => {
@@ -168,7 +168,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
           setNgrokLoading(false);
         }
       }
-    } catch {}
+    } catch { }
   };
 
   const handleToggleNgrok = async () => {
@@ -325,7 +325,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
     try {
       const stored = localStorage.getItem('rp_navbar_size');
       if (stored === 'compact' || stored === 'normal' || stored === 'large') return stored;
-    } catch {}
+    } catch { }
     return 'normal';
   });
 
@@ -333,7 +333,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
     try {
       const stored = localStorage.getItem('rp_sidebar_width');
       if (stored) return Number(stored);
-    } catch {}
+    } catch { }
     return 256;
   });
 
@@ -341,7 +341,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
     try {
       const stored = localStorage.getItem('rp_sidebar_collapsed');
       if (stored) return JSON.parse(stored);
-    } catch {}
+    } catch { }
     return false;
   });
 
@@ -349,7 +349,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
     try {
       const stored = localStorage.getItem('rp_sidebar_hidden');
       if (stored) return JSON.parse(stored);
-    } catch {}
+    } catch { }
     return false;
   });
 
@@ -360,31 +360,31 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
   useEffect(() => {
     try {
       localStorage.setItem('rp_navbar_minimized', JSON.stringify(navbarMinimized));
-    } catch {}
+    } catch { }
   }, [navbarMinimized]);
 
   useEffect(() => {
     try {
       localStorage.setItem('rp_navbar_size', navbarSize);
-    } catch {}
+    } catch { }
   }, [navbarSize]);
 
   useEffect(() => {
     try {
       localStorage.setItem('rp_sidebar_width', sidebarWidth.toString());
-    } catch {}
+    } catch { }
   }, [sidebarWidth]);
 
   useEffect(() => {
     try {
       localStorage.setItem('rp_sidebar_collapsed', JSON.stringify(sidebarCollapsed));
-    } catch {}
+    } catch { }
   }, [sidebarCollapsed]);
 
   useEffect(() => {
     try {
       localStorage.setItem('rp_sidebar_hidden', JSON.stringify(sidebarHidden));
-    } catch {}
+    } catch { }
   }, [sidebarHidden]);
 
   // Listener para redimensionar barra lateral com drag do mouse
@@ -428,7 +428,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
   const [loadingLeads, setLoadingLeads] = useState(false);
   const [crawlerPage, setCrawlerPage] = useState(1);
   const [hasMoreCrawlerLeads, setHasMoreCrawlerLeads] = useState(true);
-  
+
   // Paginação e Modo de Visualização (Persistência no LocalStorage)
   const [currentPage, setCurrentPage] = useState(1);
   const [leadsPerPage, setLeadsPerPage] = useState(10);
@@ -436,14 +436,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
     try {
       const stored = localStorage.getItem('rp_leads_view_mode');
       if (stored === 'table' || stored === 'cards') return stored;
-    } catch {}
+    } catch { }
     return 'table';
   });
 
   useEffect(() => {
     try {
       localStorage.setItem('rp_leads_view_mode', viewMode);
-    } catch {}
+    } catch { }
   }, [viewMode]);
 
   // Modo de Visualização e Paginação para Leads Salvos
@@ -451,14 +451,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
     try {
       const stored = localStorage.getItem('rp_saved_leads_view_mode');
       if (stored === 'table' || stored === 'cards') return stored;
-    } catch {}
+    } catch { }
     return 'table';
   });
 
   useEffect(() => {
     try {
       localStorage.setItem('rp_saved_leads_view_mode', savedViewMode);
-    } catch {}
+    } catch { }
   }, [savedViewMode]);
   const [savedCurrentPage, setSavedCurrentPage] = useState(1);
   const [savedPerPage, setSavedPerPage] = useState(10);
@@ -557,7 +557,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
     try {
       const stored = localStorage.getItem('builddreamer_filter_presets');
       if (stored) return JSON.parse(stored);
-    } catch {}
+    } catch { }
     return [
       { id: '1', name: 'Padarias Sem Site (DF)', niche: 'Padaria', city: 'Brasília', state: 'DF', country: 'Brasil', onlyWithoutWebsite: true, hasPhoneOnly: true, minRating: 4 },
       { id: '2', name: 'Dentistas em Formosa (GO)', niche: 'Dentista', city: 'Formosa', state: 'GO', country: 'Brasil', onlyWithoutWebsite: false, hasPhoneOnly: true, minRating: 4.5 },
@@ -642,7 +642,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
     try {
       const stored = localStorage.getItem('rp_projects_view_mode');
       if (stored === 'grid' || stored === 'list') return stored;
-    } catch {}
+    } catch { }
     return 'grid';
   });
 
@@ -650,18 +650,18 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
     try {
       const stored = localStorage.getItem('rp_projects_sort');
       if (['newest', 'oldest', 'name_asc', 'name_desc'].includes(stored || '')) return stored as any;
-    } catch {}
+    } catch { }
     return 'newest';
   });
 
   const [projectsSearch, setProjectsSearch] = useState('');
 
   useEffect(() => {
-    try { localStorage.setItem('rp_projects_view_mode', projectsViewMode); } catch {}
+    try { localStorage.setItem('rp_projects_view_mode', projectsViewMode); } catch { }
   }, [projectsViewMode]);
 
   useEffect(() => {
-    try { localStorage.setItem('rp_projects_sort', projectsSort); } catch {}
+    try { localStorage.setItem('rp_projects_sort', projectsSort); } catch { }
   }, [projectsSort]);
 
   // Horário do servidor
@@ -680,7 +680,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
           const offset = serverMs - ((t0 + t1) / 2);
           setServerTimeOffset(offset);
         }
-      } catch {}
+      } catch { }
     };
     fetchServerTime();
     const syncInterval = setInterval(fetchServerTime, 60000);
@@ -731,7 +731,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
           setProjects(enriched);
           return;
         }
-      } catch {}
+      } catch { }
       setProjects(data);
     } catch (err: any) {
       setError(err.message);
@@ -806,7 +806,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
               [pId]: job
             }));
           }
-        } catch {}
+        } catch { }
       }
     }, 2500);
 
@@ -969,12 +969,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
         if (data.status === 'completed') {
           setRemasterScrapingStatus('completed');
           setRemasterProgressMsg(data.progressMessage || 'Extração finalizada com sucesso!');
-          
+
           const mappedPages = (data.discoveredPages || []).map((p: any) => ({
             name: p.name,
             slug: p.slug,
             url: p.url,
-            customPrompt: p.isHomepage 
+            customPrompt: p.isHomepage
               ? 'Hero impactante com CTA duplo, apresentação dos diferenciais, estatísticas da empresa, depoimentos e formulário de contato/WhatsApp.'
               : `Apresentação detalhada com tópicos visuais, benefícios claros, cards ilustrativos e chamadas para ação focadas em ${p.name}.`,
             cleanText: p.cleanText || '',
@@ -1014,7 +1014,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
       try {
         const stored = localStorage.getItem('custom_gemini_models');
         if (stored) registeredModelIds = JSON.parse(stored).map((m: any) => m.id);
-      } catch {}
+      } catch { }
 
       const res = await fetch(`${API_URL}/api/ai/remaster/generate`, {
         method: 'POST',
@@ -1092,7 +1092,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
         setProjects([newProject, ...projects]);
         setShowCreateModal(false);
         onSelectProject(newProject.id);
-        
+
         setSelectedZipBase64(null);
         setSelectedZipName('');
         setNewProjectName('');
@@ -1117,7 +1117,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
       try {
         const stored = localStorage.getItem('custom_gemini_models');
         if (stored) registeredModelIds = JSON.parse(stored).map((m: any) => m.id);
-      } catch {}
+      } catch { }
 
       const res = await fetch(`${API_URL}/api/projects`, {
         method: 'POST',
@@ -1129,8 +1129,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
           'X-Proxy-Url': localStorage.getItem('ai_proxy_url') || '',
           'X-AI-Skills': localStorage.getItem('custom_ai_skills') || ''
         },
-        body: JSON.stringify({ 
-          name: finalName, 
+        body: JSON.stringify({
+          name: finalName,
           description: finalDesc,
           isAIPrompt: creationMode === 'ai'
         })
@@ -1141,7 +1141,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
         throw new Error(errorData.error || 'Falha ao criar projeto.');
       }
       const newProject = await res.json();
-      
+
       setProjects([newProject, ...projects]);
       setShowCreateModal(false);
       notify.success(`Projeto "${finalName}" criado com sucesso!`, 'Criado');
@@ -1157,7 +1157,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
         // Se for do zero ou template tradicional, abre direto o editor
         onSelectProject(newProject.id);
       }
-      
+
       // Reset fields
       setNewProjectName('');
       setNewProjectDesc('');
@@ -1193,76 +1193,68 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
   };
 
   return (
-    <div className={`h-screen w-screen font-sans flex flex-col overflow-hidden transition-colors duration-200 ${
-      theme === 'light' ? 'bg-slate-50 text-slate-900' : 'bg-[#0a0c10] text-slate-100'
-    }`}>
+    <div className={`h-screen w-screen font-sans flex flex-col overflow-hidden transition-colors duration-200 ${theme === 'light' ? 'bg-slate-50 text-slate-900' : 'bg-[#0a0c10] text-slate-100'
+      }`}>
       {/* Top Navbar with Size and Minimized State Toggle */}
-      <header className={`border-b sticky top-0 z-30 shrink-0 transition-all duration-300 backdrop-blur-md ${
-        theme === 'light'
+      <header className={`border-b sticky top-0 z-30 shrink-0 transition-all duration-300 backdrop-blur-md ${theme === 'light'
           ? 'bg-white/95 border-slate-200 shadow-sm'
           : 'bg-[#0f1117]/95 border-slate-800/80 shadow-[0_4px_20px_rgba(0,0,0,0.3)]'
-      } ${
-        navbarMinimized ? 'h-9 py-0' : navbarSize === 'compact' ? 'h-11 py-1' : navbarSize === 'large' ? 'h-14 py-1.5' : 'h-12 py-1'
-      }`}>
+        } ${navbarMinimized ? 'h-9 py-0' : navbarSize === 'compact' ? 'h-11 py-1' : navbarSize === 'large' ? 'h-14 py-1.5' : 'h-12 py-1'
+        }`}>
         <div className="w-full px-4 sm:px-6 h-full flex items-center justify-between gap-4">
-          
+
           {/* Logo & Brand Identity */}
           <div className="flex items-center gap-3 shrink-0">
             {/* Mobile Hamburger Toggle */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className={`p-2 rounded-xl border md:hidden transition-all cursor-pointer ${
-                theme === 'light'
+              className={`p-2 rounded-xl border md:hidden transition-all cursor-pointer ${theme === 'light'
                   ? 'bg-slate-100 border-slate-200 text-slate-600 hover:text-slate-900'
                   : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
-              }`}
+                }`}
               title="Menu Lateral"
             >
               {mobileMenuOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
             </button>
 
-            <div className={`w-7 h-7 rounded-xl overflow-hidden border shrink-0 flex items-center justify-center shadow-inner ${
-              theme === 'light' ? 'border-amber-600/30 bg-amber-50' : 'border-amber-500/30 bg-black/40'
-            }`}>
+            <div className={`w-7 h-7 rounded-xl overflow-hidden border shrink-0 flex items-center justify-center shadow-inner ${theme === 'light' ? 'border-amber-600/30 bg-amber-50' : 'border-amber-500/30 bg-black/40'
+              }`}>
               <img src="/logo.png" alt="Real Premise" className="w-full h-full object-cover" />
             </div>
             {!navbarMinimized && (
               <div className="flex items-center gap-2">
-                <span className={`font-extrabold text-xs sm:text-sm tracking-wider ${
-                  theme === 'light' ? 'text-slate-900' : 'text-white'
-                }`}>REAL PREMISE</span>
-                <span className={`hidden sm:inline-block px-1.5 py-0.5 rounded-md border text-[8px] font-mono tracking-widest ${
-                  theme === 'light'
+                <span className={`font-extrabold text-xs sm:text-sm tracking-wider ${theme === 'light' ? 'text-slate-900' : 'text-white'
+                  }`}>REAL PREMISE</span>
+                <span className={`hidden sm:inline-block px-1.5 py-0.5 rounded-md border text-[8px] font-mono tracking-widest ${theme === 'light'
                     ? 'border-slate-300 bg-slate-100 text-slate-600 font-semibold'
                     : 'border-slate-700 bg-slate-800/80 text-slate-300'
-                }`}>STUDIO</span>
+                  }`}>STUDIO</span>
               </div>
             )}
           </div>
 
           {/* Quick Actions & Topbar Controls */}
           <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
-            
+
             {/* Botão de Conexão Ngrok do Sistema */}
             <div className="flex items-center gap-1.5">
               <button
                 onClick={handleToggleNgrok}
                 disabled={ngrokLoading || ngrokStatus === 'starting'}
-                className={`h-9 px-3 rounded-xl border text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer shadow-sm ${
-                  ngrokOnline
+                className={`h-9 px-3 rounded-xl border text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer shadow-sm ${ngrokOnline
                     ? 'bg-emerald-950/60 border-emerald-500/50 text-emerald-300 hover:bg-emerald-900/60'
                     : ngrokStatus === 'starting'
-                    ? 'bg-amber-950/60 border-amber-500/50 text-amber-300'
-                    : theme === 'light'
-                    ? 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-700'
-                    : 'bg-slate-900/80 hover:bg-slate-800 border-slate-800 text-slate-300'
-                }`}
+                      ? 'bg-amber-950/60 border-amber-500/50 text-amber-300'
+                      : theme === 'light'
+                        ? 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-700'
+                        : 'bg-slate-900/80 hover:bg-slate-800 border-slate-800 text-slate-300'
+                  }`}
                 title={
-                  ngrokOnline 
-                    ? `Sistema Online no Ngrok (${ngrokUrl}) - Clique para desligar` 
-                    : ngrokStatus === 'starting' 
-                    ? 'Iniciando túnel do Ngrok em background...' 
-                    : 'Subir URL do sistema no Ngrok para acesso externo e previews'
+                  ngrokOnline
+                    ? `Sistema Online no Ngrok (${ngrokUrl}) - Clique para desligar`
+                    : ngrokStatus === 'starting'
+                      ? 'Iniciando túnel do Ngrok em background...'
+                      : 'Subir URL do sistema no Ngrok para acesso externo e previews'
                 }
               >
                 {ngrokLoading || ngrokStatus === 'starting' ? (
@@ -1301,11 +1293,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
             {/* Alternador de Modo Escuro / Claro */}
             <button
               onClick={toggleTheme}
-              className={`h-9 px-2.5 rounded-xl border transition-all cursor-pointer flex items-center gap-1.5 ${
-                theme === 'light'
+              className={`h-9 px-2.5 rounded-xl border transition-all cursor-pointer flex items-center gap-1.5 ${theme === 'light'
                   ? 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-800 shadow-sm'
                   : 'bg-slate-900/80 hover:bg-slate-800 border-slate-800 text-amber-300 shadow-sm'
-              }`}
+                }`}
               title={theme === 'dark' ? 'Mudar para Modo Claro' : 'Mudar para Modo Escuro'}
             >
               {theme === 'dark' ? (
@@ -1332,11 +1323,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                     setSidebarCollapsed(!sidebarCollapsed);
                   }
                 }}
-                className={`h-7 px-2 rounded-lg text-xs transition-all cursor-pointer flex items-center gap-1.5 ${
-                  sidebarCollapsed && !sidebarHidden
+                className={`h-7 px-2 rounded-lg text-xs transition-all cursor-pointer flex items-center gap-1.5 ${sidebarCollapsed && !sidebarHidden
                     ? 'bg-purple-600 text-white shadow-sm font-semibold'
                     : 'text-slate-400 hover:text-white hover:bg-slate-850'
-                }`}
+                  }`}
                 title={sidebarCollapsed ? "Expandir Menu Lateral (Mostrar Textos)" : "Menu Lateral Compacto (Apenas Ícones)"}
               >
                 <Minimize2 className={`w-3.5 h-3.5 ${sidebarCollapsed ? 'text-white' : ''}`} />
@@ -1347,11 +1337,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
 
               <button
                 onClick={() => setSidebarHidden(!sidebarHidden)}
-                className={`h-7 px-2 rounded-lg text-xs transition-all cursor-pointer flex items-center gap-1.5 ${
-                  sidebarHidden
+                className={`h-7 px-2 rounded-lg text-xs transition-all cursor-pointer flex items-center gap-1.5 ${sidebarHidden
                     ? 'bg-amber-600 text-white shadow-sm font-semibold'
                     : 'text-slate-400 hover:text-white hover:bg-slate-850'
-                }`}
+                  }`}
                 title={sidebarHidden ? "Mostrar Menu Lateral" : "Ocultar Menu Lateral Totalmente (Ganhar Espaço Máximo)"}
               >
                 <Maximize2 className="w-3.5 h-3.5" />
@@ -1364,11 +1353,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
             {/* Botão de Minimizar Cabeçalho */}
             <button
               onClick={() => setNavbarMinimized(!navbarMinimized)}
-              className={`w-9 h-9 border rounded-xl flex items-center justify-center transition-all cursor-pointer shadow-sm ${
-                theme === 'light'
+              className={`w-9 h-9 border rounded-xl flex items-center justify-center transition-all cursor-pointer shadow-sm ${theme === 'light'
                   ? 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-600 hover:text-slate-900'
                   : 'bg-slate-900/80 hover:bg-slate-800 border-slate-800 text-slate-400 hover:text-white'
-              }`}
+                }`}
               title={navbarMinimized ? "Expandir Barra Superior" : "Minimizar Barra Superior"}
             >
               {navbarMinimized ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
@@ -1378,20 +1366,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
             <div className="relative">
               <button
                 onClick={() => setShowUserDropdown(!showUserDropdown)}
-                className={`h-9 flex items-center gap-2.5 p-1 pl-2.5 rounded-xl border transition-all cursor-pointer shadow-sm ${
-                  theme === 'light'
+                className={`h-9 flex items-center gap-2.5 p-1 pl-2.5 rounded-xl border transition-all cursor-pointer shadow-sm ${theme === 'light'
                     ? 'bg-slate-100 hover:bg-slate-200 border-slate-200'
                     : 'bg-slate-900/80 hover:bg-slate-800 border-slate-800'
-                }`}
+                  }`}
               >
                 {!navbarMinimized && (
                   <div className="text-right hidden sm:block">
-                    <p className={`text-xs font-bold leading-tight ${
-                      theme === 'light' ? 'text-slate-900' : 'text-white'
-                    }`}>{user?.name || 'Desenvolvedor'}</p>
-                    <p className={`text-[9px] font-mono leading-tight ${
-                      theme === 'light' ? 'text-slate-500' : 'text-slate-400'
-                    }`}>{user?.email}</p>
+                    <p className={`text-xs font-bold leading-tight ${theme === 'light' ? 'text-slate-900' : 'text-white'
+                      }`}>{user?.name || 'Desenvolvedor'}</p>
+                    <p className={`text-[9px] font-mono leading-tight ${theme === 'light' ? 'text-slate-500' : 'text-slate-400'
+                      }`}>{user?.email}</p>
                   </div>
                 )}
                 <div className="w-7 h-7 rounded-lg bg-slate-800 text-slate-100 flex items-center justify-center font-bold text-xs shadow border border-slate-700">
@@ -1401,17 +1386,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
 
               {/* Dropdown Menu Popup */}
               {showUserDropdown && (
-                <div 
-                  className={`absolute right-0 mt-2 w-56 border rounded-2xl shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-150 backdrop-blur-xl ${
-                    theme === 'light'
+                <div
+                  className={`absolute right-0 mt-2 w-56 border rounded-2xl shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-150 backdrop-blur-xl ${theme === 'light'
                       ? 'bg-white border-slate-200 text-slate-900'
                       : 'bg-[#0f1117] border-slate-800 text-slate-100'
-                  }`}
+                    }`}
                   onClick={() => setShowUserDropdown(false)}
                 >
-                  <div className={`p-3 border-b ${
-                    theme === 'light' ? 'border-slate-100 bg-slate-50' : 'border-slate-800 bg-slate-900/50'
-                  }`}>
+                  <div className={`p-3 border-b ${theme === 'light' ? 'border-slate-100 bg-slate-50' : 'border-slate-800 bg-slate-900/50'
+                    }`}>
                     <p className="text-xs font-semibold truncate">{user?.name || 'Desenvolvedor'}</p>
                     <p className="text-[10px] text-slate-500 font-mono truncate">{user?.email}</p>
                   </div>
@@ -1444,11 +1427,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
 
       {/* Main Body with Resizable Sidebar Layout */}
       <div className="flex-1 flex overflow-hidden relative">
-        
+
         {/* Mobile Navigation Drawer */}
         {mobileMenuOpen && (
           <div className="fixed inset-0 z-40 bg-black/80 backdrop-blur-sm md:hidden flex" onClick={() => setMobileMenuOpen(false)}>
-            <div 
+            <div
               className="w-64 bg-[#0b0614] border-r border-slate-850 h-full p-4 flex flex-col justify-between"
               onClick={(e) => e.stopPropagation()}
             >
@@ -1461,36 +1444,32 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                 </div>
                 <button
                   onClick={() => { setActiveTab('general'); setMobileMenuOpen(false); }}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
-                    activeTab === 'general' ? 'bg-purple-900/30 text-purple-300 border border-purple-500/30' : 'text-slate-400'
-                  }`}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${activeTab === 'general' ? 'bg-purple-900/30 text-purple-300 border border-purple-500/30' : 'text-slate-400'
+                    }`}
                 >
                   <Sparkles className="w-4 h-4 text-purple-400" />
                   Visão Geral
                 </button>
                 <button
                   onClick={() => { setActiveTab('projects'); setMobileMenuOpen(false); }}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
-                    activeTab === 'projects' ? 'bg-purple-900/30 text-purple-300 border border-purple-500/30' : 'text-slate-400'
-                  }`}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${activeTab === 'projects' ? 'bg-purple-900/30 text-purple-300 border border-purple-500/30' : 'text-slate-400'
+                    }`}
                 >
                   <Layout className="w-4 h-4 text-indigo-400" />
                   Projetos / Sites
                 </button>
                 <button
                   onClick={() => { setActiveTab('leads'); setMobileMenuOpen(false); }}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
-                    activeTab === 'leads' ? 'bg-purple-900/30 text-purple-300 border border-purple-500/30' : 'text-slate-400'
-                  }`}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${activeTab === 'leads' ? 'bg-purple-900/30 text-purple-300 border border-purple-500/30' : 'text-slate-400'
+                    }`}
                 >
                   <Users className="w-4 h-4 text-pink-400" />
                   Buscar Clientes
                 </button>
                 <button
                   onClick={() => { setActiveTab('settings'); setMobileMenuOpen(false); }}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
-                    activeTab === 'settings' ? 'bg-purple-900/30 text-purple-300 border border-purple-500/30' : 'text-slate-400'
-                  }`}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${activeTab === 'settings' ? 'bg-purple-900/30 text-purple-300 border border-purple-500/30' : 'text-slate-400'
+                    }`}
                 >
                   <Settings className="w-4 h-4 text-purple-400" />
                   Configurações
@@ -1502,23 +1481,20 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
 
         {/* Left Navigation Sidebar with Collapse (Icons Only), Hide & Drag-to-Resize Handle */}
         {!sidebarHidden && (
-          <aside 
+          <aside
             style={{ width: sidebarCollapsed ? '60px' : `${sidebarWidth}px` }}
-            className={`border-r flex flex-col justify-between shrink-0 h-full overflow-y-auto ${
-              sidebarCollapsed ? 'p-2' : 'p-3.5'
-            } hidden md:flex relative select-none transition-[width,padding] duration-200 ${
-              theme === 'light'
+            className={`border-r flex flex-col justify-between shrink-0 h-full overflow-y-auto ${sidebarCollapsed ? 'p-2' : 'p-3.5'
+              } hidden md:flex relative select-none transition-[width,padding] duration-200 ${theme === 'light'
                 ? 'bg-white border-slate-200'
                 : 'bg-[#0b0d13] border-slate-800/80'
-            }`}
+              }`}
           >
             <div className="space-y-1">
               {/* Toggle Collapse/Expand Header on Sidebar */}
               <div className={`flex items-center ${sidebarCollapsed ? 'justify-center pb-2' : 'justify-between pb-2'} border-b border-slate-850/60 mb-2`}>
                 {!sidebarCollapsed && (
-                  <span className={`text-[9px] font-bold uppercase tracking-wider ${
-                    theme === 'light' ? 'text-slate-400' : 'text-slate-500'
-                  }`}>
+                  <span className={`text-[9px] font-bold uppercase tracking-wider ${theme === 'light' ? 'text-slate-400' : 'text-slate-500'
+                    }`}>
                     Navegação
                   </span>
                 )}
@@ -1533,9 +1509,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
 
               {/* Seção 1: Criação & Projetos */}
               {!sidebarCollapsed ? (
-                <div className={`pt-2 pb-1 px-3 text-[10px] font-bold uppercase tracking-wider ${
-                  theme === 'light' ? 'text-slate-400' : 'text-slate-500'
-                }`}>
+                <div className={`pt-2 pb-1 px-3 text-[10px] font-bold uppercase tracking-wider ${theme === 'light' ? 'text-slate-400' : 'text-slate-500'
+                  }`}>
                   Principal
                 </div>
               ) : (
@@ -1544,15 +1519,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
 
               <button
                 onClick={() => setActiveTab('general')}
-                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2 py-2.5' : 'gap-3 px-3.5 py-2.5'} rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                  activeTab === 'general'
+                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2 py-2.5' : 'gap-3 px-3.5 py-2.5'} rounded-xl text-xs font-semibold transition-all cursor-pointer ${activeTab === 'general'
                     ? theme === 'light'
                       ? 'bg-indigo-50 text-indigo-700 font-bold'
                       : 'bg-slate-800 text-white font-bold'
                     : theme === 'light'
                       ? 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                       : 'text-slate-400 hover:bg-slate-900/60 hover:text-slate-200'
-                }`}
+                  }`}
                 title="Visão Geral"
               >
                 <Sparkles className="w-4 h-4 text-purple-400 shrink-0" />
@@ -1561,35 +1535,32 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
 
               <button
                 onClick={() => setActiveTab('projects')}
-                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2 py-2.5' : 'gap-3 px-3.5 py-2.5'} rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                  activeTab === 'projects'
+                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2 py-2.5' : 'gap-3 px-3.5 py-2.5'} rounded-xl text-xs font-semibold transition-all cursor-pointer ${activeTab === 'projects'
                     ? theme === 'light'
                       ? 'bg-indigo-50 text-indigo-700 font-bold'
                       : 'bg-slate-800 text-white font-bold'
                     : theme === 'light'
                       ? 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                       : 'text-slate-400 hover:bg-slate-900/60 hover:text-slate-200'
-                }`}
+                  }`}
                 title="Meus Sites"
               >
                 <Layout className="w-4 h-4 text-indigo-400 shrink-0" />
                 {!sidebarCollapsed && (
                   <>
                     <span className="truncate flex-1 text-left">Meus Sites</span>
-                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
-                      theme === 'light' ? 'bg-slate-200 text-slate-700' : 'bg-slate-800 text-slate-300 border border-slate-700'
-                    }`}>
+                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${theme === 'light' ? 'bg-slate-200 text-slate-700' : 'bg-slate-800 text-slate-300 border border-slate-700'
+                      }`}>
                       {projects.length}
                     </span>
                   </>
                 )}
               </button>
-              
+
               {/* Seção 2: CRM & Vendas */}
               {!sidebarCollapsed ? (
-                <div className={`pt-4 pb-1 px-3 text-[10px] font-bold uppercase tracking-wider ${
-                  theme === 'light' ? 'text-slate-400' : 'text-slate-500'
-                }`}>
+                <div className={`pt-4 pb-1 px-3 text-[10px] font-bold uppercase tracking-wider ${theme === 'light' ? 'text-slate-400' : 'text-slate-500'
+                  }`}>
                   Vendas & CRM
                 </div>
               ) : (
@@ -1598,15 +1569,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
 
               <button
                 onClick={() => setActiveTab('crm')}
-                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2 py-2.5' : 'gap-3 px-3.5 py-2.5'} rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                  activeTab === 'crm'
+                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2 py-2.5' : 'gap-3 px-3.5 py-2.5'} rounded-xl text-xs font-semibold transition-all cursor-pointer ${activeTab === 'crm'
                     ? theme === 'light'
                       ? 'bg-emerald-50 text-emerald-700 font-bold shadow-sm'
                       : 'bg-emerald-950/40 text-emerald-300 border border-emerald-500/30 font-bold shadow-sm'
                     : theme === 'light'
                       ? 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                       : 'text-slate-400 hover:bg-slate-900/60 hover:text-slate-200'
-                }`}
+                  }`}
                 title="Funil de Vendas"
               >
                 <TrendingUp className="w-4 h-4 text-emerald-400 shrink-0" />
@@ -1622,9 +1592,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
 
               {/* Seção 3: Prospecção & Captação */}
               {!sidebarCollapsed ? (
-                <div className={`pt-4 pb-1 px-3 text-[10px] font-bold uppercase tracking-wider ${
-                  theme === 'light' ? 'text-slate-400' : 'text-slate-500'
-                }`}>
+                <div className={`pt-4 pb-1 px-3 text-[10px] font-bold uppercase tracking-wider ${theme === 'light' ? 'text-slate-400' : 'text-slate-500'
+                  }`}>
                   Prospecção
                 </div>
               ) : (
@@ -1633,15 +1602,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
 
               <button
                 onClick={() => setActiveTab('leads')}
-                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2 py-2.5' : 'gap-3 px-3.5 py-2.5'} rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                  activeTab === 'leads'
+                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2 py-2.5' : 'gap-3 px-3.5 py-2.5'} rounded-xl text-xs font-semibold transition-all cursor-pointer ${activeTab === 'leads'
                     ? theme === 'light'
                       ? 'bg-indigo-50 text-indigo-700 font-bold'
                       : 'bg-slate-800 text-white font-bold'
                     : theme === 'light'
                       ? 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                       : 'text-slate-400 hover:bg-slate-900/60 hover:text-slate-200'
-                }`}
+                  }`}
                 title="Buscador de Clientes"
               >
                 <Users className="w-4 h-4 text-sky-400 shrink-0" />
@@ -1650,24 +1618,22 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
 
               <button
                 onClick={() => setActiveTab('saved-leads')}
-                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2 py-2.5 relative' : 'gap-3 px-3.5 py-2.5'} rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                  activeTab === 'saved-leads'
+                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2 py-2.5 relative' : 'gap-3 px-3.5 py-2.5'} rounded-xl text-xs font-semibold transition-all cursor-pointer ${activeTab === 'saved-leads'
                     ? theme === 'light'
                       ? 'bg-amber-50 text-amber-800 font-bold'
                       : 'bg-slate-800 text-amber-300 font-bold'
                     : theme === 'light'
                       ? 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                       : 'text-slate-400 hover:bg-slate-900/60 hover:text-slate-200'
-                }`}
+                  }`}
                 title={`Leads Salvos (${savedLeads.length})`}
               >
                 <Bookmark className="w-4 h-4 text-amber-400 shrink-0" />
                 {!sidebarCollapsed ? (
                   <>
                     <span className="truncate flex-1 text-left">Leads Salvos</span>
-                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
-                      theme === 'light' ? 'bg-amber-100 text-amber-800' : 'bg-amber-950/60 text-amber-300 border border-amber-500/30'
-                    }`}>
+                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${theme === 'light' ? 'bg-amber-100 text-amber-800' : 'bg-amber-950/60 text-amber-300 border border-amber-500/30'
+                      }`}>
                       {savedLeads.length}
                     </span>
                   </>
@@ -1678,24 +1644,22 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
 
               <button
                 onClick={() => setActiveTab('presets')}
-                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2 py-2.5 relative' : 'gap-3 px-3.5 py-2.5'} rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                  activeTab === 'presets'
+                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2 py-2.5 relative' : 'gap-3 px-3.5 py-2.5'} rounded-xl text-xs font-semibold transition-all cursor-pointer ${activeTab === 'presets'
                     ? theme === 'light'
                       ? 'bg-indigo-50 text-indigo-700 font-bold'
                       : 'bg-slate-800 text-white font-bold'
                     : theme === 'light'
                       ? 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                       : 'text-slate-400 hover:bg-slate-900/60 hover:text-slate-200'
-                }`}
+                  }`}
                 title={`Filtros Salvos (${filterPresets.length})`}
               >
                 <SlidersHorizontal className="w-4 h-4 text-indigo-400 shrink-0" />
                 {!sidebarCollapsed ? (
                   <>
                     <span className="truncate flex-1 text-left">Filtros Salvos</span>
-                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
-                      theme === 'light' ? 'bg-slate-200 text-slate-700' : 'bg-slate-800 text-slate-300 border border-slate-700'
-                    }`}>
+                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${theme === 'light' ? 'bg-slate-200 text-slate-700' : 'bg-slate-800 text-slate-300 border border-slate-700'
+                      }`}>
                       {filterPresets.length}
                     </span>
                   </>
@@ -1706,9 +1670,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
 
               {/* Seção 4: Configurações & Conta */}
               {!sidebarCollapsed ? (
-                <div className={`pt-4 pb-1 px-3 text-[10px] font-bold uppercase tracking-wider ${
-                  theme === 'light' ? 'text-slate-400' : 'text-slate-500'
-                }`}>
+                <div className={`pt-4 pb-1 px-3 text-[10px] font-bold uppercase tracking-wider ${theme === 'light' ? 'text-slate-400' : 'text-slate-500'
+                  }`}>
                   Geral
                 </div>
               ) : (
@@ -1717,15 +1680,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
 
               <button
                 onClick={() => setActiveTab('settings')}
-                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2 py-2.5' : 'gap-3 px-3.5 py-2.5'} rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                  activeTab === 'settings'
+                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2 py-2.5' : 'gap-3 px-3.5 py-2.5'} rounded-xl text-xs font-semibold transition-all cursor-pointer ${activeTab === 'settings'
                     ? theme === 'light'
                       ? 'bg-purple-50 text-purple-700 font-bold'
                       : 'bg-gradient-to-r from-purple-900/50 to-indigo-900/50 text-white font-bold border border-purple-500/40 shadow-sm'
                     : theme === 'light'
                       ? 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                       : 'text-slate-400 hover:bg-slate-900/60 hover:text-slate-200'
-                }`}
+                  }`}
                 title="Configurações"
               >
                 <Settings className="w-4 h-4 text-purple-400 shrink-0" />
@@ -1738,30 +1700,27 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
               <div className="space-y-2">
                 {/* Relógio do Servidor */}
                 {serverTime && (
-                  <div className={`p-2.5 border rounded-xl ${
-                    theme === 'light' ? 'bg-slate-50 border-slate-200' : 'bg-slate-900/60 border-slate-800'
-                  }`}>
+                  <div className={`p-2.5 border rounded-xl ${theme === 'light' ? 'bg-slate-50 border-slate-200' : 'bg-slate-900/60 border-slate-800'
+                    }`}>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-1.5">
-                        <Clock className={`w-3 h-3 ${ theme === 'light' ? 'text-slate-500' : 'text-slate-400'}`} />
-                        <span className={`text-[9px] font-bold uppercase tracking-wider ${ theme === 'light' ? 'text-slate-500' : 'text-slate-500'}`}>Servidor</span>
+                        <Clock className={`w-3 h-3 ${theme === 'light' ? 'text-slate-500' : 'text-slate-400'}`} />
+                        <span className={`text-[9px] font-bold uppercase tracking-wider ${theme === 'light' ? 'text-slate-500' : 'text-slate-500'}`}>Servidor</span>
                       </div>
-                      <span className={`font-mono text-xs font-bold tabular-nums ${ theme === 'light' ? 'text-slate-800' : 'text-slate-200'}`}>{serverTime}</span>
+                      <span className={`font-mono text-xs font-bold tabular-nums ${theme === 'light' ? 'text-slate-800' : 'text-slate-200'}`}>{serverTime}</span>
                     </div>
                   </div>
                 )}
 
                 {/* Link Ngrok quando online */}
                 {ngrokOnline && ngrokUrl && (
-                  <div className={`p-3 border rounded-xl animate-in fade-in duration-200 ${
-                    theme === 'light' ? 'bg-emerald-50 border-emerald-200' : 'bg-emerald-950/30 border-emerald-500/30'
-                  }`}>
+                  <div className={`p-3 border rounded-xl animate-in fade-in duration-200 ${theme === 'light' ? 'bg-emerald-50 border-emerald-200' : 'bg-emerald-950/30 border-emerald-500/30'
+                    }`}>
                     <div className="flex items-center justify-between gap-1 mb-1">
                       <div className="flex items-center gap-1.5">
                         <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                        <span className={`text-[10px] font-bold uppercase tracking-wider ${
-                          theme === 'light' ? 'text-emerald-800' : 'text-emerald-400'
-                        }`}>Ngrok Online</span>
+                        <span className={`text-[10px] font-bold uppercase tracking-wider ${theme === 'light' ? 'text-emerald-800' : 'text-emerald-400'
+                          }`}>Ngrok Online</span>
                       </div>
                       <Globe className="w-3.5 h-3.5 text-emerald-400" />
                     </div>
@@ -1769,9 +1728,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                       href={ngrokUrl}
                       target="_blank"
                       rel="noreferrer"
-                      className={`text-xs font-mono truncate block hover:underline transition-colors flex items-center justify-between gap-1 ${
-                        theme === 'light' ? 'text-emerald-700' : 'text-emerald-300'
-                      }`}
+                      className={`text-xs font-mono truncate block hover:underline transition-colors flex items-center justify-between gap-1 ${theme === 'light' ? 'text-emerald-700' : 'text-emerald-300'
+                        }`}
                       title={ngrokUrl}
                     >
                       <span className="truncate">{ngrokUrl.replace('https://', '')}</span>
@@ -1846,7 +1804,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
               {/* Status & Estatísticas em Grid Principal */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
                 {/* Total de Projetos */}
-                <div 
+                <div
                   onClick={() => setActiveTab('projects')}
                   className="bg-[#0f0b18] border border-slate-850 hover:border-purple-500/40 rounded-2xl p-5 shadow-xl relative overflow-hidden group cursor-pointer transition-all"
                 >
@@ -1864,7 +1822,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                 </div>
 
                 {/* CRM de Vendas de Sites */}
-                <div 
+                <div
                   onClick={() => setActiveTab('crm')}
                   className="bg-[#0f0b18] border border-slate-850 hover:border-emerald-500/40 rounded-2xl p-5 shadow-xl relative overflow-hidden group cursor-pointer transition-all"
                 >
@@ -1882,7 +1840,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                 </div>
 
                 {/* Leads Prospectados & Salvos */}
-                <div 
+                <div
                   onClick={() => setActiveTab('saved-leads')}
                   className="bg-[#0f0b18] border border-slate-850 hover:border-amber-500/40 rounded-2xl p-5 shadow-xl relative overflow-hidden group cursor-pointer transition-all"
                 >
@@ -1926,7 +1884,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                     <Cpu className="w-5 h-5 text-indigo-400" />
                     Fluxos Rápidos de Produção
                   </h3>
-                  
+
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <button
                       onClick={() => { setCreationMode('ai'); setShowCreateModal(true); }}
@@ -2092,9 +2050,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
 
               {/* Toolbar: Busca, Ordenação e Modo de Visualização */}
               {projects.length > 0 && (
-                <div className={`flex flex-col sm:flex-row items-stretch sm:items-center gap-2 p-3 rounded-2xl border ${
-                  theme === 'light' ? 'bg-white border-slate-200' : 'bg-[#0f0b18] border-slate-800'
-                }`}>
+                <div className={`flex flex-col sm:flex-row items-stretch sm:items-center gap-2 p-3 rounded-2xl border ${theme === 'light' ? 'bg-white border-slate-200' : 'bg-[#0f0b18] border-slate-800'
+                  }`}>
                   {/* Campo de busca */}
                   <div className="flex-1 relative">
                     <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500 pointer-events-none" />
@@ -2103,9 +2060,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                       placeholder="Buscar projeto..."
                       value={projectsSearch}
                       onChange={e => setProjectsSearch(e.target.value)}
-                      className={`w-full pl-8 pr-3 py-2 text-xs rounded-xl border focus:outline-none focus:border-purple-500 transition-colors ${
-                        theme === 'light' ? 'bg-slate-50 border-slate-200 text-slate-900 placeholder-slate-400' : 'bg-slate-950 border-slate-800 text-white placeholder-slate-600'
-                      }`}
+                      className={`w-full pl-8 pr-3 py-2 text-xs rounded-xl border focus:outline-none focus:border-purple-500 transition-colors ${theme === 'light' ? 'bg-slate-50 border-slate-200 text-slate-900 placeholder-slate-400' : 'bg-slate-950 border-slate-800 text-white placeholder-slate-600'
+                        }`}
                     />
                   </div>
 
@@ -2115,9 +2071,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                     <select
                       value={projectsSort}
                       onChange={e => setProjectsSort(e.target.value as any)}
-                      className={`text-xs rounded-xl border px-2.5 py-2 focus:outline-none cursor-pointer ${
-                        theme === 'light' ? 'bg-slate-50 border-slate-200 text-slate-900' : 'bg-slate-950 border-slate-800 text-white'
-                      }`}
+                      className={`text-xs rounded-xl border px-2.5 py-2 focus:outline-none cursor-pointer ${theme === 'light' ? 'bg-slate-50 border-slate-200 text-slate-900' : 'bg-slate-950 border-slate-800 text-white'
+                        }`}
                     >
                       <option value="newest">Mais recentes</option>
                       <option value="oldest">Mais antigos</option>
@@ -2127,23 +2082,20 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                   </div>
 
                   {/* Modo de visualização */}
-                  <div className={`flex items-center rounded-xl border p-0.5 ${
-                    theme === 'light' ? 'bg-slate-100 border-slate-200' : 'bg-slate-950 border-slate-800'
-                  }`}>
+                  <div className={`flex items-center rounded-xl border p-0.5 ${theme === 'light' ? 'bg-slate-100 border-slate-200' : 'bg-slate-950 border-slate-800'
+                    }`}>
                     <button
                       onClick={() => setProjectsViewMode('grid')}
-                      className={`p-1.5 rounded-lg transition-all cursor-pointer ${
-                        projectsViewMode === 'grid' ? 'bg-purple-600 text-white shadow' : 'text-slate-400 hover:text-white'
-                      }`}
+                      className={`p-1.5 rounded-lg transition-all cursor-pointer ${projectsViewMode === 'grid' ? 'bg-purple-600 text-white shadow' : 'text-slate-400 hover:text-white'
+                        }`}
                       title="Vista em Grade"
                     >
                       <LayoutGrid className="w-3.5 h-3.5" />
                     </button>
                     <button
                       onClick={() => setProjectsViewMode('list')}
-                      className={`p-1.5 rounded-lg transition-all cursor-pointer ${
-                        projectsViewMode === 'list' ? 'bg-purple-600 text-white shadow' : 'text-slate-400 hover:text-white'
-                      }`}
+                      className={`p-1.5 rounded-lg transition-all cursor-pointer ${projectsViewMode === 'list' ? 'bg-purple-600 text-white shadow' : 'text-slate-400 hover:text-white'
+                        }`}
                       title="Vista em Lista"
                     >
                       <List className="w-3.5 h-3.5" />
@@ -2174,7 +2126,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                   <p className="text-slate-400 text-sm max-w-sm mb-8">
                     Comece agora criando seu primeiro site utilizando nossa inteligência artificial ou a partir de um template.
                   </p>
-                  <button 
+                  <button
                     onClick={() => setShowCreateModal(true)}
                     className="px-6 py-3 bg-purple-700 hover:bg-purple-650 text-white font-semibold rounded-xl transition-all cursor-pointer"
                   >
@@ -2195,19 +2147,18 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                     const jobInfo = generatingProjectJobs[project.id];
 
                     return (
-                      <div 
+                      <div
                         key={project.id}
                         onClick={() => {
                           if (isGenerating) { notify.warning('Aguarde! A IA ainda está finalizando o site.'); return; }
                           onSelectProject(project.id);
                         }}
-                        className={`border rounded-2xl p-5 transition-all group flex flex-col justify-between min-h-[200px] shadow-lg animate-in fade-in duration-200 relative ${
-                          isGenerating 
-                            ? 'bg-[#0f0b18] border-amber-500/50 shadow-[0_0_25px_rgba(229,185,95,0.15)] cursor-not-allowed overflow-hidden' 
+                        className={`border rounded-2xl p-5 transition-all group flex flex-col justify-between min-h-[200px] shadow-lg animate-in fade-in duration-200 relative ${isGenerating
+                            ? 'bg-[#0f0b18] border-amber-500/50 shadow-[0_0_25px_rgba(229,185,95,0.15)] cursor-not-allowed overflow-hidden'
                             : theme === 'light'
                               ? 'bg-white border-slate-200 hover:border-purple-400/60 cursor-pointer hover:shadow-purple-100'
                               : 'bg-[#0f0b18] border-slate-800/80 hover:border-purple-500/40 hover:bg-[#130d1e] cursor-pointer hover:shadow-[0_0_20px_rgba(168,85,247,0.08)]'
-                        }`}
+                          }`}
                       >
                         {isGenerating && (
                           <div className="absolute inset-0 bg-black/75 backdrop-blur-[2px] z-10 flex flex-col items-center justify-center p-4 text-center rounded-2xl">
@@ -2223,16 +2174,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
 
                         <div className="flex-1">
                           <div className="flex items-start justify-between gap-3 mb-2">
-                            <h3 className={`font-bold text-base line-clamp-1 group-hover:text-purple-300 transition-colors ${
-                              theme === 'light' ? 'text-slate-900' : 'text-white'
-                            }`}>{project.name}</h3>
-                            <span className={`px-2 py-0.5 rounded-lg text-[10px] capitalize font-bold shrink-0 border ${
-                              isGenerating 
+                            <h3 className={`font-bold text-base line-clamp-1 group-hover:text-purple-300 transition-colors ${theme === 'light' ? 'text-slate-900' : 'text-white'
+                              }`}>{project.name}</h3>
+                            <span className={`px-2 py-0.5 rounded-lg text-[10px] capitalize font-bold shrink-0 border ${isGenerating
                                 ? 'bg-amber-500/20 text-amber-300 border-amber-500/30 animate-pulse'
                                 : project.status === 'published'
                                   ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
                                   : theme === 'light' ? 'bg-slate-100 text-slate-600 border-slate-200' : 'bg-slate-800/60 text-slate-400 border-slate-700/60'
-                            }`}>
+                              }`}>
                               {isGenerating ? 'Gerando...' : project.status === 'development' ? 'Dev' : 'Live'}
                             </span>
                           </div>
@@ -2248,16 +2197,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                             </div>
                           )}
 
-                          <p className={`text-xs line-clamp-2 ${
-                            theme === 'light' ? 'text-slate-500' : 'text-slate-400'
-                          }`}>
+                          <p className={`text-xs line-clamp-2 ${theme === 'light' ? 'text-slate-500' : 'text-slate-400'
+                            }`}>
                             {project.description || 'Sem descrição.'}
                           </p>
                         </div>
 
-                        <div className={`border-t pt-3 mt-3 flex items-center justify-between text-xs ${
-                          theme === 'light' ? 'border-slate-100 text-slate-500' : 'border-slate-800/60 text-slate-500'
-                        }`}>
+                        <div className={`border-t pt-3 mt-3 flex items-center justify-between text-xs ${theme === 'light' ? 'border-slate-100 text-slate-500' : 'border-slate-800/60 text-slate-500'
+                          }`}>
                           <div className="flex items-center gap-3">
                             <span className="flex items-center gap-1">
                               <FileText className="w-3 h-3" />
@@ -2270,14 +2217,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                           </div>
 
                           <div className="flex items-center gap-1">
-                            <button 
+                            <button
                               onClick={(e) => { e.stopPropagation(); openProjectDetailsModal(project); }}
                               className="p-1.5 text-slate-500 hover:text-purple-300 rounded-lg hover:bg-purple-950/40 transition-all cursor-pointer"
                               title="Editar detalhes"
                             >
                               <Edit2 className="w-3 h-3" />
                             </button>
-                            <button 
+                            <button
                               onClick={(e) => { e.stopPropagation(); handleDeleteProject(project.id, e); }}
                               className="p-1.5 text-slate-500 hover:text-red-400 rounded-lg hover:bg-red-950/30 transition-all cursor-pointer"
                               title="Excluir projeto"
@@ -2293,13 +2240,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                 </div>
               ) : (
                 /* Project List View */
-                <div className={`border rounded-2xl overflow-hidden ${
-                  theme === 'light' ? 'bg-white border-slate-200' : 'bg-[#0f0b18] border-slate-800'
-                }`}>
-                  {/* Table Header */}
-                  <div className={`grid grid-cols-[2fr_1fr_auto_auto] gap-4 px-5 py-2.5 text-[10px] font-bold uppercase tracking-wider ${
-                    theme === 'light' ? 'text-slate-500 bg-slate-50 border-b border-slate-200' : 'text-slate-500 bg-slate-900/40 border-b border-slate-800'
+                <div className={`border rounded-2xl overflow-hidden ${theme === 'light' ? 'bg-white border-slate-200' : 'bg-[#0f0b18] border-slate-800'
                   }`}>
+                  {/* Table Header */}
+                  <div className={`grid grid-cols-[2fr_1fr_auto_auto] gap-4 px-5 py-2.5 text-[10px] font-bold uppercase tracking-wider ${theme === 'light' ? 'text-slate-500 bg-slate-50 border-b border-slate-200' : 'text-slate-500 bg-slate-900/40 border-b border-slate-800'
+                    }`}>
                     <span>Projeto</span>
                     <span>Criado em</span>
                     <span>Páginas</span>
@@ -2317,27 +2262,23 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                           if (isGenerating) { notify.warning('Aguarde! A IA ainda está finalizando o site.'); return; }
                           onSelectProject(project.id);
                         }}
-                        className={`grid grid-cols-[2fr_1fr_auto_auto] gap-4 px-5 py-3.5 items-center transition-all cursor-pointer group ${
-                          idx !== filteredProjects.length - 1
+                        className={`grid grid-cols-[2fr_1fr_auto_auto] gap-4 px-5 py-3.5 items-center transition-all cursor-pointer group ${idx !== filteredProjects.length - 1
                             ? theme === 'light' ? 'border-b border-slate-100' : 'border-b border-slate-800/50'
                             : ''
-                        } ${
-                          theme === 'light' ? 'hover:bg-purple-50/60' : 'hover:bg-purple-950/10'
-                        }`}
+                          } ${theme === 'light' ? 'hover:bg-purple-50/60' : 'hover:bg-purple-950/10'
+                          }`}
                       >
                         {/* Nome e info */}
                         <div className="min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className={`font-semibold text-sm truncate group-hover:text-purple-400 transition-colors ${
-                              theme === 'light' ? 'text-slate-900' : 'text-white'
-                            }`}>{project.name}</span>
-                            <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold border shrink-0 ${
-                              isGenerating
+                            <span className={`font-semibold text-sm truncate group-hover:text-purple-400 transition-colors ${theme === 'light' ? 'text-slate-900' : 'text-white'
+                              }`}>{project.name}</span>
+                            <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold border shrink-0 ${isGenerating
                                 ? 'bg-amber-500/20 text-amber-300 border-amber-500/30 animate-pulse'
                                 : project.status === 'published'
                                   ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
                                   : theme === 'light' ? 'bg-slate-100 text-slate-500 border-slate-200' : 'bg-slate-800 text-slate-400 border-slate-700'
-                            }`}>
+                              }`}>
                               {isGenerating ? '⚡ IA...' : project.status === 'development' ? 'Dev' : 'Live'}
                             </span>
                             {project.crmLead && (
@@ -2348,20 +2289,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                             )}
                           </div>
                           {project.description && (
-                            <p className={`text-[11px] mt-0.5 truncate ${
-                              theme === 'light' ? 'text-slate-500' : 'text-slate-500'
-                            }`}>{project.description}</p>
+                            <p className={`text-[11px] mt-0.5 truncate ${theme === 'light' ? 'text-slate-500' : 'text-slate-500'
+                              }`}>{project.description}</p>
                           )}
                         </div>
 
                         {/* Data de criação */}
-                        <div className={`text-xs ${ theme === 'light' ? 'text-slate-500' : 'text-slate-500'}`}>
+                        <div className={`text-xs ${theme === 'light' ? 'text-slate-500' : 'text-slate-500'}`}>
                           <div className="font-mono">{new Date(project.createdAt).toLocaleDateString('pt-BR')}</div>
                           <div className="text-[10px] opacity-70">{new Date(project.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</div>
                         </div>
 
                         {/* Páginas */}
-                        <div className={`text-xs font-mono text-center ${ theme === 'light' ? 'text-slate-600' : 'text-slate-400'}`}>
+                        <div className={`text-xs font-mono text-center ${theme === 'light' ? 'text-slate-600' : 'text-slate-400'}`}>
                           {project.pages?.length || 1}
                         </div>
 
@@ -2457,9 +2397,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                         <button
                           type="button"
                           onClick={() => setSavedViewMode('table')}
-                          className={`px-2.5 py-1 rounded-lg transition-all ${
-                            savedViewMode === 'table' ? 'bg-purple-700 text-white font-bold' : 'text-slate-400 hover:text-white'
-                          }`}
+                          className={`px-2.5 py-1 rounded-lg transition-all ${savedViewMode === 'table' ? 'bg-purple-700 text-white font-bold' : 'text-slate-400 hover:text-white'
+                            }`}
                           title="Visualização em Lista Compacta"
                         >
                           Lista
@@ -2467,9 +2406,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                         <button
                           type="button"
                           onClick={() => setSavedViewMode('cards')}
-                          className={`px-2.5 py-1 rounded-lg transition-all ${
-                            savedViewMode === 'cards' ? 'bg-purple-700 text-white font-bold' : 'text-slate-400 hover:text-white'
-                          }`}
+                          className={`px-2.5 py-1 rounded-lg transition-all ${savedViewMode === 'cards' ? 'bg-purple-700 text-white font-bold' : 'text-slate-400 hover:text-white'
+                            }`}
                           title="Visualização em Cards"
                         >
                           Cards
@@ -2527,10 +2465,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                                         </div>
                                         <div>
                                           {lead.website ? (
-                                            <a 
-                                              href={lead.website} 
-                                              target="_blank" 
-                                              rel="noopener noreferrer" 
+                                            <a
+                                              href={lead.website}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
                                               className="text-[11px] text-cyan-400 hover:underline flex items-center gap-1 truncate max-w-[180px]"
                                               title={lead.website}
                                             >
@@ -2620,7 +2558,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                       {savedLeads
                         .slice((savedCurrentPage - 1) * savedPerPage, savedCurrentPage * savedPerPage)
                         .map(lead => (
-                          <div 
+                          <div
                             key={lead.id}
                             className="bg-[#0f0b18] border border-yellow-500/20 rounded-2xl p-5 flex flex-col justify-between hover:border-yellow-500/40 transition-all shadow-md"
                           >
@@ -2686,23 +2624,23 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                                     WhatsApp
                                   </a>
                                 )}
-                                 <button
-                                   onClick={() => handleCreateProjectFromLead(lead)}
-                                   className="px-3.5 py-1.5 bg-indigo-600/30 hover:bg-indigo-600 border border-indigo-500/40 text-xs font-bold text-indigo-200 hover:text-white rounded-xl transition-all cursor-pointer shadow-sm flex items-center gap-1"
-                                 >
-                                   <Layout className="w-3.5 h-3.5" />
-                                   Gerar Site
-                                 </button>
-                                 {lead.website && (
-                                   <button
-                                     onClick={() => handleStartRemasterFlow(lead)}
-                                     className="px-3.5 py-1.5 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-xs font-bold text-white rounded-xl transition-all cursor-pointer shadow-md shadow-purple-600/20 flex items-center gap-1"
-                                     title="Analisar site original e remasterizar com IA"
-                                   >
-                                     <Sparkles className="w-3.5 h-3.5" />
-                                     Melhorar com IA
-                                   </button>
-                                 )}
+                                <button
+                                  onClick={() => handleCreateProjectFromLead(lead)}
+                                  className="px-3.5 py-1.5 bg-indigo-600/30 hover:bg-indigo-600 border border-indigo-500/40 text-xs font-bold text-indigo-200 hover:text-white rounded-xl transition-all cursor-pointer shadow-sm flex items-center gap-1"
+                                >
+                                  <Layout className="w-3.5 h-3.5" />
+                                  Gerar Site
+                                </button>
+                                {lead.website && (
+                                  <button
+                                    onClick={() => handleStartRemasterFlow(lead)}
+                                    className="px-3.5 py-1.5 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-xs font-bold text-white rounded-xl transition-all cursor-pointer shadow-md shadow-purple-600/20 flex items-center gap-1"
+                                    title="Analisar site original e remasterizar com IA"
+                                  >
+                                    <Sparkles className="w-3.5 h-3.5" />
+                                    Melhorar com IA
+                                  </button>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -2726,11 +2664,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                           <button
                             key={page}
                             onClick={() => setSavedCurrentPage(page)}
-                            className={`w-8 h-8 rounded-xl text-xs font-bold transition-all ${
-                              savedCurrentPage === page
+                            className={`w-8 h-8 rounded-xl text-xs font-bold transition-all ${savedCurrentPage === page
                                 ? 'bg-purple-700 text-white shadow-[0_0_10px_rgba(168,85,247,0.4)]'
                                 : 'bg-[#0f0b18] border border-slate-850 text-slate-400 hover:text-white'
-                            }`}
+                              }`}
                           >
                             {page}
                           </button>
@@ -2791,7 +2728,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {filterPresets.map(preset => (
-                  <div 
+                  <div
                     key={preset.id}
                     className="bg-[#0f0b18] border border-slate-850 hover:border-cyan-500/30 rounded-2xl p-5 flex flex-col justify-between transition-all shadow-md"
                   >
@@ -2878,7 +2815,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                   </h2>
                   <p className="text-xs text-slate-400">Encontre empresas locais sem site para oferecer seus serviços.</p>
                 </div>
-                
+
                 {/* Botões rápidos de atalho */}
                 <div className="flex items-center gap-2 flex-wrap">
                   <button
@@ -2903,7 +2840,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
                   <div className="md:col-span-4 relative">
                     <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-slate-500" />
-                    <input 
+                    <input
                       type="text"
                       required
                       placeholder="Nicho: Padaria, Dentista, Supermercado..."
@@ -2914,7 +2851,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                   </div>
                   <div className="md:col-span-3 relative">
                     <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-slate-500" />
-                    <input 
+                    <input
                       type="text"
                       required
                       placeholder="Cidade (ex: Formosa, Brasília)"
@@ -2924,7 +2861,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                     />
                   </div>
                   <div className="md:col-span-2 relative">
-                    <input 
+                    <input
                       type="text"
                       placeholder="Estado (ex: GO, DF, SP)"
                       value={leadState}
@@ -2933,7 +2870,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                     />
                   </div>
                   <div className="md:col-span-1 relative">
-                    <input 
+                    <input
                       type="text"
                       placeholder="País"
                       value={leadCountry}
@@ -2956,7 +2893,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                 <div className="pt-2.5 border-t border-slate-900 flex flex-wrap items-center justify-between gap-4 text-xs text-slate-400">
                   <div className="flex flex-wrap items-center gap-4">
                     <label className="flex items-center gap-2 cursor-pointer select-none hover:text-white transition-colors">
-                      <input 
+                      <input
                         type="checkbox"
                         checked={onlyWithoutWebsite}
                         onChange={(e) => setOnlyWithoutWebsite(e.target.checked)}
@@ -2966,7 +2903,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                     </label>
 
                     <label className="flex items-center gap-2 cursor-pointer select-none hover:text-white transition-colors">
-                      <input 
+                      <input
                         type="checkbox"
                         checked={hasPhoneOnly}
                         onChange={(e) => setHasPhoneOnly(e.target.checked)}
@@ -2978,11 +2915,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                     <button
                       type="button"
                       onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
-                      className={`px-2.5 py-1 rounded-lg border text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
-                        showAdvancedFilters || minRating !== '0' || minReviews !== '0'
+                      className={`px-2.5 py-1 rounded-lg border text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${showAdvancedFilters || minRating !== '0' || minReviews !== '0'
                           ? 'bg-purple-950/40 border-purple-500/50 text-purple-300'
                           : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
-                      }`}
+                        }`}
                     >
                       <SlidersHorizontal className="w-3.5 h-3.5" />
                       <span>Filtros Avançados</span>
@@ -3139,9 +3075,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                               <button
                                 type="button"
                                 onClick={() => setViewMode('table')}
-                                className={`px-2.5 py-1 rounded-lg transition-all ${
-                                  viewMode === 'table' ? 'bg-purple-700 text-white font-bold' : 'text-slate-400 hover:text-white'
-                                }`}
+                                className={`px-2.5 py-1 rounded-lg transition-all ${viewMode === 'table' ? 'bg-purple-700 text-white font-bold' : 'text-slate-400 hover:text-white'
+                                  }`}
                                 title="Visualização em Lista Compacta"
                               >
                                 Lista
@@ -3149,9 +3084,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                               <button
                                 type="button"
                                 onClick={() => setViewMode('cards')}
-                                className={`px-2.5 py-1 rounded-lg transition-all ${
-                                  viewMode === 'cards' ? 'bg-purple-700 text-white font-bold' : 'text-slate-400 hover:text-white'
-                                }`}
+                                className={`px-2.5 py-1 rounded-lg transition-all ${viewMode === 'cards' ? 'bg-purple-700 text-white font-bold' : 'text-slate-400 hover:text-white'
+                                  }`}
                                 title="Visualização em Cards"
                               >
                                 Cards
@@ -3176,346 +3110,341 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                                 </thead>
                                 <tbody className="divide-y divide-slate-850/60 text-xs">
                                   {paginatedLeads.map(lead => {
-                                const isSaved = savedLeads.some(l => l.id === lead.id || l.name === lead.name);
-                                const mapsSearchUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${lead.name} ${lead.address || lead.city || ''}`)}`;
+                                    const isSaved = savedLeads.some(l => l.id === lead.id || l.name === lead.name);
+                                    const mapsSearchUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${lead.name} ${lead.address || lead.city || ''}`)}`;
 
-                                return (
-                                  <tr 
-                                    key={lead.id} 
-                                    className={`hover:bg-slate-900/40 transition-colors group ${
-                                      isSaved ? 'bg-yellow-500/5' : ''
-                                    }`}
-                                  >
-                                    <td className="py-3.5 px-4">
-                                      <div className="font-bold text-white text-sm flex items-center gap-2">
-                                        <span className="truncate max-w-[220px]" title={lead.name}>{lead.name}</span>
-                                        {isSaved && (
-                                          <BookmarkCheck className="w-3.5 h-3.5 text-yellow-400 fill-yellow-400 shrink-0" />
-                                        )}
-                                      </div>
-                                      <div className="flex items-center gap-2 mt-0.5">
-                                        <span className="text-[10px] text-purple-400 font-mono">{lead.category}</span>
-                                        <span className="text-[10px] text-slate-500">• {lead.source}</span>
-                                      </div>
-                                    </td>
+                                    return (
+                                      <tr
+                                        key={lead.id}
+                                        className={`hover:bg-slate-900/40 transition-colors group ${isSaved ? 'bg-yellow-500/5' : ''
+                                          }`}
+                                      >
+                                        <td className="py-3.5 px-4">
+                                          <div className="font-bold text-white text-sm flex items-center gap-2">
+                                            <span className="truncate max-w-[220px]" title={lead.name}>{lead.name}</span>
+                                            {isSaved && (
+                                              <BookmarkCheck className="w-3.5 h-3.5 text-yellow-400 fill-yellow-400 shrink-0" />
+                                            )}
+                                          </div>
+                                          <div className="flex items-center gap-2 mt-0.5">
+                                            <span className="text-[10px] text-purple-400 font-mono">{lead.category}</span>
+                                            <span className="text-[10px] text-slate-500">• {lead.source}</span>
+                                          </div>
+                                        </td>
 
-                                    <td className="py-3.5 px-4 text-slate-300 max-w-[260px]">
-                                      <div className="flex items-start gap-1.5">
-                                        <MapPin className="w-3.5 h-3.5 text-pink-400 shrink-0 mt-0.5" />
-                                        <span className="line-clamp-2 text-xs text-slate-300" title={lead.address}>
-                                          {lead.address || `${lead.city || ''} - ${lead.state || ''}`}
-                                        </span>
-                                      </div>
-                                    </td>
-
-                                    <td className="py-3.5 px-4">
-                                      <div className="space-y-1">
-                                        <div className="flex items-center gap-1.5 text-slate-300 font-mono text-xs">
-                                          <Phone className="w-3 h-3 text-indigo-400 shrink-0" />
-                                          <span>{lead.phone}</span>
-                                        </div>
-                                        <div>
-                                          {lead.website ? (
-                                            <a 
-                                              href={lead.website} 
-                                              target="_blank" 
-                                              rel="noopener noreferrer" 
-                                              className="text-[11px] text-cyan-400 hover:underline flex items-center gap-1 truncate max-w-[180px]"
-                                              title={lead.website}
-                                            >
-                                              <Globe className="w-3 h-3 shrink-0" />
-                                              <span className="truncate">{lead.website.replace(/^https?:\/\//, '')}</span>
-                                            </a>
-                                          ) : (
-                                            <span className="text-[10px] font-bold text-red-400 bg-red-950/40 border border-red-500/20 px-1.5 py-0.5 rounded">
-                                              Sem Website
+                                        <td className="py-3.5 px-4 text-slate-300 max-w-[260px]">
+                                          <div className="flex items-start gap-1.5">
+                                            <MapPin className="w-3.5 h-3.5 text-pink-400 shrink-0 mt-0.5" />
+                                            <span className="line-clamp-2 text-xs text-slate-300" title={lead.address}>
+                                              {lead.address || `${lead.city || ''} - ${lead.state || ''}`}
                                             </span>
-                                          )}
-                                        </div>
-                                      </div>
-                                    </td>
+                                          </div>
+                                        </td>
 
-                                    <td className="py-3.5 px-4 text-center">
-                                      <div className="flex flex-col items-center gap-0.5">
-                                        <span className="inline-flex items-center gap-1 bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 px-2 py-0.5 rounded-lg text-xs font-bold">
-                                          <Star className="w-3 h-3 fill-yellow-400" />
-                                          {lead.rating}
-                                        </span>
-                                        {lead.totalReviews !== undefined && (
-                                          <span className="text-[10px] text-slate-500 font-mono">
-                                            ({lead.totalReviews} avaliações)
-                                          </span>
+                                        <td className="py-3.5 px-4">
+                                          <div className="space-y-1">
+                                            <div className="flex items-center gap-1.5 text-slate-300 font-mono text-xs">
+                                              <Phone className="w-3 h-3 text-indigo-400 shrink-0" />
+                                              <span>{lead.phone}</span>
+                                            </div>
+                                            <div>
+                                              {lead.website ? (
+                                                <a
+                                                  href={lead.website}
+                                                  target="_blank"
+                                                  rel="noopener noreferrer"
+                                                  className="text-[11px] text-cyan-400 hover:underline flex items-center gap-1 truncate max-w-[180px]"
+                                                  title={lead.website}
+                                                >
+                                                  <Globe className="w-3 h-3 shrink-0" />
+                                                  <span className="truncate">{lead.website.replace(/^https?:\/\//, '')}</span>
+                                                </a>
+                                              ) : (
+                                                <span className="text-[10px] font-bold text-red-400 bg-red-950/40 border border-red-500/20 px-1.5 py-0.5 rounded">
+                                                  Sem Website
+                                                </span>
+                                              )}
+                                            </div>
+                                          </div>
+                                        </td>
+
+                                        <td className="py-3.5 px-4 text-center">
+                                          <div className="flex flex-col items-center gap-0.5">
+                                            <span className="inline-flex items-center gap-1 bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 px-2 py-0.5 rounded-lg text-xs font-bold">
+                                              <Star className="w-3 h-3 fill-yellow-400" />
+                                              {lead.rating}
+                                            </span>
+                                            {lead.totalReviews !== undefined && (
+                                              <span className="text-[10px] text-slate-500 font-mono">
+                                                ({lead.totalReviews} avaliações)
+                                              </span>
+                                            )}
+                                          </div>
+                                        </td>
+
+                                        <td className="py-3.5 px-4 text-right">
+                                          <div className="flex items-center justify-end gap-1.5">
+                                            {/* Botão Ver no Maps */}
+                                            <a
+                                              href={mapsSearchUrl}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="p-2 bg-slate-900 hover:bg-pink-950/40 border border-slate-800 hover:border-pink-500/40 text-pink-400 rounded-xl transition-all shadow-sm"
+                                              title="Ver localização no Google Maps"
+                                            >
+                                              <MapPin className="w-4 h-4" />
+                                            </a>
+
+                                            {/* WhatsApp */}
+                                            {lead.whatsappUrl && (
+                                              <a
+                                                href={lead.whatsappUrl}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="p-2 bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-500/40 text-emerald-400 rounded-xl transition-all shadow-sm"
+                                                title={`Conversar com ${lead.name} no WhatsApp`}
+                                              >
+                                                <Phone className="w-4 h-4" />
+                                              </a>
+                                            )}
+
+                                            {/* Salvar Lead */}
+                                            <button
+                                              onClick={() => handleToggleSaveLead(lead)}
+                                              className={`p-2 rounded-xl border transition-all cursor-pointer shadow-sm ${isSaved
+                                                  ? 'bg-yellow-500/20 border-yellow-500/40 text-yellow-300'
+                                                  : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-yellow-400 hover:border-yellow-500/30'
+                                                }`}
+                                              title={isSaved ? 'Lead salvo nos favoritos (clique para remover)' : 'Salvar lead nos favoritos'}
+                                            >
+                                              {isSaved ? <BookmarkCheck className="w-4 h-4 fill-yellow-400" /> : <Bookmark className="w-4 h-4" />}
+                                            </button>
+
+                                            {/* Botão: Gerar Site Normal */}
+                                            <button
+                                              onClick={() => handleCreateProjectFromLead(lead)}
+                                              className="p-2 bg-indigo-600/20 hover:bg-indigo-600 border border-indigo-500/40 text-indigo-300 hover:text-white rounded-xl transition-all shadow-sm cursor-pointer"
+                                              title="Gerar Site Completo para este Estabelecimento"
+                                            >
+                                              <Layout className="w-4 h-4" />
+                                            </button>
+
+                                            {/* Botão: Melhorar com IA (Apenas se o cliente tiver website) */}
+                                            {lead.website && (
+                                              <button
+                                                onClick={() => handleStartRemasterFlow(lead)}
+                                                className="p-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white rounded-xl transition-all shadow-md hover:shadow-purple-500/30 cursor-pointer"
+                                                title={`Melhorar com IA: Analisar páginas de ${lead.website} e reconstruir com prompts customizados`}
+                                              >
+                                                <Sparkles className="w-4 h-4" />
+                                              </button>
+                                            )}
+                                          </div>
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {paginatedLeads.map(lead => {
+                              const isSaved = savedLeads.some(l => l.id === lead.id || l.name === lead.name);
+                              const mapsSearchUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${lead.name} ${lead.address || lead.city || ''}`)}`;
+
+                              return (
+                                <div
+                                  key={lead.id}
+                                  className={`bg-[#0f0b18] border rounded-2xl p-5 flex flex-col justify-between transition-all shadow-md ${isSaved ? 'border-yellow-500/40 shadow-[0_0_15px_rgba(234,179,8,0.1)]' : 'border-slate-850 hover:border-purple-500/30'
+                                    }`}
+                                >
+                                  <div className="space-y-2">
+                                    <div className="flex items-start justify-between gap-3">
+                                      <div>
+                                        <h3 className="font-bold text-white text-base leading-tight">{lead.name}</h3>
+                                        {lead.category && (
+                                          <span className="text-[10px] text-purple-400 font-mono">{lead.category}</span>
                                         )}
                                       </div>
-                                    </td>
-
-                                    <td className="py-3.5 px-4 text-right">
-                                      <div className="flex items-center justify-end gap-1.5">
-                                        {/* Botão Ver no Maps */}
-                                        <a
-                                          href={mapsSearchUrl}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className="p-2 bg-slate-900 hover:bg-pink-950/40 border border-slate-800 hover:border-pink-500/40 text-pink-400 rounded-xl transition-all shadow-sm"
-                                          title="Ver localização no Google Maps"
-                                        >
-                                          <MapPin className="w-4 h-4" />
-                                        </a>
-
-                                        {/* WhatsApp */}
-                                        {lead.whatsappUrl && (
-                                          <a
-                                            href={lead.whatsappUrl}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="p-2 bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-500/40 text-emerald-400 rounded-xl transition-all shadow-sm"
-                                            title={`Conversar com ${lead.name} no WhatsApp`}
-                                          >
-                                            <Phone className="w-4 h-4" />
-                                          </a>
-                                        )}
-
-                                        {/* Salvar Lead */}
+                                      <div className="flex items-center gap-2 shrink-0">
                                         <button
                                           onClick={() => handleToggleSaveLead(lead)}
-                                          className={`p-2 rounded-xl border transition-all cursor-pointer shadow-sm ${
-                                            isSaved 
-                                              ? 'bg-yellow-500/20 border-yellow-500/40 text-yellow-300' 
-                                              : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-yellow-400 hover:border-yellow-500/30'
-                                          }`}
-                                          title={isSaved ? 'Lead salvo nos favoritos (clique para remover)' : 'Salvar lead nos favoritos'}
+                                          className={`p-1.5 rounded-lg border transition-all cursor-pointer ${isSaved
+                                              ? 'bg-yellow-500/20 border-yellow-500/40 text-yellow-300'
+                                              : 'bg-slate-900 border-slate-800 text-slate-500 hover:text-yellow-400'
+                                            }`}
+                                          title={isSaved ? 'Salvo nos favoritos' : 'Salvar lead para depois'}
                                         >
                                           {isSaved ? <BookmarkCheck className="w-4 h-4 fill-yellow-400" /> : <Bookmark className="w-4 h-4" />}
                                         </button>
-
-                                        {/* Botão: Gerar Site Normal */}
-                                        <button
-                                          onClick={() => handleCreateProjectFromLead(lead)}
-                                          className="p-2 bg-indigo-600/20 hover:bg-indigo-600 border border-indigo-500/40 text-indigo-300 hover:text-white rounded-xl transition-all shadow-sm cursor-pointer"
-                                          title="Gerar Site Completo para este Estabelecimento"
-                                        >
-                                          <Layout className="w-4 h-4" />
-                                        </button>
-
-                                        {/* Botão: Melhorar com IA (Apenas se o cliente tiver website) */}
-                                        {lead.website && (
-                                           <button
-                                             onClick={() => handleStartRemasterFlow(lead)}
-                                             className="p-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white rounded-xl transition-all shadow-md hover:shadow-purple-500/30 cursor-pointer"
-                                             title={`Melhorar com IA: Analisar páginas de ${lead.website} e reconstruir com prompts customizados`}
-                                           >
-                                             <Sparkles className="w-4 h-4" />
-                                           </button>
-                                         )}
+                                        <div className="flex items-center gap-1 bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 px-1.5 py-0.5 rounded text-[10px]">
+                                          <Star className="w-3 h-3 fill-yellow-400" />
+                                          {lead.rating}
+                                        </div>
                                       </div>
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {paginatedLeads.map(lead => {
-                        const isSaved = savedLeads.some(l => l.id === lead.id || l.name === lead.name);
-                        const mapsSearchUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${lead.name} ${lead.address || lead.city || ''}`)}`;
+                                    </div>
 
-                        return (
-                          <div 
-                            key={lead.id}
-                            className={`bg-[#0f0b18] border rounded-2xl p-5 flex flex-col justify-between transition-all shadow-md ${
-                              isSaved ? 'border-yellow-500/40 shadow-[0_0_15px_rgba(234,179,8,0.1)]' : 'border-slate-850 hover:border-purple-500/30'
-                            }`}
-                          >
-                            <div className="space-y-2">
-                              <div className="flex items-start justify-between gap-3">
-                                <div>
-                                  <h3 className="font-bold text-white text-base leading-tight">{lead.name}</h3>
-                                  {lead.category && (
-                                    <span className="text-[10px] text-purple-400 font-mono">{lead.category}</span>
-                                  )}
-                                </div>
-                                <div className="flex items-center gap-2 shrink-0">
-                                  <button
-                                    onClick={() => handleToggleSaveLead(lead)}
-                                    className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
-                                      isSaved 
-                                        ? 'bg-yellow-500/20 border-yellow-500/40 text-yellow-300' 
-                                        : 'bg-slate-900 border-slate-800 text-slate-500 hover:text-yellow-400'
-                                    }`}
-                                    title={isSaved ? 'Salvo nos favoritos' : 'Salvar lead para depois'}
-                                  >
-                                    {isSaved ? <BookmarkCheck className="w-4 h-4 fill-yellow-400" /> : <Bookmark className="w-4 h-4" />}
-                                  </button>
-                                  <div className="flex items-center gap-1 bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 px-1.5 py-0.5 rounded text-[10px]">
-                                    <Star className="w-3 h-3 fill-yellow-400" />
-                                    {lead.rating}
+                                    <p className="text-xs text-slate-400 flex items-center gap-1.5">
+                                      <MapPin className="w-3.5 h-3.5 text-pink-400 shrink-0" />
+                                      <span className="line-clamp-1">{lead.address}</span>
+                                    </p>
+
+                                    <p className="text-xs text-slate-400 flex items-center gap-1.5">
+                                      <Phone className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                                      <span>{lead.phone}</span>
+                                    </p>
+
+                                    {lead.openingHours && (
+                                      <p className="text-[11px] text-emerald-400/90 flex items-center gap-1.5 font-sans">
+                                        <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
+                                        <span>{lead.openingHours}</span>
+                                      </p>
+                                    )}
+
+                                    <p className="text-xs flex items-center gap-1.5">
+                                      <Globe className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                                      {lead.website ? (
+                                        <a href={lead.website} target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline line-clamp-1">
+                                          {lead.website}
+                                        </a>
+                                      ) : (
+                                        <span className="text-red-400 font-semibold uppercase tracking-wider text-[10px] bg-red-950/30 border border-red-500/25 px-1.5 py-0.5 rounded shadow-[0_0_8px_rgba(239,68,68,0.1)]">Sem Website (Oportunidade!)</span>
+                                      )}
+                                    </p>
+                                  </div>
+
+                                  <div className="mt-4 pt-4 border-t border-slate-850/80 flex items-center justify-between gap-2 flex-wrap">
+                                    <span className="text-[10px] text-slate-500 font-mono">
+                                      {lead.source || 'Crawler Autônomo'}
+                                    </span>
+                                    <div className="flex items-center gap-1.5">
+                                      <a
+                                        href={mapsSearchUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="p-2 bg-slate-900 hover:bg-pink-950/40 border border-slate-800 hover:border-pink-500/40 text-pink-400 rounded-xl transition-all shadow-sm"
+                                        title="Ver localização no Google Maps"
+                                      >
+                                        <MapPin className="w-4 h-4" />
+                                      </a>
+                                      {lead.whatsappUrl && (
+                                        <a
+                                          href={lead.whatsappUrl}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="p-2 bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-500/40 text-emerald-400 rounded-xl transition-all shadow-sm"
+                                          title={`Conversar com ${lead.name} no WhatsApp`}
+                                        >
+                                          <Phone className="w-4 h-4" />
+                                        </a>
+                                      )}
+
+                                      {/* Botão: Gerar Site Normal */}
+                                      <button
+                                        onClick={() => handleCreateProjectFromLead(lead)}
+                                        className="p-2 bg-indigo-600/20 hover:bg-indigo-600 border border-indigo-500/40 text-indigo-300 hover:text-white rounded-xl transition-all shadow-sm cursor-pointer"
+                                        title="Gerar Site Completo para este Estabelecimento"
+                                      >
+                                        <Layout className="w-4 h-4" />
+                                      </button>
+
+                                      {/* Botão: Melhorar com IA (Apenas se o cliente tiver website) */}
+                                      {lead.website && (
+                                        <button
+                                          onClick={() => handleStartRemasterFlow(lead)}
+                                          className="p-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white rounded-xl transition-all shadow-md hover:shadow-purple-500/30 cursor-pointer"
+                                          title={`Melhorar com IA: Analisar páginas de ${lead.website} e reconstruir com prompts customizados`}
+                                        >
+                                          <Sparkles className="w-4 h-4" />
+                                        </button>
+                                      )}
+                                    </div>
                                   </div>
                                 </div>
-                              </div>
-
-                              <p className="text-xs text-slate-400 flex items-center gap-1.5">
-                                <MapPin className="w-3.5 h-3.5 text-pink-400 shrink-0" />
-                                <span className="line-clamp-1">{lead.address}</span>
-                              </p>
-
-                              <p className="text-xs text-slate-400 flex items-center gap-1.5">
-                                <Phone className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-                                <span>{lead.phone}</span>
-                              </p>
-
-                              {lead.openingHours && (
-                                <p className="text-[11px] text-emerald-400/90 flex items-center gap-1.5 font-sans">
-                                  <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
-                                  <span>{lead.openingHours}</span>
-                                </p>
-                              )}
-
-                              <p className="text-xs flex items-center gap-1.5">
-                                <Globe className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-                                {lead.website ? (
-                                  <a href={lead.website} target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline line-clamp-1">
-                                    {lead.website}
-                                  </a>
-                                ) : (
-                                  <span className="text-red-400 font-semibold uppercase tracking-wider text-[10px] bg-red-950/30 border border-red-500/25 px-1.5 py-0.5 rounded shadow-[0_0_8px_rgba(239,68,68,0.1)]">Sem Website (Oportunidade!)</span>
-                                )}
-                              </p>
-                            </div>
-
-                            <div className="mt-4 pt-4 border-t border-slate-850/80 flex items-center justify-between gap-2 flex-wrap">
-                              <span className="text-[10px] text-slate-500 font-mono">
-                                {lead.source || 'Crawler Autônomo'}
-                              </span>
-                              <div className="flex items-center gap-1.5">
-                                <a
-                                  href={mapsSearchUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="p-2 bg-slate-900 hover:bg-pink-950/40 border border-slate-800 hover:border-pink-500/40 text-pink-400 rounded-xl transition-all shadow-sm"
-                                  title="Ver localização no Google Maps"
-                                >
-                                  <MapPin className="w-4 h-4" />
-                                </a>
-                                {lead.whatsappUrl && (
-                                  <a
-                                    href={lead.whatsappUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="p-2 bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-500/40 text-emerald-400 rounded-xl transition-all shadow-sm"
-                                    title={`Conversar com ${lead.name} no WhatsApp`}
-                                  >
-                                    <Phone className="w-4 h-4" />
-                                  </a>
-                                )}
-                                
-                                {/* Botão: Gerar Site Normal */}
-                                <button
-                                  onClick={() => handleCreateProjectFromLead(lead)}
-                                  className="p-2 bg-indigo-600/20 hover:bg-indigo-600 border border-indigo-500/40 text-indigo-300 hover:text-white rounded-xl transition-all shadow-sm cursor-pointer"
-                                  title="Gerar Site Completo para este Estabelecimento"
-                                >
-                                  <Layout className="w-4 h-4" />
-                                </button>
-
-                                {/* Botão: Melhorar com IA (Apenas se o cliente tiver website) */}
-                                {lead.website && (
-                                   <button
-                                     onClick={() => handleStartRemasterFlow(lead)}
-                                     className="p-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white rounded-xl transition-all shadow-md hover:shadow-purple-500/30 cursor-pointer"
-                                     title={`Melhorar com IA: Analisar páginas de ${lead.website} e reconstruir com prompts customizados`}
-                                   >
-                                     <Sparkles className="w-4 h-4" />
-                                   </button>
-                                 )}
-                              </div>
-                            </div>
+                              );
+                            })}
                           </div>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  {/* Controles de Navegação e Busca de Novas Páginas do Google Maps */}
-                  <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-6 border-t border-slate-850">
-                    {/* Paginação Local dos Leads Atuais */}
-                    {Math.ceil(totalItems / leadsPerPage) > 1 && (
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
-                          disabled={currentPage === 1}
-                          className="px-3 py-1.5 bg-[#0f0b18] border border-slate-800 hover:border-purple-500/40 text-xs font-semibold text-slate-300 hover:text-white rounded-xl disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-                        >
-                          Anterior
-                        </button>
-
-                        <div className="flex items-center gap-1">
-                          {Array.from({ length: Math.ceil(totalItems / leadsPerPage) }, (_, i) => i + 1).map(page => (
-                            <button
-                              key={page}
-                              onClick={() => setCurrentPage(page)}
-                              className={`w-7 h-7 rounded-lg text-xs font-bold transition-all ${
-                                currentPage === page
-                                  ? 'bg-purple-700 text-white shadow-[0_0_10px_rgba(168,85,247,0.4)]'
-                                  : 'bg-[#0f0b18] border border-slate-850 text-slate-400 hover:text-white'
-                              }`}
-                            >
-                              {page}
-                            </button>
-                          ))}
-                        </div>
-
-                        <button
-                          onClick={() => setCurrentPage(p => Math.min(p + 1, Math.ceil(totalItems / leadsPerPage)))}
-                          disabled={currentPage === Math.ceil(totalItems / leadsPerPage)}
-                          className="px-3 py-1.5 bg-[#0f0b18] border border-slate-800 hover:border-purple-500/40 text-xs font-semibold text-slate-300 hover:text-white rounded-xl disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-                        >
-                          Próxima
-                        </button>
-                      </div>
-                    )}
-
-                    {/* Paginação Contínua/Infinita do Motor Google Maps */}
-                    <div className="flex items-center gap-3 ml-auto">
-                      <div className="text-xs text-slate-400 font-medium">
-                        Lote Google Maps: <strong className="text-purple-400 font-mono">Página {crawlerPage}</strong>
-                      </div>
-
-                      {crawlerPage > 1 && (
-                        <button
-                          onClick={() => handleSearchLeads(undefined, crawlerPage - 1)}
-                          disabled={loadingLeads}
-                          className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-purple-500/40 text-slate-200 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                        >
-                          ← Página Anterior do Maps
-                        </button>
-                      )}
-
-                      <button
-                        onClick={() => handleSearchLeads(undefined, crawlerPage + 1)}
-                        disabled={loadingLeads || !hasMoreCrawlerLeads}
-                        className="px-4 py-2 bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-600 hover:to-indigo-600 text-white text-xs font-bold rounded-xl shadow-lg shadow-purple-600/20 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                        title="Busca o próximo lote de clientes diretamente no Google Maps"
-                      >
-                        {loadingLeads ? (
-                          <>
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            Raspando Lote {crawlerPage + 1}...
-                          </>
-                        ) : (
-                          <>
-                            <span>Próxima Página do Maps ({crawlerPage + 1})</span>
-                            <ChevronRight className="w-4 h-4" />
-                          </>
                         )}
-                      </button>
-                    </div>
-                  </div>
-                </>
-              );
-            })()}
+
+                        {/* Controles de Navegação e Busca de Novas Páginas do Google Maps */}
+                        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-6 border-t border-slate-850">
+                          {/* Paginação Local dos Leads Atuais */}
+                          {Math.ceil(totalItems / leadsPerPage) > 1 && (
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
+                                disabled={currentPage === 1}
+                                className="px-3 py-1.5 bg-[#0f0b18] border border-slate-800 hover:border-purple-500/40 text-xs font-semibold text-slate-300 hover:text-white rounded-xl disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                              >
+                                Anterior
+                              </button>
+
+                              <div className="flex items-center gap-1">
+                                {Array.from({ length: Math.ceil(totalItems / leadsPerPage) }, (_, i) => i + 1).map(page => (
+                                  <button
+                                    key={page}
+                                    onClick={() => setCurrentPage(page)}
+                                    className={`w-7 h-7 rounded-lg text-xs font-bold transition-all ${currentPage === page
+                                        ? 'bg-purple-700 text-white shadow-[0_0_10px_rgba(168,85,247,0.4)]'
+                                        : 'bg-[#0f0b18] border border-slate-850 text-slate-400 hover:text-white'
+                                      }`}
+                                  >
+                                    {page}
+                                  </button>
+                                ))}
+                              </div>
+
+                              <button
+                                onClick={() => setCurrentPage(p => Math.min(p + 1, Math.ceil(totalItems / leadsPerPage)))}
+                                disabled={currentPage === Math.ceil(totalItems / leadsPerPage)}
+                                className="px-3 py-1.5 bg-[#0f0b18] border border-slate-800 hover:border-purple-500/40 text-xs font-semibold text-slate-300 hover:text-white rounded-xl disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                              >
+                                Próxima
+                              </button>
+                            </div>
+                          )}
+
+                          {/* Paginação Contínua/Infinita do Motor Google Maps */}
+                          <div className="flex items-center gap-3 ml-auto">
+                            <div className="text-xs text-slate-400 font-medium">
+                              Lote Google Maps: <strong className="text-purple-400 font-mono">Página {crawlerPage}</strong>
+                            </div>
+
+                            {crawlerPage > 1 && (
+                              <button
+                                onClick={() => handleSearchLeads(undefined, crawlerPage - 1)}
+                                disabled={loadingLeads}
+                                className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-purple-500/40 text-slate-200 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                              >
+                                ← Página Anterior do Maps
+                              </button>
+                            )}
+
+                            <button
+                              onClick={() => handleSearchLeads(undefined, crawlerPage + 1)}
+                              disabled={loadingLeads || !hasMoreCrawlerLeads}
+                              className="px-4 py-2 bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-600 hover:to-indigo-600 text-white text-xs font-bold rounded-xl shadow-lg shadow-purple-600/20 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                              title="Busca o próximo lote de clientes diretamente no Google Maps"
+                            >
+                              {loadingLeads ? (
+                                <>
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                  Raspando Lote {crawlerPage + 1}...
+                                </>
+                              ) : (
+                                <>
+                                  <span>Próxima Página do Maps ({crawlerPage + 1})</span>
+                                  <ChevronRight className="w-4 h-4" />
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
               )}
             </div>
@@ -3543,7 +3472,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
             <form onSubmit={handleSavePreset} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Título do Filtro</label>
-                <input 
+                <input
                   type="text"
                   required
                   placeholder="Ex: Padarias Sem Site no DF"
@@ -3556,7 +3485,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div className="md:col-span-3">
                   <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Nicho / Categoria</label>
-                  <input 
+                  <input
                     type="text"
                     required
                     placeholder="Ex: Padaria, Dentista, Pizzaria"
@@ -3567,7 +3496,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                 </div>
                 <div>
                   <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Cidade</label>
-                  <input 
+                  <input
                     type="text"
                     required
                     placeholder="Ex: Formosa"
@@ -3578,7 +3507,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                 </div>
                 <div>
                   <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Estado (UF)</label>
-                  <input 
+                  <input
                     type="text"
                     placeholder="Ex: GO"
                     value={presetForm.state}
@@ -3588,7 +3517,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                 </div>
                 <div>
                   <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">País</label>
-                  <input 
+                  <input
                     type="text"
                     placeholder="Ex: Brasil"
                     value={presetForm.country}
@@ -3600,7 +3529,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
 
               <div className="space-y-2 pt-2 border-t border-slate-850">
                 <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
-                  <input 
+                  <input
                     type="checkbox"
                     checked={presetForm.onlyWithoutWebsite}
                     onChange={(e) => setPresetForm(p => ({ ...p, onlyWithoutWebsite: e.target.checked }))}
@@ -3610,7 +3539,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                 </label>
 
                 <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
-                  <input 
+                  <input
                     type="checkbox"
                     checked={presetForm.hasPhoneOnly}
                     onChange={(e) => setPresetForm(p => ({ ...p, hasPhoneOnly: e.target.checked }))}
@@ -3651,28 +3580,28 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
 
             {/* Mode selection */}
             <div className="grid grid-cols-4 gap-1.5 p-1 bg-slate-955 border border-slate-850 rounded-xl mb-6">
-              <button 
+              <button
                 type="button"
                 onClick={() => setCreationMode('scratch')}
                 className={`py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer ${creationMode === 'scratch' ? 'bg-purple-700 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}
               >
                 Do Zero
               </button>
-              <button 
+              <button
                 type="button"
                 onClick={() => setCreationMode('template')}
                 className={`py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer ${creationMode === 'template' ? 'bg-purple-700 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}
               >
                 Template
               </button>
-              <button 
+              <button
                 type="button"
                 onClick={() => setCreationMode('ai')}
                 className={`py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer ${creationMode === 'ai' ? 'bg-purple-700 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}
               >
                 IA Gemini
               </button>
-              <button 
+              <button
                 type="button"
                 onClick={() => setCreationMode('zip')}
                 className={`py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1 ${creationMode === 'zip' ? 'bg-cyan-600 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}
@@ -3689,8 +3618,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                   <div>
                     <label className="block text-xs font-semibold uppercase tracking-wider text-slate-455 mb-2">Arquivo ZIP do Site</label>
                     <div className="border-2 border-dashed border-slate-800 hover:border-cyan-500/50 rounded-2xl p-6 text-center transition-all bg-slate-950/50">
-                      <input 
-                        type="file" 
+                      <input
+                        type="file"
                         id="dashboard-zip-input"
                         accept=".zip"
                         required={!selectedZipBase64}
@@ -3732,8 +3661,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
 
                   <div>
                     <label className="block text-xs font-semibold uppercase tracking-wider text-slate-455 mb-2">Nome do Projeto</label>
-                    <input 
-                      type="text" 
+                    <input
+                      type="text"
                       required
                       placeholder="Ex: Site Exportado"
                       value={newProjectName}
@@ -3744,7 +3673,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
 
                   <div>
                     <label className="block text-xs font-semibold uppercase tracking-wider text-slate-455 mb-2">Descrição (Opcional)</label>
-                    <textarea 
+                    <textarea
                       placeholder="Ex: Site importado para edição e preview no Ngrok"
                       value={newProjectDesc}
                       onChange={(e) => setNewProjectDesc(e.target.value)}
@@ -3757,8 +3686,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                 <div className="space-y-4">
                   <div>
                     <label className="block text-xs font-semibold uppercase tracking-wider text-slate-455 mb-2">Nome do Negócio</label>
-                    <input 
-                      type="text" 
+                    <input
+                      type="text"
                       required
                       placeholder="Ex: Bella Napoli"
                       value={businessName}
@@ -3769,8 +3698,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
 
                   <div>
                     <label className="block text-xs font-semibold uppercase tracking-wider text-slate-455 mb-2">Segmento</label>
-                    <input 
-                      type="text" 
+                    <input
+                      type="text"
                       required
                       placeholder="Ex: Restaurante Italiano, Advocacia, SaaS de Marketing"
                       value={segment}
@@ -3781,8 +3710,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
 
                   <div>
                     <label className="block text-xs font-semibold uppercase tracking-wider text-slate-455 mb-2">Estilo Visual & Cores</label>
-                    <input 
-                      type="text" 
+                    <input
+                      type="text"
                       placeholder="Ex: Moderno, Minimalista, Cores Escuras e Roxo"
                       value={visualStyle}
                       onChange={(e) => setVisualStyle(e.target.value)}
@@ -3792,7 +3721,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
 
                   <div>
                     <label className="block text-xs font-semibold uppercase tracking-wider text-slate-455 mb-2">Instruções Extras</label>
-                    <textarea 
+                    <textarea
                       placeholder="Que seções deseja incluir? (Ex: Hero, Depoimentos, Cardápio)"
                       value={newProjectDesc}
                       onChange={(e) => setNewProjectDesc(e.target.value)}
@@ -3805,8 +3734,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                 <div className="space-y-4">
                   <div>
                     <label className="block text-xs font-semibold uppercase tracking-wider text-slate-455 mb-2">Nome do Projeto</label>
-                    <input 
-                      type="text" 
+                    <input
+                      type="text"
                       required
                       placeholder="Meu Novo Site"
                       value={newProjectName}
@@ -3817,7 +3746,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
 
                   <div>
                     <label className="block text-xs font-semibold uppercase tracking-wider text-slate-455 mb-2">Descrição (Opcional)</label>
-                    <textarea 
+                    <textarea
                       placeholder="Descreva brevemente o objetivo do site."
                       value={newProjectDesc}
                       onChange={(e) => setNewProjectDesc(e.target.value)}
@@ -3859,18 +3788,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
       <nav className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-[#0c0616]/95 border-t border-purple-500/20 backdrop-blur-lg flex items-center justify-around px-2 z-40 shadow-[0_-4px_20px_rgba(0,0,0,0.5)]">
         <button
           onClick={() => setActiveTab('general')}
-          className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all cursor-pointer ${
-            activeTab === 'general' ? 'text-purple-400 font-bold' : 'text-slate-500 hover:text-slate-300'
-          }`}
+          className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all cursor-pointer ${activeTab === 'general' ? 'text-purple-400 font-bold' : 'text-slate-500 hover:text-slate-300'
+            }`}
         >
           <Sparkles className="w-5 h-5" />
           <span className="text-[10px]">Geral</span>
         </button>
         <button
           onClick={() => setActiveTab('projects')}
-          className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all cursor-pointer ${
-            activeTab === 'projects' ? 'text-indigo-400 font-bold' : 'text-slate-500 hover:text-slate-300'
-          }`}
+          className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all cursor-pointer ${activeTab === 'projects' ? 'text-indigo-400 font-bold' : 'text-slate-500 hover:text-slate-300'
+            }`}
         >
           <Layout className="w-5 h-5" />
           <span className="text-[10px]">Sites</span>
@@ -3884,9 +3811,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
         </button>
         <button
           onClick={() => setActiveTab('leads')}
-          className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all cursor-pointer ${
-            activeTab === 'leads' ? 'text-pink-400 font-bold' : 'text-slate-500 hover:text-slate-300'
-          }`}
+          className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all cursor-pointer ${activeTab === 'leads' ? 'text-pink-400 font-bold' : 'text-slate-500 hover:text-slate-300'
+            }`}
         >
           <Users className="w-5 h-5" />
           <span className="text-[10px]">Clientes</span>
@@ -3904,7 +3830,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
       {showRemasterModal && (
         <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 backdrop-blur-md animate-fade-in">
           <div className="w-full max-w-4xl bg-[#0d0a17] border border-purple-500/30 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
-            
+
             {/* Modal Header */}
             <div className="p-5 bg-gradient-to-r from-purple-950/60 to-slate-900 border-b border-purple-500/20 flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -3933,7 +3859,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
 
             {/* Modal Body */}
             <div className="p-6 overflow-y-auto space-y-6 flex-1 pr-3">
-              
+
               {/* ETAPA 1: Status do Crawler / Scraping */}
               <div className="p-4 bg-slate-950/80 border border-slate-800 rounded-xl space-y-3">
                 <div className="flex items-center justify-between">
@@ -3941,13 +3867,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                     <Globe className="w-4 h-4 text-indigo-400" />
                     Etapa 1: Varredura e Download das Páginas Existentes
                   </span>
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase font-mono ${
-                    remasterScrapingStatus === 'scraping' 
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase font-mono ${remasterScrapingStatus === 'scraping'
                       ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30 animate-pulse'
                       : remasterScrapingStatus === 'completed'
-                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                      : 'bg-red-500/20 text-red-300 border border-red-500/30'
-                  }`}>
+                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                        : 'bg-red-500/20 text-red-300 border border-red-500/30'
+                    }`}>
                     {remasterScrapingStatus === 'scraping' ? 'Extraindo...' : remasterScrapingStatus === 'completed' ? 'Concluído' : 'Atenção'}
                   </span>
                 </div>
@@ -3965,7 +3890,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
               {/* ETAPA 2: Configuração de Prompts e Componentes (Disponível quando o scraping conclui) */}
               {remasterScrapingStatus === 'completed' && (
                 <div className="space-y-6 animate-in fade-in duration-300">
-                  
+
                   {/* Prompt Global do Site */}
                   <div className="p-4 bg-purple-950/20 border border-purple-500/30 rounded-xl space-y-2">
                     <label className="block text-xs font-bold text-white uppercase tracking-wider flex items-center justify-between">
@@ -4056,13 +3981,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
 
                     <div className="space-y-3">
                       {remasterPages.map((page, idx) => (
-                        <div 
+                        <div
                           key={idx}
-                          className={`p-3.5 border rounded-xl transition-all space-y-2.5 ${
-                            page.enabled 
-                              ? 'bg-slate-950 border-purple-500/30 shadow-sm' 
+                          className={`p-3.5 border rounded-xl transition-all space-y-2.5 ${page.enabled
+                              ? 'bg-slate-950 border-purple-500/30 shadow-sm'
                               : 'bg-slate-950/40 border-slate-850 opacity-60'
-                          }`}
+                            }`}
                         >
                           <div className="flex items-center justify-between gap-3">
                             <div className="flex items-center gap-2 min-w-0">
@@ -4149,12 +4073,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
             {/* Modal Footer */}
             <div className="p-4 bg-slate-950 border-t border-purple-500/20 flex items-center justify-between">
               <span className="text-xs text-slate-400 font-mono">
-                {remasterScrapingStatus === 'completed' 
+                {remasterScrapingStatus === 'completed'
                   ? `${remasterPages.filter(p => p.enabled).length} páginas prontas para geração sincronizada`
                   : 'Aguardando conclusão do crawler...'
                 }
               </span>
-              
+
               <div className="flex items-center gap-2">
                 <button
                   type="button"
@@ -4163,7 +4087,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                 >
                   Cancelar
                 </button>
-                
+
                 <button
                   type="button"
                   disabled={remasterScrapingStatus !== 'completed' || generatingRemaster}
@@ -4193,7 +4117,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
       {showManualLeadModal && (
         <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 backdrop-blur-md animate-fade-in">
           <div className="w-full max-w-lg bg-[#0d0a17] border border-yellow-500/30 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-            
+
             {/* Modal Header */}
             <div className="p-5 bg-gradient-to-r from-yellow-950/40 to-slate-900 border-b border-yellow-500/20 flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -4467,18 +4391,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
       <nav className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-[#0c0616]/95 border-t border-purple-500/20 backdrop-blur-lg flex items-center justify-around px-2 z-40 shadow-[0_-4px_20px_rgba(0,0,0,0.5)]">
         <button
           onClick={() => setActiveTab('general')}
-          className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all cursor-pointer ${
-            activeTab === 'general' ? 'text-purple-400 font-bold' : 'text-slate-500 hover:text-slate-300'
-          }`}
+          className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all cursor-pointer ${activeTab === 'general' ? 'text-purple-400 font-bold' : 'text-slate-500 hover:text-slate-300'
+            }`}
         >
           <Sparkles className="w-5 h-5" />
           <span className="text-[10px]">Geral</span>
         </button>
         <button
           onClick={() => setActiveTab('projects')}
-          className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all cursor-pointer ${
-            activeTab === 'projects' ? 'text-indigo-400 font-bold' : 'text-slate-500 hover:text-slate-300'
-          }`}
+          className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all cursor-pointer ${activeTab === 'projects' ? 'text-indigo-400 font-bold' : 'text-slate-500 hover:text-slate-300'
+            }`}
         >
           <Layout className="w-5 h-5" />
           <span className="text-[10px]">Sites</span>
@@ -4492,18 +4414,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
         </button>
         <button
           onClick={() => setActiveTab('leads')}
-          className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all cursor-pointer ${
-            activeTab === 'leads' ? 'text-pink-400 font-bold' : 'text-slate-500 hover:text-slate-300'
-          }`}
+          className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all cursor-pointer ${activeTab === 'leads' ? 'text-pink-400 font-bold' : 'text-slate-500 hover:text-slate-300'
+            }`}
         >
           <Users className="w-5 h-5" />
           <span className="text-[10px]">Clientes</span>
         </button>
         <button
           onClick={() => setActiveTab('settings')}
-          className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all cursor-pointer ${
-            activeTab === 'settings' ? 'text-purple-400 font-bold' : 'text-slate-500 hover:text-slate-300'
-          }`}
+          className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all cursor-pointer ${activeTab === 'settings' ? 'text-purple-400 font-bold' : 'text-slate-500 hover:text-slate-300'
+            }`}
         >
           <Settings className="w-5 h-5" />
           <span className="text-[10px]">Ajustes</span>

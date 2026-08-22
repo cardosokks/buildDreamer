@@ -105,9 +105,9 @@ async function processAIChatJob(
       }));
       const routesGuide = allRoutes.map(r => `- "${r.name}" -> href="${r.href}"`).join('\n');
 
-      const updatedPages = await Promise.all(
-        pagesToProcess.map(async (p) => {
-          let specificDirective = '';
+      const updatedPages = [];
+      for (const p of pagesToProcess) {
+        let specificDirective = '';
           if (isNavbarStandardization) {
             specificDirective = `
               DIRETRIZ CRÍTICA DE NAVBAR / HEADER PADRONIZADA:
@@ -164,16 +164,15 @@ async function processAIChatJob(
             }
           });
 
-          return {
+          updatedPages.push({
             id: p.id,
             name: p.name,
             slug: p.slug,
             html: aiResponse.html || p.html,
             css: aiResponse.css || p.css,
             js: aiResponse.js || p.js
-          };
-        })
-      );
+          });
+      }
 
       // Localiza o resultado correspondente à página atualmente aberta no editor
       const currentActiveUpdated = updatedPages.find(p => p.id === pageId) || updatedPages[0];
