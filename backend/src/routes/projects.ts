@@ -254,6 +254,46 @@ router.get('/:id', async (req: AuthenticatedRequest, res: any) => {
   }
 });
 
+// Update Project Info (Nome, Descrição, Status, Domínio)
+router.put('/:id', async (req: AuthenticatedRequest, res: any) => {
+  try {
+    const id = req.params.id as string;
+    const userId = req.userId as string;
+    const { name, description, status, domain, favicon } = req.body;
+
+    const membership = await prisma.projectMember.findFirst({
+      where: {
+        projectId: id,
+        userId: userId
+      }
+    });
+
+    if (!membership) {
+      return res.status(403).json({ error: 'Você não tem permissão para editar este projeto' });
+    }
+
+    const updated = await prisma.project.update({
+      where: { id },
+      data: {
+        ...(name !== undefined && { name: name.trim() }),
+        ...(description !== undefined && { description: description?.trim() || null }),
+        ...(status !== undefined && { status }),
+        ...(domain !== undefined && { domain: domain?.trim() || null }),
+        ...(favicon !== undefined && { favicon })
+      },
+      include: {
+        pages: {
+          select: { id: true, name: true, slug: true, isHomepage: true }
+        }
+      }
+    });
+
+    return res.json(updated);
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
 // Delete Project
 router.delete('/:id', async (req: AuthenticatedRequest, res: any) => {
   try {

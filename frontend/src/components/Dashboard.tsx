@@ -249,6 +249,59 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
 
   // Manual Lead Creation Modal States
   const [showManualLeadModal, setShowManualLeadModal] = useState(false);
+
+  // Project Details & Edit Modal State
+  const [showProjectModal, setShowProjectModal] = useState(false);
+  const [selectedProjectDetails, setSelectedProjectDetails] = useState<Project | null>(null);
+  const [editingProjectForm, setEditingProjectForm] = useState({
+    name: '',
+    description: '',
+    status: 'development',
+    domain: ''
+  });
+  const [savingProjectDetails, setSavingProjectDetails] = useState(false);
+
+  const openProjectDetailsModal = (proj: Project) => {
+    setSelectedProjectDetails(proj);
+    setEditingProjectForm({
+      name: proj.name || '',
+      description: proj.description || '',
+      status: proj.status || 'development',
+      domain: (proj as any).domain || ''
+    });
+    setShowProjectModal(true);
+  };
+
+  const handleSaveProjectDetails = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedProjectDetails) return;
+    setSavingProjectDetails(true);
+
+    try {
+      const res = await fetch(`${API_URL}/api/projects/${selectedProjectDetails.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(editingProjectForm)
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Falha ao atualizar projeto');
+      }
+
+      const updated = await res.json();
+      setProjects(prev => prev.map(p => p.id === updated.id ? { ...p, ...updated } : p));
+      setSelectedProjectDetails(updated);
+      setShowProjectModal(false);
+    } catch (err: any) {
+      alert(err.message || 'Erro ao salvar alterações do projeto');
+    } finally {
+      setSavingProjectDetails(false);
+    }
+  };
   const [manualLeadName, setManualLeadName] = useState('');
   const [manualLeadCategory, setManualLeadCategory] = useState('');
   const [manualLeadPhone, setManualLeadPhone] = useState('');
@@ -2006,16 +2059,27 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                             </span>
                           </div>
 
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1.5">
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openProjectDetailsModal(project);
+                              }}
+                              className="p-1.5 text-slate-400 hover:text-purple-300 rounded-lg hover:bg-purple-950/40 border border-transparent hover:border-purple-500/30 transition-all cursor-pointer flex items-center gap-1 text-[11px]"
+                              title="Ver informações e editar projeto"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                              <span className="font-semibold">Editar</span>
+                            </button>
                             <button 
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleDeleteProject(project.id, e);
                               }}
-                              className="p-1.5 hover:text-red-400 rounded-lg hover:bg-slate-850 transition-all cursor-pointer"
+                              className="p-1.5 text-slate-500 hover:text-red-400 rounded-lg hover:bg-slate-850 transition-all cursor-pointer"
                               title="Deletar projeto"
                             >
-                              <Trash2 className="w-4 h-4" />
+                              <Trash2 className="w-3.5 h-3.5" />
                             </button>
                             <ChevronRight className="w-5 h-5 text-slate-650 group-hover:translate-x-1 transition-transform group-hover:text-amber-400" />
                           </div>
@@ -3956,7 +4020,148 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
 
+      {/* Modal de Informações e Edição do Projeto */}
+      {showProjectModal && selectedProjectDetails && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-xl bg-slate-950 border border-slate-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="p-5 bg-gradient-to-r from-purple-950/40 to-slate-900 border-b border-purple-500/20 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-purple-600 text-white shadow-lg shadow-purple-600/30">
+                  <Layout className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white flex items-center gap-2">
+                    Informações do Projeto
+                  </h3>
+                  <p className="text-xs text-slate-400">Edite as configurações, nome, status e visualize metadados.</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowProjectModal(false)}
+                className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800/60 rounded-xl transition-all cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Form & Info */}
+            <form onSubmit={handleSaveProjectDetails} className="p-6 space-y-4 overflow-y-auto">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                    Nome do Projeto *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Ex: Landing Page Tech"
+                    value={editingProjectForm.name}
+                    onChange={(e) => setEditingProjectForm({ ...editingProjectForm, name: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white focus:border-purple-500 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                    Status de Publicação
+                  </label>
+                  <select
+                    value={editingProjectForm.status}
+                    onChange={(e) => setEditingProjectForm({ ...editingProjectForm, status: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white focus:border-purple-500 focus:outline-none cursor-pointer"
+                  >
+                    <option value="development">Em Desenvolvimento (Rascunho)</option>
+                    <option value="published">Publicado / Ativo</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                  Descrição do Negócio / Site
+                </label>
+                <textarea
+                  rows={3}
+                  placeholder="Breve descrição dos serviços ou objetivo do site..."
+                  value={editingProjectForm.description}
+                  onChange={(e) => setEditingProjectForm({ ...editingProjectForm, description: e.target.value })}
+                  className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white focus:border-purple-500 focus:outline-none resize-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                  Domínio Customizado (Opcional)
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ex: meusite.com.br"
+                  value={editingProjectForm.domain}
+                  onChange={(e) => setEditingProjectForm({ ...editingProjectForm, domain: e.target.value })}
+                  className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white focus:border-purple-500 focus:outline-none font-mono"
+                />
+              </div>
+
+              {/* Metadados e Informações Técnicas */}
+              <div className="p-3.5 bg-slate-900/60 border border-slate-850 rounded-2xl space-y-2 text-xs">
+                <span className="font-bold text-purple-300 text-[11px] uppercase tracking-wider block">Metadados do Projeto:</span>
+                <div className="grid grid-cols-2 gap-2 text-slate-400">
+                  <div>
+                    <span className="text-slate-500 block text-[10px]">ID do Projeto:</span>
+                    <span className="font-mono text-[11px] text-slate-300 truncate block">{selectedProjectDetails.id}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block text-[10px]">Total de Páginas:</span>
+                    <span className="font-bold text-white">{selectedProjectDetails.pages?.length || 1} página(s)</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block text-[10px]">Data de Criação:</span>
+                    <span className="text-slate-300">{new Date(selectedProjectDetails.createdAt).toLocaleDateString('pt-BR')}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block text-[10px]">Última Modificação:</span>
+                    <span className="text-slate-300">{new Date(selectedProjectDetails.updatedAt || selectedProjectDetails.createdAt).toLocaleString('pt-BR')}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="pt-4 border-t border-slate-850 flex items-center justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowProjectModal(false);
+                    onSelectProject(selectedProjectDetails.id);
+                  }}
+                  className="px-4 py-2.5 bg-purple-950/60 hover:bg-purple-900/80 border border-purple-500/40 text-purple-300 rounded-xl text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5"
+                >
+                  <ArrowUpRight className="w-4 h-4" />
+                  Abrir no Editor Visual
+                </button>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowProjectModal(false)}
+                    className="px-4 py-2.5 bg-slate-900 hover:bg-slate-850 text-slate-300 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={savingProjectDetails}
+                    className="px-5 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold rounded-xl text-xs shadow-lg shadow-purple-600/30 transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                  >
+                    {savingProjectDetails ? 'Salvando...' : 'Salvar Alterações'}
+                  </button>
+                </div>
+              </div>
+            </form>
           </div>
         </div>
       )}
