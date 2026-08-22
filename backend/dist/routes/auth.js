@@ -155,4 +155,8 @@ router.put('/settings', auth_1.authenticateToken, async (req, res) => {
         return res.status(500).json({ error: error.message });
     }
 });
+// Server Time Endpoint – retorna o horário atual do servidor para sincronização no cliente
+router.get('/time', (req, res) => {
+    return res.json({ time: new Date().toISOString(), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone });
+});
 exports.authRouter = router;

@@ -1260,6 +1260,22 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
           />
         )}
 
+        {/* ─── Toggle da Sidebar Esquerda (Páginas/DOM) ─── */}
+        <div className="relative flex items-start">
+          <button
+            onClick={() => setShowSidebar(!showSidebar)}
+            className={`absolute top-4 z-20 h-12 flex items-center justify-center transition-all cursor-pointer rounded-r-xl border-y border-r shadow-md group ${
+              showSidebar
+                ? 'left-0 w-5 bg-slate-900/90 border-slate-800 text-slate-500 hover:text-white hover:bg-slate-800'
+                : 'left-0 w-7 bg-purple-700 border-purple-600 text-white hover:bg-purple-600'
+            }`}
+            title={showSidebar ? 'Recolher painel de páginas' : 'Abrir painel de páginas'}
+          >
+            <span className="text-[10px] font-black select-none" style={{ writingMode: 'vertical-rl' }}>
+              {showSidebar ? '◀' : '▶'}
+            </span>
+          </button>
+        </div>
         {/* Central Interactive Sandbox Canvas */}
         <main 
           className="flex-1 flex justify-center items-center overflow-auto bg-[#07020d] p-3 md:p-6 min-w-0"
@@ -1324,7 +1340,24 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
         </main>
 
         {/* Right Inspector & Properties Panel */}
-        {showStylesPanel && (
+        <div className="relative flex items-start">
+          {/* Toggle da Sidebar Direita (Propriedades) */}
+          <button
+            onClick={() => setShowStylesPanel(!showStylesPanel)}
+            className={`absolute top-4 z-20 h-12 flex items-center justify-center transition-all cursor-pointer rounded-l-xl border-y border-l shadow-md ${
+              showStylesPanel
+                ? 'right-0 translate-x-0 w-5 bg-slate-900/90 border-slate-800 text-slate-500 hover:text-white hover:bg-slate-800'
+                : 'right-0 w-7 bg-indigo-700 border-indigo-600 text-white hover:bg-indigo-600'
+            }`}
+            style={{ right: showStylesPanel ? 'auto' : 0, left: showStylesPanel ? -5 : 'auto' }}
+            title={showStylesPanel ? 'Recolher painel de propriedades' : 'Abrir painel de propriedades'}
+          >
+            <span className="text-[10px] font-black select-none" style={{ writingMode: 'vertical-rl' }}>
+              {showStylesPanel ? '▶' : '◀'}
+            </span>
+          </button>
+
+          {showStylesPanel && (
           <PropertiesPanel
             selectedSelector={selectedSelector}
             selectedPath={selectedPath}
@@ -1350,7 +1383,8 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
             }}
             onPageSeoChange={handlePageSeoChange}
           />
-        )}
+          )}
+        </div>
 
         {/* AI Copilot Panel */}
         {showChat && activePage && (
