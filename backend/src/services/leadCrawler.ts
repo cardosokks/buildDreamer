@@ -144,118 +144,125 @@ export class LeadCrawlerEngine {
     maxPages?: number;
   }): Promise<CrawledLead[]> {
     const pageNum = Math.max(1, params.page || 1);
-    const pagesPerRequest = params.maxPages || 6;
-    const startOffset = (pageNum - 1) * pagesPerRequest * 20;
-
-    const baseQuery = `${params.niche} em ${params.city} ${params.state || ''}`.trim();
     
-    // Lista de variações de consultas para multiplicar os resultados do Google Maps (Centro, Bairros, Regiões)
-    const queries = [
-      baseQuery,
-      `${params.niche} no Centro de ${params.city} ${params.state || ''}`.trim(),
-      `${params.niche} em ${params.city}`.trim(),
-      `melhores ${params.niche} em ${params.city}`.trim(),
-      `lojas de ${params.niche} em ${params.city}`.trim()
+    // Matriz de setores, regiões e zonas para segmentação por página real (gerando novos clientes a cada página)
+    const SUB_ZONES_BY_PAGE: string[][] = [
+      ['Centro', 'Setor Central', 'Avenida Principal', 'Comércio'],
+      ['Setor Formosinha', 'Parque da Colina', 'Lago do Vovô', 'Norte'],
+      ['Setor Abreu', 'Setor Bela Vista', 'Setor Sul', 'Sul'],
+      ['Setor Nordeste', 'Vila Vicentina', 'Jardim Oliveira', 'Leste'],
+      ['Parque Lago', 'Setor Bosque', 'Distrito Industrial', 'Oeste'],
+      ['Vila Imperatriz', 'Setor Ferroviário', 'Jardim América', 'Entorno'],
+      ['Residencial Primavera', 'São Vicente', 'Vila Nova', 'Vila Rica'],
+      ['Jardim Planalto', 'Setor Pampulha', 'Setor Universitário', 'Perimetral'],
+      ['Setor Aeroporto', 'Vila União', 'Bairro Popular', 'Avenida Comercial'],
+      ['Vila Esperança', 'Bairro Santa Luzia', 'Residencial Vale do Sol', 'Zona Rural']
     ];
+
+    const currentZones = SUB_ZONES_BY_PAGE[(pageNum - 1) % SUB_ZONES_BY_PAGE.length] || ['Centro', 'Bairro'];
+    
+    // Lista de variações de consultas exclusivas para a página atual
+    const queries = currentZones.map(zone => 
+      `${params.niche} ${zone} ${params.city} ${params.state || ''}`.trim()
+    );
+
+    // Adiciona termo genérico de nicho se for página 1
+    if (pageNum === 1) {
+      queries.unshift(`${params.niche} em ${params.city} ${params.state || ''}`.trim());
+    } else {
+      queries.push(`melhores ${params.niche} em ${currentZones[0]} ${params.city}`.trim());
+    }
 
     const allQueriesResults = await Promise.all(
       queries.map(async (query) => {
-        const pageOffsets = Array.from({ length: pagesPerRequest }, (_, i) => startOffset + (i * 20));
+        const leads: CrawledLead[] = [];
+        try {
+          const url = `https://www.google.com/search?tbm=map&authuser=0&hl=pt-BR&gl=br&q=${encodeURIComponent(query)}&pb=!1s${encodeURIComponent(query)}!7i30!10b1!12m3!1m2!1y12000!2y12000!2m1!1i0!4m1!1i30`;
+          
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 7000);
 
-        const pagesResults = await Promise.all(
-          pageOffsets.map(async (offset, pageIdx) => {
-            const leads: CrawledLead[] = [];
-            try {
-              const url = `https://www.google.com/search?tbm=map&authuser=0&hl=pt-BR&gl=br&q=${encodeURIComponent(query)}&pb=!1s${encodeURIComponent(query)}!7i30!10b1!12m3!1m2!1y12000!2y12000!2m1!1i${offset}!4m1!1i20`;
+          const res = await fetch(url, {
+            headers: {
+              'User-Agent': getRandomUserAgent(),
+              'Accept': '*/*',
+              'Accept-Language': 'pt-BR,pt;q=0.9',
+              'Referer': 'https://www.google.com/maps/'
+            },
+            signal: controller.signal
+          });
+          clearTimeout(timeout);
+
+          if (!res.ok) return leads;
+
+          const text = await res.text();
+          const cleaned = text.replace(/^\)\]\}'/, '').trim();
+          const data = JSON.parse(cleaned);
+
+          const places = data[0][1];
+          if (places && Array.isArray(places)) {
+            places.forEach((p: any, i: number) => {
+              if (!p || !p[14]) return;
+              const info = p[14];
+              const rawName = info[11];
+              if (!rawName || typeof rawName !== 'string') return;
+
+              const name = sanitizeText(rawName);
+              const category = info[13] ? sanitizeText(info[13][0]) : params.niche;
+              const address = sanitizeText(info[39] || (info[2] ? info[2].join(', ') : `${params.city} - ${params.state || ''}`));
               
-              const controller = new AbortController();
-              const timeout = setTimeout(() => controller.abort(), 7000);
+              let phoneRaw = info[178] ? info[178][0] : (info[3] || 'Não informado');
+              let phone = this.extractPhone(phoneRaw);
 
-              const res = await fetch(url, {
-                headers: {
-                  'User-Agent': getRandomUserAgent(),
-                  'Accept': '*/*',
-                  'Accept-Language': 'pt-BR,pt;q=0.9',
-                  'Referer': 'https://www.google.com/maps/'
-                },
-                signal: controller.signal
-              });
-              clearTimeout(timeout);
+              const rating = info[4] && typeof info[4][7] === 'number' ? info[4][7].toFixed(1) : (4.5 + ((i + pageNum) % 5) * 0.1).toFixed(1);
+              const totalReviews = info[4] && typeof info[4][8] === 'number' ? info[4][8] : undefined;
 
-              if (!res.ok) return leads;
-
-              const text = await res.text();
-              const cleaned = text.replace(/^\)\]\}'/, '').trim();
-              const data = JSON.parse(cleaned);
-
-              const places = data[0][1];
-              if (places && Array.isArray(places)) {
-                places.forEach((p: any, i: number) => {
-                  if (!p || !p[14]) return;
-                  const info = p[14];
-                  const rawName = info[11];
-                  if (!rawName || typeof rawName !== 'string') return;
-
-                  const name = sanitizeText(rawName);
-                  const category = info[13] ? sanitizeText(info[13][0]) : params.niche;
-                  const address = sanitizeText(info[39] || (info[2] ? info[2].join(', ') : `${params.city} - ${params.state || ''}`));
-                  
-                  let phoneRaw = info[178] ? info[178][0] : (info[3] || 'Não informado');
-                  let phone = this.extractPhone(phoneRaw);
-
-                  const rating = info[4] && typeof info[4][7] === 'number' ? info[4][7].toFixed(1) : (4.5 + ((i + pageIdx) % 5) * 0.1).toFixed(1);
-                  const totalReviews = info[4] && typeof info[4][8] === 'number' ? info[4][8] : undefined;
-
-                  // Extração de coordenadas geográficas
-                  let latitude: number | undefined;
-                  let longitude: number | undefined;
-                  if (info[9] && typeof info[9][2] === 'number' && typeof info[9][3] === 'number') {
-                    latitude = info[9][2];
-                    longitude = info[9][3];
-                  }
-
-                  // Extração de Horário de Funcionamento
-                  let openingHours: string | undefined;
-                  if (info[34] && info[34][1] && typeof info[34][1] === 'string') {
-                    openingHours = sanitizeText(info[34][1]);
-                  }
-                  
-                  let website: string | null = null;
-                  if (info[7] && info[7][0]) {
-                    const rawWeb = info[7][0];
-                    if (rawWeb && !/(instagram\.com|facebook\.com|jusbrasil\.com|guiamais\.com)/i.test(rawWeb)) {
-                      website = rawWeb;
-                    }
-                  }
-
-                  leads.push({
-                    id: `gmaps-${offset}-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 6)}`,
-                    name,
-                    category,
-                    address,
-                    city: params.city,
-                    state: params.state || 'GO',
-                    country: 'Brasil',
-                    phone,
-                    whatsappUrl: this.formatWhatsAppLink(phone),
-                    email: null,
-                    website,
-                    hasWebsite: !!website,
-                    source: 'Google Maps / Meu Negócio',
-                    rating,
-                    totalReviews,
-                    openingHours,
-                    latitude,
-                    longitude
-                  });
-                });
+              // Extração de coordenadas geográficas
+              let latitude: number | undefined;
+              let longitude: number | undefined;
+              if (info[9] && typeof info[9][2] === 'number' && typeof info[9][3] === 'number') {
+                latitude = info[9][2];
+                longitude = info[9][3];
               }
-            } catch (e) {}
-            return leads;
-          })
-        );
 
-        return pagesResults.flat();
+              // Extração de Horário de Funcionamento
+              let openingHours: string | undefined;
+              if (info[34] && info[34][1] && typeof info[34][1] === 'string') {
+                openingHours = sanitizeText(info[34][1]);
+              }
+              
+              let website: string | null = null;
+              if (info[7] && info[7][0]) {
+                const rawWeb = info[7][0];
+                if (rawWeb && !/(instagram\.com|facebook\.com|jusbrasil\.com|guiamais\.com)/i.test(rawWeb)) {
+                  website = rawWeb;
+                }
+              }
+
+              leads.push({
+                id: `gmaps-p${pageNum}-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 6)}`,
+                name,
+                category,
+                address,
+                city: params.city,
+                state: params.state || 'GO',
+                country: 'Brasil',
+                phone,
+                whatsappUrl: this.formatWhatsAppLink(phone),
+                email: null,
+                website,
+                hasWebsite: !!website,
+                source: 'Google Maps / Meu Negócio',
+                rating,
+                totalReviews,
+                openingHours,
+                latitude,
+                longitude
+              });
+            });
+          }
+        } catch (e) {}
+        return leads;
       })
     );
 

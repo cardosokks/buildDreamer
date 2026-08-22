@@ -265,7 +265,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
   // User Profile Dropdown state
   const [showUserDropdown, setShowUserDropdown] = useState(false);
 
-  // Leads search states segmentados
+  // Leads search states segmentados e filtros avançados
   const [leadQuery, setLeadQuery] = useState('');
   const [leadCity, setLeadCity] = useState('');
   const [leadState, setLeadState] = useState('');
@@ -273,6 +273,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
   const [onlyWithoutWebsite, setOnlyWithoutWebsite] = useState(false);
   const [hasPhoneOnly, setHasPhoneOnly] = useState(false);
   const [minRating, setMinRating] = useState('0');
+  const [minReviews, setMinReviews] = useState('0');
+  const [sortBy, setSortBy] = useState<'rating' | 'reviews' | 'name'>('rating');
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [leadsList, setLeadsList] = useState<Lead[]>([]);
   const [loadingLeads, setLoadingLeads] = useState(false);
   const [crawlerPage, setCrawlerPage] = useState(1);
@@ -2084,44 +2087,109 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                   </div>
                 </div>
 
-                {/* Filtros Detalhados */}
-                <div className="pt-2 border-t border-slate-900 flex flex-wrap items-center justify-between gap-4 text-xs text-slate-400">
-                  <div className="flex flex-wrap items-center gap-5">
-                    <label className="flex items-center gap-2 cursor-pointer select-none">
+                {/* Barra de Filtros Rápidos & Painel Expansível de Filtros Avançados */}
+                <div className="pt-2.5 border-t border-slate-900 flex flex-wrap items-center justify-between gap-4 text-xs text-slate-400">
+                  <div className="flex flex-wrap items-center gap-4">
+                    <label className="flex items-center gap-2 cursor-pointer select-none hover:text-white transition-colors">
                       <input 
                         type="checkbox"
                         checked={onlyWithoutWebsite}
                         onChange={(e) => setOnlyWithoutWebsite(e.target.checked)}
-                        className="w-4 h-4 rounded bg-slate-900 border-slate-700 text-purple-600 focus:ring-purple-500"
+                        className="w-4 h-4 rounded bg-slate-900 border-slate-700 text-purple-600 focus:ring-purple-500 cursor-pointer"
                       />
                       <span>Apenas <strong>Sem Website</strong> (Oportunidades)</span>
                     </label>
 
-                    <label className="flex items-center gap-2 cursor-pointer select-none">
+                    <label className="flex items-center gap-2 cursor-pointer select-none hover:text-white transition-colors">
                       <input 
                         type="checkbox"
                         checked={hasPhoneOnly}
                         onChange={(e) => setHasPhoneOnly(e.target.checked)}
-                        className="w-4 h-4 rounded bg-slate-900 border-slate-700 text-purple-600 focus:ring-purple-500"
+                        className="w-4 h-4 rounded bg-slate-900 border-slate-700 text-purple-600 focus:ring-purple-500 cursor-pointer"
                       />
                       <span>Com <strong>Telefone/WhatsApp</strong></span>
                     </label>
+
+                    <button
+                      type="button"
+                      onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+                      className={`px-2.5 py-1 rounded-lg border text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                        showAdvancedFilters || minRating !== '0' || minReviews !== '0'
+                          ? 'bg-purple-950/40 border-purple-500/50 text-purple-300'
+                          : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      <SlidersHorizontal className="w-3.5 h-3.5" />
+                      <span>Filtros Avançados</span>
+                      {minRating !== '0' || minReviews !== '0' ? (
+                        <span className="w-1.5 h-1.5 rounded-full bg-purple-400" />
+                      ) : null}
+                    </button>
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <span>Avaliação Mínima:</span>
+                  <div className="flex items-center gap-2 ml-auto">
+                    <span className="text-slate-500">Ordenar por:</span>
                     <select
-                      value={minRating}
-                      onChange={(e) => setMinRating(e.target.value)}
-                      className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none"
+                      value={sortBy}
+                      onChange={(e) => setSortBy(e.target.value as any)}
+                      className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-purple-500/50 cursor-pointer"
                     >
-                      <option value="0">Todas as notas</option>
-                      <option value="4.0">★ 4.0 ou mais</option>
-                      <option value="4.5">★ 4.5 ou mais</option>
-                      <option value="4.8">★ 4.8 ou mais</option>
+                      <option value="rating">Melhor Avaliados ★</option>
+                      <option value="reviews">Mais Avaliações (Popularidade)</option>
+                      <option value="name">Nome (A–Z)</option>
                     </select>
                   </div>
                 </div>
+
+                {/* Gaveta de Filtros Avançados */}
+                {showAdvancedFilters && (
+                  <div className="p-4 bg-slate-950/70 border border-purple-500/20 rounded-xl grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs animate-in fade-in zoom-in-95 duration-150">
+                    <div>
+                      <label className="block text-slate-400 font-semibold mb-1.5">Avaliação Mínima Google</label>
+                      <select
+                        value={minRating}
+                        onChange={(e) => setMinRating(e.target.value)}
+                        className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-purple-500"
+                      >
+                        <option value="0">Qualquer nota</option>
+                        <option value="3.5">★ 3.5 ou mais</option>
+                        <option value="4.0">★ 4.0 ou mais</option>
+                        <option value="4.5">★ 4.5 ou mais</option>
+                        <option value="4.8">★ 4.8 ou mais</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-400 font-semibold mb-1.5">Mínimo de Avaliações / Reviews</label>
+                      <select
+                        value={minReviews}
+                        onChange={(e) => setMinReviews(e.target.value)}
+                        className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-purple-500"
+                      >
+                        <option value="0">Qualquer quantidade</option>
+                        <option value="10">Mais de 10 avaliações</option>
+                        <option value="30">Mais de 30 avaliações</option>
+                        <option value="50">Mais de 50 avaliações</option>
+                        <option value="100">Mais de 100 avaliações</option>
+                      </select>
+                    </div>
+
+                    <div className="flex items-end">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMinRating('0');
+                          setMinReviews('0');
+                          setOnlyWithoutWebsite(false);
+                          setHasPhoneOnly(false);
+                        }}
+                        className="w-full py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-white rounded-lg text-xs font-semibold transition-all cursor-pointer"
+                      >
+                        Limpar Filtros Avançados
+                      </button>
+                    </div>
+                  </div>
+                )}
               </form>
 
               {/* Leads results list com Controles de Visualização e Paginação */}
@@ -2142,74 +2210,107 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
               ) : (
                 <div className="space-y-4">
                   {/* Barra Superior da Listagem: Contador, Filtros de Paginação e Alternador de Layout */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#0f0b18] border border-slate-850 px-4 py-3 rounded-2xl text-xs">
-                    <div className="flex items-center gap-2 text-slate-400">
-                      <span>Exibindo <strong>{Math.min((currentPage - 1) * leadsPerPage + 1, leadsList.length)}</strong>–<strong>{Math.min(currentPage * leadsPerPage, leadsList.length)}</strong> de <strong>{leadsList.length}</strong> estabelecimentos</span>
-                    </div>
+                  {(() => {
+                    // Filtra e Ordena os leads dinamicamente
+                    const filteredAndSorted = leadsList
+                      .filter(lead => {
+                        if (onlyWithoutWebsite && (lead.hasWebsite || lead.website)) return false;
+                        if (hasPhoneOnly && (!lead.phone || lead.phone === 'Não informado')) return false;
+                        if (minRating !== '0' && parseFloat(lead.rating || '0') < parseFloat(minRating)) return false;
+                        if (minReviews !== '0' && (lead.totalReviews || 0) < parseInt(minReviews)) return false;
+                        return true;
+                      })
+                      .sort((a, b) => {
+                        if (sortBy === 'rating') {
+                          return parseFloat(b.rating || '0') - parseFloat(a.rating || '0');
+                        }
+                        if (sortBy === 'reviews') {
+                          return (b.totalReviews || 0) - (a.totalReviews || 0);
+                        }
+                        if (sortBy === 'name') {
+                          return a.name.localeCompare(b.name);
+                        }
+                        return 0;
+                      });
 
-                    <div className="flex items-center gap-3">
-                      {/* Seletor de itens por página */}
-                      <div className="flex items-center gap-1.5 text-slate-400">
-                        <span>Por página:</span>
-                        <select
-                          value={leadsPerPage}
-                          onChange={(e) => {
-                            setLeadsPerPage(Number(e.target.value));
-                            setCurrentPage(1);
-                          }}
-                          className="bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-white text-xs focus:outline-none"
-                        >
-                          <option value={10}>10</option>
-                          <option value={20}>20</option>
-                          <option value={30}>30</option>
-                          <option value={50}>50</option>
-                        </select>
-                      </div>
+                    const totalItems = filteredAndSorted.length;
+                    const paginatedLeads = filteredAndSorted.slice((currentPage - 1) * leadsPerPage, currentPage * leadsPerPage);
 
-                      {/* Alternador Tabela / Cards */}
-                      <div className="flex items-center bg-slate-950 border border-slate-800 rounded-xl p-0.5">
-                        <button
-                          type="button"
-                          onClick={() => setViewMode('table')}
-                          className={`px-2.5 py-1 rounded-lg transition-all ${
-                            viewMode === 'table' ? 'bg-purple-700 text-white font-bold' : 'text-slate-400 hover:text-white'
-                          }`}
-                          title="Visualização em Lista Compacta"
-                        >
-                          Lista
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setViewMode('cards')}
-                          className={`px-2.5 py-1 rounded-lg transition-all ${
-                            viewMode === 'cards' ? 'bg-purple-700 text-white font-bold' : 'text-slate-400 hover:text-white'
-                          }`}
-                          title="Visualização em Cards"
-                        >
-                          Cards
-                        </button>
-                      </div>
-                    </div>
-                  </div>
+                    return (
+                      <>
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#0f0b18] border border-slate-850 px-4 py-3 rounded-2xl text-xs">
+                          <div className="flex items-center gap-2 text-slate-400">
+                            <span>
+                              Exibindo <strong>{totalItems > 0 ? (currentPage - 1) * leadsPerPage + 1 : 0}</strong>–<strong>{Math.min(currentPage * leadsPerPage, totalItems)}</strong> de <strong>{totalItems}</strong> estabelecimentos
+                            </span>
+                            {totalItems !== leadsList.length && (
+                              <span className="text-[10px] bg-purple-950/40 text-purple-400 border border-purple-500/20 px-2 py-0.5 rounded-md font-mono">
+                                (filtrado de {leadsList.length})
+                              </span>
+                            )}
+                          </div>
 
-                  {/* Renderização em Tabela / Lista Compacta com Ações ao Final */}
-                  {viewMode === 'table' ? (
-                    <div className="bg-[#0f0b18] border border-slate-850 rounded-2xl overflow-hidden shadow-xl">
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-left border-collapse">
-                          <thead>
-                            <tr className="border-b border-slate-850 bg-slate-950/60 text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                              <th className="py-3.5 px-4">Estabelecimento / Nicho</th>
-                              <th className="py-3.5 px-4">Endereço & Localização</th>
-                              <th className="py-3.5 px-4">Telefone / Presença</th>
-                              <th className="py-3.5 px-4 text-center">Nota</th>
-                              <th className="py-3.5 px-4 text-right">Ações Rápidas</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-850/60 text-xs">
-                            {leadsList
-                              .slice((currentPage - 1) * leadsPerPage, currentPage * leadsPerPage)
-                              .map(lead => {
+                          <div className="flex items-center gap-3">
+                            {/* Seletor de itens por página */}
+                            <div className="flex items-center gap-1.5 text-slate-400">
+                              <span>Por página:</span>
+                              <select
+                                value={leadsPerPage}
+                                onChange={(e) => {
+                                  setLeadsPerPage(Number(e.target.value));
+                                  setCurrentPage(1);
+                                }}
+                                className="bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-white text-xs focus:outline-none"
+                              >
+                                <option value={10}>10</option>
+                                <option value={20}>20</option>
+                                <option value={30}>30</option>
+                                <option value={50}>50</option>
+                              </select>
+                            </div>
+
+                            {/* Alternador Tabela / Cards */}
+                            <div className="flex items-center bg-slate-950 border border-slate-800 rounded-xl p-0.5">
+                              <button
+                                type="button"
+                                onClick={() => setViewMode('table')}
+                                className={`px-2.5 py-1 rounded-lg transition-all ${
+                                  viewMode === 'table' ? 'bg-purple-700 text-white font-bold' : 'text-slate-400 hover:text-white'
+                                }`}
+                                title="Visualização em Lista Compacta"
+                              >
+                                Lista
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setViewMode('cards')}
+                                className={`px-2.5 py-1 rounded-lg transition-all ${
+                                  viewMode === 'cards' ? 'bg-purple-700 text-white font-bold' : 'text-slate-400 hover:text-white'
+                                }`}
+                                title="Visualização em Cards"
+                              >
+                                Cards
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Renderização em Tabela / Lista Compacta com Ações ao Final */}
+                        {viewMode === 'table' ? (
+                          <div className="bg-[#0f0b18] border border-slate-850 rounded-2xl overflow-hidden shadow-xl">
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-left border-collapse">
+                                <thead>
+                                  <tr className="border-b border-slate-850 bg-slate-950/60 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                                    <th className="py-3.5 px-4">Estabelecimento / Nicho</th>
+                                    <th className="py-3.5 px-4">Endereço & Localização</th>
+                                    <th className="py-3.5 px-4">Telefone / Presença</th>
+                                    <th className="py-3.5 px-4 text-center">Nota</th>
+                                    <th className="py-3.5 px-4 text-right">Ações Rápidas</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-850/60 text-xs">
+                                  {paginatedLeads.map(lead => {
                                 const isSaved = savedLeads.some(l => l.id === lead.id || l.name === lead.name);
                                 const mapsSearchUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${lead.name} ${lead.address || lead.city || ''}`)}`;
 
@@ -2284,16 +2385,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                                     </td>
 
                                     <td className="py-3.5 px-4 text-right">
-                                      <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                                      <div className="flex items-center justify-end gap-1.5">
                                         {/* Botão Ver no Maps */}
                                         <a
                                           href={mapsSearchUrl}
                                           target="_blank"
                                           rel="noopener noreferrer"
-                                          className="p-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-pink-500/40 text-pink-400 rounded-lg transition-all"
+                                          className="p-2 bg-slate-900 hover:bg-pink-950/40 border border-slate-800 hover:border-pink-500/40 text-pink-400 rounded-xl transition-all shadow-sm"
                                           title="Ver localização no Google Maps"
                                         >
-                                          <MapPin className="w-3.5 h-3.5" />
+                                          <MapPin className="w-4 h-4" />
                                         </a>
 
                                         {/* WhatsApp */}
@@ -2302,45 +2403,43 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                                             href={lead.whatsappUrl}
                                             target="_blank"
                                             rel="noopener noreferrer"
-                                            className="px-2.5 py-1.5 bg-emerald-600/20 hover:bg-emerald-600/40 border border-emerald-500/40 text-emerald-400 text-xs font-bold rounded-lg transition-all"
-                                            title="Chamar no WhatsApp"
+                                            className="p-2 bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-500/40 text-emerald-400 rounded-xl transition-all shadow-sm"
+                                            title={`Conversar com ${lead.name} no WhatsApp`}
                                           >
-                                            WhatsApp
+                                            <Phone className="w-4 h-4" />
                                           </a>
                                         )}
 
                                         {/* Salvar Lead */}
                                         <button
                                           onClick={() => handleToggleSaveLead(lead)}
-                                          className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
+                                          className={`p-2 rounded-xl border transition-all cursor-pointer shadow-sm ${
                                             isSaved 
                                               ? 'bg-yellow-500/20 border-yellow-500/40 text-yellow-300' 
-                                              : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-yellow-400'
+                                              : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-yellow-400 hover:border-yellow-500/30'
                                           }`}
-                                          title={isSaved ? 'Salvo' : 'Salvar Lead'}
+                                          title={isSaved ? 'Lead salvo nos favoritos (clique para remover)' : 'Salvar lead nos favoritos'}
                                         >
-                                          {isSaved ? <BookmarkCheck className="w-3.5 h-3.5 fill-yellow-400" /> : <Bookmark className="w-3.5 h-3.5" />}
+                                          {isSaved ? <BookmarkCheck className="w-4 h-4 fill-yellow-400" /> : <Bookmark className="w-4 h-4" />}
                                         </button>
 
-                                        {/* Criar Site ou Melhorar com IA caso tenha website */}
-                                        {lead.website ? (
-                                          <button
-                                            onClick={() => handleRemasterClientWebsite(lead)}
-                                            className="px-2.5 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold rounded-lg text-xs transition-all shadow-md cursor-pointer flex items-center gap-1"
-                                            title="Analisar todas as páginas e subpáginas e recriar versão moderna com IA"
-                                          >
-                                            <Sparkles className="w-3.5 h-3.5" />
-                                            Melhorar com IA
-                                          </button>
-                                        ) : (
-                                          <button
-                                            onClick={() => handleCreateProjectFromLead(lead)}
-                                            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg text-xs transition-all shadow-md cursor-pointer flex items-center gap-1"
-                                          >
-                                            <Sparkles className="w-3.5 h-3.5" />
-                                            Gerar Site
-                                          </button>
-                                        )}
+                                        {/* Botão: Gerar Site Normal */}
+                                        <button
+                                          onClick={() => handleCreateProjectFromLead(lead)}
+                                          className="p-2 bg-indigo-600/20 hover:bg-indigo-600 border border-indigo-500/40 text-indigo-300 hover:text-white rounded-xl transition-all shadow-sm cursor-pointer"
+                                          title="Gerar Site Completo para este Estabelecimento"
+                                        >
+                                          <Layout className="w-4 h-4" />
+                                        </button>
+
+                                        {/* Botão: Melhorar / Criar com IA (Remaster Inteligente) */}
+                                        <button
+                                          onClick={() => handleRemasterClientWebsite(lead)}
+                                          className="p-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white rounded-xl transition-all shadow-md hover:shadow-purple-500/30 cursor-pointer"
+                                          title={lead.website ? `Melhorar com IA: Analisar ${lead.website} e reconstruir versão moderna` : `Gerar Site Otimizado com IA para ${lead.name}`}
+                                        >
+                                          <Sparkles className="w-4 h-4" />
+                                        </button>
                                       </div>
                                     </td>
                                   </tr>
@@ -2351,120 +2450,129 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                       </div>
                     </div>
                   ) : (
-                    /* Renderização em Cards */
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {leadsList
-                        .slice((currentPage - 1) * leadsPerPage, currentPage * leadsPerPage)
-                        .map(lead => {
-                          const isSaved = savedLeads.some(l => l.id === lead.id || l.name === lead.name);
-                          const mapsSearchUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${lead.name} ${lead.address || lead.city || ''}`)}`;
+                      {paginatedLeads.map(lead => {
+                        const isSaved = savedLeads.some(l => l.id === lead.id || l.name === lead.name);
+                        const mapsSearchUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${lead.name} ${lead.address || lead.city || ''}`)}`;
 
-                          return (
-                            <div 
-                              key={lead.id}
-                              className={`bg-[#0f0b18] border rounded-2xl p-5 flex flex-col justify-between transition-all shadow-md ${
-                                isSaved ? 'border-yellow-500/40 shadow-[0_0_15px_rgba(234,179,8,0.1)]' : 'border-slate-850 hover:border-purple-500/30'
-                              }`}
-                            >
-                              <div className="space-y-2">
-                                <div className="flex items-start justify-between gap-3">
-                                  <div>
-                                    <h3 className="font-bold text-white text-base leading-tight">{lead.name}</h3>
-                                    {lead.category && (
-                                      <span className="text-[10px] text-purple-400 font-mono">{lead.category}</span>
-                                    )}
-                                  </div>
-                                  <div className="flex items-center gap-2 shrink-0">
-                                    <button
-                                      onClick={() => handleToggleSaveLead(lead)}
-                                      className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
-                                        isSaved 
-                                          ? 'bg-yellow-500/20 border-yellow-500/40 text-yellow-300' 
-                                          : 'bg-slate-900 border-slate-800 text-slate-500 hover:text-yellow-400'
-                                      }`}
-                                      title={isSaved ? 'Salvo nos favoritos' : 'Salvar lead para depois'}
-                                    >
-                                      {isSaved ? <BookmarkCheck className="w-4 h-4 fill-yellow-400" /> : <Bookmark className="w-4 h-4" />}
-                                    </button>
-                                    <div className="flex items-center gap-1 bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 px-1.5 py-0.5 rounded text-[10px]">
-                                      <Star className="w-3 h-3 fill-yellow-400" />
-                                      {lead.rating}
-                                    </div>
+                        return (
+                          <div 
+                            key={lead.id}
+                            className={`bg-[#0f0b18] border rounded-2xl p-5 flex flex-col justify-between transition-all shadow-md ${
+                              isSaved ? 'border-yellow-500/40 shadow-[0_0_15px_rgba(234,179,8,0.1)]' : 'border-slate-850 hover:border-purple-500/30'
+                            }`}
+                          >
+                            <div className="space-y-2">
+                              <div className="flex items-start justify-between gap-3">
+                                <div>
+                                  <h3 className="font-bold text-white text-base leading-tight">{lead.name}</h3>
+                                  {lead.category && (
+                                    <span className="text-[10px] text-purple-400 font-mono">{lead.category}</span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0">
+                                  <button
+                                    onClick={() => handleToggleSaveLead(lead)}
+                                    className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
+                                      isSaved 
+                                        ? 'bg-yellow-500/20 border-yellow-500/40 text-yellow-300' 
+                                        : 'bg-slate-900 border-slate-800 text-slate-500 hover:text-yellow-400'
+                                    }`}
+                                    title={isSaved ? 'Salvo nos favoritos' : 'Salvar lead para depois'}
+                                  >
+                                    {isSaved ? <BookmarkCheck className="w-4 h-4 fill-yellow-400" /> : <Bookmark className="w-4 h-4" />}
+                                  </button>
+                                  <div className="flex items-center gap-1 bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 px-1.5 py-0.5 rounded text-[10px]">
+                                    <Star className="w-3 h-3 fill-yellow-400" />
+                                    {lead.rating}
                                   </div>
                                 </div>
-
-                                <p className="text-xs text-slate-400 flex items-center gap-1.5">
-                                  <MapPin className="w-3.5 h-3.5 text-pink-400 shrink-0" />
-                                  <span className="line-clamp-1">{lead.address}</span>
-                                </p>
-
-                                <p className="text-xs text-slate-400 flex items-center gap-1.5">
-                                  <Phone className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-                                  <span>{lead.phone}</span>
-                                </p>
-
-                                {lead.openingHours && (
-                                  <p className="text-[11px] text-emerald-400/90 flex items-center gap-1.5 font-sans">
-                                    <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
-                                    <span>{lead.openingHours}</span>
-                                  </p>
-                                )}
-
-                                <p className="text-xs flex items-center gap-1.5">
-                                  <Globe className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-                                  {lead.website ? (
-                                    <a href={lead.website} target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline line-clamp-1">
-                                      {lead.website}
-                                    </a>
-                                  ) : (
-                                    <span className="text-red-400 font-semibold uppercase tracking-wider text-[10px] bg-red-950/30 border border-red-500/25 px-1.5 py-0.5 rounded shadow-[0_0_8px_rgba(239,68,68,0.1)]">Sem Website (Oportunidade!)</span>
-                                  )}
-                                </p>
                               </div>
 
-                              <div className="mt-4 pt-4 border-t border-slate-850/80 flex items-center justify-between gap-2 flex-wrap">
-                                <span className="text-[10px] text-slate-500 font-mono">
-                                  {lead.source || 'Crawler Autônomo'}
-                                </span>
-                                <div className="flex items-center gap-2">
+                              <p className="text-xs text-slate-400 flex items-center gap-1.5">
+                                <MapPin className="w-3.5 h-3.5 text-pink-400 shrink-0" />
+                                <span className="line-clamp-1">{lead.address}</span>
+                              </p>
+
+                              <p className="text-xs text-slate-400 flex items-center gap-1.5">
+                                <Phone className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                                <span>{lead.phone}</span>
+                              </p>
+
+                              {lead.openingHours && (
+                                <p className="text-[11px] text-emerald-400/90 flex items-center gap-1.5 font-sans">
+                                  <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
+                                  <span>{lead.openingHours}</span>
+                                </p>
+                              )}
+
+                              <p className="text-xs flex items-center gap-1.5">
+                                <Globe className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                                {lead.website ? (
+                                  <a href={lead.website} target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline line-clamp-1">
+                                    {lead.website}
+                                  </a>
+                                ) : (
+                                  <span className="text-red-400 font-semibold uppercase tracking-wider text-[10px] bg-red-950/30 border border-red-500/25 px-1.5 py-0.5 rounded shadow-[0_0_8px_rgba(239,68,68,0.1)]">Sem Website (Oportunidade!)</span>
+                                )}
+                              </p>
+                            </div>
+
+                            <div className="mt-4 pt-4 border-t border-slate-850/80 flex items-center justify-between gap-2 flex-wrap">
+                              <span className="text-[10px] text-slate-500 font-mono">
+                                {lead.source || 'Crawler Autônomo'}
+                              </span>
+                              <div className="flex items-center gap-1.5">
+                                <a
+                                  href={mapsSearchUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="p-2 bg-slate-900 hover:bg-pink-950/40 border border-slate-800 hover:border-pink-500/40 text-pink-400 rounded-xl transition-all shadow-sm"
+                                  title="Ver localização no Google Maps"
+                                >
+                                  <MapPin className="w-4 h-4" />
+                                </a>
+                                {lead.whatsappUrl && (
                                   <a
-                                    href={mapsSearchUrl}
+                                    href={lead.whatsappUrl}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="px-2.5 py-1.5 bg-pink-950/30 hover:bg-pink-900/50 border border-pink-500/30 text-pink-300 text-xs font-semibold rounded-xl transition-all flex items-center gap-1"
-                                    title="Ver no Google Maps"
+                                    className="p-2 bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-500/40 text-emerald-400 rounded-xl transition-all shadow-sm"
+                                    title={`Conversar com ${lead.name} no WhatsApp`}
                                   >
-                                    <MapPin className="w-3.5 h-3.5" />
-                                    Maps
+                                    <Phone className="w-4 h-4" />
                                   </a>
-                                  {lead.whatsappUrl && (
-                                    <a
-                                      href={lead.whatsappUrl}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="px-3 py-1.5 bg-emerald-600/20 hover:bg-emerald-600/40 border border-emerald-500/40 text-emerald-400 text-xs font-bold rounded-xl transition-all"
-                                    >
-                                      WhatsApp
-                                    </a>
-                                  )}
-                                  <button
-                                    onClick={() => handleCreateProjectFromLead(lead)}
-                                    className="px-3.5 py-1.5 bg-purple-700 hover:bg-purple-600 text-white font-bold rounded-xl text-xs transition-all shadow-md cursor-pointer"
-                                  >
-                                    Gerar Site
-                                  </button>
-                                </div>
+                                )}
+                                
+                                {/* Botão: Gerar Site Normal */}
+                                <button
+                                  onClick={() => handleCreateProjectFromLead(lead)}
+                                  className="p-2 bg-indigo-600/20 hover:bg-indigo-600 border border-indigo-500/40 text-indigo-300 hover:text-white rounded-xl transition-all shadow-sm cursor-pointer"
+                                  title="Gerar Site Completo para este Estabelecimento"
+                                >
+                                  <Layout className="w-4 h-4" />
+                                </button>
+
+                                {/* Botão: Melhorar / Criar com IA */}
+                                <button
+                                  onClick={() => handleRemasterClientWebsite(lead)}
+                                  className="p-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white rounded-xl transition-all shadow-md hover:shadow-purple-500/30 cursor-pointer"
+                                  title={lead.website ? `Melhorar com IA: Analisar ${lead.website} e reconstruir versão moderna` : `Gerar Site Otimizado com IA para ${lead.name}`}
+                                >
+                                  <Sparkles className="w-4 h-4" />
+                                </button>
                               </div>
                             </div>
-                          );
-                        })}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
 
                   {/* Controles de Navegação e Busca de Novas Páginas do Google Maps */}
                   <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-6 border-t border-slate-850">
                     {/* Paginação Local dos Leads Atuais */}
-                    {Math.ceil(leadsList.length / leadsPerPage) > 1 && (
+                    {Math.ceil(totalItems / leadsPerPage) > 1 && (
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
@@ -2475,7 +2583,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                         </button>
 
                         <div className="flex items-center gap-1">
-                          {Array.from({ length: Math.ceil(leadsList.length / leadsPerPage) }, (_, i) => i + 1).map(page => (
+                          {Array.from({ length: Math.ceil(totalItems / leadsPerPage) }, (_, i) => i + 1).map(page => (
                             <button
                               key={page}
                               onClick={() => setCurrentPage(page)}
@@ -2491,8 +2599,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                         </div>
 
                         <button
-                          onClick={() => setCurrentPage(p => Math.min(p + 1, Math.ceil(leadsList.length / leadsPerPage)))}
-                          disabled={currentPage === Math.ceil(leadsList.length / leadsPerPage)}
+                          onClick={() => setCurrentPage(p => Math.min(p + 1, Math.ceil(totalItems / leadsPerPage)))}
+                          disabled={currentPage === Math.ceil(totalItems / leadsPerPage)}
                           className="px-3 py-1.5 bg-[#0f0b18] border border-slate-800 hover:border-purple-500/40 text-xs font-semibold text-slate-300 hover:text-white rounded-xl disabled:opacity-40 disabled:cursor-not-allowed transition-all"
                         >
                           Próxima
@@ -2536,8 +2644,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                       </button>
                     </div>
                   </div>
-                </div>
-              )}
+                </>
+              );
+            })()}
+          </div>
+        )}
             </div>
           )}
         </main>
