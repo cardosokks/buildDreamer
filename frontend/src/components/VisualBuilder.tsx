@@ -927,63 +927,47 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
           </div>
         </div>
 
-        {/* Viewports & Breakpoints Controller */}
-        <div className="hidden sm:flex items-center gap-3">
-          <div className="flex items-center gap-1 p-1 bg-slate-950/80 border border-slate-900 rounded-xl">
-            <button 
-              onClick={() => setViewport('desktop')}
-              className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${viewport === 'desktop' ? 'bg-purple-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'}`}
+        {/* Viewports & Breakpoints Controller (Menu Unificado Dropdown) */}
+        <div className="flex items-center">
+          <div className="relative">
+            <select
+              value={viewport}
+              onChange={(e) => setViewport(e.target.value as any)}
+              className="bg-slate-950/90 hover:bg-slate-900 border border-slate-850 hover:border-purple-500/40 text-xs font-semibold text-slate-200 rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-purple-500 cursor-pointer shadow-sm flex items-center transition-all"
+              title="Ajustar visualização de tela (Responsividade)"
             >
-              <Monitor className="w-3.5 h-3.5" />
-              Desktop
-            </button>
-            <button 
-              onClick={() => setViewport('tablet')}
-              className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${viewport === 'tablet' ? 'bg-purple-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'}`}
-            >
-              <Tablet className="w-3.5 h-3.5" />
-              Tablet
-            </button>
-            <button 
-              onClick={() => setViewport('mobile')}
-              className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${viewport === 'mobile' ? 'bg-purple-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'}`}
-            >
-              <Smartphone className="w-3.5 h-3.5" />
-              Mobile (Android)
-            </button>
+              <option value="desktop" className="bg-slate-950 text-white">🖥️ Desktop (100%)</option>
+              <option value="tablet" className="bg-slate-950 text-white">📱 Tablet (768px)</option>
+              <option value="mobile" className="bg-slate-950 text-white">📲 Mobile (375px)</option>
+            </select>
           </div>
         </div>
 
         {/* Actions & Utilities */}
         <div className="flex items-center gap-2">
-          {/* Status de Salvamento / Sincronização FTP */}
-          <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-950/80 border border-slate-900 text-[11px] font-mono">
-            {saveStatus === 'saving' ? (
-              <>
-                <span className="w-2 h-2 rounded-full bg-yellow-400 animate-ping" />
-                <span className="text-yellow-400">Sincronizando FTP...</span>
-              </>
-            ) : saveStatus === 'error' ? (
-              <>
-                <span className="w-2 h-2 rounded-full bg-red-400" />
-                <span className="text-red-400">Erro ao Salvar</span>
-              </>
-            ) : (
-              <>
-                <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                <span className="text-emerald-400">Salvo & FTP OK</span>
-              </>
-            )}
-          </div>
-
-          {/* Botão Salvar Manual */}
+          {/* Botão Unificado: Salvar Manual + Feedback visual da Bolinha de Status */}
           <button
             onClick={handleManualSave}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-200 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm"
-            title="Salvar Alterações (Ctrl+S)"
+            disabled={saveStatus === 'saving'}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm border ${
+              saveStatus === 'saving'
+                ? 'bg-yellow-950/40 border-yellow-500/40 text-yellow-300'
+                : saveStatus === 'error'
+                ? 'bg-red-950/40 border-red-500/40 text-red-300 hover:bg-red-900/40'
+                : 'bg-slate-900 hover:bg-slate-800 border-slate-800 text-slate-200 hover:border-purple-500/40'
+            }`}
+            title="Salvar Alterações & Sincronizar FTP (Ctrl+S)"
           >
-            <Check className="w-3.5 h-3.5 text-purple-400" />
-            Salvar
+            <span
+              className={`w-2 h-2 rounded-full shrink-0 ${
+                saveStatus === 'saving'
+                  ? 'bg-yellow-400 animate-ping'
+                  : saveStatus === 'error'
+                  ? 'bg-red-400 shadow-[0_0_8px_#ef4444]'
+                  : 'bg-emerald-400 shadow-[0_0_8px_#10b981]'
+              }`}
+            />
+            <span>{saveStatus === 'saving' ? 'Salvando...' : saveStatus === 'error' ? 'Erro ao Salvar' : 'Salvar'}</span>
           </button>
 
           {/* Undo / Redo */}
