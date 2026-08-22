@@ -49,7 +49,7 @@ import {
 } from 'lucide-react';
 
 import { useTheme } from '../context/ThemeContext';
-import { SettingsModal } from './SettingsModal';
+import { SettingsPage } from './SettingsPage';
 import { API_URL } from '../config';
 
 interface Project {
@@ -98,8 +98,8 @@ interface FilterPreset {
 }
 
 interface DashboardProps {
-  initialTab?: 'general' | 'projects' | 'leads' | 'saved-leads' | 'presets';
-  onTabChange?: (tab: 'general' | 'projects' | 'leads' | 'saved-leads' | 'presets') => void;
+  initialTab?: 'general' | 'projects' | 'leads' | 'saved-leads' | 'presets' | 'settings';
+  onTabChange?: (tab: 'general' | 'projects' | 'leads' | 'saved-leads' | 'presets' | 'settings') => void;
   onSelectProject: (projectId: string) => void;
 }
 
@@ -110,17 +110,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
-  const [activeTab, setActiveTabState] = useState<'general' | 'projects' | 'leads' | 'saved-leads' | 'presets'>(() => {
+  const [activeTab, setActiveTabState] = useState<'general' | 'projects' | 'leads' | 'saved-leads' | 'presets' | 'settings'>(() => {
     try {
       const stored = localStorage.getItem('rp_dashboard_active_tab');
-      if (stored === 'general' || stored === 'projects' || stored === 'leads' || stored === 'saved-leads' || stored === 'presets') {
+      if (stored === 'general' || stored === 'projects' || stored === 'leads' || stored === 'saved-leads' || stored === 'presets' || stored === 'settings') {
         return stored;
       }
     } catch {}
     return initialTab === 'tunnels' as any ? 'general' : initialTab;
   });
 
-  const setActiveTab = (tab: 'general' | 'projects' | 'leads' | 'saved-leads' | 'presets') => {
+  const setActiveTab = (tab: 'general' | 'projects' | 'leads' | 'saved-leads' | 'presets' | 'settings') => {
     setActiveTabState(tab);
     if (onTabChange) onTabChange(tab);
     try {
@@ -1188,7 +1188,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
 
                   <div className="p-1.5 space-y-1">
                     <button
-                      onClick={() => { setShowUserDropdown(false); setShowSettings(true); }}
+                      onClick={() => { setShowUserDropdown(false); setActiveTab('settings'); }}
                       className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-slate-300 hover:text-white hover:bg-purple-900/30 rounded-xl transition-all cursor-pointer"
                     >
                       <Settings className="w-4 h-4 text-purple-400" />
@@ -1263,6 +1263,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                 >
                   <Users className="w-4 h-4 text-pink-400" />
                   Buscar Clientes
+                </button>
+                <button
+                  onClick={() => { setActiveTab('settings'); setMobileMenuOpen(false); }}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
+                    activeTab === 'settings' ? 'bg-purple-900/30 text-purple-300 border border-purple-500/30' : 'text-slate-400'
+                  }`}
+                >
+                  <Settings className="w-4 h-4 text-purple-400" />
+                  Configurações
                 </button>
               </div>
             </div>
@@ -1373,6 +1382,29 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
               }`}>
                 {filterPresets.length}
               </span>
+            </button>
+
+            {/* Configurações do Sistema na Sidebar */}
+            <div className={`pt-4 pb-1 px-3 text-[10px] font-bold uppercase tracking-wider ${
+              theme === 'light' ? 'text-slate-400' : 'text-slate-500'
+            }`}>
+              Sistema & Conta
+            </div>
+
+            <button
+              onClick={() => setActiveTab('settings')}
+              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                activeTab === 'settings'
+                  ? theme === 'light'
+                    ? 'bg-purple-50 text-purple-700 font-bold'
+                    : 'bg-gradient-to-r from-purple-900/50 to-indigo-900/50 text-white font-bold border border-purple-500/40 shadow-sm'
+                  : theme === 'light'
+                    ? 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                    : 'text-slate-400 hover:bg-slate-900/60 hover:text-slate-200'
+              }`}
+            >
+              <Settings className="w-4 h-4 text-purple-400 shrink-0" />
+              <span className="truncate flex-1 text-left">Configurações</span>
             </button>
           </div>
 
@@ -2266,7 +2298,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                 ))}
               </div>
             </div>
-          ) : (
+          ) : activeTab === 'leads' ? (
             /* BUSCAR CLIENTES (LEADS CRAWLER TAB SEM MAPA PESADO) */
             <div className="max-w-6xl mx-auto space-y-6">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -2915,10 +2947,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                 </>
               );
             })()}
-          </div>
-        )}
+                </div>
+              )}
             </div>
-          )}
+          ) : activeTab === 'settings' ? (
+            /* PÁGINA NATIVA DE CONFIGURAÇÕES DO SISTEMA */
+            <SettingsPage />
+          ) : null}
         </main>
       </div>
 
@@ -3718,10 +3753,52 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
         </div>
       )}
 
-      {/* Settings Modal */}
-      {showSettings && (
-        <SettingsModal onClose={() => setShowSettings(false)} />
-      )}
+      {/* Mobile Bottom Navigation Bar (Android / Smartphone) */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-[#0c0616]/95 border-t border-purple-500/20 backdrop-blur-lg flex items-center justify-around px-2 z-40 shadow-[0_-4px_20px_rgba(0,0,0,0.5)]">
+        <button
+          onClick={() => setActiveTab('general')}
+          className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all cursor-pointer ${
+            activeTab === 'general' ? 'text-purple-400 font-bold' : 'text-slate-500 hover:text-slate-300'
+          }`}
+        >
+          <Sparkles className="w-5 h-5" />
+          <span className="text-[10px]">Geral</span>
+        </button>
+        <button
+          onClick={() => setActiveTab('projects')}
+          className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all cursor-pointer ${
+            activeTab === 'projects' ? 'text-indigo-400 font-bold' : 'text-slate-500 hover:text-slate-300'
+          }`}
+        >
+          <Layout className="w-5 h-5" />
+          <span className="text-[10px]">Sites</span>
+        </button>
+        <button
+          onClick={() => setShowCreateModal(true)}
+          className="flex flex-col items-center justify-center -mt-5 w-12 h-12 rounded-full bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-[0_0_15px_rgba(168,85,247,0.5)] cursor-pointer"
+          title="Novo Projeto"
+        >
+          <FolderPlus className="w-6 h-6" />
+        </button>
+        <button
+          onClick={() => setActiveTab('leads')}
+          className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all cursor-pointer ${
+            activeTab === 'leads' ? 'text-pink-400 font-bold' : 'text-slate-500 hover:text-slate-300'
+          }`}
+        >
+          <Users className="w-5 h-5" />
+          <span className="text-[10px]">Clientes</span>
+        </button>
+        <button
+          onClick={() => setActiveTab('settings')}
+          className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all cursor-pointer ${
+            activeTab === 'settings' ? 'text-purple-400 font-bold' : 'text-slate-500 hover:text-slate-300'
+          }`}
+        >
+          <Settings className="w-5 h-5" />
+          <span className="text-[10px]">Ajustes</span>
+        </button>
+      </nav>
     </div>
   );
 };
