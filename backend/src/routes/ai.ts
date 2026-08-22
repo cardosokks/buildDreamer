@@ -13,6 +13,21 @@ import { AuthenticatedRequest } from '../middleware/auth';
 
 const router = Router();
 
+// Helper: decodifica headers que chegam em Base64 do frontend
+// O frontend envia: btoa(unescape(encodeURIComponent(value))) para evitar
+// o erro ISO-8859-1 em headers HTTP com caracteres pt-BR (acentos etc)
+const decodeHeader = (val: string | string[] | undefined): string => {
+  if (!val) return '';
+  const str = Array.isArray(val) ? val[0] : val;
+  if (!str) return '';
+  try {
+    return decodeURIComponent(escape(Buffer.from(str, 'base64').toString('binary')));
+  } catch {
+    return str; // fallback para valor plain-text (compatibilidade)
+  }
+};
+
+
 // In-memory queue system for AI chat modifications
 export const aiChatJobsQueue: Record<string, {
   status: 'pending' | 'processing' | 'completed' | 'failed';
@@ -266,17 +281,17 @@ router.post('/chat', async (req: AuthenticatedRequest, res: any) => {
       (hasTargetPages && targetPageIds.length > 1) ||
       /todas as p[áa]ginas|em todo o site|globalmente|em todas|todas páginas|navbar de todas|navbar padrão/i.test(prompt);
 
-    const clientGeminiKey = (req.headers['x-gemini-key'] || req.headers['X-Gemini-Key']) as string;
-    const clientProxyUrl = (req.headers['x-proxy-url'] || req.headers['X-Proxy-Url']) as string || process.env.AI_PROXY_URL;
+    const clientGeminiKey = decodeHeader(req.headers['x-gemini-key'] as string);
+    const clientProxyUrl = decodeHeader(req.headers['x-proxy-url'] as string) || process.env.AI_PROXY_URL;
     let registeredModels: string[] | undefined;
     try {
-      const rawModels = (req.headers['x-gemini-models'] || req.headers['X-Gemini-Models']) as string;
+      const rawModels = decodeHeader(req.headers['x-gemini-models'] as string);
       if (rawModels) registeredModels = JSON.parse(rawModels);
     } catch {}
 
     let customSkills: any[] | undefined;
     try {
-      const rawSkills = (req.headers['x-ai-skills'] || req.headers['X-Ai-Skills'] || req.headers['X-AI-Skills']) as string;
+      const rawSkills = decodeHeader((req.headers['x-ai-skills'] || req.headers['X-Ai-Skills'] || req.headers['X-AI-Skills']) as string);
       if (rawSkills) customSkills = JSON.parse(rawSkills);
     } catch {}
 
@@ -345,8 +360,8 @@ router.get('/jobs/:jobId/status', (req: AuthenticatedRequest, res: any) => {
 // List available models from Google Gemini API with the given API key
 router.get('/models', async (req: AuthenticatedRequest, res: any) => {
   try {
-    const clientGeminiKey = (req.headers['x-gemini-key'] || req.headers['X-Gemini-Key'] || process.env.GEMINI_API_KEY) as string;
-    const clientProxyUrl = (req.headers['x-proxy-url'] || req.headers['X-Proxy-Url']) as string || process.env.AI_PROXY_URL;
+    const clientGeminiKey = decodeHeader(req.headers['x-gemini-key'] as string) || process.env.GEMINI_API_KEY!;
+    const clientProxyUrl = decodeHeader(req.headers['x-proxy-url'] as string) || process.env.AI_PROXY_URL;
     
     if (!clientGeminiKey) {
       return res.status(400).json({ error: 'Chave do Gemini não configurada' });

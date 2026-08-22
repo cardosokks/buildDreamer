@@ -370,15 +370,21 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
         if (stored) registeredModelIds = JSON.parse(stored).map((m: any) => m.id);
       } catch {}
 
+      // Headers HTTP só aceitam caracteres ISO-8859-1 — valores com acentos (pt-BR)
+      // precisam ser encodados para evitar o erro "non ISO-8859-1 code point"
+      const safeHeader = (val: string) => {
+        try { return btoa(unescape(encodeURIComponent(val))); } catch { return ''; }
+      };
+
       const res = await fetch(`${API_URL}/api/ai/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'x-gemini-key': localGeminiKey,
-          'x-gemini-models': JSON.stringify(registeredModelIds),
-          'x-proxy-url': localStorage.getItem('ai_proxy_url') || '',
-          'x-ai-skills': localStorage.getItem('custom_ai_skills') || ''
+          'x-gemini-key': safeHeader(localGeminiKey),
+          'x-gemini-models': safeHeader(JSON.stringify(registeredModelIds)),
+          'x-proxy-url': safeHeader(localStorage.getItem('ai_proxy_url') || ''),
+          'x-ai-skills': safeHeader(localStorage.getItem('custom_ai_skills') || '')
         },
         body: JSON.stringify({ 
           prompt: messageText, 
