@@ -590,145 +590,101 @@ export const Sidebar: React.FC<SidebarProps> = ({
         )}
       </div>
 
-      <div className="flex border-b border-slate-900 bg-slate-950/60 p-1 gap-1">
-        <button
-          onClick={() => setActiveTab('layers')}
-          className={`flex-1 py-1.5 text-xs font-semibold rounded-md flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-            activeTab === 'layers'
-              ? 'bg-purple-600/25 text-purple-300 border border-purple-500/30 shadow-sm'
-              : 'text-slate-400 hover:text-slate-200'
-          }`}
-        >
-          <Layers className="w-3.5 h-3.5" />
-          Árvore DOM
-        </button>
-        <button
-          onClick={() => setActiveTab('blocks')}
-          className={`flex-1 py-1.5 text-xs font-semibold rounded-md flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-            activeTab === 'blocks'
-              ? 'bg-purple-600/25 text-purple-300 border border-purple-500/30 shadow-sm'
-              : 'text-slate-400 hover:text-slate-200'
-          }`}
-        >
-          <Component className="w-3.5 h-3.5" />
-          Templates
-        </button>
-      </div>
+      {/* Seção de Templates Arrastáveis e Cadastro */}
+      <div className="flex-1 flex flex-col min-h-0">
+        <div className="p-2.5 border-b border-slate-900 bg-slate-950/40 space-y-2">
+          <div className="flex items-center justify-between gap-1.5">
+            <button
+              type="button"
+              onClick={() => setShowNewTemplateModal(true)}
+              className="flex-1 py-1.5 px-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-lg text-[11px] font-bold shadow transition-all flex items-center justify-center gap-1 cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Novo Template</span>
+            </button>
 
-      {activeTab === 'layers' ? (
-        <div className="flex-1 flex flex-col min-h-0">
-          <div className="p-2 border-b border-slate-900/60 flex items-center justify-between text-[11px] text-slate-500 px-3">
-            <span>Estrutura de Elementos</span>
-            <div className="flex items-center gap-2">
-              <button onClick={() => setExpandedPaths(new Set(['0', '1', '2', '3', '0.0', '1.0']))} className="hover:text-purple-300 transition-colors">Expandir</button>
-              <span>•</span>
-              <button onClick={() => setExpandedPaths(new Set())} className="hover:text-purple-300 transition-colors">Recolher</button>
-            </div>
-          </div>
-          <div className="flex-1 overflow-y-auto p-2 space-y-0.5 min-h-0">
-            {layers.length > 0 ? (
-              renderLayers(layers)
-            ) : (
-              <p className="text-[10px] text-slate-600 italic p-3 text-center">Nenhum elemento no canvas.</p>
-            )}
-          </div>
-        </div>
-      ) : (
-        <div className="flex-1 flex flex-col min-h-0">
-          <div className="p-2.5 border-b border-slate-900 bg-slate-950/40 space-y-2">
-            <div className="flex items-center justify-between gap-1.5">
+            {selectedPath && onSaveSelectionAsTemplate && (
               <button
                 type="button"
-                onClick={() => setShowNewTemplateModal(true)}
-                className="flex-1 py-1.5 px-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-lg text-[11px] font-bold shadow transition-all flex items-center justify-center gap-1 cursor-pointer"
+                onClick={() => {
+                  const name = prompt('Nome do Template para o bloco selecionado:');
+                  if (!name) return;
+                  const cat = prompt('Categoria (ex: Cabeçalho, Seções, Conversão):', 'Personalizados') || 'Personalizados';
+                  onSaveSelectionAsTemplate(name, cat);
+                }}
+                className="py-1.5 px-2 bg-slate-900 hover:bg-slate-850 border border-purple-500/40 text-purple-300 rounded-lg text-[11px] font-semibold transition-all flex items-center gap-1 cursor-pointer"
+                title="Salvar o elemento selecionado no canvas como um novo template"
               >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Novo Template</span>
+                <Sparkles className="w-3.5 h-3.5 text-pink-400" />
+                <span>Salvar Seleção</span>
               </button>
-
-              {selectedPath && onSaveSelectionAsTemplate && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    const name = prompt('Nome do Template para o bloco selecionado:');
-                    if (!name) return;
-                    const cat = prompt('Categoria (ex: Cabeçalho, Seções, Conversão):', 'Personalizados') || 'Personalizados';
-                    onSaveSelectionAsTemplate(name, cat);
-                  }}
-                  className="py-1.5 px-2 bg-slate-900 hover:bg-slate-850 border border-purple-500/40 text-purple-300 rounded-lg text-[11px] font-semibold transition-all flex items-center gap-1 cursor-pointer"
-                  title="Salvar o elemento selecionado no canvas como um novo template"
-                >
-                  <Sparkles className="w-3.5 h-3.5 text-pink-400" />
-                  <span>Salvar Seleção</span>
-                </button>
-              )}
-            </div>
-
-            <div className="flex items-center gap-1.5">
-              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Filtrar:</span>
-              <select
-                value={templateCategoryFilter}
-                onChange={(e) => setTemplateCategoryFilter(e.target.value)}
-                className="bg-slate-900 border border-slate-800 text-[10px] text-slate-300 rounded-md px-1.5 py-1 focus:outline-none focus:border-purple-500 cursor-pointer flex-1"
-              >
-                <option value="ALL">Todas as Categorias ({allTemplates.length})</option>
-                {categories.filter(c => c !== 'ALL').map(c => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
-            </div>
+            )}
           </div>
 
-          <div className="flex-1 overflow-y-auto p-2.5 space-y-2.5 min-h-0">
-            <span className="text-[10px] uppercase tracking-wider font-bold text-slate-500 block px-1">
-              Arraste para o Canvas ou Clique:
-            </span>
-            {filteredTemplates.map((block) => (
-              <div
-                key={block.id}
-                draggable
-                onDragStart={(e) => {
-                  e.dataTransfer.setData('text/plain', `template:${block.id}`);
-                  e.dataTransfer.setData('application/x-template-html', block.html);
-                  e.dataTransfer.setData('application/x-template-css', block.css || '');
-                  e.dataTransfer.effectAllowed = 'copyMove';
-                }}
-                onClick={() => onInsertBlock && onInsertBlock(block.html, block.css)}
-                className="p-3 bg-[#110c1e] hover:bg-[#19122c] border border-slate-800/80 hover:border-purple-500/60 rounded-xl transition-all group cursor-grab active:cursor-grabbing shadow-sm hover:shadow-[0_0_15px_rgba(168,85,247,0.2)] relative"
-              >
-                <div className="flex items-center justify-between mb-1">
-                  <div className="flex items-center gap-2 truncate">
-                    <GripVertical className="w-3.5 h-3.5 text-slate-600 group-hover:text-purple-400 shrink-0" />
-                    <span className="text-xs font-bold text-white group-hover:text-purple-300 transition-colors truncate">
-                      {block.title}
-                    </span>
-                  </div>
-                  
-                  {customTemplates.some(ct => ct.id === block.id) && (
-                    <button
-                      onClick={(e) => handleDeleteCustomTemplate(block.id, e)}
-                      className="p-1 text-slate-500 hover:text-red-400 rounded hover:bg-slate-900 transition-colors"
-                      title="Excluir Template"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </button>
-                  )}
-                </div>
-
-                <div className="flex items-center justify-between text-[10px] text-slate-400 pl-5">
-                  <span className="bg-purple-950/60 text-purple-300 border border-purple-500/30 px-1.5 py-0.2 rounded font-mono">
-                    {block.category}
-                  </span>
-                  <span className="text-slate-500 group-hover:text-purple-400 transition-colors flex items-center gap-1 font-semibold">
-                    <Plus className="w-3 h-3" />
-                    Inserir
-                  </span>
-                </div>
-              </div>
-            ))}
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Filtrar:</span>
+            <select
+              value={templateCategoryFilter}
+              onChange={(e) => setTemplateCategoryFilter(e.target.value)}
+              className="bg-slate-900 border border-slate-800 text-[10px] text-slate-300 rounded-md px-1.5 py-1 focus:outline-none focus:border-purple-500 cursor-pointer flex-1"
+            >
+              <option value="ALL">Todas as Categorias ({allTemplates.length})</option>
+              {categories.filter(c => c !== 'ALL').map(c => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
           </div>
         </div>
-      )}
+
+        <div className="flex-1 overflow-y-auto p-2.5 space-y-2.5 min-h-0">
+          <span className="text-[10px] uppercase tracking-wider font-bold text-slate-500 block px-1">
+            Biblioteca de Blocos & Templates:
+          </span>
+          {filteredTemplates.map((block) => (
+            <div
+              key={block.id}
+              draggable
+              onDragStart={(e) => {
+                e.dataTransfer.setData('text/plain', `template:${block.id}`);
+                e.dataTransfer.setData('application/x-template-html', block.html);
+                e.dataTransfer.setData('application/x-template-css', block.css || '');
+                e.dataTransfer.effectAllowed = 'copyMove';
+              }}
+              onClick={() => onInsertBlock && onInsertBlock(block.html, block.css)}
+              className="p-3 bg-[#110c1e] hover:bg-[#19122c] border border-slate-850 hover:border-purple-500/60 rounded-xl transition-all group cursor-grab active:cursor-grabbing shadow-sm hover:shadow-[0_0_15px_rgba(168,85,247,0.2)] relative"
+            >
+              <div className="flex items-center justify-between mb-1">
+                <div className="flex items-center gap-2 truncate">
+                  <GripVertical className="w-3.5 h-3.5 text-slate-600 group-hover:text-purple-400 shrink-0" />
+                  <span className="text-xs font-bold text-white group-hover:text-purple-300 transition-colors truncate">
+                    {block.title}
+                  </span>
+                </div>
+                
+                {customTemplates.some(ct => ct.id === block.id) && (
+                  <button
+                    onClick={(e) => handleDeleteCustomTemplate(block.id, e)}
+                    className="p-1 text-slate-500 hover:text-red-400 rounded hover:bg-slate-900 transition-colors"
+                    title="Excluir Template"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+
+              <div className="flex items-center justify-between text-[10px] text-slate-400 pl-5">
+                <span className="bg-purple-950/60 text-purple-300 border border-purple-500/30 px-1.5 py-0.2 rounded font-mono">
+                  {block.category}
+                </span>
+                <span className="text-slate-500 group-hover:text-purple-400 transition-colors flex items-center gap-1 font-semibold">
+                  <Plus className="w-3 h-3" />
+                  Inserir
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
 
       {showNewTemplateModal && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">

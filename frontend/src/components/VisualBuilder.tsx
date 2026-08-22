@@ -1362,6 +1362,15 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
             onAttrChange={handleAttrChange}
             onDeleteElement={handleDeleteElement}
             onDuplicateElement={handleDuplicateElement}
+            onMoveElement={handleMoveElement}
+            onMoveElementDirection={handleMoveElementDirection}
+            layers={layers}
+            onSelectLayer={(selector, path) => {
+              setSelectedSelector(selector);
+              setSelectedPath(path);
+            }}
+            onHoverLayer={(path) => setHoverPath(path)}
+            onSaveSelectionAsTemplate={handleSaveSelectionAsTemplate}
             pageSeo={{
               title: activePage?.seoTitle || activePage?.name || '',
               description: activePage?.seoDescription || '',

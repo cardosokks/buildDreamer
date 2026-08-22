@@ -51,6 +51,15 @@ const cleanComputedValue = (val: string, prop: string): string => {
   return val;
 };
 
+export interface ElementNode {
+  tag: string;
+  id?: string;
+  className?: string;
+  text?: string;
+  children?: ElementNode[];
+  path?: string;
+}
+
 interface PropertiesPanelProps {
   selectedSelector: string | null;
   selectedPath?: string | null;
@@ -60,6 +69,12 @@ interface PropertiesPanelProps {
   onAttrChange: (attr: string, value: string) => void;
   onDeleteElement?: (path: string) => void;
   onDuplicateElement?: (path: string) => void;
+  onMoveElement?: (sourcePath: string, targetPath: string, position?: 'before' | 'after' | 'inside') => void;
+  onMoveElementDirection?: (path: string, direction: 'up' | 'down') => void;
+  layers?: ElementNode[];
+  onSelectLayer?: (selector: string, path: string) => void;
+  onHoverLayer?: (path: string | null) => void;
+  onSaveSelectionAsTemplate?: (title: string, category: string) => void;
   pageSeo?: {
     title?: string;
     description?: string;
@@ -188,11 +203,172 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   onAttrChange,
   onDeleteElement,
   onDuplicateElement,
+  onMoveElement,
+  onMoveElementDirection,
+  layers = [],
+  onSelectLayer,
+  onHoverLayer,
+  onSaveSelectionAsTemplate,
   pageSeo,
   onPageSeoChange,
 }) => {
-  const [panelTab, setPanelTab] = useState<'styles' | 'attrs' | 'seo'>('styles');
+  const [panelTab, setPanelTab] = useState<'layers' | 'styles' | 'attrs' | 'seo'>('layers');
   const [newClassInput, setNewClassInput] = useState('');
+  const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set(['0', '1', '2', '3', '0.0', '1.0']));
+  const [dragSource, setDragSource] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState<string | null>(null);
+  const [dragOverPosition, setDragOverPosition] = useState<'before' | 'after' | 'inside' | null>(null);
+
+  // Troca automática para estilos se um elemento for selecionado enquanto na aba layers se desejado
+  useEffect(() => {
+    if (selectedSelector && panelTab === 'layers' && !selectedPath) {
+      setPanelTab('styles');
+    }
+  }, [selectedSelector]);
+
+  const toggleExpanded = (path: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setExpandedPaths(prev => {
+      const next = new Set(prev);
+      next.has(path) ? next.delete(path) : next.add(path);
+      return next;
+    });
+  };
+
+  const renderLayers = (nodes: ElementNode[], depth = 0, parentPath = '') => {
+    return nodes.map((node, index) => {
+      const path = parentPath ? `${parentPath}.${index}` : `${index}`;
+      const className = typeof node.className === 'string' ? node.className : '';
+      const cleanClass = className ? className.split(' ').filter(c => !c.startsWith('studio-'))[0] : '';
+      const selector = node.tag + (cleanClass ? '.' + cleanClass : '');
+      const hasChildren = node.children && node.children.length > 0;
+      const isExpanded = expandedPaths.has(path);
+      const isSelected = selectedPath === path;
+      const isDragOver = dragOver === path;
+
+      return (
+        <div key={path} role="treeitem" aria-expanded={hasChildren ? isExpanded : undefined} aria-selected={isSelected} className="relative">
+          {isDragOver && dragOverPosition === 'before' && (
+            <div className="absolute top-0 left-0 right-0 h-1 bg-purple-500 rounded-full z-10 shadow-[0_0_8px_rgba(168,85,247,0.8)]" />
+          )}
+
+          <div
+            className={`group relative flex items-center justify-between gap-1.5 rounded-lg text-xs transition-all duration-100 cursor-pointer select-none ${
+              isSelected
+                ? 'bg-purple-600/35 text-white border border-purple-500/60 shadow-sm font-semibold'
+                : isDragOver && dragOverPosition === 'inside'
+                ? 'bg-indigo-600/30 border-2 border-indigo-400 text-indigo-200'
+                : 'hover:bg-slate-900/90 text-slate-300 hover:text-white border border-transparent'
+            }`}
+            style={{ 
+              paddingLeft: `${Math.max(6, depth * 12 + 6)}px`, 
+              paddingRight: '6px', 
+              paddingTop: '5px', 
+              paddingBottom: '5px' 
+            }}
+            onClick={() => onSelectLayer && onSelectLayer(selector, path)}
+            onMouseEnter={() => onHoverLayer && onHoverLayer(path)}
+            onMouseLeave={() => onHoverLayer && onHoverLayer(null)}
+            draggable
+            onDragStart={(e) => {
+              e.stopPropagation();
+              setDragSource(path);
+              e.dataTransfer.setData('text/plain', `layer:${path}`);
+              e.dataTransfer.effectAllowed = 'move';
+            }}
+            onDragOver={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (dragSource !== path) {
+                setDragOver(path);
+                const rect = e.currentTarget.getBoundingClientRect();
+                const offsetY = e.clientY - rect.top;
+                if (offsetY < rect.height * 0.25) {
+                  setDragOverPosition('before');
+                } else if (offsetY > rect.height * 0.75) {
+                  setDragOverPosition('after');
+                } else {
+                  setDragOverPosition('inside');
+                }
+              }
+            }}
+            onDragLeave={() => {
+              setDragOver(null);
+              setDragOverPosition(null);
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              const pos = dragOverPosition || 'inside';
+              setDragOver(null);
+              setDragOverPosition(null);
+              if (dragSource && dragSource !== path && onMoveElement) {
+                onMoveElement(dragSource, path, pos);
+              }
+            }}
+          >
+            <div className="flex items-center gap-1.5 min-w-0 flex-1">
+              {hasChildren ? (
+                <button
+                  onClick={(e) => toggleExpanded(path, e)}
+                  className="p-0.5 hover:bg-slate-800 rounded text-slate-400 hover:text-white shrink-0"
+                >
+                  {isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                </button>
+              ) : (
+                <span className="w-3 h-3 shrink-0 inline-block" />
+              )}
+
+              <Layers className="w-3 h-3 text-purple-400 shrink-0" />
+
+              <div className="flex items-center gap-1 min-w-0 flex-1">
+                <span className="font-mono text-[11px] text-white font-medium truncate">{node.tag}</span>
+                {node.id && (
+                  <span className="text-[9px] text-cyan-400 font-mono bg-cyan-950/60 px-1 py-0.2 rounded border border-cyan-500/20 shrink-0">
+                    #{node.id}
+                  </span>
+                )}
+                {cleanClass && !node.id && (
+                  <span className="text-[9px] text-purple-400 font-mono truncate max-w-[80px] shrink-0">
+                    .{cleanClass}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {isSelected && onMoveElementDirection && (
+              <div className="flex items-center gap-0.5 opacity-80 group-hover:opacity-100">
+                <button
+                  onClick={(e) => { e.stopPropagation(); onMoveElementDirection(path, 'up'); }}
+                  className="p-0.5 hover:bg-slate-800 rounded text-slate-400 hover:text-white"
+                  title="Subir"
+                >
+                  ▲
+                </button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); onMoveElementDirection(path, 'down'); }}
+                  className="p-0.5 hover:bg-slate-800 rounded text-slate-400 hover:text-white"
+                  title="Descer"
+                >
+                  ▼
+                </button>
+              </div>
+            )}
+          </div>
+
+          {isDragOver && dragOverPosition === 'after' && (
+            <div className="absolute bottom-0 left-0 right-0 h-1 bg-purple-500 rounded-full z-10 shadow-[0_0_8px_rgba(168,85,247,0.8)]" />
+          )}
+
+          {hasChildren && isExpanded && (
+            <div role="group" className="border-l border-slate-800/80 ml-2.5 pl-0.5">
+              {renderLayers(node.children!, depth + 1, path)}
+            </div>
+          )}
+        </div>
+      );
+    });
+  };
 
   // SEO Local States with Debounce to prevent lag/freezing
   const [localSeoTitle, setLocalSeoTitle] = useState(pageSeo?.title || '');
@@ -251,45 +427,78 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const isInput = ['input', 'textarea', 'select'].includes(tag);
 
   return (
-    <aside className="w-72 border-l border-slate-900 bg-[#090410] flex flex-col h-full shrink-0 select-none shadow-2xl">
-      {/* Panel Top Tabs */}
-      <div className="flex border-b border-slate-900 bg-slate-950/60 p-1 gap-1">
+    <aside className="w-80 border-l border-slate-900 bg-[#090410] flex flex-col h-full shrink-0 select-none shadow-2xl z-20">
+      {/* Panel Top Tabs: Árvore DOM unificada com Estilos, Atributos e SEO */}
+      <div className="flex border-b border-slate-900 bg-slate-950/80 p-1 gap-1">
         <button
-          onClick={() => setPanelTab('styles')}
-          className={`flex-1 py-1.5 text-[11px] font-semibold rounded-md flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-            panelTab === 'styles'
-              ? 'bg-purple-600/25 text-purple-300 border border-purple-500/30 shadow-sm'
+          onClick={() => setPanelTab('layers')}
+          className={`flex-1 py-1.5 text-[11px] font-semibold rounded-md flex items-center justify-center gap-1 transition-all cursor-pointer ${
+            panelTab === 'layers'
+              ? 'bg-purple-600/25 text-purple-300 border border-purple-500/30 shadow-sm font-bold'
               : 'text-slate-500 hover:text-slate-300'
           }`}
+          title="Árvore de Blocos DOM"
+        >
+          <Layers className="w-3 h-3" />
+          Árvore
+        </button>
+        <button
+          onClick={() => setPanelTab('styles')}
+          className={`flex-1 py-1.5 text-[11px] font-semibold rounded-md flex items-center justify-center gap-1 transition-all cursor-pointer ${
+            panelTab === 'styles'
+              ? 'bg-purple-600/25 text-purple-300 border border-purple-500/30 shadow-sm font-bold'
+              : 'text-slate-500 hover:text-slate-300'
+          }`}
+          title="Estilos CSS"
         >
           <Palette className="w-3 h-3" />
           Estilos
         </button>
         <button
           onClick={() => setPanelTab('attrs')}
-          className={`flex-1 py-1.5 text-[11px] font-semibold rounded-md flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+          className={`flex-1 py-1.5 text-[11px] font-semibold rounded-md flex items-center justify-center gap-1 transition-all cursor-pointer ${
             panelTab === 'attrs'
-              ? 'bg-purple-600/25 text-purple-300 border border-purple-500/30 shadow-sm'
+              ? 'bg-purple-600/25 text-purple-300 border border-purple-500/30 shadow-sm font-bold'
               : 'text-slate-500 hover:text-slate-300'
           }`}
+          title="Atributos & Conteúdo"
         >
           <Code className="w-3 h-3" />
           Atributos
         </button>
         <button
           onClick={() => setPanelTab('seo')}
-          className={`flex-1 py-1.5 text-[11px] font-semibold rounded-md flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+          className={`flex-1 py-1.5 text-[11px] font-semibold rounded-md flex items-center justify-center gap-1 transition-all cursor-pointer ${
             panelTab === 'seo'
-              ? 'bg-purple-600/25 text-purple-300 border border-purple-500/30 shadow-sm'
+              ? 'bg-purple-600/25 text-purple-300 border border-purple-500/30 shadow-sm font-bold'
               : 'text-slate-500 hover:text-slate-300'
           }`}
+          title="SEO da Página"
         >
           <Globe className="w-3 h-3" />
           SEO
         </button>
       </div>
 
-      {panelTab === 'seo' ? (
+      {panelTab === 'layers' ? (
+        <div className="flex-1 flex flex-col min-h-0">
+          <div className="p-2.5 border-b border-slate-900 bg-slate-950/40 flex items-center justify-between text-[11px] text-slate-500 px-3">
+            <span className="font-bold text-slate-400">Árvore de Blocos DOM</span>
+            <div className="flex items-center gap-2 text-[10px]">
+              <button onClick={() => setExpandedPaths(new Set(['0', '1', '2', '3', '0.0', '1.0']))} className="hover:text-purple-300 transition-colors">Expandir</button>
+              <span>•</span>
+              <button onClick={() => setExpandedPaths(new Set())} className="hover:text-purple-300 transition-colors">Recolher</button>
+            </div>
+          </div>
+          <div className="flex-1 overflow-y-auto p-2 space-y-0.5 min-h-0">
+            {layers.length > 0 ? (
+              renderLayers(layers)
+            ) : (
+              <p className="text-[10px] text-slate-600 italic p-4 text-center">Nenhum elemento no canvas.</p>
+            )}
+          </div>
+        </div>
+      ) : panelTab === 'seo' ? (
         <div className="flex-1 overflow-y-auto p-3.5 space-y-4">
           <div>
             <span className="text-[10px] uppercase font-bold text-purple-400 tracking-wider flex items-center gap-1.5 mb-2">
