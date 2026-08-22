@@ -41,7 +41,7 @@ const router = (0, express_1.Router)();
 // In-memory queue system for AI chat modifications
 exports.aiChatJobsQueue = {};
 // Background worker for chat edits (suporta single-page ou todas as páginas)
-async function processAIChatJob(jobId, prompt, pageId, applyToAll, clientGeminiKey, model, registeredModels, clientProxyUrl) {
+async function processAIChatJob(jobId, prompt, pageId, applyToAll, clientGeminiKey, model, registeredModels, clientProxyUrl, customSkills) {
     try {
         const page = await db_1.prisma.page.findUnique({
             where: { id: pageId },
@@ -90,7 +90,7 @@ async function processAIChatJob(jobId, prompt, pageId, applyToAll, clientGeminiK
                     html: p.html,
                     css: p.css,
                     js: p.js
-                }, clientGeminiKey, model, registeredModels, undefined, clientProxyUrl);
+                }, clientGeminiKey, model, registeredModels, undefined, clientProxyUrl, customSkills);
                 await db_1.prisma.page.update({
                     where: { id: p.id },
                     data: {
@@ -108,24 +108,25 @@ async function processAIChatJob(jobId, prompt, pageId, applyToAll, clientGeminiK
                     js: aiResponse.js || p.js
                 };
             }));
-            const activeUpdated = updatedPages.find(p => p.id === pageId) || updatedPages[0];
             exports.aiChatJobsQueue[jobId] = {
                 status: 'completed',
                 scope: 'all',
                 pageId,
                 projectId: page.projectId,
                 result: {
-                    explanation: `Alteração aplicada com sucesso em todas as ${updatedPages.length} páginas do site com tema e navbar sincronizados!`,
-                    html: activeUpdated.html,
-                    css: activeUpdated.css,
-                    js: activeUpdated.js,
+                    explanation: `Alteração aplicada globalmente com sucesso em ${updatedPages.length} páginas do site.`,
                     updatedPages
-                }
+                },
+                currentModel: model
             };
         }
         else {
-            // Alteração na página individual ativa
-            const aiResponse = await (0, gemini_1.generateAIResponse)(prompt, {
+            // Processamento em página única
+            const singlePrompt = `
+        Página atual: "${page.name}" (slug: /${page.slug}, arquivo: ${page.isHomepage ? 'index.html' : page.slug + '.html'})
+        Instrução de alteração do usuário: "${prompt}"
+      `;
+            const aiResponse = await (0, gemini_1.generateAIResponse)(singlePrompt, {
                 html: page.html,
                 css: page.css,
                 js: page.js
@@ -137,7 +138,7 @@ async function processAIChatJob(jobId, prompt, pageId, applyToAll, clientGeminiK
                     pageId,
                     projectId: page.projectId
                 };
-            }, clientProxyUrl);
+            }, clientProxyUrl, customSkills);
             // Persiste automaticamente a alteração no banco
             await db_1.prisma.page.update({
                 where: { id: page.id },
@@ -196,6 +197,13 @@ router.post('/chat', async (req, res) => {
                 registeredModels = JSON.parse(rawModels);
         }
         catch { }
+        let customSkills;
+        try {
+            const rawSkills = (req.headers['x-ai-skills'] || req.headers['X-Ai-Skills'] || req.headers['X-AI-Skills']);
+            if (rawSkills)
+                customSkills = JSON.parse(rawSkills);
+        }
+        catch { }
         const jobId = `chat-job-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
         exports.aiChatJobsQueue[jobId] = {
             status: 'pending',
@@ -205,7 +213,7 @@ router.post('/chat', async (req, res) => {
             projectId: page.projectId
         };
         // Disparar processamento assíncrono em background
-        processAIChatJob(jobId, prompt, pageId, hasGlobalIntent, clientGeminiKey, model, registeredModels, clientProxyUrl);
+        processAIChatJob(jobId, prompt, pageId, hasGlobalIntent, clientGeminiKey, model, registeredModels, clientProxyUrl, customSkills);
         return res.status(202).json({ jobId, status: 'pending', scope: hasGlobalIntent ? 'all' : 'single' });
     }
     catch (error) {

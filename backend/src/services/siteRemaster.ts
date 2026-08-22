@@ -211,7 +211,8 @@ export async function processWebsiteRemasterJob(
   customApiKey?: string,
   registeredModels?: string[],
   customProxyUrl?: string,
-  onProgress?: (status: string, attempt: number, total: number) => void
+  onProgress?: (status: string, attempt: number, total: number) => void,
+  customSkills?: any[]
 ) {
   try {
     if (onProgress) onProgress(`Analisando estrutura e páginas do site (${websiteUrl})...`, 1, 4);
@@ -300,7 +301,8 @@ export async function processWebsiteRemasterJob(
       (model, attempt, total) => {
         if (onProgress) onProgress(`IA criando Home (${model} - ${attempt}/${total})...`, 2, 4);
       },
-      customProxyUrl
+      customProxyUrl,
+      customSkills
     );
 
     if (existingHome) {
@@ -361,7 +363,8 @@ export async function processWebsiteRemasterJob(
             undefined,
             registeredModels,
             undefined,
-            customProxyUrl
+            customProxyUrl,
+            customSkills
           );
 
           const existingSub = await prisma.page.findFirst({

@@ -215,7 +215,7 @@ function extractNavbarAndFooter(homeHtml) {
  * 2. Navbar e Footer Universais IDÊNTICOS em todas as páginas
  * 3. Separação Absoluta de HTML, CSS e JS
  */
-async function processWebsiteRemasterJob(projectId, websiteUrl, businessName, customApiKey, registeredModels, customProxyUrl, onProgress) {
+async function processWebsiteRemasterJob(projectId, websiteUrl, businessName, customApiKey, registeredModels, customProxyUrl, onProgress, customSkills) {
     try {
         if (onProgress)
             onProgress(`Analisando estrutura e páginas do site (${websiteUrl})...`, 1, 4);
@@ -290,7 +290,7 @@ async function processWebsiteRemasterJob(projectId, websiteUrl, businessName, cu
         const homeAiResponse = await (0, gemini_1.generateAIResponse)(homePrompt, { html: '', css: '', js: '' }, customApiKey, undefined, registeredModels, (model, attempt, total) => {
             if (onProgress)
                 onProgress(`IA criando Home (${model} - ${attempt}/${total})...`, 2, 4);
-        }, customProxyUrl);
+        }, customProxyUrl, customSkills);
         if (existingHome) {
             await db_1.prisma.page.update({
                 where: { id: existingHome.id },
@@ -338,7 +338,7 @@ async function processWebsiteRemasterJob(projectId, websiteUrl, businessName, cu
           3. SEPARAÇÃO TOTAL: Retorne APENAS HTML limpo no campo "html" (sem tags <style> nem <script>).
         `;
             try {
-                const subAiResponse = await (0, gemini_1.generateAIResponse)(subPrompt, { html: '', css: globalCss, js: globalJs }, customApiKey, undefined, registeredModels, undefined, customProxyUrl);
+                const subAiResponse = await (0, gemini_1.generateAIResponse)(subPrompt, { html: '', css: globalCss, js: globalJs }, customApiKey, undefined, registeredModels, undefined, customProxyUrl, customSkills);
                 const existingSub = await db_1.prisma.page.findFirst({
                     where: { projectId, slug: sub.slug }
                 });

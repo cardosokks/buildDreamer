@@ -41,7 +41,7 @@ const gemini_1 = require("../services/gemini");
 const router = (0, express_1.Router)();
 exports.projectJobsQueue = {};
 // Background task worker method
-async function processAIProjectGeneration(projectId, prompt, customApiKey, customModel, registeredModels, customProxyUrl) {
+async function processAIProjectGeneration(projectId, prompt, customApiKey, customModel, registeredModels, customProxyUrl, customSkills) {
     exports.projectJobsQueue[projectId] = { status: 'processing' };
     try {
         const page = await db_1.prisma.page.findFirst({
@@ -57,7 +57,7 @@ async function processAIProjectGeneration(projectId, prompt, customApiKey, custo
                 attempt,
                 total
             };
-        }, customProxyUrl);
+        }, customProxyUrl, customSkills);
         // Save final generated code to database
         await db_1.prisma.page.update({
             where: { id: page.id },
@@ -173,6 +173,13 @@ router.post('/', async (req, res) => {
                 registeredModels = JSON.parse(rawModels);
         }
         catch { }
+        let customSkills;
+        try {
+            const rawSkills = (req.headers['x-ai-skills'] || req.headers['X-Ai-Skills'] || req.headers['X-AI-Skills']);
+            if (rawSkills)
+                customSkills = JSON.parse(rawSkills);
+        }
+        catch { }
         // 1. Caso seja remasterização/melhoria de site existente (analisa páginas e subpáginas)
         if (remasterWebsiteUrl) {
             exports.projectJobsQueue[project.id] = { status: 'pending' };
@@ -183,7 +190,7 @@ router.post('/', async (req, res) => {
                     attempt,
                     total
                 };
-            }).then(() => {
+            }, customSkills).then(() => {
                 exports.projectJobsQueue[project.id] = { status: 'completed' };
             }).catch((err) => {
                 exports.projectJobsQueue[project.id] = { status: 'failed', error: err.message };
@@ -194,7 +201,7 @@ router.post('/', async (req, res) => {
             const aiPromptMessage = `Gere um mockup completo e profissional de site para a empresa "${name}". Descrição detalhada do negócio: ${description}. Crie uma paleta elegante, seções funcionais (Hero, Serviços, Contato, FAQ) e um design moderno responsivo.`;
             // Enqueue job immediately on process memory thread
             exports.projectJobsQueue[project.id] = { status: 'pending' };
-            processAIProjectGeneration(project.id, aiPromptMessage, clientGeminiKey, undefined, registeredModels, clientProxyUrl);
+            processAIProjectGeneration(project.id, aiPromptMessage, clientGeminiKey, undefined, registeredModels, clientProxyUrl, customSkills);
         }
         // Upload to FTP background
         try {

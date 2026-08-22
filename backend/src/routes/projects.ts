@@ -21,7 +21,8 @@ async function processAIProjectGeneration(
   customApiKey?: string, 
   customModel?: string, 
   registeredModels?: string[],
-  customProxyUrl?: string
+  customProxyUrl?: string,
+  customSkills?: any[]
 ) {
   projectJobsQueue[projectId] = { status: 'processing' };
   try {
@@ -46,7 +47,8 @@ async function processAIProjectGeneration(
           total
         };
       },
-      customProxyUrl
+      customProxyUrl,
+      customSkills
     );
 
     // Save final generated code to database
@@ -169,6 +171,12 @@ router.post('/', async (req: AuthenticatedRequest, res: any) => {
       if (rawModels) registeredModels = JSON.parse(rawModels);
     } catch {}
 
+    let customSkills: any[] | undefined;
+    try {
+      const rawSkills = (req.headers['x-ai-skills'] || req.headers['X-Ai-Skills'] || req.headers['X-AI-Skills']) as string;
+      if (rawSkills) customSkills = JSON.parse(rawSkills);
+    } catch {}
+
     // 1. Caso seja remasterização/melhoria de site existente (analisa páginas e subpáginas)
     if (remasterWebsiteUrl) {
       projectJobsQueue[project.id] = { status: 'pending' };
@@ -186,7 +194,8 @@ router.post('/', async (req: AuthenticatedRequest, res: any) => {
             attempt,
             total
           };
-        }
+        },
+        customSkills
       ).then(() => {
         projectJobsQueue[project.id] = { status: 'completed' };
       }).catch((err) => {
@@ -199,7 +208,7 @@ router.post('/', async (req: AuthenticatedRequest, res: any) => {
       
       // Enqueue job immediately on process memory thread
       projectJobsQueue[project.id] = { status: 'pending' };
-      processAIProjectGeneration(project.id, aiPromptMessage, clientGeminiKey, undefined, registeredModels, clientProxyUrl);
+      processAIProjectGeneration(project.id, aiPromptMessage, clientGeminiKey, undefined, registeredModels, clientProxyUrl, customSkills);
     }
 
     // Upload to FTP background

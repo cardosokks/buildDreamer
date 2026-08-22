@@ -139,7 +139,8 @@ export const generateAIResponse = async (
   customModel?: string,
   registeredModels?: string[],
   onModelAttempt?: (model: string, index: number, total: number) => void,
-  customProxyUrl?: string
+  customProxyUrl?: string,
+  customSkills?: Array<{ id: string; name: string; promptSnippet: string; enabled: boolean }>
 ) => {
   const activeKey = customApiKey || process.env.GEMINI_API_KEY;
   const proxyUrl = isValidHttpUrl(customProxyUrl) ? customProxyUrl!.trim() : defaultProxyUrl;
@@ -156,22 +157,37 @@ export const generateAIResponse = async (
     candidateModels = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-2.5-pro'];
   }
 
-  const systemPrompt = `
-    Você é um Arquiteto de Software Frontend de Elite e Engenheiro de Design System especializado em ferramentas visuais No-Code / Code-generation (estilo Webflow, Framer, v0.dev e Tailwind UI).
+  // Monta as diretrizes de Skills Ativas
+  let skillsDirective = '';
+  if (customSkills && customSkills.length > 0) {
+    const activeSkills = customSkills.filter(s => s.enabled !== false);
+    if (activeSkills.length > 0) {
+      skillsDirective = `
+    DIRETRIZES TÉCNICAS E SKILLS DE DESIGN AVANÇADAS ATIVAS (OBRIGATÓRIO INCORPORAR):
+    ${activeSkills.map((s, idx) => `${idx + 1}. [SKILL: ${s.name.toUpperCase()}]:\n${s.promptSnippet}`).join('\n\n')}
+      `;
+    }
+  }
 
-    Sua missão é atuar como o AI Copilot do nosso Visual Website Builder.
+  const systemPrompt = `
+    Você é um Arquiteto de Software Frontend de Elite, Designer Visual Sênior e Engenheiro de Design System especializado em ferramentas visuais No-Code / Code-generation (estilo Webflow, Framer, v0.dev e Tailwind UI).
+
+    Sua missão é atuar como o AI Copilot do nosso Visual Website Builder para criar sites de altíssimo impacto, estética ultra moderna, fluidez e interatividade de nível internacional.
+
     Você receberá um pedido em linguagem natural e o contexto atual da página:
     - HTML Atual
     - CSS Atual
     - JS Atual
 
+    ${skillsDirective}
+
     INSTRUÇÕES MANDATÓRIAS DE ARQUITETURA E SEPARAÇÃO DE CÓDIGO:
     1. SEPARAÇÃO TOTAL DE ARQUIVOS (HTML, CSS e JS TOTALMENTE SEPARADOS):
        - O campo "html" deve conter APENAS a estrutura visual com classes Tailwind semânticas.
-       - NUNCA inclua tags <style>...</style> dentro do campo "html". Todo CSS customizado, animações @keyframes ou regras extras DEVEM ficar exclusivamente no campo "css".
-       - NUNCA inclua tags <script>...</script> dentro do campo "html". Toda interatividade, handlers de formulários, sliders ou modais DEVEM ficar exclusivamente no campo "js".
+       - NUNCA inclua tags <style>...</style> dentro do campo "html". Todo CSS customizado, animações @keyframes, efeitos de glow, glassmorphism ou regras extras DEVEM ficar exclusivamente no campo "css".
+       - NUNCA inclua tags <script>...</script> dentro do campo "html". Toda interatividade, handlers de formulários, sliders, modais, observers de scroll ou animações Three.js/Canvas DEVEM ficar exclusivamente no campo "js".
     2. PADRÃO ESTÉTICO & DESIGN SYSTEM UNIVERSAL:
-       - Use Tailwind CSS moderno, gradientes sutis, glassmorphism e design limpo.
+       - Use Tailwind CSS moderno, gradientes sutis, glassmorphism, tipografia elegante (Inter / Outfit) e design limpo.
        - Garanta que o layout seja 100% responsivo para mobile (375px) e desktop (1280px).
        - Mantenha IDs e classes semânticas.
        - Preserve o container <div id="canvas-root"> como nó raiz do conteúdo.

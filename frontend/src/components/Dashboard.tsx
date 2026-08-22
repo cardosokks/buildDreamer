@@ -593,7 +593,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
           'Authorization': `Bearer ${token}`,
           'X-Gemini-Key': localStorage.getItem('gemini_api_key') || '',
           'X-Gemini-Models': JSON.stringify(registeredModelIds),
-          'X-Proxy-Url': localStorage.getItem('ai_proxy_url') || ''
+          'X-Proxy-Url': localStorage.getItem('ai_proxy_url') || '',
+          'X-AI-Skills': localStorage.getItem('custom_ai_skills') || ''
         },
         body: JSON.stringify({ 
           name: lead.name, 
@@ -680,7 +681,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
           'Authorization': `Bearer ${token}`,
           'X-Gemini-Key': localStorage.getItem('gemini_api_key') || '',
           'X-Gemini-Models': JSON.stringify(registeredModelIds),
-          'X-Proxy-Url': localStorage.getItem('ai_proxy_url') || ''
+          'X-Proxy-Url': localStorage.getItem('ai_proxy_url') || '',
+          'X-AI-Skills': localStorage.getItem('custom_ai_skills') || ''
         },
         body: JSON.stringify({ 
           name: finalName, 

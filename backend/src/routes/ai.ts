@@ -32,7 +32,8 @@ async function processAIChatJob(
   clientGeminiKey?: string,
   model?: string,
   registeredModels?: string[],
-  clientProxyUrl?: string
+  clientProxyUrl?: string,
+  customSkills?: Array<{ id: string; name: string; promptSnippet: string; enabled: boolean }>
 ) {
   try {
     const page = await prisma.page.findUnique({
@@ -95,7 +96,8 @@ async function processAIChatJob(
             model,
             registeredModels,
             undefined,
-            clientProxyUrl
+            clientProxyUrl,
+            customSkills
           );
 
           await prisma.page.update({
@@ -118,25 +120,26 @@ async function processAIChatJob(
         })
       );
 
-      const activeUpdated = updatedPages.find(p => p.id === pageId) || updatedPages[0];
-
       aiChatJobsQueue[jobId] = {
         status: 'completed',
         scope: 'all',
         pageId,
         projectId: page.projectId,
         result: {
-          explanation: `Alteração aplicada com sucesso em todas as ${updatedPages.length} páginas do site com tema e navbar sincronizados!`,
-          html: activeUpdated.html,
-          css: activeUpdated.css,
-          js: activeUpdated.js,
+          explanation: `Alteração aplicada globalmente com sucesso em ${updatedPages.length} páginas do site.`,
           updatedPages
-        }
+        },
+        currentModel: model
       };
     } else {
-      // Alteração na página individual ativa
+      // Processamento em página única
+      const singlePrompt = `
+        Página atual: "${page.name}" (slug: /${page.slug}, arquivo: ${page.isHomepage ? 'index.html' : page.slug + '.html'})
+        Instrução de alteração do usuário: "${prompt}"
+      `;
+
       const aiResponse = await generateAIResponse(
-        prompt,
+        singlePrompt,
         {
           html: page.html,
           css: page.css,
@@ -154,7 +157,8 @@ async function processAIChatJob(
             projectId: page.projectId
           };
         },
-        clientProxyUrl
+        clientProxyUrl,
+        customSkills
       );
 
       // Persiste automaticamente a alteração no banco
@@ -221,6 +225,12 @@ router.post('/chat', async (req: AuthenticatedRequest, res: any) => {
       if (rawModels) registeredModels = JSON.parse(rawModels);
     } catch {}
 
+    let customSkills: any[] | undefined;
+    try {
+      const rawSkills = (req.headers['x-ai-skills'] || req.headers['X-Ai-Skills'] || req.headers['X-AI-Skills']) as string;
+      if (rawSkills) customSkills = JSON.parse(rawSkills);
+    } catch {}
+
     const jobId = `chat-job-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     aiChatJobsQueue[jobId] = { 
       status: 'pending', 
@@ -239,7 +249,8 @@ router.post('/chat', async (req: AuthenticatedRequest, res: any) => {
       clientGeminiKey, 
       model, 
       registeredModels, 
-      clientProxyUrl
+      clientProxyUrl,
+      customSkills
     );
 
     return res.status(202).json({ jobId, status: 'pending', scope: hasGlobalIntent ? 'all' : 'single' });

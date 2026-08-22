@@ -264,7 +264,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
           'Authorization': `Bearer ${token}`,
           'x-gemini-key': localGeminiKey,
           'x-gemini-models': JSON.stringify(registeredModelIds),
-          'x-proxy-url': localStorage.getItem('ai_proxy_url') || ''
+          'x-proxy-url': localStorage.getItem('ai_proxy_url') || '',
+          'x-ai-skills': localStorage.getItem('custom_ai_skills') || ''
         },
         body: JSON.stringify({ 
           prompt: userMessage.trim(), 
