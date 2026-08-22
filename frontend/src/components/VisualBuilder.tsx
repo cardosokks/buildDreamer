@@ -763,6 +763,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
 
   const [ngrokActive, setNgrokActive] = useState(false);
   const [ngrokUrl, setNgrokUrl] = useState<string | null>(null);
+  const [showPreviewMenu, setShowPreviewMenu] = useState(false);
 
   // Consulta se o sistema está online no Ngrok
   const checkSystemNgrokStatus = useCallback(async () => {
@@ -794,13 +795,14 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
     const blob = new Blob([content], { type: 'text/html;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     window.open(url, '_blank');
+    setShowPreviewMenu(false);
   };
 
   const handleOpenNgrokPreview = () => {
     if (!ngrokUrl) return;
-    // Abre a rota do editor/site ou a URL pública diretamente no Ngrok
     const pageRoute = activePage ? `/builder/${projectId}` : '';
     window.open(`${ngrokUrl}${pageRoute}`, '_blank');
+    setShowPreviewMenu(false);
   };
 
   return (
@@ -948,29 +950,71 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
             <Code2 className="w-4 h-4" />
           </button>
 
-          {/* Botão de Preview em Nova Aba Local */}
-          <button
-            onClick={handleOpenLivePreview}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-cyan-500/40 text-cyan-300 rounded-xl text-xs font-semibold transition-all cursor-pointer shadow-sm"
-            title="Abrir Preview Local em Nova Aba"
-          >
-            <Eye className="w-3.5 h-3.5 text-cyan-400" />
-            <span className="hidden sm:inline">Preview</span>
-          </button>
+          {/* Botão Unificado de Preview (Local + Ngrok) */}
+          <div className="relative">
+            {ngrokActive && ngrokUrl ? (
+              <div className="flex items-center">
+                <button
+                  onClick={handleOpenLivePreview}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-950/60 hover:bg-cyan-900/60 border border-cyan-500/50 rounded-l-xl text-xs font-semibold text-cyan-300 transition-all cursor-pointer shadow-sm"
+                  title="Abrir Preview Local em Nova Aba"
+                >
+                  <Eye className="w-3.5 h-3.5 text-cyan-400" />
+                  <span className="hidden sm:inline">Preview</span>
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse ml-0.5" title="Ngrok Online" />
+                </button>
 
-          {/* Botão de Preview Ngrok (Aparece quando o Ngrok estiver ativo) */}
-          {ngrokActive && ngrokUrl && (
-            <button
-              onClick={handleOpenNgrokPreview}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-950/70 hover:bg-emerald-900/80 border border-emerald-500/50 text-emerald-300 rounded-xl text-xs font-semibold transition-all cursor-pointer shadow-sm animate-in fade-in zoom-in-95 duration-200"
-              title={`Abrir no Ngrok: ${ngrokUrl}`}
-            >
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-              <Globe className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="hidden sm:inline">Link Ngrok</span>
-              <ExternalLink className="w-3 h-3 text-emerald-400/80" />
-            </button>
-          )}
+                <button
+                  onClick={() => setShowPreviewMenu(!showPreviewMenu)}
+                  className="p-1.5 bg-cyan-950/60 hover:bg-cyan-900/60 border border-l-0 border-cyan-500/50 rounded-r-xl text-cyan-300 transition-all cursor-pointer"
+                  title="Mais Opções de Preview (Local / Link Ngrok)"
+                >
+                  <ChevronDown className="w-3.5 h-3.5 text-cyan-400" />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={handleOpenLivePreview}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-cyan-500/40 text-cyan-300 rounded-xl text-xs font-semibold transition-all cursor-pointer shadow-sm"
+                title="Abrir Preview Local em Nova Aba"
+              >
+                <Eye className="w-3.5 h-3.5 text-cyan-400" />
+                <span className="hidden sm:inline">Preview</span>
+              </button>
+            )}
+
+            {/* Menu Dropdown de Preview quando Ngrok estiver ativo */}
+            {showPreviewMenu && ngrokActive && ngrokUrl && (
+              <div className="absolute right-0 top-full mt-1.5 w-60 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl p-1.5 z-50 space-y-1 backdrop-blur-md animate-in fade-in zoom-in-95 duration-100">
+                <button
+                  onClick={handleOpenLivePreview}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-slate-200 hover:bg-slate-800 hover:text-white rounded-lg transition-colors cursor-pointer text-left"
+                >
+                  <ExternalLink className="w-4 h-4 text-cyan-400 shrink-0" />
+                  <div>
+                    <span className="block font-bold">Preview Local</span>
+                    <span className="text-[10px] text-slate-400">Em tempo real nesta máquina</span>
+                  </div>
+                </button>
+
+                <button
+                  onClick={handleOpenNgrokPreview}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-emerald-300 hover:bg-emerald-950/40 rounded-lg transition-colors cursor-pointer text-left"
+                >
+                  <Globe className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <div>
+                    <span className="block font-bold flex items-center gap-1.5">
+                      Link Público Ngrok
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                    </span>
+                    <span className="text-[10px] text-emerald-400/80 font-mono truncate block max-w-[170px]">
+                      {ngrokUrl.replace('https://', '')}
+                    </span>
+                  </div>
+                </button>
+              </div>
+            )}
+          </div>
 
           {/* Hidden ZIP File Input */}
           <input 
