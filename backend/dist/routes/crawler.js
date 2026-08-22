@@ -7,12 +7,12 @@ const router = (0, express_1.Router)();
 // Endpoint de Crawler Autônomo para Busca de Estabelecimentos e Leads
 router.post('/search', async (req, res) => {
     try {
-        const { niche, city, state, country, location, query, onlyWithoutWebsite, hasPhoneOnly, minRating, limit } = req.body;
+        const { niche, city, state, country, location, query, onlyWithoutWebsite, hasPhoneOnly, minRating, limit, page } = req.body;
         const finalNiche = niche || query;
         if (!finalNiche) {
             return res.status(400).json({ error: 'Nicho ou termo de busca é obrigatório (ex: Supermercado, Pizzaria, Dentista)' });
         }
-        const leads = await leadCrawler_1.LeadCrawlerEngine.executeSearch({
+        const result = await leadCrawler_1.LeadCrawlerEngine.executeSearch({
             niche: finalNiche,
             city: city || '',
             state: state || '',
@@ -21,12 +21,15 @@ router.post('/search', async (req, res) => {
             onlyWithoutWebsite: onlyWithoutWebsite === true || onlyWithoutWebsite === 'true',
             hasPhoneOnly: hasPhoneOnly === true || hasPhoneOnly === 'true',
             minRating: parseFloat(minRating || '0'),
-            limit: parseInt(limit || '150', 10)
+            limit: parseInt(limit || '40', 10),
+            page: parseInt(page || '1', 10)
         });
         return res.json({
             success: true,
-            total: leads.length,
-            leads
+            total: result.leads.length,
+            page: result.page,
+            hasMore: result.hasMore,
+            leads: result.leads
         });
     }
     catch (error) {

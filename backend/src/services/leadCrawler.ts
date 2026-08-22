@@ -139,21 +139,28 @@ export class LeadCrawlerEngine {
     niche: string;
     city: string;
     state?: string;
+    page?: number;
+    pageSize?: number;
     maxPages?: number;
   }): Promise<CrawledLead[]> {
+    const pageNum = Math.max(1, params.page || 1);
+    const pagesPerRequest = params.maxPages || 6;
+    const startOffset = (pageNum - 1) * pagesPerRequest * 20;
+
     const baseQuery = `${params.niche} em ${params.city} ${params.state || ''}`.trim();
-    const maxPages = params.maxPages || 10; // 10 páginas por busca = até 200 estabelecimentos por query
     
     // Lista de variações de consultas para multiplicar os resultados do Google Maps (Centro, Bairros, Regiões)
     const queries = [
       baseQuery,
       `${params.niche} no Centro de ${params.city} ${params.state || ''}`.trim(),
-      `${params.niche} em ${params.city}`.trim()
+      `${params.niche} em ${params.city}`.trim(),
+      `melhores ${params.niche} em ${params.city}`.trim(),
+      `lojas de ${params.niche} em ${params.city}`.trim()
     ];
 
     const allQueriesResults = await Promise.all(
       queries.map(async (query) => {
-        const pageOffsets = Array.from({ length: maxPages }, (_, i) => i * 20);
+        const pageOffsets = Array.from({ length: pagesPerRequest }, (_, i) => startOffset + (i * 20));
 
         const pagesResults = await Promise.all(
           pageOffsets.map(async (offset, pageIdx) => {
@@ -338,7 +345,7 @@ export class LeadCrawlerEngine {
   }
 
   /**
-   * Executa busca multi-fonte massiva, concorrente e sem limites restritivos
+   * Executa busca multi-fonte massiva, concorrente e com paginação real infinita
    */
   public static async executeSearch(params: {
     niche: string;
@@ -350,7 +357,8 @@ export class LeadCrawlerEngine {
     hasPhoneOnly?: boolean;
     minRating?: number;
     limit?: number;
-  }): Promise<CrawledLead[]> {
+    page?: number;
+  }): Promise<{ leads: CrawledLead[]; page: number; hasMore: boolean }> {
     const { 
       niche, 
       city = '', 
@@ -360,7 +368,8 @@ export class LeadCrawlerEngine {
       onlyWithoutWebsite = false, 
       hasPhoneOnly = false, 
       minRating = 0, 
-      limit = 500 // Limite expandido para até 500 estabelecimentos
+      limit = 40,
+      page = 1
     } = params;
 
     let finalCity = city.trim();
@@ -375,10 +384,10 @@ export class LeadCrawlerEngine {
     if (!finalCity) finalCity = 'Formosa';
     if (!finalState) finalState = 'GO';
 
-    // Executa em paralelo todas as páginas e subconsultas do Google Maps + Guias Municipais
+    // Executa em paralelo todas as subconsultas da página solicitada
     const [gmapsResults, directoryResults] = await Promise.all([
-      this.scrapeGoogleMapsPaged({ niche, city: finalCity, state: finalState, maxPages: 10 }),
-      this.scrapeMunicipalDirectory({ niche, city: finalCity, state: finalState })
+      this.scrapeGoogleMapsPaged({ niche, city: finalCity, state: finalState, page, maxPages: 6 }),
+      page === 1 ? this.scrapeMunicipalDirectory({ niche, city: finalCity, state: finalState }) : Promise.resolve([])
     ]);
 
     const combined = [...gmapsResults, ...directoryResults];
@@ -398,6 +407,11 @@ export class LeadCrawlerEngine {
       }
     }
 
-    return uniqueLeads.slice(0, limit);
+    const filteredLeads = uniqueLeads.slice(0, limit);
+    return {
+      leads: filteredLeads,
+      page,
+      hasMore: uniqueLeads.length >= 10
+    };
   }
 }

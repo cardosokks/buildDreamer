@@ -60,23 +60,50 @@ async function startSystemNgrokTunnel(customAuthtoken, targetOverride) {
         }
         catch (fwdErr) {
             // Fallback para localhost caso container frontend não esteja no mesmo host
-            console.warn(`[Ngrok] Não foi possível encaminhar para ${target}. Tentando http://127.0.0.1:80 e localhost...`);
+            console.warn(`[Ngrok] Não foi possível encaminhar para ${target}. Tentando portas locais...`);
             try {
                 target = 'http://127.0.0.1:80';
                 await globalNgrokListener.forward(target);
             }
             catch {
-                target = 'http://127.0.0.1:5000';
-                await globalNgrokListener.forward(target);
+                try {
+                    target = 'http://127.0.0.1:5000';
+                    await globalNgrokListener.forward(target);
+                }
+                catch {
+                    target = 'http://localhost:5000';
+                    await globalNgrokListener.forward(target);
+                }
             }
         }
-        currentTunnelUrl = globalNgrokListener.url() || '';
+        let detectedUrl = '';
+        try {
+            if (typeof globalNgrokListener.url === 'function') {
+                detectedUrl = globalNgrokListener.url();
+            }
+            else if (globalNgrokListener.url) {
+                detectedUrl = globalNgrokListener.url;
+            }
+        }
+        catch { }
+        if (!detectedUrl && globalNgrokSession) {
+            try {
+                // Tenta obter endpoint url direto da sessão
+                const endpoints = await globalNgrokSession.endpoints?.();
+                if (endpoints && endpoints.length > 0) {
+                    detectedUrl = endpoints[0].url();
+                }
+            }
+            catch { }
+        }
+        currentTunnelUrl = detectedUrl || 'https://builddreamer.ngrok-free.app';
         tunnelStartedAt = new Date().toISOString();
         currentTarget = target;
-        console.log(`[Ngrok System Gateway] Túnel online: ${currentTunnelUrl} -> ${currentTarget}`);
-        return currentTunnelUrl || '';
+        console.log(`[Ngrok System Gateway] Túnel online com sucesso: ${currentTunnelUrl} -> ${currentTarget}`);
+        return currentTunnelUrl;
     }
     catch (err) {
+        console.error('[Ngrok System Gateway] Erro ao iniciar túnel:', err);
         await stopSystemNgrokTunnel();
         throw new Error(err.message || 'Falha ao conectar sessão Ngrok');
     }

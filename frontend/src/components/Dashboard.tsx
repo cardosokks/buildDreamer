@@ -252,6 +252,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
   const [minRating, setMinRating] = useState('0');
   const [leadsList, setLeadsList] = useState<Lead[]>([]);
   const [loadingLeads, setLoadingLeads] = useState(false);
+  const [crawlerPage, setCrawlerPage] = useState(1);
+  const [hasMoreCrawlerLeads, setHasMoreCrawlerLeads] = useState(true);
   
   // Paginação e Modo de Visualização (Persistência no LocalStorage)
   const [currentPage, setCurrentPage] = useState(1);
@@ -470,15 +472,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
     };
   }, [isResizingSidebar]);
 
-  // Lead search method com Crawler Autônomo
-  const handleSearchLeads = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Lead search method com Crawler Autônomo e Paginação Remota
+  const handleSearchLeads = async (e?: React.FormEvent, targetPage: number = 1) => {
+    if (e) e.preventDefault();
     if (!leadQuery) return;
     setLoadingLeads(true);
+    setCrawlerPage(targetPage);
     setCurrentPage(1);
 
     try {
-      // 1. Chamar Crawler Autônomo com parâmetros segmentados
+      // 1. Chamar Crawler Autônomo com parâmetros segmentados e página solicitada
       const crawlerRes = await fetch(`${API_URL}/api/crawler/search`, {
         method: 'POST',
         headers: {
@@ -493,13 +496,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
           onlyWithoutWebsite,
           hasPhoneOnly,
           minRating,
+          page: targetPage,
           limit: 40
         })
       });
 
       if (crawlerRes.ok) {
         const data = await crawlerRes.json();
-        if (data.leads && data.leads.length > 0) {
+        if (data.leads && Array.isArray(data.leads)) {
+          setHasMoreCrawlerLeads(data.hasMore !== false);
           setLeadsList(data.leads.map((l: any) => ({
             ...l,
             needsWebsite: l.hasWebsite === false || !l.website
@@ -2421,42 +2426,81 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                     </div>
                   )}
 
-                  {/* Controles de Paginação (Anterior / Próxima e Números de Página) */}
-                  {Math.ceil(leadsList.length / leadsPerPage) > 1 && (
-                    <div className="flex items-center justify-center gap-2 pt-4">
-                      <button
-                        onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
-                        disabled={currentPage === 1}
-                        className="px-3.5 py-2 bg-[#0f0b18] border border-slate-800 hover:border-purple-500/40 text-xs font-semibold text-slate-300 hover:text-white rounded-xl disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-                      >
-                        Anterior
-                      </button>
+                  {/* Controles de Navegação e Busca de Novas Páginas do Google Maps */}
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-6 border-t border-slate-850">
+                    {/* Paginação Local dos Leads Atuais */}
+                    {Math.ceil(leadsList.length / leadsPerPage) > 1 && (
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
+                          disabled={currentPage === 1}
+                          className="px-3 py-1.5 bg-[#0f0b18] border border-slate-800 hover:border-purple-500/40 text-xs font-semibold text-slate-300 hover:text-white rounded-xl disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                        >
+                          Anterior
+                        </button>
 
-                      <div className="flex items-center gap-1">
-                        {Array.from({ length: Math.ceil(leadsList.length / leadsPerPage) }, (_, i) => i + 1).map(page => (
-                          <button
-                            key={page}
-                            onClick={() => setCurrentPage(page)}
-                            className={`w-8 h-8 rounded-xl text-xs font-bold transition-all ${
-                              currentPage === page
-                                ? 'bg-purple-700 text-white shadow-[0_0_10px_rgba(168,85,247,0.4)]'
-                                : 'bg-[#0f0b18] border border-slate-850 text-slate-400 hover:text-white'
-                            }`}
-                          >
-                            {page}
-                          </button>
-                        ))}
+                        <div className="flex items-center gap-1">
+                          {Array.from({ length: Math.ceil(leadsList.length / leadsPerPage) }, (_, i) => i + 1).map(page => (
+                            <button
+                              key={page}
+                              onClick={() => setCurrentPage(page)}
+                              className={`w-7 h-7 rounded-lg text-xs font-bold transition-all ${
+                                currentPage === page
+                                  ? 'bg-purple-700 text-white shadow-[0_0_10px_rgba(168,85,247,0.4)]'
+                                  : 'bg-[#0f0b18] border border-slate-850 text-slate-400 hover:text-white'
+                              }`}
+                            >
+                              {page}
+                            </button>
+                          ))}
+                        </div>
+
+                        <button
+                          onClick={() => setCurrentPage(p => Math.min(p + 1, Math.ceil(leadsList.length / leadsPerPage)))}
+                          disabled={currentPage === Math.ceil(leadsList.length / leadsPerPage)}
+                          className="px-3 py-1.5 bg-[#0f0b18] border border-slate-800 hover:border-purple-500/40 text-xs font-semibold text-slate-300 hover:text-white rounded-xl disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                        >
+                          Próxima
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Paginação Contínua/Infinita do Motor Google Maps */}
+                    <div className="flex items-center gap-3 ml-auto">
+                      <div className="text-xs text-slate-400 font-medium">
+                        Lote Google Maps: <strong className="text-purple-400 font-mono">Página {crawlerPage}</strong>
                       </div>
 
+                      {crawlerPage > 1 && (
+                        <button
+                          onClick={() => handleSearchLeads(undefined, crawlerPage - 1)}
+                          disabled={loadingLeads}
+                          className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-purple-500/40 text-slate-200 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                        >
+                          ← Página Anterior do Maps
+                        </button>
+                      )}
+
                       <button
-                        onClick={() => setCurrentPage(p => Math.min(p + 1, Math.ceil(leadsList.length / leadsPerPage)))}
-                        disabled={currentPage === Math.ceil(leadsList.length / leadsPerPage)}
-                        className="px-3.5 py-2 bg-[#0f0b18] border border-slate-800 hover:border-purple-500/40 text-xs font-semibold text-slate-300 hover:text-white rounded-xl disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                        onClick={() => handleSearchLeads(undefined, crawlerPage + 1)}
+                        disabled={loadingLeads || !hasMoreCrawlerLeads}
+                        className="px-4 py-2 bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-600 hover:to-indigo-600 text-white text-xs font-bold rounded-xl shadow-lg shadow-purple-600/20 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                        title="Busca o próximo lote de clientes diretamente no Google Maps"
                       >
-                        Próxima
+                        {loadingLeads ? (
+                          <>
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            Raspando Lote {crawlerPage + 1}...
+                          </>
+                        ) : (
+                          <>
+                            <span>Próxima Página do Maps ({crawlerPage + 1})</span>
+                            <ChevronRight className="w-4 h-4" />
+                          </>
+                        )}
                       </button>
                     </div>
-                  )}
+                  </div>
                 </div>
               )}
             </div>
