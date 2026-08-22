@@ -153,6 +153,9 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
       if (!res.ok) throw new Error('Falha ao carregar projeto');
       const data = await res.json();
       setProject(data);
+      if (data.name) {
+        document.title = `${data.name} | Editor Visual BuildDreamer`;
+      }
       if (data.pages && data.pages.length > 0 && !activePageId) {
         const home = data.pages.find((p: Page) => p.isHomepage) || data.pages[0];
         setActivePageId(home.id);
