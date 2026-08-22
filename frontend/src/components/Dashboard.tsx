@@ -1864,7 +1864,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                                           <BookmarkCheck className="w-3.5 h-3.5 fill-yellow-400" />
                                         </button>
 
-                                        {lead.website ? (
+                                        {/* Botão: Gerar Site Normal */}
+                                        <button
+                                          onClick={() => handleCreateProjectFromLead(lead)}
+                                          className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg text-xs transition-all shadow-md cursor-pointer flex items-center gap-1"
+                                        >
+                                          <Sparkles className="w-3.5 h-3.5" />
+                                          Gerar Site
+                                        </button>
+
+                                        {/* Botão: Melhorar com IA (Apenas se tiver website) */}
+                                        {lead.website && (
                                           <button
                                             onClick={() => handleStartRemasterFlow(lead)}
                                             className="px-2.5 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold rounded-lg text-xs transition-all shadow-md cursor-pointer flex items-center gap-1"
@@ -1872,14 +1882,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                                           >
                                             <Sparkles className="w-3.5 h-3.5" />
                                             Melhorar com IA
-                                          </button>
-                                        ) : (
-                                          <button
-                                            onClick={() => handleCreateProjectFromLead(lead)}
-                                            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg text-xs transition-all shadow-md cursor-pointer flex items-center gap-1"
-                                          >
-                                            <Sparkles className="w-3.5 h-3.5" />
-                                            Gerar Site
                                           </button>
                                         )}
                                       </div>
@@ -1963,12 +1965,23 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                                     WhatsApp
                                   </a>
                                 )}
-                                <button
-                                  onClick={() => handleCreateProjectFromLead(lead)}
-                                  className="px-3.5 py-1.5 bg-purple-700/40 hover:bg-purple-700/80 border border-purple-500/50 text-xs font-bold text-white rounded-xl transition-all cursor-pointer shadow-sm"
-                                >
-                                  Gerar Site com IA
-                                </button>
+                                 <button
+                                   onClick={() => handleCreateProjectFromLead(lead)}
+                                   className="px-3.5 py-1.5 bg-indigo-600/30 hover:bg-indigo-600 border border-indigo-500/40 text-xs font-bold text-indigo-200 hover:text-white rounded-xl transition-all cursor-pointer shadow-sm flex items-center gap-1"
+                                 >
+                                   <Layout className="w-3.5 h-3.5" />
+                                   Gerar Site
+                                 </button>
+                                 {lead.website && (
+                                   <button
+                                     onClick={() => handleStartRemasterFlow(lead)}
+                                     className="px-3.5 py-1.5 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-xs font-bold text-white rounded-xl transition-all cursor-pointer shadow-md shadow-purple-600/20 flex items-center gap-1"
+                                     title="Analisar site original e remasterizar com IA"
+                                   >
+                                     <Sparkles className="w-3.5 h-3.5" />
+                                     Melhorar com IA
+                                   </button>
+                                 )}
                               </div>
                             </div>
                           </div>
@@ -2556,14 +2569,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                                           <Layout className="w-4 h-4" />
                                         </button>
 
-                                        {/* Botão: Melhorar / Criar com IA (Remaster Inteligente em 2 etapas) */}
-                                        <button
-                                          onClick={() => handleStartRemasterFlow(lead)}
-                                          className="p-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white rounded-xl transition-all shadow-md hover:shadow-purple-500/30 cursor-pointer"
-                                          title={lead.website ? `Melhorar com IA: Analisar páginas de ${lead.website} e reconstruir com prompts customizados` : `Gerar Site Otimizado com IA para ${lead.name}`}
-                                        >
-                                          <Sparkles className="w-4 h-4" />
-                                        </button>
+                                        {/* Botão: Melhorar com IA (Apenas se o cliente tiver website) */}
+                                        {lead.website && (
+                                           <button
+                                             onClick={() => handleStartRemasterFlow(lead)}
+                                             className="p-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white rounded-xl transition-all shadow-md hover:shadow-purple-500/30 cursor-pointer"
+                                             title={`Melhorar com IA: Analisar páginas de ${lead.website} e reconstruir com prompts customizados`}
+                                           >
+                                             <Sparkles className="w-4 h-4" />
+                                           </button>
+                                         )}
                                       </div>
                                     </td>
                                   </tr>
@@ -2677,14 +2692,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                                   <Layout className="w-4 h-4" />
                                 </button>
 
-                                {/* Botão: Melhorar / Criar com IA (Remaster Inteligente em 2 etapas) */}
-                                <button
-                                  onClick={() => handleStartRemasterFlow(lead)}
-                                  className="p-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white rounded-xl transition-all shadow-md hover:shadow-purple-500/30 cursor-pointer"
-                                  title={lead.website ? `Melhorar com IA: Analisar páginas de ${lead.website} e reconstruir com prompts customizados` : `Gerar Site Otimizado com IA para ${lead.name}`}
-                                >
-                                  <Sparkles className="w-4 h-4" />
-                                </button>
+                                {/* Botão: Melhorar com IA (Apenas se o cliente tiver website) */}
+                                {lead.website && (
+                                   <button
+                                     onClick={() => handleStartRemasterFlow(lead)}
+                                     className="p-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white rounded-xl transition-all shadow-md hover:shadow-purple-500/30 cursor-pointer"
+                                     title={`Melhorar com IA: Analisar páginas de ${lead.website} e reconstruir com prompts customizados`}
+                                   >
+                                     <Sparkles className="w-4 h-4" />
+                                   </button>
+                                 )}
                               </div>
                             </div>
                           </div>
