@@ -246,6 +246,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
   const [repeatFooter, setRepeatFooter] = useState(true);
   const [generatingRemaster, setGeneratingRemaster] = useState(false);
 
+  // Manual Lead Creation Modal States
+  const [showManualLeadModal, setShowManualLeadModal] = useState(false);
+  const [manualLeadName, setManualLeadName] = useState('');
+  const [manualLeadCategory, setManualLeadCategory] = useState('');
+  const [manualLeadPhone, setManualLeadPhone] = useState('');
+  const [manualLeadWebsite, setManualLeadWebsite] = useState('');
+  const [manualLeadAddress, setManualLeadAddress] = useState('');
+  const [manualLeadCity, setManualLeadCity] = useState('');
+  const [manualLeadRating, setManualLeadRating] = useState('5.0');
+
   const [navbarSize, setNavbarSize] = useState<'compact' | 'normal' | 'large'>(() => {
     try {
       const stored = localStorage.getItem('rp_navbar_size');
@@ -359,6 +369,52 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
       localStorage.setItem('builddreamer_saved_leads', JSON.stringify(updated));
       return updated;
     });
+  };
+
+  const handleAddManualLead = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!manualLeadName.trim()) {
+      alert('O nome do estabelecimento é obrigatório.');
+      return;
+    }
+
+    const cleanPhone = manualLeadPhone.trim().replace(/\D/g, '');
+    let cleanWebsite = manualLeadWebsite.trim();
+    if (cleanWebsite && !cleanWebsite.startsWith('http://') && !cleanWebsite.startsWith('https://')) {
+      cleanWebsite = `https://${cleanWebsite}`;
+    }
+
+    const newLead: Lead = {
+      id: `manual-lead-${Date.now()}`,
+      name: manualLeadName.trim(),
+      category: manualLeadCategory.trim() || 'Comércio Local',
+      phone: manualLeadPhone.trim() || '(Não informado)',
+      website: cleanWebsite || null,
+      hasWebsite: !!cleanWebsite,
+      needsWebsite: !cleanWebsite,
+      address: manualLeadAddress.trim() || manualLeadCity.trim() || 'Endereço não informado',
+      city: manualLeadCity.trim() || 'Cidade',
+      state: 'UF',
+      country: 'Brasil',
+      rating: manualLeadRating || '5.0',
+      totalReviews: 1,
+      source: 'Cadastro Manual',
+      whatsappUrl: cleanPhone ? `https://wa.me/55${cleanPhone}?text=${encodeURIComponent(`Olá! Vi o perfil da ${manualLeadName.trim()} e gostaria de conversar.`)}` : null
+    };
+
+    const updated = [newLead, ...savedLeads];
+    setSavedLeads(updated);
+    localStorage.setItem('builddreamer_saved_leads', JSON.stringify(updated));
+
+    // Reset Form
+    setManualLeadName('');
+    setManualLeadCategory('');
+    setManualLeadPhone('');
+    setManualLeadWebsite('');
+    setManualLeadAddress('');
+    setManualLeadCity('');
+    setManualLeadRating('5.0');
+    setShowManualLeadModal(false);
   };
 
   // Filter Presets State (CRUD de Filtros Pré-Prontos)
@@ -1687,13 +1743,23 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                   </h1>
                   <p className="text-slate-450 mt-1">Gerencie os potenciais clientes favoritados para abordagem e criação de sites.</p>
                 </div>
-                <button
-                  onClick={() => setActiveTab('leads')}
-                  className="px-4 py-2 bg-purple-700 hover:bg-purple-600 text-white font-semibold rounded-xl text-xs transition-all flex items-center gap-2 cursor-pointer"
-                >
-                  <Search className="w-4 h-4" />
-                  Buscar Mais Leads
-                </button>
+                <div className="flex items-center gap-2.5">
+                  <button
+                    onClick={() => setShowManualLeadModal(true)}
+                    className="px-4 py-2 bg-yellow-500 hover:bg-yellow-400 text-slate-950 font-bold rounded-xl text-xs transition-all shadow-md shadow-yellow-500/20 flex items-center gap-2 cursor-pointer"
+                    title="Cadastrar um novo lead manualmente"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Adicionar Lead Manual
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('leads')}
+                    className="px-4 py-2 bg-purple-700 hover:bg-purple-600 text-white font-semibold rounded-xl text-xs transition-all flex items-center gap-2 cursor-pointer"
+                  >
+                    <Search className="w-4 h-4" />
+                    Buscar no Maps
+                  </button>
+                </div>
               </div>
 
               {savedLeads.length === 0 ? (
@@ -3453,6 +3519,139 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                 </button>
               </div>
             </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Cadastro Manual de Lead */}
+      {showManualLeadModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 backdrop-blur-md animate-fade-in">
+          <div className="w-full max-w-lg bg-[#0d0a17] border border-yellow-500/30 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            
+            {/* Modal Header */}
+            <div className="p-5 bg-gradient-to-r from-yellow-950/40 to-slate-900 border-b border-yellow-500/20 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-yellow-500 text-slate-950 shadow-lg shadow-yellow-500/30">
+                  <BookmarkCheck className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white flex items-center gap-2">
+                    Cadastrar Lead Manualmente
+                  </h3>
+                  <p className="text-xs text-slate-400">Adicione um novo cliente aos seus favoritos.</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowManualLeadModal(false)}
+                className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800/60 rounded-xl transition-all cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Form */}
+            <form onSubmit={handleAddManualLead} className="p-6 space-y-4 overflow-y-auto">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                  Nome do Estabelecimento / Empresa *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ex: Padaria Central Pão Quente"
+                  value={manualLeadName}
+                  onChange={(e) => setManualLeadName(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:border-yellow-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                    Nicho / Categoria
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ex: Padaria, Dentista, Barbearia"
+                    value={manualLeadCategory}
+                    onChange={(e) => setManualLeadCategory(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:border-yellow-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                    Telefone / WhatsApp
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ex: (61) 98765-4321"
+                    value={manualLeadPhone}
+                    onChange={(e) => setManualLeadPhone(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:border-yellow-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5 flex items-center justify-between">
+                  <span>Website Atual (Opcional)</span>
+                  <span className="text-[10px] text-cyan-400 font-normal lowercase italic">se preenchido, habilita o 'Melhorar com IA'</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ex: https://meusiteantigo.com.br"
+                  value={manualLeadWebsite}
+                  onChange={(e) => setManualLeadWebsite(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:border-cyan-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                    Endereço Completo
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ex: Av. Central, 123, Centro"
+                    value={manualLeadAddress}
+                    onChange={(e) => setManualLeadAddress(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:border-yellow-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                    Cidade
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ex: Brasília"
+                    value={manualLeadCity}
+                    onChange={(e) => setManualLeadCity(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:border-yellow-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="pt-4 border-t border-slate-850 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setShowManualLeadModal(false)}
+                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-slate-300 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-yellow-500 hover:bg-yellow-400 text-slate-950 font-bold rounded-xl text-xs shadow-md shadow-yellow-500/20 transition-all cursor-pointer flex items-center gap-1.5"
+                >
+                  <Plus className="w-4 h-4" />
+                  Salvar Lead
+                </button>
+              </div>
+            </form>
 
           </div>
         </div>
