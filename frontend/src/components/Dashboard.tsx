@@ -357,6 +357,23 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
     }
   });
 
+  // Helper para salvar leads ou presets no banco de dados
+  const syncSettingsToDatabase = async (payload: { savedLeads?: any; filterPresets?: any }) => {
+    if (!token) return;
+    try {
+      await fetch(`${API_URL}/api/auth/settings`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(payload)
+      });
+    } catch (e) {
+      console.warn('Erro ao sincronizar dados com o banco:', e);
+    }
+  };
+
   const handleToggleSaveLead = (lead: Lead) => {
     setSavedLeads(prev => {
       const exists = prev.some(l => l.id === lead.id || l.name === lead.name);
@@ -367,6 +384,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
         updated = [...prev, lead];
       }
       localStorage.setItem('builddreamer_saved_leads', JSON.stringify(updated));
+      syncSettingsToDatabase({ savedLeads: updated });
       return updated;
     });
   };
@@ -405,6 +423,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
     const updated = [newLead, ...savedLeads];
     setSavedLeads(updated);
     localStorage.setItem('builddreamer_saved_leads', JSON.stringify(updated));
+    syncSettingsToDatabase({ savedLeads: updated });
 
     // Reset Form
     setManualLeadName('');
@@ -452,11 +471,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
       const updated = filterPresets.map(p => p.id === editingPresetId ? { ...presetForm, id: editingPresetId } : p);
       setFilterPresets(updated);
       localStorage.setItem('builddreamer_filter_presets', JSON.stringify(updated));
+      syncSettingsToDatabase({ filterPresets: updated });
     } else {
       const newPreset: FilterPreset = { ...presetForm, id: `preset-${Date.now()}` };
       const updated = [...filterPresets, newPreset];
       setFilterPresets(updated);
       localStorage.setItem('builddreamer_filter_presets', JSON.stringify(updated));
+      syncSettingsToDatabase({ filterPresets: updated });
     }
     setPresetModalOpen(false);
     setEditingPresetId(null);
@@ -466,6 +487,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
     const updated = filterPresets.filter(p => p.id !== id);
     setFilterPresets(updated);
     localStorage.setItem('builddreamer_filter_presets', JSON.stringify(updated));
+    syncSettingsToDatabase({ filterPresets: updated });
   };
 
   const handleApplyPreset = (preset: FilterPreset) => {
@@ -515,6 +537,45 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
       setLoading(false);
     }
   };
+
+  // Carregar configurações do usuário salvas no Banco de Dados (sincronização multi-dispositivo)
+  useEffect(() => {
+    if (!token) return;
+    const fetchUserSettings = async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/auth/settings`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const s = data.settings;
+          if (s) {
+            if (s.geminiApiKey) localStorage.setItem('gemini_api_key', s.geminiApiKey);
+            if (s.openaiApiKey) localStorage.setItem('openai_api_key', s.openaiApiKey);
+            if (s.aiProxyUrl) localStorage.setItem('ai_proxy_url', s.aiProxyUrl);
+            if (s.ngrokAuthToken) localStorage.setItem('ngrok_authtoken', s.ngrokAuthToken);
+            if (s.customAiModels && Array.isArray(s.customAiModels)) {
+              localStorage.setItem('custom_gemini_models', JSON.stringify(s.customAiModels));
+            }
+            if (s.customAiSkills && Array.isArray(s.customAiSkills)) {
+              localStorage.setItem('custom_ai_skills', JSON.stringify(s.customAiSkills));
+            }
+            if (s.savedLeads && Array.isArray(s.savedLeads)) {
+              setSavedLeads(s.savedLeads);
+              localStorage.setItem('builddreamer_saved_leads', JSON.stringify(s.savedLeads));
+            }
+            if (s.filterPresets && Array.isArray(s.filterPresets)) {
+              setFilterPresets(s.filterPresets);
+              localStorage.setItem('builddreamer_filter_presets', JSON.stringify(s.filterPresets));
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('Falha ao carregar configurações do banco:', e);
+      }
+    };
+    fetchUserSettings();
+  }, [token]);
 
   // Monitorar em tempo real todos os projetos que estão sendo construídos pela IA
   useEffect(() => {

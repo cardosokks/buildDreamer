@@ -7,12 +7,20 @@ generator client {
 }
 
 model User {
-  id           String          @id @default(uuid())
-  email        String          @unique
-  password     String
-  name         String?
-  projects     ProjectMember[]
-  createdAt    DateTime        @default(now())
+  id              String          @id @default(uuid())
+  email           String          @unique
+  password        String
+  name            String?
+  geminiApiKey    String?
+  openaiApiKey    String?
+  aiProxyUrl      String?
+  ngrokAuthToken  String?
+  customAiSkills  Json?
+  customAiModels  Json?
+  savedLeads      Json?
+  filterPresets   Json?
+  projects        ProjectMember[]
+  createdAt       DateTime        @default(now())
 }
 
 model Project {

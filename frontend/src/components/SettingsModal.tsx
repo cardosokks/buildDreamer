@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { User, Key, Save, Trash2, Plus, Box, Sparkles, Cpu, Check, RotateCcw } from 'lucide-react';
 import { API_URL } from '../config';
@@ -71,6 +71,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
   const { token, user, login } = useAuth();
   const [activeTab, setActiveTab] = useState<'profile' | 'ai' | 'models' | 'skills'>('profile');
   const [loading, setLoading] = useState(false);
+  const [savingRemote, setSavingRemote] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -87,7 +88,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
   // Models CRUD fields
   const getStoredModels = () => {
     const stored = localStorage.getItem('custom_gemini_models');
-    if (stored) return JSON.parse(stored);
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch {}
+    }
     return [
       { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash (Recomendado)' },
       { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash' },
@@ -108,7 +114,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       } catch {}
     }
-    localStorage.setItem('custom_ai_skills', JSON.stringify(DEFAULT_AI_SKILLS));
     return DEFAULT_AI_SKILLS;
   };
 
@@ -118,6 +123,86 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
   const [newSkillDesc, setNewSkillDesc] = useState('');
   const [newSkillSnippet, setNewSkillSnippet] = useState('');
   const [editingSkillId, setEditingSkillId] = useState<string | null>(null);
+
+  // Sincronizar configurações do Banco de Dados ao abrir o Modal
+  useEffect(() => {
+    if (!token) return;
+    const loadUserSettingsFromDatabase = async () => {
+      try {
+        setLoading(true);
+        const res = await fetch(`${API_URL}/api/auth/settings`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const s = data.settings;
+          if (s) {
+            if (s.name) setName(s.name);
+            if (s.email) setEmail(s.email);
+            if (s.geminiApiKey) {
+              setGeminiKey(s.geminiApiKey);
+              localStorage.setItem('gemini_api_key', s.geminiApiKey);
+            }
+            if (s.openaiApiKey) {
+              setOpenaiKey(s.openaiApiKey);
+              localStorage.setItem('openai_api_key', s.openaiApiKey);
+            }
+            if (s.aiProxyUrl) {
+              setProxyUrl(s.aiProxyUrl);
+              localStorage.setItem('ai_proxy_url', s.aiProxyUrl);
+            }
+            if (s.ngrokAuthToken) {
+              setNgrokToken(s.ngrokAuthToken);
+              localStorage.setItem('ngrok_authtoken', s.ngrokAuthToken);
+            }
+            if (s.customAiModels && Array.isArray(s.customAiModels)) {
+              setModels(s.customAiModels);
+              localStorage.setItem('custom_gemini_models', JSON.stringify(s.customAiModels));
+            }
+            if (s.customAiSkills && Array.isArray(s.customAiSkills)) {
+              setSkills(s.customAiSkills);
+              localStorage.setItem('custom_ai_skills', JSON.stringify(s.customAiSkills));
+            }
+            if (s.savedLeads && Array.isArray(s.savedLeads)) {
+              localStorage.setItem('builddreamer_saved_leads', JSON.stringify(s.savedLeads));
+            }
+            if (s.filterPresets && Array.isArray(s.filterPresets)) {
+              localStorage.setItem('builddreamer_filter_presets', JSON.stringify(s.filterPresets));
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Erro ao sincronizar do banco:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadUserSettingsFromDatabase();
+  }, [token]);
+
+  // Função central para persistir qualquer alteração no Banco de Dados
+  const saveToDatabase = async (payload: any) => {
+    if (!token) return;
+    setSavingRemote(true);
+    try {
+      const res = await fetch(`${API_URL}/api/auth/settings`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Falha ao salvar no banco');
+      }
+    } catch (e: any) {
+      console.error('Falha ao sincronizar com banco de dados:', e);
+    } finally {
+      setSavingRemote(false);
+    }
+  };
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -129,7 +214,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
       if (user) {
         const updatedUser = { ...user, name, email };
         login(token!, updatedUser);
-        setSuccessMsg('Perfil atualizado com sucesso!');
+        await saveToDatabase({ name });
+        setSuccessMsg('Perfil atualizado e salvo no banco de dados!');
       }
     } catch (err: any) {
       setErrorMsg(err.message);
@@ -138,19 +224,30 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
     }
   };
 
-  const handleSaveAIKeys = (e: React.FormEvent) => {
+  const handleSaveAIKeys = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setSuccessMsg(null);
+    
+    // Atualiza localmente
     localStorage.setItem('gemini_api_key', geminiKey);
     localStorage.setItem('openai_api_key', openaiKey);
     localStorage.setItem('ai_proxy_url', proxyUrl);
     localStorage.setItem('ngrok_authtoken', ngrokToken);
-    setSuccessMsg('Configurações de IA, Proxy e Ngrok salvas com sucesso!');
+
+    // Salva no banco de dados
+    await saveToDatabase({
+      geminiApiKey: geminiKey,
+      openaiApiKey: openaiKey,
+      aiProxyUrl: proxyUrl,
+      ngrokAuthToken: ngrokToken
+    });
+
+    setSuccessMsg('Configurações de IA, Proxy e Ngrok salvas com sucesso no banco de dados!');
     setLoading(false);
   };
 
-  const handleAddModel = (e: React.FormEvent) => {
+  const handleAddModel = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newModelId || !newModelName) return;
 
@@ -162,16 +259,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
     const updated = [...models, { id: newModelId, name: newModelName }];
     setModels(updated);
     localStorage.setItem('custom_gemini_models', JSON.stringify(updated));
+    await saveToDatabase({ customAiModels: updated });
+    
     setNewModelId('');
     setNewModelName('');
-    setSuccessMsg('Modelo adicionado com sucesso!');
+    setSuccessMsg('Modelo adicionado e salvo no banco de dados!');
   };
 
-  const handleDeleteModel = (id: string) => {
+  const handleDeleteModel = async (id: string) => {
     const updated = models.filter(m => m.id !== id);
     setModels(updated);
     localStorage.setItem('custom_gemini_models', JSON.stringify(updated));
-    setSuccessMsg('Modelo excluído com sucesso!');
+    await saveToDatabase({ customAiModels: updated });
+    setSuccessMsg('Modelo excluído e sincronizado no banco de dados!');
   };
 
   const [fetchingApiModels, setFetchingApiModels] = useState(false);
@@ -214,7 +314,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
         const updated = [...models, ...newDiscovered];
         setModels(updated);
         localStorage.setItem('custom_gemini_models', JSON.stringify(updated));
-        setSuccessMsg(`Sucesso! ${newDiscovered.length} novos modelos foram encontrados na sua chave e cadastrados.`);
+        await saveToDatabase({ customAiModels: updated });
+        setSuccessMsg(`Sucesso! ${newDiscovered.length} novos modelos foram encontrados na sua chave e salvos no banco.`);
       }
     } catch (e: any) {
       console.error(e);
@@ -224,25 +325,24 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
     }
   };
 
-  const handleSaveSkill = (e: React.FormEvent) => {
+  const handleSaveSkill = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newSkillName.trim() || !newSkillSnippet.trim()) {
       setErrorMsg('Nome da Skill e Diretriz de Prompt são obrigatórios.');
       return;
     }
 
+    let updated: AISkill[];
     if (editingSkillId) {
-      const updated = skills.map(s => s.id === editingSkillId ? {
+      updated = skills.map(s => s.id === editingSkillId ? {
         ...s,
         name: newSkillName.trim(),
         category: newSkillCategory,
         description: newSkillDesc.trim(),
         promptSnippet: newSkillSnippet.trim()
       } : s);
-      setSkills(updated);
-      localStorage.setItem('custom_ai_skills', JSON.stringify(updated));
       setEditingSkillId(null);
-      setSuccessMsg('Skill atualizada com sucesso!');
+      setSuccessMsg('Skill atualizada e salva no banco de dados!');
     } else {
       const newSkill: AISkill = {
         id: `skill-${Date.now()}`,
@@ -252,28 +352,32 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
         promptSnippet: newSkillSnippet.trim(),
         enabled: true
       };
-      const updated = [...skills, newSkill];
-      setSkills(updated);
-      localStorage.setItem('custom_ai_skills', JSON.stringify(updated));
-      setSuccessMsg('Nova Skill cadastrada com sucesso!');
+      updated = [...skills, newSkill];
+      setSuccessMsg('Nova Skill cadastrada e salva no banco de dados!');
     }
+
+    setSkills(updated);
+    localStorage.setItem('custom_ai_skills', JSON.stringify(updated));
+    await saveToDatabase({ customAiSkills: updated });
 
     setNewSkillName('');
     setNewSkillDesc('');
     setNewSkillSnippet('');
   };
 
-  const handleToggleSkill = (id: string) => {
+  const handleToggleSkill = async (id: string) => {
     const updated = skills.map(s => s.id === id ? { ...s, enabled: !s.enabled } : s);
     setSkills(updated);
     localStorage.setItem('custom_ai_skills', JSON.stringify(updated));
+    await saveToDatabase({ customAiSkills: updated });
   };
 
-  const handleDeleteSkill = (id: string) => {
+  const handleDeleteSkill = async (id: string) => {
     const updated = skills.filter(s => s.id !== id);
     setSkills(updated);
     localStorage.setItem('custom_ai_skills', JSON.stringify(updated));
-    setSuccessMsg('Skill removida.');
+    await saveToDatabase({ customAiSkills: updated });
+    setSuccessMsg('Skill removida do banco de dados.');
   };
 
   const handleStartEditSkill = (s: AISkill) => {
@@ -284,10 +388,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
     setNewSkillSnippet(s.promptSnippet);
   };
 
-  const handleResetDefaultSkills = () => {
+  const handleResetDefaultSkills = async () => {
     setSkills(DEFAULT_AI_SKILLS);
     localStorage.setItem('custom_ai_skills', JSON.stringify(DEFAULT_AI_SKILLS));
-    setSuccessMsg('Skills restauradas para os padrões profissionais de fábrica!');
+    await saveToDatabase({ customAiSkills: DEFAULT_AI_SKILLS });
+    setSuccessMsg('Skills restauradas para os padrões e salvas no banco!');
   };
 
   return (

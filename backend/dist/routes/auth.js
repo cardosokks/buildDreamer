@@ -58,4 +58,101 @@ router.post('/login', async (req, res) => {
         return res.status(500).json({ error: error.message });
     }
 });
+const auth_1 = require("../middleware/auth");
+// Helper para garantir que as colunas de configurações existam no banco PostgreSQL
+let columnsChecked = false;
+async function ensureUserSettingsColumns() {
+    if (columnsChecked)
+        return;
+    try {
+        await db_1.prisma.$executeRawUnsafe(`
+      ALTER TABLE "User" 
+      ADD COLUMN IF NOT EXISTS "geminiApiKey" TEXT,
+      ADD COLUMN IF NOT EXISTS "openaiApiKey" TEXT,
+      ADD COLUMN IF NOT EXISTS "aiProxyUrl" TEXT,
+      ADD COLUMN IF NOT EXISTS "ngrokAuthToken" TEXT,
+      ADD COLUMN IF NOT EXISTS "customAiSkills" JSONB,
+      ADD COLUMN IF NOT EXISTS "customAiModels" JSONB,
+      ADD COLUMN IF NOT EXISTS "savedLeads" JSONB,
+      ADD COLUMN IF NOT EXISTS "filterPresets" JSONB;
+    `);
+        columnsChecked = true;
+    }
+    catch (err) {
+        console.error('Error ensuring User settings columns:', err);
+    }
+}
+// Obter configurações do usuário logado (armazenadas no banco de dados)
+router.get('/settings', auth_1.authenticateToken, async (req, res) => {
+    try {
+        await ensureUserSettingsColumns();
+        const rows = await db_1.prisma.$queryRawUnsafe(`SELECT "id", "email", "name", "geminiApiKey", "openaiApiKey", "aiProxyUrl", "ngrokAuthToken", "customAiSkills", "customAiModels", "savedLeads", "filterPresets" FROM "User" WHERE "id" = $1 LIMIT 1`, req.userId);
+        if (!rows || rows.length === 0) {
+            return res.status(404).json({ error: 'Usuário não encontrado' });
+        }
+        const user = rows[0];
+        return res.json({ settings: user });
+    }
+    catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
+});
+// Atualizar configurações do usuário logado no banco de dados
+router.put('/settings', auth_1.authenticateToken, async (req, res) => {
+    try {
+        await ensureUserSettingsColumns();
+        const { name, geminiApiKey, openaiApiKey, aiProxyUrl, ngrokAuthToken, customAiSkills, customAiModels, savedLeads, filterPresets } = req.body;
+        const fields = [];
+        const values = [];
+        let idx = 1;
+        if (name !== undefined) {
+            fields.push(`"name" = $${idx++}`);
+            values.push(name);
+        }
+        if (geminiApiKey !== undefined) {
+            fields.push(`"geminiApiKey" = $${idx++}`);
+            values.push(geminiApiKey);
+        }
+        if (openaiApiKey !== undefined) {
+            fields.push(`"openaiApiKey" = $${idx++}`);
+            values.push(openaiApiKey);
+        }
+        if (aiProxyUrl !== undefined) {
+            fields.push(`"aiProxyUrl" = $${idx++}`);
+            values.push(aiProxyUrl);
+        }
+        if (ngrokAuthToken !== undefined) {
+            fields.push(`"ngrokAuthToken" = $${idx++}`);
+            values.push(ngrokAuthToken);
+        }
+        if (customAiSkills !== undefined) {
+            fields.push(`"customAiSkills" = $${idx++}::jsonb`);
+            values.push(typeof customAiSkills === 'string' ? customAiSkills : JSON.stringify(customAiSkills));
+        }
+        if (customAiModels !== undefined) {
+            fields.push(`"customAiModels" = $${idx++}::jsonb`);
+            values.push(typeof customAiModels === 'string' ? customAiModels : JSON.stringify(customAiModels));
+        }
+        if (savedLeads !== undefined) {
+            fields.push(`"savedLeads" = $${idx++}::jsonb`);
+            values.push(typeof savedLeads === 'string' ? savedLeads : JSON.stringify(savedLeads));
+        }
+        if (filterPresets !== undefined) {
+            fields.push(`"filterPresets" = $${idx++}::jsonb`);
+            values.push(typeof filterPresets === 'string' ? filterPresets : JSON.stringify(filterPresets));
+        }
+        if (fields.length > 0) {
+            values.push(req.userId);
+            await db_1.prisma.$executeRawUnsafe(`UPDATE "User" SET ${fields.join(', ')} WHERE "id" = $${idx}`, ...values);
+        }
+        const rows = await db_1.prisma.$queryRawUnsafe(`SELECT "id", "email", "name", "geminiApiKey", "openaiApiKey", "aiProxyUrl", "ngrokAuthToken", "customAiSkills", "customAiModels", "savedLeads", "filterPresets" FROM "User" WHERE "id" = $1 LIMIT 1`, req.userId);
+        return res.json({
+            message: 'Configurações salvas e sincronizadas com sucesso no banco de dados!',
+            settings: rows[0] || {}
+        });
+    }
+    catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
+});
 exports.authRouter = router;
