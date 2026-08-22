@@ -30,14 +30,25 @@ async function ensureLeadTable() {
         "updatedAt" TIMESTAMP DEFAULT NOW()
       );
     `);
-        // Adiciona colunas se faltarem
-        await db_1.prisma.$executeRawUnsafe(`ALTER TABLE "Lead" ADD COLUMN IF NOT EXISTS "dealValue" DOUBLE PRECISION DEFAULT 0;`).catch(() => { });
-        await db_1.prisma.$executeRawUnsafe(`ALTER TABLE "Lead" ADD COLUMN IF NOT EXISTS "status" TEXT DEFAULT 'PROSPECT';`).catch(() => { });
-        await db_1.prisma.$executeRawUnsafe(`ALTER TABLE "Lead" ADD COLUMN IF NOT EXISTS "notes" TEXT;`).catch(() => { });
-        await db_1.prisma.$executeRawUnsafe(`ALTER TABLE "Lead" ADD COLUMN IF NOT EXISTS "origin" TEXT DEFAULT 'MANUAL';`).catch(() => { });
-        await db_1.prisma.$executeRawUnsafe(`ALTER TABLE "Lead" ADD COLUMN IF NOT EXISTS "tags" JSONB DEFAULT '[]'::jsonb;`).catch(() => { });
-        await db_1.prisma.$executeRawUnsafe(`ALTER TABLE "Lead" ADD COLUMN IF NOT EXISTS "lastContactDate" TIMESTAMP;`).catch(() => { });
-        await db_1.prisma.$executeRawUnsafe(`ALTER TABLE "Lead" ADD COLUMN IF NOT EXISTS "projectId" TEXT;`).catch(() => { });
+        // Adiciona colunas se faltarem (migration incremental segura)
+        const alters = [
+            `ALTER TABLE "Lead" ADD COLUMN IF NOT EXISTS "company" TEXT;`,
+            `ALTER TABLE "Lead" ADD COLUMN IF NOT EXISTS "phone" TEXT;`,
+            `ALTER TABLE "Lead" ADD COLUMN IF NOT EXISTS "email" TEXT;`,
+            `ALTER TABLE "Lead" ADD COLUMN IF NOT EXISTS "website" TEXT;`,
+            `ALTER TABLE "Lead" ADD COLUMN IF NOT EXISTS "address" TEXT;`,
+            `ALTER TABLE "Lead" ADD COLUMN IF NOT EXISTS "rating" TEXT;`,
+            `ALTER TABLE "Lead" ADD COLUMN IF NOT EXISTS "dealValue" DOUBLE PRECISION DEFAULT 0;`,
+            `ALTER TABLE "Lead" ADD COLUMN IF NOT EXISTS "status" TEXT DEFAULT 'PROSPECT';`,
+            `ALTER TABLE "Lead" ADD COLUMN IF NOT EXISTS "notes" TEXT;`,
+            `ALTER TABLE "Lead" ADD COLUMN IF NOT EXISTS "origin" TEXT DEFAULT 'MANUAL';`,
+            `ALTER TABLE "Lead" ADD COLUMN IF NOT EXISTS "tags" JSONB DEFAULT '[]'::jsonb;`,
+            `ALTER TABLE "Lead" ADD COLUMN IF NOT EXISTS "lastContactDate" TIMESTAMP;`,
+            `ALTER TABLE "Lead" ADD COLUMN IF NOT EXISTS "projectId" TEXT;`,
+        ];
+        for (const sql of alters) {
+            await db_1.prisma.$executeRawUnsafe(sql).catch(() => { });
+        }
     }
     catch (e) {
         console.warn('[CRM DB] Aviso ao verificar tabela Lead:', e);
@@ -68,22 +79,27 @@ router.get('/crm', async (req, res) => {
 router.post('/crm', async (req, res) => {
     try {
         await ensureLeadTable();
+        const userId = req.userId;
+        if (!userId) {
+            return res.status(401).json({ error: 'Usuário não autenticado. Faça login novamente.' });
+        }
         const { name, company, phone, email, website, address, rating, dealValue, status, notes, origin, tags, projectId } = req.body;
         if (!name || typeof name !== 'string' || !name.trim()) {
-            return res.status(400).json({ error: 'Nome do lead/empresa é obrigatório' });
+            return res.status(400).json({ error: 'Nome do contato é obrigatório' });
         }
         const id = `lead-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
-        const parsedDealValue = typeof dealValue === 'number' ? dealValue : parseFloat(dealValue || '0') || 0;
-        const initialStatus = status || 'PROSPECT';
+        const parsedDealValue = typeof dealValue === 'number' ? dealValue : parseFloat(String(dealValue || '0')) || 0;
+        const initialStatus = (status && ['PROSPECT', 'CONTACTED', 'PROPOSAL_SENT', 'IN_NEGOTIATION', 'WON', 'LOST'].includes(status)) ? status : 'PROSPECT';
         const tagsJson = JSON.stringify(Array.isArray(tags) ? tags : []);
+        const safeProjectId = projectId && projectId !== '' ? String(projectId) : null;
         await db_1.prisma.$executeRawUnsafe(`
       INSERT INTO "Lead" (
         "id", "name", "company", "phone", "email", "website", "address", "rating",
         "dealValue", "status", "notes", "origin", "tags", "userId", "projectId", "createdAt", "updatedAt"
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, $14, $15, NOW(), NOW()
+        $1, $2, $3, $4, $5, $6, $7, $8, $9::double precision, $10, $11, $12, $13::jsonb, $14, $15, NOW(), NOW()
       );
-    `, id, name.trim(), company ? String(company).trim() : null, phone ? String(phone).trim() : null, email ? String(email).trim() : null, website ? String(website).trim() : null, address ? String(address).trim() : null, rating ? String(rating).trim() : null, parsedDealValue, initialStatus, notes ? String(notes).trim() : null, origin ? String(origin).trim() : 'MANUAL', tagsJson, req.userId, projectId || null);
+    `, id, String(name).trim(), company ? String(company).trim() : null, phone ? String(phone).trim() : null, email ? String(email).trim() : null, website ? String(website).trim() : null, address ? String(address).trim() : null, rating ? String(rating).trim() : null, parsedDealValue, initialStatus, notes ? String(notes).trim() : null, origin ? String(origin).trim() : 'MANUAL', tagsJson, String(userId), safeProjectId);
         const createdRows = await db_1.prisma.$queryRawUnsafe(`
       SELECT 
         l.*,
@@ -94,12 +110,12 @@ router.post('/crm', async (req, res) => {
       WHERE l."id" = $1 LIMIT 1
     `, id);
         return res.status(201).json({
-            lead: createdRows[0] || { id, name, status: initialStatus, dealValue: parsedDealValue }
+            lead: createdRows[0] || { id, name: String(name).trim(), status: initialStatus, dealValue: parsedDealValue }
         });
     }
     catch (error) {
-        console.error('Erro ao criar lead no CRM:', error);
-        return res.status(500).json({ error: error.message || 'Erro ao cadastrar lead' });
+        console.error('[CRM] Erro ao criar lead:', error?.message, error?.code, error?.detail);
+        return res.status(500).json({ error: error.message || 'Erro ao cadastrar lead. Tente novamente.' });
     }
 });
 // 3. Atualizar Lead (Status, Valor, Notas, Data de Contato, Projeto Vinculado)
