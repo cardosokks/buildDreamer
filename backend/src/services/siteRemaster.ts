@@ -180,7 +180,7 @@ export async function crawlEntireClientWebsite(
 /**
  * Extrai o bloco exato de Header/Navbar e Footer gerado na Home para reutilização idêntica em todas as subpáginas
  */
-function extractNavbarAndFooter(homeHtml: string): { navbarHtml: string; footerHtml: string } {
+export function extractNavbarAndFooter(homeHtml: string): { navbarHtml: string; footerHtml: string } {
   let navbarHtml = '';
   let footerHtml = '';
 
@@ -197,12 +197,327 @@ function extractNavbarAndFooter(homeHtml: string): { navbarHtml: string; footerH
   return { navbarHtml, footerHtml };
 }
 
+// In-memory queue para Scrape Jobs
+export const scrapeJobsQueue: Record<string, {
+  status: 'pending' | 'scraping' | 'completed' | 'failed';
+  websiteUrl: string;
+  businessName: string;
+  discoveredPages: Array<{
+    name: string;
+    slug: string;
+    url: string;
+    cleanText: string;
+    excerpt: string;
+    isHomepage: boolean;
+  }>;
+  progressMessage?: string;
+  error?: string;
+}> = {};
+
 /**
- * Worker assíncrono que melhora e reconstrói o site completo com IA
- * Garante:
- * 1. Design System e Paleta de Cores Estritamente Compartilhados
- * 2. Navbar e Footer Universais IDÊNTICOS em todas as páginas
- * 3. Separação Absoluta de HTML, CSS e JS
+ * Worker assíncrono para extração prévia de páginas do site cliente
+ */
+export async function startWebsiteScrapeJob(
+  jobId: string,
+  websiteUrl: string,
+  businessName: string,
+  customProxyUrl?: string
+) {
+  scrapeJobsQueue[jobId] = {
+    status: 'scraping',
+    websiteUrl,
+    businessName,
+    discoveredPages: [],
+    progressMessage: `Conectando e descobrindo páginas de ${websiteUrl}...`
+  };
+
+  try {
+    const scraped = await crawlEntireClientWebsite(websiteUrl, 8, customProxyUrl);
+
+    let pagesToReturn: Array<{
+      name: string;
+      slug: string;
+      url: string;
+      cleanText: string;
+      excerpt: string;
+      isHomepage: boolean;
+    }> = [];
+
+    if (scraped.length > 0) {
+      pagesToReturn = scraped.map(p => ({
+        name: p.name,
+        slug: p.slug,
+        url: p.url,
+        cleanText: p.cleanText,
+        excerpt: p.cleanText.slice(0, 180) + '...',
+        isHomepage: p.slug === 'index'
+      }));
+
+      // Se a Home não estiver explícita, marca a primeira como Home
+      if (!pagesToReturn.some(p => p.isHomepage)) {
+        pagesToReturn[0].isHomepage = true;
+        pagesToReturn[0].slug = 'index';
+      }
+    } else {
+      // Fallback inteligente caso o crawler não consiga acessar diretamente (ex: Cloudflare restrito)
+      pagesToReturn = [
+        {
+          name: 'Home',
+          slug: 'index',
+          url: websiteUrl,
+          cleanText: `Página principal de ${businessName}. Apresentação da empresa, proposta de valor e diferenciais.`,
+          excerpt: `Apresentação institucional e serviços principais de ${businessName}...`,
+          isHomepage: true
+        },
+        {
+          name: 'Serviços',
+          slug: 'servicos',
+          url: `${websiteUrl}/servicos`,
+          cleanText: `Catálogo completo de soluções e serviços prestados por ${businessName}.`,
+          excerpt: `Produtos e soluções com especificações e benefícios...`,
+          isHomepage: false
+        },
+        {
+          name: 'Sobre Nós',
+          slug: 'sobre',
+          url: `${websiteUrl}/sobre`,
+          cleanText: `História, missão, visão e autoridade de ${businessName} no mercado.`,
+          excerpt: `História e autoridade no mercado...`,
+          isHomepage: false
+        },
+        {
+          name: 'Contato',
+          slug: 'contato',
+          url: `${websiteUrl}/contato`,
+          cleanText: `Formulário de atendimento, WhatsApp, localização e telefones de ${businessName}.`,
+          excerpt: `Canais de atendimento direto e localização...`,
+          isHomepage: false
+        }
+      ];
+    }
+
+    scrapeJobsQueue[jobId] = {
+      status: 'completed',
+      websiteUrl,
+      businessName,
+      discoveredPages: pagesToReturn,
+      progressMessage: `Extração concluída com sucesso! ${pagesToReturn.length} páginas mapeadas.`
+    };
+  } catch (err: any) {
+    console.error(`Erro no Scrape Job ${jobId}:`, err);
+    scrapeJobsQueue[jobId] = {
+      status: 'failed',
+      websiteUrl,
+      businessName,
+      discoveredPages: [],
+      error: err.message || 'Falha ao raspar páginas do site.'
+    };
+  }
+}
+
+/**
+ * Worker assíncrono para Geração Completa Multi-Página Customizada
+ */
+export async function processCustomRemasterGenerationJob(
+  projectId: string,
+  projectName: string,
+  globalPrompt: string,
+  pages: Array<{
+    name: string;
+    slug: string;
+    originalUrl?: string;
+    customPrompt?: string;
+    cleanText?: string;
+    isHomepage?: boolean;
+    enabled?: boolean;
+  }>,
+  sharedComponents: {
+    repeatNavbar: boolean;
+    repeatFooter: boolean;
+  },
+  customApiKey?: string,
+  registeredModels?: string[],
+  customProxyUrl?: string,
+  onProgress?: (status: string, attempt: number, total: number) => void,
+  customSkills?: any[]
+) {
+  try {
+    const activePages = pages.filter(p => p.enabled !== false);
+    if (activePages.length === 0) throw new Error('Nenhuma página selecionada para geração.');
+
+    let homePage = activePages.find(p => p.isHomepage || p.slug === 'index') || activePages[0];
+    const subPages = activePages.filter(p => p !== homePage);
+
+    // Mapeamento dos Links Universais de Navegação
+    const allNavigationRoutes = [
+      { name: homePage.name || 'Home', href: 'index.html' },
+      ...subPages.map(p => ({ name: p.name, href: `${p.slug}.html` }))
+    ];
+    const navigationLinksText = allNavigationRoutes.map(r => `- "${r.name}" -> href="${r.href}"`).join('\n');
+
+    // 1. GERAR A HOME E CRIAR OS COMPONENTES UNIVERSAIS (Navbar e Footer)
+    if (onProgress) onProgress(`IA criando arquitetura da Home e Design System Universal...`, 1, subPages.length + 1);
+
+    const homeAiPrompt = `
+      Você é o Arquiteto Frontend Líder e Designer Master do Visual Builder.
+      Estamos remasterizando o site da empresa "${projectName}".
+
+      DIRETRIZ VISUAL GLOBAL (APLICA-SE A TODO O SITE):
+      """
+      ${globalPrompt || 'Design de altíssimo luxo, moderna paleta, tipografia impecável, foco em conversão e interações fluidas.'}
+      """
+
+      PROMPT ESPECÍFICO DA HOME:
+      """
+      ${homePage.customPrompt || 'Hero Section impactante com CTA duplo, estatísticas, seção de serviços em destaque, depoimentos e formulário.'}
+      """
+
+      CONTEÚDO EXTRAÍDO DO SITE ORIGINAL:
+      """
+      ${homePage.cleanText || `Empresa ${projectName}: soluções completas e autoridade.`}
+      """
+
+      MAPA DE NAVEGAÇÃO OBRIGATÓRIO PARA A NAVBAR (LINKS PARA TODAS AS PÁGINAS DO SITE):
+      ${navigationLinksText}
+
+      REGRAS CRÍTICAS DE COMPONENTES REUTILIZÁVEIS:
+      1. Crie uma <header class="sticky top-0 z-50 ..."> com uma NAVBAR rica, responsiva, com a logo "${projectName}" e os links acima.
+      2. Crie um <footer class="border-t ..."> elegante no final da página com os mesmos links de navegação e copyright.
+      3. SEPARAÇÃO ESTRITA: Retorne HTML sem <style> nem <script>. Todo CSS no campo "css" e JS no campo "js".
+    `;
+
+    const homeAiResponse = await generateAIResponse(
+      homeAiPrompt,
+      { html: '', css: '', js: '' },
+      customApiKey,
+      undefined,
+      registeredModels,
+      (model, attempt, total) => {
+        if (onProgress) onProgress(`IA gerando Home (${model} - ${attempt}/${total})...`, 1, subPages.length + 1);
+      },
+      customProxyUrl,
+      customSkills
+    );
+
+    // Salvar Home no Prisma
+    const existingHome = await prisma.page.findFirst({
+      where: { projectId, isHomepage: true }
+    });
+
+    if (existingHome) {
+      await prisma.page.update({
+        where: { id: existingHome.id },
+        data: {
+          name: homePage.name || 'Home',
+          html: homeAiResponse.html || existingHome.html,
+          css: homeAiResponse.css || '',
+          js: homeAiResponse.js || ''
+        }
+      });
+    }
+
+    const homeHtml = homeAiResponse.html || '';
+    const globalCss = homeAiResponse.css || '';
+    const globalJs = homeAiResponse.js || '';
+    
+    // Extrai os blocos de Navbar e Footer gerados na Home
+    const { navbarHtml, footerHtml } = extractNavbarAndFooter(homeHtml);
+
+    // 2. GERAR CADA SUBPÁGINA INJETANDO OS COMPONENTES UNIVERSAIS SEM DUPLICAÇÃO
+    for (let i = 0; i < subPages.length; i++) {
+      const sub = subPages[i];
+      if (onProgress) onProgress(`IA gerando subpágina "${sub.name}" (${i + 2}/${subPages.length + 1})...`, i + 2, subPages.length + 1);
+
+      const subPrompt = `
+        Você é o Engenheiro Frontend do site "${projectName}".
+        Estamos gerando a subpágina "${sub.name}" (arquivo: ${sub.slug}.html).
+
+        DIRETRIZ GLOBAL DO SITE:
+        """
+        ${globalPrompt}
+        """
+
+        PROMPT ESPECÍFICO DESTA SUBPÁGINA ("${sub.name}"):
+        """
+        ${sub.customPrompt || `Apresente detalhadamente as informações, benefícios e recursos de ${sub.name}.`}
+        """
+
+        CONTEÚDO EXTRAÍDO DA SUBPÁGINA ORIGINAL:
+        """
+        ${sub.cleanText || `Conteúdo institucional e serviços de ${sub.name}.`}
+        """
+
+        ${sharedComponents.repeatNavbar ? `
+        NAVBAR UNIVERSAL PRONTA DA HOME (INCORPORE EXATAMENTE ESTE BLOCO NO TOPO, APENAS MARCANDO A PÁGINA "${sub.name}" COMO ATIVA):
+        """
+        ${navbarHtml || `<header class="p-4 border-b border-slate-800 flex justify-between items-center"><div class="font-bold">${projectName}</div><nav>${navigationLinksText}</nav></header>`}
+        """` : ''}
+
+        ${sharedComponents.repeatFooter ? `
+        FOOTER UNIVERSAL PRONTO DA HOME (INCORPORE EXATAMENTE ESTE BLOCO NA BASE):
+        """
+        ${footerHtml || `<footer class="p-8 border-t border-slate-800 text-center text-slate-400">© ${projectName}</footer>`}
+        """` : ''}
+
+        REGRAS MANDATÓRIAS:
+        1. CONSISTÊNCIA DE TEMA: Mantenha a mesma paleta de cores, tipografia, bordas e cards da Home.
+        2. ENCAIXE DE COMPONENTES: Não recrie nem altere o visual da Navbar/Footer compartilhados, apenas utilize-os no topo e base da página.
+        3. SEPARAÇÃO TOTAL: Retorne APENAS HTML limpo no campo "html" (sem tags <style> nem <script>).
+      `;
+
+      try {
+        const subAiResponse = await generateAIResponse(
+          subPrompt,
+          { html: '', css: globalCss, js: globalJs },
+          customApiKey,
+          undefined,
+          registeredModels,
+          undefined,
+          customProxyUrl,
+          customSkills
+        );
+
+        const existingSub = await prisma.page.findFirst({
+          where: { projectId, slug: sub.slug }
+        });
+
+        if (existingSub) {
+          await prisma.page.update({
+            where: { id: existingSub.id },
+            data: {
+              html: subAiResponse.html || existingSub.html,
+              css: subAiResponse.css || globalCss,
+              js: subAiResponse.js || globalJs
+            }
+          });
+        } else {
+          await prisma.page.create({
+            data: {
+              name: sub.name,
+              slug: sub.slug,
+              title: `${sub.name} | ${projectName}`,
+              isHomepage: false,
+              projectId,
+              html: subAiResponse.html || '<div class="p-8 text-center text-white">Conteúdo em atualização</div>',
+              css: subAiResponse.css || globalCss,
+              js: subAiResponse.js || globalJs
+            }
+          });
+        }
+      } catch (subErr: any) {
+        console.error(`Erro ao gerar subpágina ${sub.name}:`, subErr.message);
+      }
+    }
+
+    if (onProgress) onProgress(`Site 100% gerado com sucesso!`, subPages.length + 1, subPages.length + 1);
+  } catch (err: any) {
+    console.error("Erro no processCustomRemasterGenerationJob:", err);
+    throw err;
+  }
+}
+
+/**
+ * Worker assíncrono padrão que melhora e reconstrói o site completo com IA
  */
 export async function processWebsiteRemasterJob(
   projectId: string,
@@ -220,187 +535,48 @@ export async function processWebsiteRemasterJob(
     const scrapedPages = await crawlEntireClientWebsite(websiteUrl, 6, customProxyUrl);
     
     let homeText = '';
-    let homeUrl = websiteUrl;
-    let targetPagesList: Array<{ name: string; slug: string; description: string; cleanText?: string }> = [];
+    let targetPagesList: Array<{ name: string; slug: string; customPrompt?: string; cleanText?: string }> = [];
 
     if (scrapedPages.length > 1) {
       const homeScraped = scrapedPages.find(p => p.slug === 'index') || scrapedPages[0];
       homeText = homeScraped.cleanText;
-      homeUrl = homeScraped.url;
       
       const otherScraped = scrapedPages.filter(p => p !== homeScraped);
       for (const sub of otherScraped) {
         targetPagesList.push({
           name: sub.name,
           slug: sub.slug,
-          description: `Subpágina original: ${sub.url}`,
+          customPrompt: `Subpágina original: ${sub.url}`,
           cleanText: sub.cleanText
         });
       }
     } else {
-      if (scrapedPages.length === 1) {
-        homeText = scrapedPages[0].cleanText;
-      } else {
-        homeText = `Empresa ${businessName} (${websiteUrl}): Soluções em certificação digital, sistemas empresariais, automação comercial e canais de atendimento.`;
-      }
-
-      if (onProgress) onProgress(`Estruturando arquitetura de subpáginas do negócio...`, 1, 4);
+      homeText = scrapedPages.length === 1 
+        ? scrapedPages[0].cleanText 
+        : `Empresa ${businessName} (${websiteUrl}): Soluções completas e canais de atendimento.`;
 
       targetPagesList = [
-        { name: "Serviços", slug: "servicos", description: "Soluções completas e produtos da empresa" },
-        { name: "Sobre Nós", slug: "sobre", description: "História, autoridade e equipe" },
-        { name: "Contato", slug: "contato", description: "Canais de atendimento e localização" }
+        { name: "Serviços", slug: "servicos", customPrompt: "Soluções completas e produtos da empresa" },
+        { name: "Sobre Nós", slug: "sobre", customPrompt: "História, autoridade e equipe" },
+        { name: "Contato", slug: "contato", customPrompt: "Canais de atendimento e localização" }
       ];
     }
 
-    const allNavigationRoutes = [
-      { name: 'Home', href: 'index.html' },
-      ...targetPagesList.map(p => ({ name: p.name, href: `${p.slug}.html` }))
-    ];
-
-    const navigationLinksText = allNavigationRoutes
-      .map(r => `- Link: "${r.name}" -> href="${r.href}"`)
-      .join('\n');
-
-    const existingHome = await prisma.page.findFirst({
-      where: { projectId, isHomepage: true }
-    });
-
-    if (onProgress) onProgress(`Criando Home remasterizada e estabelecendo Design System & Navbar Universal...`, 2, 4);
-
-    // 1. GERAÇÃO DA HOME (Define o Design System, a Navbar Universal e o Footer)
-    const homePrompt = `
-      Você é o Líder de Design System e Arquiteto Frontend de Elite.
-      Estamos modernizando o site completo da empresa "${businessName}".
-      URL original: ${homeUrl}
-
-      MAPA UNIVERSAL DE NAVEGAÇÃO DO SITE (A NAVBAR E O FOOTER DEVEM CONTER ESSES LINKS):
-      ${navigationLinksText}
-
-      CONTEÚDO DO SITE ORIGINAL:
-      """
-      ${homeText}
-      """
-
-      DIRETRIZES DE DESIGN SYSTEM E ARQUITETURA:
-      1. ESTILO VISUAL: Crie um design minimalista, luxuoso e de altíssimo padrão com Tailwind CSS (dark mode elegante ou tema refinado de alto contraste, tipografia Inter/Outfit).
-      2. NAVBAR UNIVERSAL RESPONSIVA:
-         - Logo com o nome "${businessName}"
-         - Menu com links para TODAS as páginas: ${allNavigationRoutes.map(r => `<a href="${r.href}">${r.name}</a>`).join(' ')}
-         - Botão CTA de destaque (ex: "Fale Conosco" / "Atendimento WhatsApp").
-      3. SEÇÕES DA HOME: Hero impactante com headline clara e CTA, Grid de Serviços/Soluções, Prova Social / Diferenciais e Footer completo com todos os links.
-      4. SEPARAÇÃO RIGOROSA: Retorne APENAS HTML no campo "html" (sem tags <style> nem <script>), CSS customizado no campo "css" e JavaScript no campo "js".
-    `;
-
-    const homeAiResponse = await generateAIResponse(
-      homePrompt,
-      { html: '', css: '', js: '' },
+    await processCustomRemasterGenerationJob(
+      projectId,
+      businessName,
+      `Site moderno, responsivo e elegante para a empresa ${businessName}`,
+      [
+        { name: 'Home', slug: 'index', isHomepage: true, cleanText: homeText },
+        ...targetPagesList
+      ],
+      { repeatNavbar: true, repeatFooter: true },
       customApiKey,
-      undefined,
       registeredModels,
-      (model, attempt, total) => {
-        if (onProgress) onProgress(`IA criando Home (${model} - ${attempt}/${total})...`, 2, 4);
-      },
       customProxyUrl,
+      onProgress,
       customSkills
     );
-
-    if (existingHome) {
-      await prisma.page.update({
-        where: { id: existingHome.id },
-        data: {
-          name: 'Home',
-          html: homeAiResponse.html || existingHome.html,
-          css: homeAiResponse.css || '',
-          js: homeAiResponse.js || ''
-        }
-      });
-    }
-
-    const homeHtml = homeAiResponse.html || '';
-    const globalCss = homeAiResponse.css || '';
-    const globalJs = homeAiResponse.js || '';
-    const { navbarHtml, footerHtml } = extractNavbarAndFooter(homeHtml);
-
-    // 2. GERAÇÃO DAS SUBPÁGINAS (Com Navbar, Tema e Design System IDÊNTICOS da Home)
-    if (onProgress) onProgress(`Remasterizando ${targetPagesList.length} subpáginas com Tema e Navbar Universal compartilhados...`, 3, 4);
-
-    await Promise.all(
-      targetPagesList.map(async (sub) => {
-        const subPrompt = `
-          Você é o Arquiteto Frontend responsável por manter 100% de consistência com o Design System da empresa "${businessName}".
-          Estamos gerando a subpágina "${sub.name}" (arquivo: ${sub.slug}.html).
-
-          MAPA DE NAVEGAÇÃO UNIVERSAL:
-          ${navigationLinksText}
-
-          CONTEÚDO ESPECÍFICO DESTA PÁGINA "${sub.name}":
-          """
-          ${sub.cleanText || sub.description}
-          """
-
-          NAVBAR UNIVERSAL OBRIGATÓRIA DA HOME (MANTENHA A MESMA ESTRUTURA VISUAL E LINKS):
-          """
-          ${navbarHtml || '<header class="p-4 border-b border-slate-800 flex justify-between items-center"><div class="font-bold">' + businessName + '</div><nav>' + navigationLinksText + '</nav></header>'}
-          """
-
-          FOOTER UNIVERSAL OBRIGATÓRIO DA HOME:
-          """
-          ${footerHtml || '<footer class="p-8 border-t border-slate-800 text-center text-slate-400">© ' + businessName + '</footer>'}
-          """
-
-          REGRAS MANDATÓRIAS:
-          1. CONSISTÊNCIA DE TEMA: Use rigorosamente a mesma paleta de cores, tipografia, espaçamentos e cards da Home.
-          2. NAVBAR & FOOTER IDÊNTICOS: Insira a mesma Navbar no topo (com o link da página atual ativo) e o mesmo Footer no final.
-          3. SEPARAÇÃO TOTAL: Retorne APENAS HTML limpo no campo "html" (sem tags <style> nem <script>).
-        `;
-
-        try {
-          const subAiResponse = await generateAIResponse(
-            subPrompt,
-            { html: '', css: globalCss, js: globalJs },
-            customApiKey,
-            undefined,
-            registeredModels,
-            undefined,
-            customProxyUrl,
-            customSkills
-          );
-
-          const existingSub = await prisma.page.findFirst({
-            where: { projectId, slug: sub.slug }
-          });
-
-          if (existingSub) {
-            await prisma.page.update({
-              where: { id: existingSub.id },
-              data: {
-                html: subAiResponse.html || existingSub.html,
-                css: subAiResponse.css || globalCss,
-                js: subAiResponse.js || globalJs
-              }
-            });
-          } else {
-            await prisma.page.create({
-              data: {
-                name: sub.name,
-                slug: sub.slug,
-                title: `${sub.name} | ${businessName}`,
-                isHomepage: false,
-                projectId,
-                html: subAiResponse.html || '<div class="p-8 text-center text-white">Conteúdo em atualização</div>',
-                css: subAiResponse.css || globalCss,
-                js: subAiResponse.js || globalJs
-              }
-            });
-          }
-        } catch (subErr: any) {
-          console.error(`Erro ao gerar subpágina ${sub.name}:`, subErr.message);
-        }
-      })
-    );
-
-    if (onProgress) onProgress(`Site 100% remasterizado com Navbar e Tema Unificados!`, 4, 4);
   } catch (err: any) {
     console.error("Erro no processWebsiteRemasterJob:", err);
     throw err;

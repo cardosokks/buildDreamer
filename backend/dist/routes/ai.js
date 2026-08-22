@@ -36,6 +36,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.aiRouter = exports.aiChatJobsQueue = void 0;
 const express_1 = require("express");
 const gemini_1 = require("../services/gemini");
+const siteRemaster_1 = require("../services/siteRemaster");
+const projects_1 = require("./projects");
 const db_1 = require("../db");
 const router = (0, express_1.Router)();
 // In-memory queue system for AI chat modifications
@@ -275,6 +277,119 @@ router.get('/models', async (req, res) => {
         return res.json({ models });
     }
     catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
+});
+/**
+ * Endpoint 1: Iniciar Extração Prévia de Páginas do Site Cliente (Scrape Job)
+ */
+router.post('/remaster/scrape', async (req, res) => {
+    try {
+        const { websiteUrl, businessName } = req.body;
+        if (!websiteUrl) {
+            return res.status(400).json({ error: 'A URL do website é obrigatória.' });
+        }
+        const clientProxyUrl = (req.headers['x-proxy-url'] || req.headers['X-Proxy-Url']) || process.env.AI_PROXY_URL;
+        const jobId = `scrape-${Date.now()}-${Math.random().toString(36).substr(2, 7)}`;
+        (0, siteRemaster_1.startWebsiteScrapeJob)(jobId, websiteUrl, businessName || 'Empresa', clientProxyUrl);
+        return res.status(202).json({
+            jobId,
+            status: 'scraping',
+            message: 'Extração do site iniciada em background.'
+        });
+    }
+    catch (err) {
+        console.error('Erro na rota /api/ai/remaster/scrape:', err);
+        return res.status(500).json({ error: err.message });
+    }
+});
+/**
+ * Endpoint 2: Status da Extração de Páginas do Site Cliente
+ */
+router.get('/remaster/scrape/:jobId/status', (req, res) => {
+    const jobId = req.params.jobId;
+    const job = siteRemaster_1.scrapeJobsQueue[jobId];
+    if (!job) {
+        return res.status(404).json({ error: 'Job de extração não encontrado ou expirado.' });
+    }
+    return res.json(job);
+});
+/**
+ * Endpoint 3: Geração Customizada do Site Multi-Página a partir do Plano Definido
+ */
+router.post('/remaster/generate', async (req, res) => {
+    try {
+        const { projectName, globalPrompt, pages, sharedComponents } = req.body;
+        if (!projectName || !pages || !Array.isArray(pages) || pages.length === 0) {
+            return res.status(400).json({ error: 'Nome do projeto e lista de páginas são obrigatórios.' });
+        }
+        const userId = req.userId;
+        // 1. Criar o Projeto no Banco de Dados
+        const project = await db_1.prisma.project.create({
+            data: {
+                name: projectName,
+                description: globalPrompt ? `Remasterização IA: ${globalPrompt.slice(0, 120)}...` : `Site gerado com IA para ${projectName}`,
+                members: {
+                    create: {
+                        userId,
+                        role: 'OWNER'
+                    }
+                },
+                pages: {
+                    create: {
+                        name: 'Home',
+                        slug: 'index',
+                        title: `Home | ${projectName}`,
+                        isHomepage: true,
+                        html: `<div class="min-h-screen bg-slate-900 text-white flex flex-col justify-center items-center">
+  <h1 class="text-3xl font-bold mb-3">Reconstruindo ${projectName}...</h1>
+  <p class="text-slate-400">Aguarde enquanto a IA arquiteta o Design System e gera todas as subpáginas.</p>
+</div>`,
+                        css: 'body { margin: 0; font-family: sans-serif; }',
+                        js: ''
+                    }
+                }
+            },
+            include: {
+                pages: true
+            }
+        });
+        const clientGeminiKey = (req.headers['x-gemini-key'] || req.headers['X-Gemini-Key']) || process.env.GEMINI_API_KEY;
+        const clientProxyUrl = (req.headers['x-proxy-url'] || req.headers['X-Proxy-Url']) || process.env.AI_PROXY_URL;
+        let registeredModels;
+        try {
+            const rawModels = (req.headers['x-gemini-models'] || req.headers['X-Gemini-Models']);
+            if (rawModels)
+                registeredModels = JSON.parse(rawModels);
+        }
+        catch { }
+        let customSkills;
+        try {
+            const rawSkills = (req.headers['x-ai-skills'] || req.headers['X-Ai-Skills'] || req.headers['X-AI-Skills']);
+            if (rawSkills)
+                customSkills = JSON.parse(rawSkills);
+        }
+        catch { }
+        // 2. Registrar no queue de status de projetos
+        projects_1.projectJobsQueue[project.id] = { status: 'pending' };
+        // 3. Disparar o Worker de Geração Multi-página Customizado
+        (0, siteRemaster_1.processCustomRemasterGenerationJob)(project.id, projectName, globalPrompt || 'Design moderno, luxuoso, alta conversão e responsivo.', pages, sharedComponents || { repeatNavbar: true, repeatFooter: true }, clientGeminiKey, registeredModels, clientProxyUrl, (status, attempt, total) => {
+            projects_1.projectJobsQueue[project.id] = {
+                status: 'processing',
+                currentModel: status,
+                attempt,
+                total
+            };
+        }, customSkills).then(() => {
+            projects_1.projectJobsQueue[project.id] = { status: 'completed' };
+        }).catch((err) => {
+            console.error(`Erro ao gerar projeto customizado ${project.id}:`, err);
+            projects_1.projectJobsQueue[project.id] = { status: 'failed', error: err.message };
+        });
+        return res.status(201).json(project);
+    }
+    catch (error) {
+        console.error('Erro na rota /api/ai/remaster/generate:', error);
         return res.status(500).json({ error: error.message });
     }
 });

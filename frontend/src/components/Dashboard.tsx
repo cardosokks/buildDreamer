@@ -224,6 +224,28 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
     }
   });
 
+  // Remaster Wizard Modal States (Novo Fluxo em 2 Etapas com Prompts por Página e Componentes Universais)
+  const [showRemasterModal, setShowRemasterModal] = useState(false);
+  const [remasterTargetLead, setRemasterTargetLead] = useState<Lead | null>(null);
+  const [remasterWebsiteUrl, setRemasterWebsiteUrl] = useState('');
+  const [remasterBusinessName, setRemasterBusinessName] = useState('');
+  const [remasterScrapeJobId, setRemasterScrapeJobId] = useState<string | null>(null);
+  const [remasterScrapingStatus, setRemasterScrapingStatus] = useState<'idle' | 'scraping' | 'completed' | 'failed'>('idle');
+  const [remasterProgressMsg, setRemasterProgressMsg] = useState('');
+  const [remasterGlobalPrompt, setRemasterGlobalPrompt] = useState('Design ultra premium, tema escuro moderno com detalhes neon, tipografia elegante, seções de alto impacto, animações de scroll e foco em alta conversão de vendas.');
+  const [remasterPages, setRemasterPages] = useState<Array<{
+    name: string;
+    slug: string;
+    url?: string;
+    customPrompt: string;
+    cleanText: string;
+    isHomepage: boolean;
+    enabled: boolean;
+  }>>([]);
+  const [repeatNavbar, setRepeatNavbar] = useState(true);
+  const [repeatFooter, setRepeatFooter] = useState(true);
+  const [generatingRemaster, setGeneratingRemaster] = useState(false);
+
   const [navbarSize, setNavbarSize] = useState<'compact' | 'normal' | 'large'>(() => {
     try {
       const stored = localStorage.getItem('rp_navbar_size');
@@ -568,16 +590,105 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
     setShowCreateModal(true);
   };
 
-  // Melhorar/Remasterizar site existente analisando todas as páginas e subpáginas com IA
-  const handleRemasterClientWebsite = async (lead: Lead) => {
-    if (!lead.website) {
-      alert('Este lead não possui um website cadastrado.');
+  // Iniciar fluxo em 2 etapas de Melhorar com IA
+  const handleStartRemasterFlow = async (leadOrUrl: { name: string; website: string } | Lead) => {
+    const targetUrl = leadOrUrl.website;
+    if (!targetUrl) {
+      alert('Nenhum website cadastrado para este estabelecimento.');
       return;
     }
 
-    if (!confirm(`Deseja analisar e remasterizar todo o site "${lead.website}" de ${lead.name} com IA? A IA irá clonar a estrutura de páginas e subpáginas gerando um design 10x superior.`)) {
+    setRemasterTargetLead(leadOrUrl as Lead);
+    setRemasterWebsiteUrl(targetUrl);
+    setRemasterBusinessName(leadOrUrl.name);
+    setRemasterScrapingStatus('scraping');
+    setRemasterProgressMsg(`Conectando e descobrindo subpáginas de ${targetUrl}...`);
+    setRemasterPages([]);
+    setShowRemasterModal(true);
+
+    try {
+      const res = await fetch(`${API_URL}/api/ai/remaster/scrape`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'X-Proxy-Url': localStorage.getItem('ai_proxy_url') || ''
+        },
+        body: JSON.stringify({
+          websiteUrl: targetUrl,
+          businessName: leadOrUrl.name
+        })
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Falha ao iniciar scraping do site.');
+      }
+
+      const data = await res.json();
+      setRemasterScrapeJobId(data.jobId);
+    } catch (err: any) {
+      console.error(err);
+      setRemasterScrapingStatus('failed');
+      setRemasterProgressMsg(err.message || 'Erro ao iniciar extração.');
+    }
+  };
+
+  // Polling para acompanhar o status do crawler de extração do site
+  useEffect(() => {
+    if (!remasterScrapeJobId || remasterScrapingStatus !== 'scraping') return;
+
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/ai/remaster/scrape/${remasterScrapeJobId}/status`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (!res.ok) return;
+        const data = await res.json();
+
+        if (data.status === 'completed') {
+          setRemasterScrapingStatus('completed');
+          setRemasterProgressMsg(data.progressMessage || 'Extração finalizada com sucesso!');
+          
+          const mappedPages = (data.discoveredPages || []).map((p: any) => ({
+            name: p.name,
+            slug: p.slug,
+            url: p.url,
+            customPrompt: p.isHomepage 
+              ? 'Hero impactante com CTA duplo, apresentação dos diferenciais, estatísticas da empresa, depoimentos e formulário de contato/WhatsApp.'
+              : `Apresentação detalhada com tópicos visuais, benefícios claros, cards ilustrativos e chamadas para ação focadas em ${p.name}.`,
+            cleanText: p.cleanText || '',
+            isHomepage: !!p.isHomepage,
+            enabled: true
+          }));
+
+          setRemasterPages(mappedPages);
+          clearInterval(interval);
+        } else if (data.status === 'failed') {
+          setRemasterScrapingStatus('failed');
+          setRemasterProgressMsg(data.error || 'Falha durante o download das páginas.');
+          clearInterval(interval);
+        } else if (data.progressMessage) {
+          setRemasterProgressMsg(data.progressMessage);
+        }
+      } catch (e) {
+        console.error('Erro no polling do scraper:', e);
+      }
+    }, 1500);
+
+    return () => clearInterval(interval);
+  }, [remasterScrapeJobId, remasterScrapingStatus, token]);
+
+  // Executar a Geração Multi-Página com os Prompts Customizados
+  const handleExecuteCustomRemaster = async () => {
+    const activePages = remasterPages.filter(p => p.enabled);
+    if (activePages.length === 0) {
+      alert('Selecione ao menos 1 página para ser gerada.');
       return;
     }
+
+    setGeneratingRemaster(true);
 
     try {
       let registeredModelIds: string[] = [];
@@ -586,7 +697,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
         if (stored) registeredModelIds = JSON.parse(stored).map((m: any) => m.id);
       } catch {}
 
-      const res = await fetch(`${API_URL}/api/projects`, {
+      const res = await fetch(`${API_URL}/api/ai/remaster/generate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -596,24 +707,35 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
           'X-Proxy-Url': localStorage.getItem('ai_proxy_url') || '',
           'X-AI-Skills': localStorage.getItem('custom_ai_skills') || ''
         },
-        body: JSON.stringify({ 
-          name: lead.name, 
-          description: `Site profissional e moderno para ${lead.name}`,
-          remasterWebsiteUrl: lead.website
+        body: JSON.stringify({
+          projectName: remasterBusinessName,
+          globalPrompt: remasterGlobalPrompt,
+          pages: activePages,
+          sharedComponents: {
+            repeatNavbar,
+            repeatFooter
+          }
         })
       });
 
-      if (!res.ok) throw new Error('Falha ao iniciar remasterização com IA');
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Falha ao iniciar geração do novo site.');
+      }
+
       const newProject = await res.json();
-      
       setProjects([newProject, ...projects]);
       setGeneratingProjectJobs(prev => ({
         ...prev,
-        [newProject.id]: { status: 'processing', currentModel: 'Analisando páginas do site original...' }
+        [newProject.id]: { status: 'processing', currentModel: 'Gerando Design System e Páginas...' }
       }));
+
+      setShowRemasterModal(false);
       setActiveTab('projects');
     } catch (err: any) {
       alert(err.message);
+    } finally {
+      setGeneratingRemaster(false);
     }
   };
 
@@ -1744,7 +1866,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
 
                                         {lead.website ? (
                                           <button
-                                            onClick={() => handleRemasterClientWebsite(lead)}
+                                            onClick={() => handleStartRemasterFlow(lead)}
                                             className="px-2.5 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold rounded-lg text-xs transition-all shadow-md cursor-pointer flex items-center gap-1"
                                             title="Analisar todas as páginas e subpáginas e recriar versão moderna com IA"
                                           >
@@ -2434,11 +2556,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                                           <Layout className="w-4 h-4" />
                                         </button>
 
-                                        {/* Botão: Melhorar / Criar com IA (Remaster Inteligente) */}
+                                        {/* Botão: Melhorar / Criar com IA (Remaster Inteligente em 2 etapas) */}
                                         <button
-                                          onClick={() => handleRemasterClientWebsite(lead)}
+                                          onClick={() => handleStartRemasterFlow(lead)}
                                           className="p-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white rounded-xl transition-all shadow-md hover:shadow-purple-500/30 cursor-pointer"
-                                          title={lead.website ? `Melhorar com IA: Analisar ${lead.website} e reconstruir versão moderna` : `Gerar Site Otimizado com IA para ${lead.name}`}
+                                          title={lead.website ? `Melhorar com IA: Analisar páginas de ${lead.website} e reconstruir com prompts customizados` : `Gerar Site Otimizado com IA para ${lead.name}`}
                                         >
                                           <Sparkles className="w-4 h-4" />
                                         </button>
@@ -2555,11 +2677,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                                   <Layout className="w-4 h-4" />
                                 </button>
 
-                                {/* Botão: Melhorar / Criar com IA */}
+                                {/* Botão: Melhorar / Criar com IA (Remaster Inteligente em 2 etapas) */}
                                 <button
-                                  onClick={() => handleRemasterClientWebsite(lead)}
+                                  onClick={() => handleStartRemasterFlow(lead)}
                                   className="p-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white rounded-xl transition-all shadow-md hover:shadow-purple-500/30 cursor-pointer"
-                                  title={lead.website ? `Melhorar com IA: Analisar ${lead.website} e reconstruir versão moderna` : `Gerar Site Otimizado com IA para ${lead.name}`}
+                                  title={lead.website ? `Melhorar com IA: Analisar páginas de ${lead.website} e reconstruir com prompts customizados` : `Gerar Site Otimizado com IA para ${lead.name}`}
                                 >
                                   <Sparkles className="w-4 h-4" />
                                 </button>
@@ -3029,6 +3151,295 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
           <span className="text-[10px]">Ajustes</span>
         </button>
       </nav>
+
+      {/* Modal de Remasterização Inteligente em 2 Etapas (Scraping + Planejador de Prompts por Página e Navbar Compartilhada) */}
+      {showRemasterModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 backdrop-blur-md animate-fade-in">
+          <div className="w-full max-w-4xl bg-[#0d0a17] border border-purple-500/30 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+            
+            {/* Modal Header */}
+            <div className="p-5 bg-gradient-to-r from-purple-950/60 to-slate-900 border-b border-purple-500/20 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-gradient-to-tr from-purple-600 to-pink-600 text-white shadow-lg shadow-purple-600/30">
+                  <Sparkles className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white flex items-center gap-2">
+                    Remasterizador & Modernizador com IA
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-950 text-purple-300 border border-purple-500/40 font-mono">
+                      Fluxo Inteligente
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    {remasterBusinessName} • <span className="font-mono text-cyan-400">{remasterWebsiteUrl}</span>
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowRemasterModal(false)}
+                className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800/60 rounded-xl transition-all cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto space-y-6 flex-1 pr-3">
+              
+              {/* ETAPA 1: Status do Crawler / Scraping */}
+              <div className="p-4 bg-slate-950/80 border border-slate-800 rounded-xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                    <Globe className="w-4 h-4 text-indigo-400" />
+                    Etapa 1: Varredura e Download das Páginas Existentes
+                  </span>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase font-mono ${
+                    remasterScrapingStatus === 'scraping' 
+                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30 animate-pulse'
+                      : remasterScrapingStatus === 'completed'
+                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                      : 'bg-red-500/20 text-red-300 border border-red-500/30'
+                  }`}>
+                    {remasterScrapingStatus === 'scraping' ? 'Extraindo...' : remasterScrapingStatus === 'completed' ? 'Concluído' : 'Atenção'}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  {remasterScrapingStatus === 'scraping' && (
+                    <div className="w-4 h-4 border-2 border-purple-500 border-t-transparent rounded-full animate-spin shrink-0" />
+                  )}
+                  <p className="text-xs text-slate-300 font-mono">
+                    {remasterProgressMsg}
+                  </p>
+                </div>
+              </div>
+
+              {/* ETAPA 2: Configuração de Prompts e Componentes (Disponível quando o scraping conclui) */}
+              {remasterScrapingStatus === 'completed' && (
+                <div className="space-y-6 animate-in fade-in duration-300">
+                  
+                  {/* Prompt Global do Site */}
+                  <div className="p-4 bg-purple-950/20 border border-purple-500/30 rounded-xl space-y-2">
+                    <label className="block text-xs font-bold text-white uppercase tracking-wider flex items-center justify-between">
+                      <span className="flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-pink-400" />
+                        Prompt Principal do Site (Aplica-se a Todas as Páginas)
+                      </span>
+                      <span className="text-[10px] text-purple-300 font-normal lowercase italic">estilo, paleta e tom de voz</span>
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={remasterGlobalPrompt}
+                      onChange={(e) => setRemasterGlobalPrompt(e.target.value)}
+                      placeholder="Ex: Tema moderno escuro com neon cyan, tipografia Inter, seções de alto impacto, animações e botão de WhatsApp..."
+                      className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:border-purple-500 focus:outline-none leading-relaxed"
+                    />
+                  </div>
+
+                  {/* Componentes Compartilhados Universais (Não duplicar geração) */}
+                  <div className="p-4 bg-slate-950/90 border border-slate-800 rounded-xl space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
+                          <Code2 className="w-4 h-4 text-purple-400" />
+                          Componentes Compartilhados Universais (Sem Duplicação)
+                        </h4>
+                        <p className="text-[11px] text-slate-400 mt-0.5">
+                          A IA gera a Navbar e o Footer apenas 1 vez na Home e os integra de forma idêntica e consistente em todas as subpáginas.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                      <label className="flex items-center gap-2 p-2.5 bg-slate-900/80 border border-slate-800 rounded-xl cursor-pointer hover:border-purple-500/40 transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={repeatNavbar}
+                          onChange={(e) => setRepeatNavbar(e.target.checked)}
+                          className="rounded bg-slate-950 border-slate-700 text-purple-600 focus:ring-0 cursor-pointer"
+                        />
+                        <div className="text-xs text-slate-200">
+                          <span className="font-semibold block">Navbar Universal Idêntica</span>
+                          <span className="text-[10px] text-slate-400">Mesma logo, menu de navegação e botões em todas as páginas</span>
+                        </div>
+                      </label>
+
+                      <label className="flex items-center gap-2 p-2.5 bg-slate-900/80 border border-slate-800 rounded-xl cursor-pointer hover:border-purple-500/40 transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={repeatFooter}
+                          onChange={(e) => setRepeatFooter(e.target.checked)}
+                          className="rounded bg-slate-950 border-slate-700 text-purple-600 focus:ring-0 cursor-pointer"
+                        />
+                        <div className="text-xs text-slate-200">
+                          <span className="font-semibold block">Footer Universal Idêntico</span>
+                          <span className="text-[10px] text-slate-400">Mesmos links rápidos, copyright e canais de contato na base</span>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Lista de Páginas com Prompt Individual */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                        <Layout className="w-4 h-4 text-pink-400" />
+                        Páginas Identificadas & Prompts Individuais ({remasterPages.filter(p => p.enabled).length}/{remasterPages.length})
+                      </h4>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newSlug = `pagina-${remasterPages.length + 1}`;
+                          setRemasterPages([...remasterPages, {
+                            name: `Nova Página ${remasterPages.length + 1}`,
+                            slug: newSlug,
+                            customPrompt: 'Apresente os detalhes desta nova seção com design harmônico e interativo.',
+                            cleanText: '',
+                            isHomepage: false,
+                            enabled: true
+                          }]);
+                        }}
+                        className="px-2.5 py-1 bg-purple-950 hover:bg-purple-900 text-purple-300 border border-purple-500/30 rounded-lg text-[10px] font-semibold flex items-center gap-1 cursor-pointer"
+                      >
+                        <Plus className="w-3 h-3" />
+                        Adicionar Subpágina
+                      </button>
+                    </div>
+
+                    <div className="space-y-3">
+                      {remasterPages.map((page, idx) => (
+                        <div 
+                          key={idx}
+                          className={`p-3.5 border rounded-xl transition-all space-y-2.5 ${
+                            page.enabled 
+                              ? 'bg-slate-950 border-purple-500/30 shadow-sm' 
+                              : 'bg-slate-950/40 border-slate-850 opacity-60'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <input
+                                type="checkbox"
+                                checked={page.enabled}
+                                onChange={(e) => {
+                                  const updated = [...remasterPages];
+                                  updated[idx].enabled = e.target.checked;
+                                  setRemasterPages(updated);
+                                }}
+                                className="rounded bg-slate-900 border-slate-700 text-purple-600 focus:ring-0 cursor-pointer"
+                              />
+                              <input
+                                type="text"
+                                value={page.name}
+                                onChange={(e) => {
+                                  const updated = [...remasterPages];
+                                  updated[idx].name = e.target.value;
+                                  setRemasterPages(updated);
+                                }}
+                                className="bg-transparent font-bold text-xs text-white border-b border-transparent hover:border-purple-500 focus:border-purple-500 focus:outline-none px-1"
+                              />
+                              <span className="text-[10px] text-slate-500 font-mono">
+                                (/{page.slug}.html)
+                              </span>
+                              {page.isHomepage && (
+                                <span className="text-[9px] px-1.5 py-0.2 rounded bg-pink-950 text-pink-300 border border-pink-500/30 font-mono uppercase">
+                                  Home Principal
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="flex items-center gap-1">
+                              {!page.isHomepage && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setRemasterPages(remasterPages.filter((_, i) => i !== idx));
+                                  }}
+                                  className="p-1 text-slate-500 hover:text-red-400 rounded transition-colors cursor-pointer"
+                                  title="Remover esta página do plano"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Campo de Prompt Específico para esta página */}
+                          {page.enabled && (
+                            <div className="space-y-1">
+                              <label className="block text-[10px] text-slate-400 flex items-center justify-between">
+                                <span>Prompt Específico para a página "{page.name}":</span>
+                                {page.cleanText && (
+                                  <span className="text-[9px] text-emerald-400 font-mono">
+                                    ✓ Conteúdo original extraído ({page.cleanText.length} carac.)
+                                  </span>
+                                )}
+                              </label>
+                              <textarea
+                                rows={2}
+                                value={page.customPrompt}
+                                onChange={(e) => {
+                                  const updated = [...remasterPages];
+                                  updated[idx].customPrompt = e.target.value;
+                                  setRemasterPages(updated);
+                                }}
+                                placeholder={`Descreva o que deseja que a IA implemente especificamente na página ${page.name}...`}
+                                className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-xs text-white font-sans focus:border-purple-500 focus:outline-none leading-relaxed"
+                              />
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                </div>
+              )}
+
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 bg-slate-950 border-t border-purple-500/20 flex items-center justify-between">
+              <span className="text-xs text-slate-400 font-mono">
+                {remasterScrapingStatus === 'completed' 
+                  ? `${remasterPages.filter(p => p.enabled).length} páginas prontas para geração sincronizada`
+                  : 'Aguardando conclusão do crawler...'
+                }
+              </span>
+              
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowRemasterModal(false)}
+                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-slate-300 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                
+                <button
+                  type="button"
+                  disabled={remasterScrapingStatus !== 'completed' || generatingRemaster}
+                  onClick={handleExecuteCustomRemaster}
+                  className="px-6 py-2.5 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-purple-600/30 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {generatingRemaster ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Iniciando Criação...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4" />
+                      Continuar e Gerar Novo Site com IA
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      )}
 
       {/* Settings Modal */}
       {showSettings && (
