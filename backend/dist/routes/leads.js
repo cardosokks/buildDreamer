@@ -4,6 +4,7 @@ exports.leadsRouter = void 0;
 const express_1 = require("express");
 const db_1 = require("../db");
 const router = (0, express_1.Router)();
+// ─── ENDPOINTS DO CRM DE VENDAS DE SITES ───
 // Garante que a tabela Lead existe com todas as colunas necessárias para o CRM
 async function ensureLeadTable() {
     try {
@@ -42,7 +43,6 @@ async function ensureLeadTable() {
         console.warn('[CRM DB] Aviso ao verificar tabela Lead:', e);
     }
 }
-// ─── ENDPOINTS DO CRM DE VENDAS DE SITES ───
 // 1. Listar todos os leads do CRM do usuário logado (com dados de projeto vinculado se houver)
 router.get('/crm', async (req, res) => {
     try {
@@ -57,11 +57,11 @@ router.get('/crm', async (req, res) => {
       WHERE l."userId" = $1
       ORDER BY l."createdAt" DESC;
     `, req.userId);
-        return res.json({ leads: rows });
+        return res.json({ leads: rows || [] });
     }
     catch (error) {
         console.error('Erro ao buscar leads do CRM:', error);
-        return res.status(500).json({ error: error.message });
+        return res.status(500).json({ error: error.message || 'Falha ao buscar leads do CRM' });
     }
 });
 // 2. Criar ou Salvar Lead no CRM
@@ -69,7 +69,7 @@ router.post('/crm', async (req, res) => {
     try {
         await ensureLeadTable();
         const { name, company, phone, email, website, address, rating, dealValue, status, notes, origin, tags, projectId } = req.body;
-        if (!name) {
+        if (!name || typeof name !== 'string' || !name.trim()) {
             return res.status(400).json({ error: 'Nome do lead/empresa é obrigatório' });
         }
         const id = `lead-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
@@ -83,13 +83,23 @@ router.post('/crm', async (req, res) => {
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, $14, $15, NOW(), NOW()
       );
-    `, id, name, company || null, phone || null, email || null, website || null, address || null, rating || null, parsedDealValue, initialStatus, notes || null, origin || 'MANUAL', tagsJson, req.userId, projectId || null);
-        const created = await db_1.prisma.$queryRawUnsafe(`SELECT * FROM "Lead" WHERE "id" = $1 LIMIT 1`, id);
-        return res.status(201).json({ lead: created[0] });
+    `, id, name.trim(), company ? String(company).trim() : null, phone ? String(phone).trim() : null, email ? String(email).trim() : null, website ? String(website).trim() : null, address ? String(address).trim() : null, rating ? String(rating).trim() : null, parsedDealValue, initialStatus, notes ? String(notes).trim() : null, origin ? String(origin).trim() : 'MANUAL', tagsJson, req.userId, projectId || null);
+        const createdRows = await db_1.prisma.$queryRawUnsafe(`
+      SELECT 
+        l.*,
+        p."name" as "projectName",
+        p."status" as "projectStatus"
+      FROM "Lead" l
+      LEFT JOIN "Project" p ON l."projectId" = p."id"
+      WHERE l."id" = $1 LIMIT 1
+    `, id);
+        return res.status(201).json({
+            lead: createdRows[0] || { id, name, status: initialStatus, dealValue: parsedDealValue }
+        });
     }
     catch (error) {
         console.error('Erro ao criar lead no CRM:', error);
-        return res.status(500).json({ error: error.message });
+        return res.status(500).json({ error: error.message || 'Erro ao cadastrar lead' });
     }
 });
 // 3. Atualizar Lead (Status, Valor, Notas, Data de Contato, Projeto Vinculado)
@@ -103,31 +113,31 @@ router.put('/crm/:id', async (req, res) => {
         let idx = 1;
         if (name !== undefined) {
             fields.push(`"name" = $${idx++}`);
-            values.push(name);
+            values.push(String(name).trim());
         }
         if (company !== undefined) {
             fields.push(`"company" = $${idx++}`);
-            values.push(company);
+            values.push(company ? String(company).trim() : null);
         }
         if (phone !== undefined) {
             fields.push(`"phone" = $${idx++}`);
-            values.push(phone);
+            values.push(phone ? String(phone).trim() : null);
         }
         if (email !== undefined) {
             fields.push(`"email" = $${idx++}`);
-            values.push(email);
+            values.push(email ? String(email).trim() : null);
         }
         if (website !== undefined) {
             fields.push(`"website" = $${idx++}`);
-            values.push(website);
+            values.push(website ? String(website).trim() : null);
         }
         if (address !== undefined) {
             fields.push(`"address" = $${idx++}`);
-            values.push(address);
+            values.push(address ? String(address).trim() : null);
         }
         if (rating !== undefined) {
             fields.push(`"rating" = $${idx++}`);
-            values.push(rating);
+            values.push(rating ? String(rating).trim() : null);
         }
         if (dealValue !== undefined) {
             fields.push(`"dealValue" = $${idx++}`);
@@ -139,19 +149,19 @@ router.put('/crm/:id', async (req, res) => {
         }
         if (notes !== undefined) {
             fields.push(`"notes" = $${idx++}`);
-            values.push(notes);
+            values.push(notes ? String(notes).trim() : null);
         }
         if (origin !== undefined) {
             fields.push(`"origin" = $${idx++}`);
-            values.push(origin);
+            values.push(origin ? String(origin).trim() : 'MANUAL');
         }
         if (tags !== undefined) {
             fields.push(`"tags" = $${idx++}::jsonb`);
-            values.push(JSON.stringify(tags));
+            values.push(JSON.stringify(Array.isArray(tags) ? tags : []));
         }
         if (projectId !== undefined) {
             fields.push(`"projectId" = $${idx++}`);
-            values.push(projectId);
+            values.push(projectId || null);
         }
         if (lastContactDate !== undefined) {
             fields.push(`"lastContactDate" = $${idx++}`);
@@ -163,7 +173,7 @@ router.put('/crm/:id', async (req, res) => {
       UPDATE "Lead" SET ${fields.join(', ')} 
       WHERE "id" = $${idx++} AND "userId" = $${idx++};
     `, ...values);
-        const updated = await db_1.prisma.$queryRawUnsafe(`
+        const updatedRows = await db_1.prisma.$queryRawUnsafe(`
       SELECT 
         l.*,
         p."name" as "projectName",
@@ -172,11 +182,11 @@ router.put('/crm/:id', async (req, res) => {
       LEFT JOIN "Project" p ON l."projectId" = p."id"
       WHERE l."id" = $1 AND l."userId" = $2 LIMIT 1
     `, id, req.userId);
-        return res.json({ lead: updated[0] });
+        return res.json({ lead: updatedRows[0] });
     }
     catch (error) {
         console.error('Erro ao atualizar lead do CRM:', error);
-        return res.status(500).json({ error: error.message });
+        return res.status(500).json({ error: error.message || 'Erro ao atualizar lead' });
     }
 });
 // 4. Excluir Lead do CRM
@@ -185,11 +195,11 @@ router.delete('/crm/:id', async (req, res) => {
         await ensureLeadTable();
         const { id } = req.params;
         await db_1.prisma.$executeRawUnsafe(`DELETE FROM "Lead" WHERE "id" = $1 AND "userId" = $2;`, id, req.userId);
-        return res.json({ message: 'Lead excluído com sucesso do CRM.' });
+        return res.json({ message: 'Lead excluído com sucesso.' });
     }
     catch (error) {
         console.error('Erro ao excluir lead do CRM:', error);
-        return res.status(500).json({ error: error.message });
+        return res.status(500).json({ error: error.message || 'Erro ao excluir lead' });
     }
 });
 // 5. Vincular Projeto / Site criado ao Lead do CRM
@@ -200,14 +210,23 @@ router.post('/crm/:id/link-project', async (req, res) => {
         const { projectId } = req.body;
         await db_1.prisma.$executeRawUnsafe(`
       UPDATE "Lead" 
-      SET "projectId" = $1, "status" = CASE WHEN "status" = 'PROSPECT' THEN 'PROPOSAL_SENT' ELSE "status" END, "updatedAt" = NOW()
+      SET "projectId" = $1, "status" = 'PROPOSAL_SENT', "updatedAt" = NOW() 
       WHERE "id" = $2 AND "userId" = $3;
     `, projectId, id, req.userId);
-        return res.json({ message: 'Projeto vinculado ao lead com sucesso!' });
+        const updatedRows = await db_1.prisma.$queryRawUnsafe(`
+      SELECT 
+        l.*,
+        p."name" as "projectName",
+        p."status" as "projectStatus"
+      FROM "Lead" l
+      LEFT JOIN "Project" p ON l."projectId" = p."id"
+      WHERE l."id" = $1 AND l."userId" = $2 LIMIT 1
+    `, id, req.userId);
+        return res.json({ lead: updatedRows[0] });
     }
     catch (error) {
         console.error('Erro ao vincular projeto ao lead:', error);
-        return res.status(500).json({ error: error.message });
+        return res.status(500).json({ error: error.message || 'Erro ao vincular projeto' });
     }
 });
 // ─── ENDPOINTS DE BUSCADOR DE CLIENTES (SCRAPING / PLACES) ───

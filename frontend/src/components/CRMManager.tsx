@@ -230,11 +230,13 @@ export const CRMManager: React.FC<CRMProps> = ({ onOpenRemasterModal, onOpenProj
           },
           body: JSON.stringify(payload)
         });
-        if (res.ok) {
-          const data = await res.json();
+        const data = await res.json();
+        if (res.ok && data.lead) {
           setLeads(leads.map(l => l.id === editingLead.id ? { ...l, ...data.lead } : l));
           setShowModal(false);
           notify.success(`Lead "${payload.name}" atualizado com sucesso!`, 'Salvo');
+        } else {
+          throw new Error(data.error || 'Erro ao atualizar lead');
         }
       } else {
         const res = await fetch(`${API_URL}/api/leads/crm`, {
@@ -245,11 +247,13 @@ export const CRMManager: React.FC<CRMProps> = ({ onOpenRemasterModal, onOpenProj
           },
           body: JSON.stringify(payload)
         });
-        if (res.ok) {
-          const data = await res.json();
+        const data = await res.json();
+        if (res.ok && data.lead) {
           setLeads([data.lead, ...leads]);
           setShowModal(false);
           notify.success(`Lead "${payload.name}" cadastrado com sucesso!`, 'Salvo');
+        } else {
+          throw new Error(data.error || 'Erro ao cadastrar lead');
         }
       }
     } catch (err: any) {
