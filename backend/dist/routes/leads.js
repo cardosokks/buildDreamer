@@ -22,7 +22,7 @@ async function ensureLeadTable() {
         "status" TEXT DEFAULT 'PROSPECT',
         "notes" TEXT,
         "origin" TEXT DEFAULT 'MANUAL',
-        "tags" JSONB DEFAULT '[]'::jsonb,
+        "tags" TEXT[] DEFAULT '{}',
         "lastContactDate" TIMESTAMP,
         "userId" TEXT NOT NULL,
         "projectId" TEXT,
@@ -42,7 +42,7 @@ async function ensureLeadTable() {
             `ALTER TABLE "Lead" ADD COLUMN IF NOT EXISTS "status" TEXT DEFAULT 'PROSPECT';`,
             `ALTER TABLE "Lead" ADD COLUMN IF NOT EXISTS "notes" TEXT;`,
             `ALTER TABLE "Lead" ADD COLUMN IF NOT EXISTS "origin" TEXT DEFAULT 'MANUAL';`,
-            `ALTER TABLE "Lead" ADD COLUMN IF NOT EXISTS "tags" JSONB DEFAULT '[]'::jsonb;`,
+            `ALTER TABLE "Lead" ADD COLUMN IF NOT EXISTS "tags" TEXT[] DEFAULT '{}';`,
             `ALTER TABLE "Lead" ADD COLUMN IF NOT EXISTS "lastContactDate" TIMESTAMP;`,
             `ALTER TABLE "Lead" ADD COLUMN IF NOT EXISTS "projectId" TEXT;`,
         ];
@@ -90,16 +90,18 @@ router.post('/crm', async (req, res) => {
         const id = `lead-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
         const parsedDealValue = typeof dealValue === 'number' ? dealValue : parseFloat(String(dealValue || '0')) || 0;
         const initialStatus = (status && ['PROSPECT', 'CONTACTED', 'PROPOSAL_SENT', 'IN_NEGOTIATION', 'WON', 'LOST'].includes(status)) ? status : 'PROSPECT';
-        const tagsJson = JSON.stringify(Array.isArray(tags) ? tags : []);
+        // Converte tags para o formato de array nativo do PostgreSQL (text[])
+        const tagsArr = Array.isArray(tags) ? tags.map(String) : [];
+        const tagsPgArr = tagsArr;
         const safeProjectId = projectId && projectId !== '' ? String(projectId) : null;
         await db_1.prisma.$executeRawUnsafe(`
       INSERT INTO "Lead" (
         "id", "name", "company", "phone", "email", "website", "address", "rating",
         "dealValue", "status", "notes", "origin", "tags", "userId", "projectId", "createdAt", "updatedAt"
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9::double precision, $10, $11, $12, $13::jsonb, $14, $15, NOW(), NOW()
+        $1, $2, $3, $4, $5, $6, $7, $8, $9::double precision, $10, $11, $12, $13::text[], $14, $15, NOW(), NOW()
       );
-    `, id, String(name).trim(), company ? String(company).trim() : null, phone ? String(phone).trim() : null, email ? String(email).trim() : null, website ? String(website).trim() : null, address ? String(address).trim() : null, rating ? String(rating).trim() : null, parsedDealValue, initialStatus, notes ? String(notes).trim() : null, origin ? String(origin).trim() : 'MANUAL', tagsJson, String(userId), safeProjectId);
+    `, id, String(name).trim(), company ? String(company).trim() : null, phone ? String(phone).trim() : null, email ? String(email).trim() : null, website ? String(website).trim() : null, address ? String(address).trim() : null, rating ? String(rating).trim() : null, parsedDealValue, initialStatus, notes ? String(notes).trim() : null, origin ? String(origin).trim() : 'MANUAL', tagsPgArr, String(userId), safeProjectId);
         const createdRows = await db_1.prisma.$queryRawUnsafe(`
       SELECT 
         l.*,
@@ -172,8 +174,8 @@ router.put('/crm/:id', async (req, res) => {
             values.push(origin ? String(origin).trim() : 'MANUAL');
         }
         if (tags !== undefined) {
-            fields.push(`"tags" = $${idx++}::jsonb`);
-            values.push(JSON.stringify(Array.isArray(tags) ? tags : []));
+            fields.push(`"tags" = $${idx++}::text[]`);
+            values.push(Array.isArray(tags) ? tags.map(String) : []);
         }
         if (projectId !== undefined) {
             fields.push(`"projectId" = $${idx++}`);

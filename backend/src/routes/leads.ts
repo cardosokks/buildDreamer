@@ -23,7 +23,7 @@ async function ensureLeadTable() {
         "status" TEXT DEFAULT 'PROSPECT',
         "notes" TEXT,
         "origin" TEXT DEFAULT 'MANUAL',
-        "tags" JSONB DEFAULT '[]'::jsonb,
+        "tags" TEXT[] DEFAULT '{}',
         "lastContactDate" TIMESTAMP,
         "userId" TEXT NOT NULL,
         "projectId" TEXT,
@@ -44,7 +44,7 @@ async function ensureLeadTable() {
       `ALTER TABLE "Lead" ADD COLUMN IF NOT EXISTS "status" TEXT DEFAULT 'PROSPECT';`,
       `ALTER TABLE "Lead" ADD COLUMN IF NOT EXISTS "notes" TEXT;`,
       `ALTER TABLE "Lead" ADD COLUMN IF NOT EXISTS "origin" TEXT DEFAULT 'MANUAL';`,
-      `ALTER TABLE "Lead" ADD COLUMN IF NOT EXISTS "tags" JSONB DEFAULT '[]'::jsonb;`,
+      `ALTER TABLE "Lead" ADD COLUMN IF NOT EXISTS "tags" TEXT[] DEFAULT '{}';`,
       `ALTER TABLE "Lead" ADD COLUMN IF NOT EXISTS "lastContactDate" TIMESTAMP;`,
       `ALTER TABLE "Lead" ADD COLUMN IF NOT EXISTS "projectId" TEXT;`,
     ];
@@ -111,7 +111,9 @@ router.post('/crm', async (req: AuthenticatedRequest, res: any) => {
     const id = `lead-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
     const parsedDealValue = typeof dealValue === 'number' ? dealValue : parseFloat(String(dealValue || '0')) || 0;
     const initialStatus = (status && ['PROSPECT','CONTACTED','PROPOSAL_SENT','IN_NEGOTIATION','WON','LOST'].includes(status)) ? status : 'PROSPECT';
-    const tagsJson = JSON.stringify(Array.isArray(tags) ? tags : []);
+    // Converte tags para o formato de array nativo do PostgreSQL (text[])
+    const tagsArr: string[] = Array.isArray(tags) ? tags.map(String) : [];
+    const tagsPgArr = tagsArr;
     const safeProjectId = projectId && projectId !== '' ? String(projectId) : null;
 
     await prisma.$executeRawUnsafe(`
@@ -119,7 +121,7 @@ router.post('/crm', async (req: AuthenticatedRequest, res: any) => {
         "id", "name", "company", "phone", "email", "website", "address", "rating",
         "dealValue", "status", "notes", "origin", "tags", "userId", "projectId", "createdAt", "updatedAt"
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9::double precision, $10, $11, $12, $13::jsonb, $14, $15, NOW(), NOW()
+        $1, $2, $3, $4, $5, $6, $7, $8, $9::double precision, $10, $11, $12, $13::text[], $14, $15, NOW(), NOW()
       );
     `, 
       id,
@@ -134,7 +136,7 @@ router.post('/crm', async (req: AuthenticatedRequest, res: any) => {
       initialStatus,
       notes ? String(notes).trim() : null,
       origin ? String(origin).trim() : 'MANUAL',
-      tagsJson,
+      tagsPgArr,
       String(userId),
       safeProjectId
     );
@@ -196,7 +198,7 @@ router.put('/crm/:id', async (req: AuthenticatedRequest, res: any) => {
     if (status !== undefined) { fields.push(`"status" = $${idx++}`); values.push(status); }
     if (notes !== undefined) { fields.push(`"notes" = $${idx++}`); values.push(notes ? String(notes).trim() : null); }
     if (origin !== undefined) { fields.push(`"origin" = $${idx++}`); values.push(origin ? String(origin).trim() : 'MANUAL'); }
-    if (tags !== undefined) { fields.push(`"tags" = $${idx++}::jsonb`); values.push(JSON.stringify(Array.isArray(tags) ? tags : [])); }
+    if (tags !== undefined) { fields.push(`"tags" = $${idx++}::text[]`); values.push(Array.isArray(tags) ? tags.map(String) : []); }
     if (projectId !== undefined) { fields.push(`"projectId" = $${idx++}`); values.push(projectId || null); }
     if (lastContactDate !== undefined) { fields.push(`"lastContactDate" = $${idx++}`); values.push(lastContactDate ? new Date(lastContactDate) : null); }
 
