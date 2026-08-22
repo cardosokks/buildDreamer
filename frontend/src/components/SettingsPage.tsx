@@ -99,6 +99,15 @@ export const SettingsPage: React.FC = () => {
   const [proxyUrl, setProxyUrl] = useState(localStorage.getItem('ai_proxy_url') || '');
   const [ngrokToken, setNgrokToken] = useState(localStorage.getItem('ngrok_authtoken') || '');
 
+  // Preferências de Interface / Navbar Size
+  const [navbarSize, setNavbarSize] = useState<'compact' | 'normal' | 'large'>(() => {
+    try {
+      const stored = localStorage.getItem('rp_navbar_size');
+      if (stored === 'compact' || stored === 'normal' || stored === 'large') return stored;
+    } catch {}
+    return 'normal';
+  });
+
   // Models CRUD fields
   const getStoredModels = () => {
     const stored = localStorage.getItem('custom_gemini_models');
@@ -177,6 +186,10 @@ export const SettingsPage: React.FC = () => {
               setSkills(s.customAiSkills);
               localStorage.setItem('custom_ai_skills', JSON.stringify(s.customAiSkills));
             }
+            if (s.navbarSize && (s.navbarSize === 'compact' || s.navbarSize === 'normal' || s.navbarSize === 'large')) {
+              setNavbarSize(s.navbarSize);
+              localStorage.setItem('rp_navbar_size', s.navbarSize);
+            }
           }
         }
       } catch (err) {
@@ -222,8 +235,9 @@ export const SettingsPage: React.FC = () => {
       if (user) {
         const updatedUser = { ...user, name, email };
         login(token!, updatedUser);
-        await saveToDatabase({ name });
-        setSuccessMsg('Perfil atualizado e sincronizado com o banco de dados!');
+        localStorage.setItem('rp_navbar_size', navbarSize);
+        await saveToDatabase({ name, navbarSize });
+        setSuccessMsg('Perfil e preferências de interface atualizados e sincronizados no banco de dados!');
       }
     } catch (err: any) {
       setErrorMsg(err.message);
@@ -551,6 +565,53 @@ export const SettingsPage: React.FC = () => {
                     className="w-full px-4 py-3 bg-slate-950/60 border border-slate-850 rounded-xl text-sm text-slate-500 cursor-not-allowed"
                   />
                   <span className="text-[10px] text-slate-500 mt-1 block">O e-mail é o identificador único da sua conta.</span>
+                </div>
+
+                {/* Seletor de Tamanho da Navbar */}
+                <div className="pt-2">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
+                    Tamanho & Densidade da Barra Superior (Topbar)
+                  </label>
+                  <div className="grid grid-cols-3 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setNavbarSize('compact')}
+                      className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                        navbarSize === 'compact'
+                          ? 'bg-purple-600/20 border-purple-500 text-white shadow-md shadow-purple-600/20'
+                          : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white hover:border-slate-700'
+                      }`}
+                    >
+                      <span className="font-bold text-xs block">Compacto</span>
+                      <span className="text-[10px] text-slate-400 block mt-0.5">Espaço reduzido (h-13)</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setNavbarSize('normal')}
+                      className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                        navbarSize === 'normal'
+                          ? 'bg-purple-600/20 border-purple-500 text-white shadow-md shadow-purple-600/20'
+                          : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white hover:border-slate-700'
+                      }`}
+                    >
+                      <span className="font-bold text-xs block">Normal</span>
+                      <span className="text-[10px] text-slate-400 block mt-0.5">Padrão equilibrado (h-15)</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setNavbarSize('large')}
+                      className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                        navbarSize === 'large'
+                          ? 'bg-purple-600/20 border-purple-500 text-white shadow-md shadow-purple-600/20'
+                          : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white hover:border-slate-700'
+                      }`}
+                    >
+                      <span className="font-bold text-xs block">Grande</span>
+                      <span className="text-[10px] text-slate-400 block mt-0.5">Maior destaque (h-18)</span>
+                    </button>
+                  </div>
                 </div>
               </div>
 

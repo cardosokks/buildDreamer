@@ -1201,28 +1201,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
               </button>
             </div>
 
-            {/* Seletor de Densidade */}
-            {!navbarMinimized && (
-              <div className={`hidden lg:flex items-center gap-1.5 h-9 px-2.5 border rounded-xl ${
-                theme === 'light' ? 'bg-slate-100 border-slate-200' : 'bg-slate-900/80 border-slate-800'
-              }`}>
-                <span className={`text-[10px] font-semibold uppercase tracking-wider ${
-                  theme === 'light' ? 'text-slate-500' : 'text-slate-400'
-                }`}>Barra:</span>
-                <select
-                  value={navbarSize}
-                  onChange={(e) => setNavbarSize(e.target.value as any)}
-                  className={`bg-transparent border-none text-[10px] font-mono focus:outline-none cursor-pointer ${
-                    theme === 'light' ? 'text-slate-800' : 'text-slate-200'
-                  }`}
-                >
-                  <option value="compact" className={theme === 'light' ? 'bg-white text-slate-900' : 'bg-slate-900 text-white'}>Compacto</option>
-                  <option value="normal" className={theme === 'light' ? 'bg-white text-slate-900' : 'bg-slate-900 text-white'}>Normal</option>
-                  <option value="large" className={theme === 'light' ? 'bg-white text-slate-900' : 'bg-slate-900 text-white'}>Grande</option>
-                </select>
-              </div>
-            )}
-
             {/* Botão de Minimizar Cabeçalho */}
             <button
               onClick={() => setNavbarMinimized(!navbarMinimized)}
@@ -1284,15 +1262,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                       className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-slate-300 hover:text-white hover:bg-purple-900/30 rounded-xl transition-all cursor-pointer"
                     >
                       <Settings className="w-4 h-4 text-purple-400" />
-                      Configurações & Chaves
-                    </button>
-
-                    <button
-                      onClick={() => { setShowUserDropdown(false); setActiveTab('leads'); }}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-slate-300 hover:text-white hover:bg-purple-900/30 rounded-xl transition-all cursor-pointer"
-                    >
-                      <Users className="w-4 h-4 text-pink-400" />
-                      Buscador de Clientes
+                      Configurações & Preferências
                     </button>
                   </div>
 
