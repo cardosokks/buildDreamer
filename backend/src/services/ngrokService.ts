@@ -9,8 +9,7 @@ export interface GlobalTunnelStatus {
   error?: string | null;
 }
 
-let globalNgrokSession: any = null;
-let globalNgrokListener: any = null;
+let currentListener: any = null;
 let currentTunnelUrl: string | null = null;
 let tunnelStartedAt: string | null = null;
 let currentTarget: string = 'http://frontend:80';
@@ -32,124 +31,109 @@ export function getSystemNgrokStatus(): GlobalTunnelStatus {
 }
 
 /**
- * Inicia o túnel global no Ngrok assincronamente em formato de background job
+ * Inicia o túnel global no Ngrok com ngrok.forward nativo e timeout resiliente
  */
-export function startSystemNgrokTunnelJob(customAuthtoken?: string, targetOverride?: string): Promise<GlobalTunnelStatus> {
+export async function startSystemNgrokTunnelJob(customAuthtoken?: string, targetOverride?: string): Promise<GlobalTunnelStatus> {
   // Se já estiver online, retorna o status imediatamente
   if (currentTunnelUrl && tunnelStatus === 'online') {
-    return Promise.resolve(getSystemNgrokStatus());
+    return getSystemNgrokStatus();
+  }
+
+  const authtoken = (customAuthtoken || process.env.NGROK_AUTHTOKEN || '').trim();
+  if (!authtoken) {
+    tunnelStatus = 'error';
+    lastError = 'Token do Ngrok não configurado. Por favor, adicione seu Ngrok Authtoken no modal de Configurações.';
+    throw new Error(lastError);
   }
 
   tunnelStatus = 'starting';
   lastError = null;
 
-  const authtoken = customAuthtoken || process.env.NGROK_AUTHTOKEN;
-  if (!authtoken) {
-    tunnelStatus = 'error';
-    lastError = 'Token do Ngrok não configurado. Adicione seu Ngrok Authtoken nas Configurações.';
-    return Promise.reject(new Error(lastError));
-  }
+  // Alvos ordenados por prioridade (produção Docker -> local Nginx 80 -> local backend 5000)
+  const candidateTargets = targetOverride 
+    ? [targetOverride] 
+    : [process.env.NGROK_TARGET || 'http://frontend:80', 'http://127.0.0.1:80', 'http://127.0.0.1:5000', '5000'];
 
-  let target = targetOverride || process.env.NGROK_TARGET || 'http://frontend:80';
-
-  // Execução do job de conexão em background
+  // Executa o processo de conexão
   (async () => {
     try {
-      console.log('[Ngrok Job] Iniciando conexão com Ngrok...');
-      
-      if (globalNgrokSession) {
-        try { await globalNgrokSession.close(); } catch {}
-        globalNgrokSession = null;
-      }
-      try { await ngrok.disconnect(); } catch {}
+      console.log('[Ngrok Service] Encerrando instâncias prévias...');
+      await stopSystemNgrokTunnel();
 
-      globalNgrokSession = await new ngrok.SessionBuilder()
-        .authtoken(authtoken)
-        .connect();
+      let listener: any = null;
+      let usedTarget = candidateTargets[0];
 
-      globalNgrokListener = await globalNgrokSession.httpEndpoint().listen();
-
-      try {
-        await globalNgrokListener.forward(target);
-      } catch (fwdErr) {
-        console.warn(`[Ngrok Job] Falha ao encaminhar para ${target}. Tentando portas locais alternativas...`);
+      for (const target of candidateTargets) {
         try {
-          target = 'http://127.0.0.1:80';
-          await globalNgrokListener.forward(target);
-        } catch {
-          try {
-            target = 'http://127.0.0.1:5000';
-            await globalNgrokListener.forward(target);
-          } catch {
-            target = 'http://localhost:5000';
-            await globalNgrokListener.forward(target);
-          }
+          console.log(`[Ngrok Service] Tentando iniciar túnel para o target: ${target}`);
+          listener = await ngrok.forward({
+            addr: target,
+            authtoken: authtoken
+          });
+          usedTarget = target;
+          break;
+        } catch (targetErr: any) {
+          console.warn(`[Ngrok Service] Falha ao conectar no target ${target}:`, targetErr.message);
         }
       }
 
-      let detectedUrl = '';
-      try {
-        if (typeof globalNgrokListener.url === 'function') {
-          detectedUrl = globalNgrokListener.url();
-        } else if (globalNgrokListener.url) {
-          detectedUrl = globalNgrokListener.url;
-        }
-      } catch {}
-
-      if (!detectedUrl && globalNgrokSession) {
-        try {
-          const endpoints = await globalNgrokSession.endpoints?.();
-          if (endpoints && endpoints.length > 0) {
-            detectedUrl = typeof endpoints[0].url === 'function' ? endpoints[0].url() : endpoints[0].url;
-          }
-        } catch {}
+      if (!listener) {
+        throw new Error('Não foi possível estabelecer túnel para nenhuma das portas do sistema (80 ou 5000). Verifique o authtoken.');
       }
 
-      currentTunnelUrl = detectedUrl || 'https://builddreamer.ngrok-free.app';
+      currentListener = listener;
+      let url = '';
+      if (typeof listener.url === 'function') {
+        url = listener.url();
+      } else if (listener.url) {
+        url = listener.url;
+      }
+
+      if (!url) {
+        url = 'https://builddreamer.ngrok-free.app';
+      }
+
+      currentTunnelUrl = url;
       tunnelStartedAt = new Date().toISOString();
-      currentTarget = target;
+      currentTarget = usedTarget;
       tunnelStatus = 'online';
       lastError = null;
 
-      console.log(`[Ngrok Job] Túnel conectado com sucesso! URL pública: ${currentTunnelUrl} -> ${currentTarget}`);
+      console.log(`[Ngrok Service] ✅ Túnel Ngrok Online: ${currentTunnelUrl} -> ${currentTarget}`);
     } catch (err: any) {
-      console.error('[Ngrok Job] Erro na execução do job do Ngrok:', err);
+      console.error('[Ngrok Service] ❌ Erro ao iniciar Ngrok:', err);
       tunnelStatus = 'error';
-      lastError = err.message || 'Falha ao conectar sessão Ngrok';
+      lastError = err.message || 'Falha ao conectar no Ngrok';
       currentTunnelUrl = null;
-      await stopSystemNgrokTunnel();
+      try { await ngrok.disconnect(); } catch {}
     }
   })();
 
-  return Promise.resolve(getSystemNgrokStatus());
+  return getSystemNgrokStatus();
 }
 
 /**
  * Encerra o túnel global do Ngrok
  */
 export async function stopSystemNgrokTunnel(): Promise<boolean> {
-  if (globalNgrokListener) {
-    try {
-      if (globalNgrokListener.close) await globalNgrokListener.close();
-    } catch {}
-    globalNgrokListener = null;
-  }
-
-  if (globalNgrokSession) {
-    try {
-      if (globalNgrokSession.close) await globalNgrokSession.close();
-    } catch {}
-    globalNgrokSession = null;
-  }
-
   try {
-    await ngrok.disconnect();
-  } catch {}
+    if (currentListener) {
+      try {
+        if (typeof currentListener.close === 'function') await currentListener.close();
+      } catch {}
+      currentListener = null;
+    }
+    try {
+      await ngrok.disconnect();
+    } catch {}
+  } catch (err) {
+    console.warn('[Ngrok Service] Aviso ao desconectar:', err);
+  }
 
   currentTunnelUrl = null;
   tunnelStartedAt = null;
   tunnelStatus = 'idle';
   lastError = null;
-  console.log('[Ngrok Job] Túnel desconectado.');
+  console.log('[Ngrok Service] Túnel parado.');
   return true;
 }

@@ -150,7 +150,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
         setNgrokOnline(!!data.active && !!data.url);
         setNgrokUrl(data.url || null);
         setNgrokStatus(data.status || (data.active ? 'online' : 'idle'));
-        if (data.status === 'online' || data.status === 'error' || data.status === 'idle') {
+        if (data.status === 'online' || data.status === 'idle') {
+          setNgrokLoading(false);
+        }
+        if (data.status === 'error' && data.error) {
           setNgrokLoading(false);
         }
       }
@@ -158,6 +161,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
   };
 
   const handleToggleNgrok = async () => {
+    const customToken = localStorage.getItem('ngrok_authtoken') || '';
+    if (!ngrokOnline && !customToken) {
+      alert('Para ligar o Ngrok, configure seu "Ngrok Authtoken" nas Configurações.');
+      setShowSettings(true);
+      return;
+    }
+
     setNgrokLoading(true);
     try {
       if (ngrokOnline) {
@@ -170,7 +180,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
         setNgrokStatus('idle');
       } else {
         setNgrokStatus('starting');
-        const customToken = localStorage.getItem('ngrok_authtoken') || '';
         const res = await fetch(`${API_URL}/api/ngrok/start`, {
           method: 'POST',
           headers: {
@@ -181,7 +190,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Erro ao disparar job do Ngrok');
-        if (data.url) {
+        if (data.url && data.status === 'online') {
           setNgrokOnline(true);
           setNgrokUrl(data.url);
           setNgrokStatus('online');
@@ -192,9 +201,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
       alert(`Falha no Ngrok: ${err.message}`);
     } finally {
       // Polling rápido para acompanhar a conclusão do job
-      setTimeout(checkNgrokStatus, 800);
-      setTimeout(checkNgrokStatus, 2000);
-      setTimeout(checkNgrokStatus, 3500);
+      setTimeout(checkNgrokStatus, 600);
+      setTimeout(checkNgrokStatus, 1500);
+      setTimeout(checkNgrokStatus, 3000);
+      setTimeout(checkNgrokStatus, 5000);
     }
   };
 
