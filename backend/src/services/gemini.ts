@@ -208,23 +208,30 @@ export const generateAIResponse = async (
 
   let lastError: any = null;
 
+  // Timeout por requisição para evitar que a IA fique pendurada se o upstream demorar
+  const REQUEST_TIMEOUT_MS = 30000;
+
   for (let i = 0; i < candidateModels.length; i++) {
     const modelToTry = candidateModels[i];
     if (onModelAttempt) {
       onModelAttempt(modelToTry, i + 1, candidateModels.length);
     }
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
     try {
       const isGemini25 = modelToTry.includes('2.5') || modelToTry.includes('2.0');
       
       const generationConfig: any = {
         responseMimeType: 'application/json',
-        temperature: 0.4,
+        temperature: 0.35,
         topP: 0.95,
         maxOutputTokens: 8192
       };
 
       if (isGemini25) {
+        // Desativa 'thinking' para respostas instantâneas sem latência de raciocínio desnecessária
         generationConfig.thinkingConfig = {
           thinkingBudget: 0
         };
@@ -249,7 +256,8 @@ export const generateAIResponse = async (
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
+        signal: controller.signal
       };
 
       if (proxyUrl) {
@@ -259,6 +267,7 @@ export const generateAIResponse = async (
       const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelToTry}:generateContent?key=${activeKey}`;
 
       const response = await undiciFetch(apiUrl, fetchOptions);
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         const errText = await response.text();
@@ -272,6 +281,7 @@ export const generateAIResponse = async (
       parsed._usedModel = modelToTry;
       return parsed;
     } catch (error: any) {
+      clearTimeout(timeoutId);
       console.warn(`[AI Engine] Tentativa com o modelo ${modelToTry} (${i + 1}/${candidateModels.length}) falhou:`, error.message);
       lastError = error;
     }

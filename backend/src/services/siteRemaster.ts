@@ -423,90 +423,93 @@ export async function processCustomRemasterGenerationJob(
     // Extrai os blocos de Navbar e Footer gerados na Home
     const { navbarHtml, footerHtml } = extractNavbarAndFooter(homeHtml);
 
-    // 2. GERAR CADA SUBPÁGINA INJETANDO OS COMPONENTES UNIVERSAIS SEM DUPLICAÇÃO
-    for (let i = 0; i < subPages.length; i++) {
-      const sub = subPages[i];
-      if (onProgress) onProgress(`IA gerando subpágina "${sub.name}" (${i + 2}/${subPages.length + 1})...`, i + 2, subPages.length + 1);
+    // 2. GERAR TODAS AS SUBPÁGINAS EM PARALELO PARA VELOCIDADE MÁXIMA
+    if (subPages.length > 0) {
+      if (onProgress) onProgress(`IA gerando ${subPages.length} subpáginas em paralelo...`, 2, subPages.length + 1);
 
-      const subPrompt = `
-        Você é o Engenheiro Frontend do site "${projectName}".
-        Estamos gerando a subpágina "${sub.name}" (arquivo: ${sub.slug}.html).
+      await Promise.all(
+        subPages.map(async (sub, idx) => {
+          const subPrompt = `
+            Você é o Engenheiro Frontend do site "${projectName}".
+            Estamos gerando a subpágina "${sub.name}" (arquivo: ${sub.slug}.html).
 
-        DIRETRIZ GLOBAL DO SITE:
-        """
-        ${globalPrompt}
-        """
+            DIRETRIZ GLOBAL DO SITE:
+            """
+            ${globalPrompt}
+            """
 
-        PROMPT ESPECÍFICO DESTA SUBPÁGINA ("${sub.name}"):
-        """
-        ${sub.customPrompt || `Apresente detalhadamente as informações, benefícios e recursos de ${sub.name}.`}
-        """
+            PROMPT ESPECÍFICO DESTA SUBPÁGINA ("${sub.name}"):
+            """
+            ${sub.customPrompt || `Apresente detalhadamente as informações, benefícios e recursos de ${sub.name}.`}
+            """
 
-        CONTEÚDO EXTRAÍDO DA SUBPÁGINA ORIGINAL:
-        """
-        ${sub.cleanText || `Conteúdo institucional e serviços de ${sub.name}.`}
-        """
+            CONTEÚDO EXTRAÍDO DA SUBPÁGINA ORIGINAL:
+            """
+            ${sub.cleanText || `Conteúdo institucional e serviços de ${sub.name}.`}
+            """
 
-        ${sharedComponents.repeatNavbar ? `
-        NAVBAR UNIVERSAL PRONTA DA HOME (INCORPORE EXATAMENTE ESTE BLOCO NO TOPO, APENAS MARCANDO A PÁGINA "${sub.name}" COMO ATIVA):
-        """
-        ${navbarHtml || `<header class="p-4 border-b border-slate-800 flex justify-between items-center"><div class="font-bold">${projectName}</div><nav>${navigationLinksText}</nav></header>`}
-        """` : ''}
+            ${sharedComponents.repeatNavbar ? `
+            NAVBAR UNIVERSAL PRONTA DA HOME (INCORPORE EXATAMENTE ESTE BLOCO NO TOPO, APENAS MARCANDO A PÁGINA "${sub.name}" COMO ATIVA):
+            """
+            ${navbarHtml || `<header class="p-4 border-b border-slate-800 flex justify-between items-center"><div class="font-bold">${projectName}</div><nav>${navigationLinksText}</nav></header>`}
+            """` : ''}
 
-        ${sharedComponents.repeatFooter ? `
-        FOOTER UNIVERSAL PRONTO DA HOME (INCORPORE EXATAMENTE ESTE BLOCO NA BASE):
-        """
-        ${footerHtml || `<footer class="p-8 border-t border-slate-800 text-center text-slate-400">© ${projectName}</footer>`}
-        """` : ''}
+            ${sharedComponents.repeatFooter ? `
+            FOOTER UNIVERSAL PRONTO DA HOME (INCORPORE EXATAMENTE ESTE BLOCO NA BASE):
+            """
+            ${footerHtml || `<footer class="p-8 border-t border-slate-800 text-center text-slate-400">© ${projectName}</footer>`}
+            """` : ''}
 
-        REGRAS MANDATÓRIAS:
-        1. CONSISTÊNCIA DE TEMA: Mantenha a mesma paleta de cores, tipografia, bordas e cards da Home.
-        2. ENCAIXE DE COMPONENTES: Não recrie nem altere o visual da Navbar/Footer compartilhados, apenas utilize-os no topo e base da página.
-        3. SEPARAÇÃO TOTAL: Retorne APENAS HTML limpo no campo "html" (sem tags <style> nem <script>).
-      `;
+            REGRAS MANDATÓRIAS:
+            1. CONSISTÊNCIA DE TEMA: Mantenha a mesma paleta de cores, tipografia, bordas e cards da Home.
+            2. ENCAIXE DE COMPONENTES: Não recrie nem altere o visual da Navbar/Footer compartilhados, apenas utilize-os no topo e base da página.
+            3. SEPARAÇÃO TOTAL: Retorne APENAS HTML limpo no campo "html" (sem tags <style> nem <script>).
+          `;
 
-      try {
-        const subAiResponse = await generateAIResponse(
-          subPrompt,
-          { html: '', css: globalCss, js: globalJs },
-          customApiKey,
-          undefined,
-          registeredModels,
-          undefined,
-          customProxyUrl,
-          customSkills
-        );
+          try {
+            const subAiResponse = await generateAIResponse(
+              subPrompt,
+              { html: '', css: globalCss, js: globalJs },
+              customApiKey,
+              undefined,
+              registeredModels,
+              undefined,
+              customProxyUrl,
+              customSkills
+            );
 
-        const existingSub = await prisma.page.findFirst({
-          where: { projectId, slug: sub.slug }
-        });
+            const existingSub = await prisma.page.findFirst({
+              where: { projectId, slug: sub.slug }
+            });
 
-        if (existingSub) {
-          await prisma.page.update({
-            where: { id: existingSub.id },
-            data: {
-              html: subAiResponse.html || existingSub.html,
-              css: subAiResponse.css || globalCss,
-              js: subAiResponse.js || globalJs
+            if (existingSub) {
+              await prisma.page.update({
+                where: { id: existingSub.id },
+                data: {
+                  name: sub.name,
+                  html: subAiResponse.html || existingSub.html,
+                  css: subAiResponse.css || globalCss,
+                  js: subAiResponse.js || globalJs
+                }
+              });
+            } else {
+              await prisma.page.create({
+                data: {
+                  projectId,
+                  name: sub.name,
+                  slug: sub.slug,
+                  html: subAiResponse.html || '<div>Subpágina</div>',
+                  css: subAiResponse.css || globalCss,
+                  js: subAiResponse.js || globalJs,
+                  isHomepage: false
+                }
+              });
             }
-          });
-        } else {
-          await prisma.page.create({
-            data: {
-              name: sub.name,
-              slug: sub.slug,
-              title: `${sub.name} | ${projectName}`,
-              isHomepage: false,
-              projectId,
-              html: subAiResponse.html || '<div class="p-8 text-center text-white">Conteúdo em atualização</div>',
-              css: subAiResponse.css || globalCss,
-              js: subAiResponse.js || globalJs
-            }
-          });
-        }
-      } catch (subErr: any) {
-        console.error(`Erro ao gerar subpágina ${sub.name}:`, subErr.message);
-      }
+          } catch (err: any) {
+            console.error(`Erro ao gerar subpágina "${sub.name}":`, err.message);
+          }
+        })
+      );
     }
 
     if (onProgress) onProgress(`Site 100% gerado com sucesso!`, subPages.length + 1, subPages.length + 1);

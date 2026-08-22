@@ -42,8 +42,8 @@ const db_1 = require("../db");
 const router = (0, express_1.Router)();
 // In-memory queue system for AI chat modifications
 exports.aiChatJobsQueue = {};
-// Background worker for chat edits (suporta single-page ou todas as páginas)
-async function processAIChatJob(jobId, prompt, pageId, applyToAll, clientGeminiKey, model, registeredModels, clientProxyUrl, customSkills) {
+// Background worker for chat edits (suporta single-page, páginas selecionadas ou todas as páginas)
+async function processAIChatJob(jobId, prompt, pageId, applyToAll, clientGeminiKey, model, registeredModels, clientProxyUrl, customSkills, targetPageIds) {
     try {
         const page = await db_1.prisma.page.findUnique({
             where: { id: pageId },
@@ -51,41 +51,70 @@ async function processAIChatJob(jobId, prompt, pageId, applyToAll, clientGeminiK
         });
         if (!page)
             throw new Error('Página não encontrada');
+        const projectPages = page.project?.pages || [page];
+        // Determina o subconjunto de páginas a serem processadas
+        let pagesToProcess = [];
+        if (targetPageIds && Array.isArray(targetPageIds) && targetPageIds.length > 0) {
+            pagesToProcess = projectPages.filter(p => targetPageIds.includes(p.id));
+            if (pagesToProcess.length === 0)
+                pagesToProcess = [page];
+        }
+        else if (applyToAll && projectPages.length > 1) {
+            pagesToProcess = projectPages;
+        }
+        else {
+            pagesToProcess = [page];
+        }
+        const isMultiPage = pagesToProcess.length > 1;
         exports.aiChatJobsQueue[jobId] = {
             status: 'processing',
-            currentModel: model || 'gemini-2.5-flash',
-            scope: applyToAll ? 'all' : 'single',
+            currentModel: isMultiPage
+                ? `${model || 'gemini-2.5-flash'} (Processando ${pagesToProcess.length} páginas selecionadas em paralelo...)`
+                : model || 'gemini-2.5-flash',
+            scope: isMultiPage ? 'all' : 'single',
             pageId,
             projectId: page.projectId
         };
-        // Se applyToAll for true, processa todas as páginas em PARALELO para máxima velocidade
-        if (applyToAll && page.project?.pages && page.project.pages.length > 1) {
-            const allPages = page.project.pages;
-            exports.aiChatJobsQueue[jobId] = {
-                status: 'processing',
-                currentModel: `${model || 'gemini-2.5-flash'} (Processando ${allPages.length} páginas do projeto em paralelo...)`,
-                scope: 'all',
-                pageId,
-                projectId: page.projectId
-            };
-            const allRoutes = allPages.map(p => ({
+        // Detecção inteligente de comandos de elementos compartilhados (Navbar, Header, Footer)
+        const isNavbarStandardization = /navbar|header|menu superior|cabe[çc]alho/i.test(prompt) && /(padr[ãa]o|igual|todas|mesm[oa]|sincroniz)/i.test(prompt);
+        const isFooterStandardization = /footer|rodap[ée]|menu inferior/i.test(prompt) && /(padr[ãa]o|igual|todas|mesm[oa]|sincroniz)/i.test(prompt);
+        if (isMultiPage) {
+            const allRoutes = projectPages.map(p => ({
                 name: p.name,
                 slug: p.slug,
                 href: p.isHomepage ? 'index.html' : `${p.slug}.html`
             }));
             const routesGuide = allRoutes.map(r => `- "${r.name}" -> href="${r.href}"`).join('\n');
-            const updatedPages = await Promise.all(allPages.map(async (p) => {
+            const updatedPages = await Promise.all(pagesToProcess.map(async (p) => {
+                let specificDirective = '';
+                if (isNavbarStandardization) {
+                    specificDirective = `
+              DIRETRIZ CRÍTICA DE NAVBAR / HEADER PADRONIZADA:
+              - A Navbar (<header> ou <nav>) da página principal/atual "${page.name}" deve ser a referência visual absoluta e replicada identicamente nesta página.
+              - Garanta que todos os links do menu apontem para as rotas corretas listadas no MAPA DE NAVEGAÇÃO.
+              - Mantenha a mesma estrutura de logo, botões CTA, fontes e cores da Navbar em todas as páginas selecionadas.
+            `;
+                }
+                else if (isFooterStandardization) {
+                    specificDirective = `
+              DIRETRIZ CRÍTICA DE FOOTER / RODAPÉ PADRONIZADO:
+              - O rodapé (<footer>) deve ser padronizado de forma idêntica e coerente com a identidade visual do site.
+            `;
+                }
                 const pagePrompt = `
-            Estamos aplicando uma alteração global em todas as páginas do site do projeto "${page.project?.name}".
-            Página atual: "${p.name}" (slug: /${p.slug}, arquivo: ${p.isHomepage ? 'index.html' : p.slug + '.html'})
+            Estamos aplicando alterações nas páginas selecionadas do site do projeto "${page.project?.name}".
+            Página atual a ser modificada: "${p.name}" (slug: /${p.slug}, arquivo: ${p.isHomepage ? 'index.html' : p.slug + '.html'})
+            Página de origem da solicitação: "${page.name}"
             
-            MAPA DE NAVEGAÇÃO UNIVERSAL DO PROJETO (Mantenha a Navbar e Footer com esses links em todas as páginas):
+            MAPA DE NAVEGAÇÃO UNIVERSAL DO PROJETO (Use para links internos da Navbar e Footer):
             ${routesGuide}
 
             Instrução do usuário: "${prompt}"
 
+            ${specificDirective}
+
             REGRAS OBRIGATÓRIAS:
-            1. Mantenha o MESMO tema, fontes, cores e a MESMA Navbar/Header em todas as páginas.
+            1. Mantenha o MESMO tema visual, fontes, cores e estética da marca.
             2. Separação Estrita: Retorne APENAS HTML limpo no campo "html" (sem tags <style> nem <script>). Todo CSS adicional no campo "css" e JS funcional no campo "js".
           `;
                 const aiResponse = await (0, gemini_1.generateAIResponse)(pagePrompt, {
@@ -110,13 +139,18 @@ async function processAIChatJob(jobId, prompt, pageId, applyToAll, clientGeminiK
                     js: aiResponse.js || p.js
                 };
             }));
+            // Localiza o resultado correspondente à página atualmente aberta no editor
+            const currentActiveUpdated = updatedPages.find(p => p.id === pageId) || updatedPages[0];
             exports.aiChatJobsQueue[jobId] = {
                 status: 'completed',
                 scope: 'all',
                 pageId,
                 projectId: page.projectId,
                 result: {
-                    explanation: `Alteração aplicada globalmente com sucesso em ${updatedPages.length} páginas do site.`,
+                    explanation: `Alteração e padronização aplicadas com sucesso em ${updatedPages.length} páginas selecionadas (${updatedPages.map(p => p.name).join(', ')}).`,
+                    html: currentActiveUpdated?.html,
+                    css: currentActiveUpdated?.css,
+                    js: currentActiveUpdated?.js,
                     updatedPages
                 },
                 currentModel: model
@@ -172,13 +206,13 @@ async function processAIChatJob(jobId, prompt, pageId, applyToAll, clientGeminiK
 // Endpoint para disparar alteração via Chat AI em background
 router.post('/chat', async (req, res) => {
     try {
-        const { prompt, pageId, model, applyToAll } = req.body;
+        const { prompt, pageId, model, applyToAll, targetPageIds } = req.body;
         if (!prompt || !pageId) {
             return res.status(400).json({ error: 'Prompt e pageId são obrigatórios' });
         }
         const page = await db_1.prisma.page.findUnique({
             where: { id: pageId },
-            include: { project: { include: { members: true } } }
+            include: { project: { include: { members: true, pages: true } } }
         });
         if (!page) {
             return res.status(404).json({ error: 'Page not found' });
@@ -187,9 +221,11 @@ router.post('/chat', async (req, res) => {
         if (!isMember) {
             return res.status(403).json({ error: 'Not authorized' });
         }
-        // Detectar intenção de aplicar a todas as páginas via prompt ou checkbox
+        // Detectar intenção de aplicar a múltiplas páginas via targetPageIds, prompt ou applyToAll
+        const hasTargetPages = Array.isArray(targetPageIds) && targetPageIds.length > 0;
         const hasGlobalIntent = applyToAll === true ||
-            /todas as p[áa]ginas|em todo o site|globalmente|em todas|todas páginas|navbar de todas/i.test(prompt);
+            (hasTargetPages && targetPageIds.length > 1) ||
+            /todas as p[áa]ginas|em todo o site|globalmente|em todas|todas páginas|navbar de todas|navbar padrão/i.test(prompt);
         const clientGeminiKey = (req.headers['x-gemini-key'] || req.headers['X-Gemini-Key']);
         const clientProxyUrl = (req.headers['x-proxy-url'] || req.headers['X-Proxy-Url']) || process.env.AI_PROXY_URL;
         let registeredModels;
@@ -215,7 +251,7 @@ router.post('/chat', async (req, res) => {
             projectId: page.projectId
         };
         // Disparar processamento assíncrono em background
-        processAIChatJob(jobId, prompt, pageId, hasGlobalIntent, clientGeminiKey, model, registeredModels, clientProxyUrl, customSkills);
+        processAIChatJob(jobId, prompt, pageId, hasGlobalIntent, clientGeminiKey, model, registeredModels, clientProxyUrl, customSkills, targetPageIds);
         return res.status(202).json({ jobId, status: 'pending', scope: hasGlobalIntent ? 'all' : 'single' });
     }
     catch (error) {

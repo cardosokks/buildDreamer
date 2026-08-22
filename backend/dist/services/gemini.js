@@ -186,20 +186,25 @@ const generateAIResponse = async (prompt, context, customApiKey, customModel, re
         throw new Error("Chave da API do Gemini não fornecida. Configure-a no menu de configurações do sistema ou no backend.");
     }
     let lastError = null;
+    // Timeout por requisição para evitar que a IA fique pendurada se o upstream demorar
+    const REQUEST_TIMEOUT_MS = 30000;
     for (let i = 0; i < candidateModels.length; i++) {
         const modelToTry = candidateModels[i];
         if (onModelAttempt) {
             onModelAttempt(modelToTry, i + 1, candidateModels.length);
         }
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
         try {
             const isGemini25 = modelToTry.includes('2.5') || modelToTry.includes('2.0');
             const generationConfig = {
                 responseMimeType: 'application/json',
-                temperature: 0.4,
+                temperature: 0.35,
                 topP: 0.95,
                 maxOutputTokens: 8192
             };
             if (isGemini25) {
+                // Desativa 'thinking' para respostas instantâneas sem latência de raciocínio desnecessária
                 generationConfig.thinkingConfig = {
                     thinkingBudget: 0
                 };
@@ -222,13 +227,15 @@ const generateAIResponse = async (prompt, context, customApiKey, customModel, re
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify(payload)
+                body: JSON.stringify(payload),
+                signal: controller.signal
             };
             if (proxyUrl) {
                 fetchOptions.dispatcher = new undici_1.ProxyAgent(proxyUrl);
             }
             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelToTry}:generateContent?key=${activeKey}`;
             const response = await (0, undici_1.fetch)(apiUrl, fetchOptions);
+            clearTimeout(timeoutId);
             if (!response.ok) {
                 const errText = await response.text();
                 throw new Error(`HTTP ${response.status}: ${errText}`);
@@ -240,6 +247,7 @@ const generateAIResponse = async (prompt, context, customApiKey, customModel, re
             return parsed;
         }
         catch (error) {
+            clearTimeout(timeoutId);
             console.warn(`[AI Engine] Tentativa com o modelo ${modelToTry} (${i + 1}/${candidateModels.length}) falhou:`, error.message);
             lastError = error;
         }
