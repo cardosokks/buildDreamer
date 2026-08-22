@@ -298,9 +298,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
       setProjects(prev => prev.map(p => p.id === updated.id ? { ...p, ...updated } : p));
       setSelectedProjectDetails(updated);
       setShowProjectModal(false);
-      notify.success(`Informações do projeto "${updated.name}" salvas no banco com sucesso!`, 'Salvo no Banco');
+      notify.success(`Informações do projeto "${updated.name}" salvas com sucesso!`, 'Salvo');
     } catch (err: any) {
-      notify.error(err.message || 'Erro ao salvar alterações do projeto', 'Erro ao Atualizar');
+      notify.error(err.message || 'Erro ao salvar alterações do projeto', 'Erro');
     } finally {
       setSavingProjectDetails(false);
     }
@@ -1084,7 +1084,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
       });
       if (!res.ok) throw new Error('Falha ao deletar projeto');
       setProjects(projects.filter(p => p.id !== id));
-      notify.success('Projeto excluído do banco de dados com sucesso.', 'Projeto Deletado');
+      notify.success('Projeto excluído com sucesso.', 'Projeto Excluído');
     } catch (err: any) {
       notify.error(err.message || 'Erro ao excluir projeto', 'Falha');
     }

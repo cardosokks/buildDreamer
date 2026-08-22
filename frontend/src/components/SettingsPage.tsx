@@ -237,7 +237,7 @@ export const SettingsPage: React.FC = () => {
         login(token!, updatedUser);
         localStorage.setItem('rp_navbar_size', navbarSize);
         await saveToDatabase({ name, navbarSize });
-        setSuccessMsg('Perfil e preferências de interface atualizados e sincronizados no banco de dados!');
+        setSuccessMsg('Perfil atualizado com sucesso!');
       }
     } catch (err: any) {
       setErrorMsg(err.message);
@@ -265,7 +265,7 @@ export const SettingsPage: React.FC = () => {
       ngrokAuthToken: ngrokToken
     });
 
-    setSuccessMsg('Configurações de IA, Proxy e Ngrok salvas com sucesso no banco de dados!');
+    setSuccessMsg('Configurações salvas com sucesso!');
     setLoading(false);
   };
 
@@ -285,7 +285,7 @@ export const SettingsPage: React.FC = () => {
     
     setNewModelId('');
     setNewModelName('');
-    setSuccessMsg('Modelo adicionado e salvo no banco de dados!');
+    setSuccessMsg('Modelo adicionado com sucesso!');
   };
 
   const handleDeleteModel = async (id: string) => {
@@ -293,36 +293,41 @@ export const SettingsPage: React.FC = () => {
     setModels(updated);
     localStorage.setItem('custom_gemini_models', JSON.stringify(updated));
     await saveToDatabase({ customAiModels: updated });
-    setSuccessMsg('Modelo excluído e sincronizado no banco de dados!');
+    setSuccessMsg('Modelo excluído com sucesso!');
   };
 
   const [fetchingApiModels, setFetchingApiModels] = useState(false);
 
-  const handleFetchApiModels = async () => {
+  const handleAutoDiscoverModels = async () => {
+    const activeKey = geminiKey || localStorage.getItem('gemini_api_key') || '';
+    if (!activeKey) {
+      setErrorMsg('Insira e salve sua Chave da API do Gemini na aba "Chaves de API" antes de buscar modelos.');
+      return;
+    }
+
     setFetchingApiModels(true);
     setErrorMsg(null);
     setSuccessMsg(null);
-
-    const activeKey = geminiKey || localStorage.getItem('gemini_api_key') || '';
 
     try {
       const res = await fetch(`${API_URL}/api/ai/models`, {
         headers: {
           'Authorization': `Bearer ${token}`,
-          'x-gemini-key': activeKey
+          'x-gemini-key': geminiKey || localStorage.getItem('gemini_api_key') || '',
+          'x-proxy-url': proxyUrl || localStorage.getItem('ai_proxy_url') || ''
         }
       });
 
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || 'Falha ao buscar modelos na API do Gemini');
+        const data = await res.json();
+        throw new Error(data.error || 'Falha ao consultar modelos disponíveis na API do Gemini.');
       }
 
       const data = await res.json();
       const apiModels: Array<{ id: string; name: string }> = data.models || [];
 
       if (apiModels.length === 0) {
-        setErrorMsg('Nenhum modelo de geração de conteúdo encontrado para este token.');
+        setErrorMsg('Nenhum modelo compatível com geração de texto foi retornado pela API.');
         return;
       }
 
@@ -336,7 +341,7 @@ export const SettingsPage: React.FC = () => {
         setModels(updated);
         localStorage.setItem('custom_gemini_models', JSON.stringify(updated));
         await saveToDatabase({ customAiModels: updated });
-        setSuccessMsg(`Sucesso! ${newDiscovered.length} novos modelos foram encontrados na sua chave e salvos no banco.`);
+        setSuccessMsg(`Sucesso! ${newDiscovered.length} novos modelos foram encontrados na sua chave e salvos.`);
       }
     } catch (e: any) {
       console.error(e);
@@ -363,7 +368,7 @@ export const SettingsPage: React.FC = () => {
         promptSnippet: newSkillSnippet.trim()
       } : s);
       setEditingSkillId(null);
-      setSuccessMsg('Skill atualizada e salva no banco de dados!');
+      setSuccessMsg('Skill atualizada com sucesso!');
     } else {
       const newSkill: AISkill = {
         id: `skill-${Date.now()}`,
@@ -374,7 +379,7 @@ export const SettingsPage: React.FC = () => {
         enabled: true
       };
       updated = [...skills, newSkill];
-      setSuccessMsg('Nova Skill cadastrada e salva no banco de dados!');
+      setSuccessMsg('Nova Skill cadastrada com sucesso!');
     }
 
     setSkills(updated);
@@ -398,7 +403,7 @@ export const SettingsPage: React.FC = () => {
     setSkills(updated);
     localStorage.setItem('custom_ai_skills', JSON.stringify(updated));
     await saveToDatabase({ customAiSkills: updated });
-    setSuccessMsg('Skill removida do banco de dados.');
+    setSuccessMsg('Skill removida com sucesso.');
   };
 
   const handleStartEditSkill = (s: AISkill) => {
@@ -413,7 +418,7 @@ export const SettingsPage: React.FC = () => {
     setSkills(DEFAULT_AI_SKILLS);
     localStorage.setItem('custom_ai_skills', JSON.stringify(DEFAULT_AI_SKILLS));
     await saveToDatabase({ customAiSkills: DEFAULT_AI_SKILLS });
-    setSuccessMsg('Skills restauradas para os padrões e salvas no banco!');
+    setSuccessMsg('Skills restauradas para os padrões com sucesso!');
   };
 
   return (
@@ -429,10 +434,10 @@ export const SettingsPage: React.FC = () => {
             Configurações da Conta & Sistema
           </h1>
           <p className="text-slate-400 mt-1.5 text-sm flex items-center gap-2">
-            <span>Credenciais, inteligência artificial, proxy e preferências vinculadas ao seu usuário</span>
+            <span>Credenciais, inteligência artificial, proxy e preferências</span>
             <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-500/30 flex items-center gap-1 font-mono">
               <Database className="w-3 h-3" />
-              Sincronizado no Banco
+              Sincronizado
             </span>
           </p>
         </div>
@@ -707,7 +712,7 @@ export const SettingsPage: React.FC = () => {
                   className="px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-purple-600/30 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
                 >
                   <Save className="w-4 h-4" />
-                  {loading ? 'Salvando...' : 'Salvar Credenciais no Banco de Dados'}
+                  {loading ? 'Salvando...' : 'Salvar Alterações'}
                 </button>
               </div>
             </form>
@@ -729,68 +734,69 @@ export const SettingsPage: React.FC = () => {
               {/* Botão de Auto-Descoberta */}
               <div className="p-4 bg-purple-950/20 border border-purple-500/30 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                  <span className="text-xs font-bold text-white block">Auto-Descoberta na API do Gemini</span>
-                  <span className="text-[11px] text-slate-400">Consulta a Google AI e cadastra todos os modelos disponíveis na sua chave.</span>
+                  <span className="text-xs font-bold text-white block">Auto-Descoberta de Modelos</span>
+                  <span className="text-[11px] text-slate-400">Varre os modelos disponíveis na sua chave do Gemini.</span>
                 </div>
                 <button
                   type="button"
-                  onClick={handleFetchApiModels}
+                  onClick={handleAutoDiscoverModels}
                   disabled={fetchingApiModels}
-                  className="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold shadow-md transition-all flex items-center gap-1.5 shrink-0 cursor-pointer disabled:opacity-50"
+                  className="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold shadow-md transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                 >
-                  {fetchingApiModels ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-                  {fetchingApiModels ? 'Consultando API...' : 'Buscar Modelos na Minha Chave'}
+                  <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                  {fetchingApiModels ? 'Consultando...' : 'Buscar Modelos na API'}
                 </button>
               </div>
 
-              {/* Formulário de Adicionar Modelo Manual */}
-              <form onSubmit={handleAddModel} className="p-5 bg-slate-950 border border-slate-800 rounded-2xl space-y-4">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-400 block">Adicionar Modelo Manualmente</span>
+              {/* Formulário Manual */}
+              <form onSubmit={handleAddModel} className="p-4 bg-slate-950/40 border border-slate-850 rounded-2xl space-y-3">
+                <span className="text-xs font-bold text-white block">Cadastrar Modelo Manualmente</span>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <input
                     type="text"
                     required
-                    placeholder="Nome de Exibição (Ex: Gemini 2.5 Flash)"
-                    value={newModelName}
-                    onChange={(e) => setNewModelName(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white focus:border-purple-500 focus:outline-none"
+                    placeholder="ID do Modelo (ex: gemini-2.5-flash)"
+                    value={newModelId}
+                    onChange={(e) => setNewModelId(e.target.value)}
+                    className="w-full px-3.5 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white font-mono focus:border-purple-500 focus:outline-none"
                   />
                   <input
                     type="text"
                     required
-                    placeholder="ID do Modelo (Ex: gemini-2.5-flash)"
-                    value={newModelId}
-                    onChange={(e) => setNewModelId(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs font-mono text-white focus:border-purple-500 focus:outline-none"
+                    placeholder="Nome Amigável (ex: Gemini 2.5 Flash)"
+                    value={newModelName}
+                    onChange={(e) => setNewModelName(e.target.value)}
+                    className="w-full px-3.5 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white focus:border-purple-500 focus:outline-none"
                   />
                 </div>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-md"
+                  className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  Cadastrar Modelo
+                  Adicionar Modelo
                 </button>
               </form>
 
-              {/* Lista de Modelos Cadastrados */}
+              {/* Lista de Modelos */}
               <div className="space-y-2">
                 <span className="text-xs font-bold uppercase tracking-wider text-slate-400 block">
                   Modelos Cadastrados ({models.length})
                 </span>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {models.map(m => (
-                    <div key={m.id} className="p-3.5 bg-slate-950 border border-slate-800 rounded-xl flex items-center justify-between gap-2 shadow-sm">
-                      <div className="min-w-0">
-                        <p className="text-xs font-bold text-white truncate">{m.name}</p>
-                        <p className="text-[10px] text-purple-400 font-mono truncate">{m.id}</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {models.map((m) => (
+                    <div key={m.id} className="p-3 bg-slate-950/60 border border-slate-850 rounded-xl flex items-center justify-between group hover:border-purple-500/40 transition-all">
+                      <div>
+                        <span className="text-xs font-bold text-white block">{m.name}</span>
+                        <span className="text-[10px] text-purple-400 font-mono">{m.id}</span>
                       </div>
                       <button
+                        type="button"
                         onClick={() => handleDeleteModel(m.id)}
-                        className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-slate-900 rounded-lg transition-colors cursor-pointer"
+                        className="p-1.5 text-slate-500 hover:text-red-400 rounded-lg hover:bg-slate-900 transition-colors cursor-pointer"
                         title="Remover modelo"
                       >
-                        <Trash2 className="w-4 h-4" />
+                        <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   ))}
@@ -799,70 +805,59 @@ export const SettingsPage: React.FC = () => {
             </div>
           )}
 
-          {/* TAB 4: SKILLS & PROMPTS DE IA */}
+          {/* TAB 4: SKILLS DE DESIGN */}
           {activeTab === 'skills' && (
             <div className="space-y-6">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <h3 className="text-lg font-bold text-white mb-1 flex items-center gap-2">
-                    <Sparkles className="w-5 h-5 text-pink-400" />
-                    Biblioteca de Skills & Superpoderes de IA
+                    <Sparkles className="w-5 h-5 text-purple-400" />
+                    Skills de Design & Engenharia de Prompts
                   </h3>
                   <p className="text-xs text-slate-400">
-                    Diretrizes de engenharia de prompt que turbinam a qualidade visual e de conversão dos sites gerados.
+                    Ative ou crie novas diretrizes técnicas que a IA incorporará ao gerar páginas e códigos.
                   </p>
                 </div>
+
                 <button
                   type="button"
                   onClick={handleResetDefaultSkills}
-                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shrink-0"
+                  className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white rounded-xl text-xs font-semibold border border-slate-800 transition-all cursor-pointer flex items-center gap-1.5 self-start"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
                   Restaurar Padrões
                 </button>
               </div>
 
-              {/* Formulário de Adição/Edição de Skill */}
-              <form onSubmit={handleSaveSkill} className="p-5 bg-slate-950 border border-slate-800 rounded-2xl space-y-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                    <Plus className="w-3.5 h-3.5 text-purple-400" />
-                    {editingSkillId ? 'Editar Skill de IA' : 'Criar Nova Skill Personalizada'}
-                  </span>
-                  {editingSkillId && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditingSkillId(null);
-                        setNewSkillName('');
-                        setNewSkillDesc('');
-                        setNewSkillSnippet('');
-                      }}
-                      className="text-xs text-slate-400 hover:text-white underline cursor-pointer"
-                    >
-                      Cancelar Edição
-                    </button>
-                  )}
-                </div>
+              {/* Formulário de Criação/Edição de Skill */}
+              <form onSubmit={handleSaveSkill} className="p-5 bg-slate-950/40 border border-purple-500/30 rounded-2xl space-y-4">
+                <span className="text-xs font-bold text-white block">
+                  {editingSkillId ? 'Editar Skill' : 'Criar Nova Skill de Design'}
+                </span>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div className="sm:col-span-2">
-                    <label className="block text-[11px] text-slate-400 mb-1">Nome da Skill *</label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                      Nome da Skill *
+                    </label>
                     <input
                       type="text"
                       required
-                      placeholder="Ex: Animações de Scroll GSAP"
+                      placeholder="Ex: Glassmorphism Ultra Premium"
                       value={newSkillName}
                       onChange={(e) => setNewSkillName(e.target.value)}
                       className="w-full px-3.5 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white focus:border-purple-500 focus:outline-none"
                     />
                   </div>
+
                   <div>
-                    <label className="block text-[11px] text-slate-400 mb-1">Categoria</label>
+                    <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                      Categoria
+                    </label>
                     <select
                       value={newSkillCategory}
                       onChange={(e: any) => setNewSkillCategory(e.target.value)}
-                      className="w-full px-3.5 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-purple-300 focus:border-purple-500 focus:outline-none cursor-pointer"
+                      className="w-full px-3.5 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white focus:border-purple-500 focus:outline-none cursor-pointer"
                     >
                       <option value="3d">3D & WebGL</option>
                       <option value="animation">Animações & Scroll</option>
@@ -875,10 +870,12 @@ export const SettingsPage: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-[11px] text-slate-400 mb-1">Descrição Curta</label>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                    Descrição Curta
+                  </label>
                   <input
                     type="text"
-                    placeholder="Ex: Transições suaves de cards e efeitos de fade ao rolar."
+                    placeholder="Breve resumo da finalidade desta skill..."
                     value={newSkillDesc}
                     onChange={(e) => setNewSkillDesc(e.target.value)}
                     className="w-full px-3.5 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white focus:border-purple-500 focus:outline-none"
@@ -886,17 +883,17 @@ export const SettingsPage: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-[11px] text-slate-400 mb-1 flex items-center justify-between">
-                    <span>Instrução / Prompt Técnico da Skill (Injetado no System Prompt) *</span>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1 flex items-center justify-between">
+                    <span>Instrução / Prompt Técnico da Skill *</span>
                     <span className="text-[10px] text-purple-400 font-mono">HTML, CSS, JS</span>
                   </label>
                   <textarea
                     rows={3}
                     required
-                    placeholder="Ex: Implemente animações suaves de entrada com IntersectionObserver no JS..."
+                    placeholder="Ex: Implemente componentes usando Tailwind com efeitos de gradiente..."
                     value={newSkillSnippet}
                     onChange={(e) => setNewSkillSnippet(e.target.value)}
-                    className="w-full px-3.5 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white font-mono focus:border-purple-500 focus:outline-none leading-relaxed"
+                    className="w-full px-3.5 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white font-mono focus:border-purple-500 focus:outline-none"
                   />
                 </div>
 

@@ -234,7 +234,7 @@ export const CRMManager: React.FC<CRMProps> = ({ onOpenRemasterModal, onOpenProj
           const data = await res.json();
           setLeads(leads.map(l => l.id === editingLead.id ? { ...l, ...data.lead } : l));
           setShowModal(false);
-          notify.success(`Lead "${payload.name}" atualizado com sucesso no banco!`, 'Lead Atualizado');
+          notify.success(`Lead "${payload.name}" atualizado com sucesso!`, 'Salvo');
         }
       } else {
         const res = await fetch(`${API_URL}/api/leads/crm`, {
@@ -249,11 +249,11 @@ export const CRMManager: React.FC<CRMProps> = ({ onOpenRemasterModal, onOpenProj
           const data = await res.json();
           setLeads([data.lead, ...leads]);
           setShowModal(false);
-          notify.success(`Lead "${payload.name}" cadastrado com sucesso no banco!`, 'Lead Criado');
+          notify.success(`Lead "${payload.name}" cadastrado com sucesso!`, 'Salvo');
         }
       }
     } catch (err: any) {
-      notify.error(err.message || 'Erro ao salvar informações do lead', 'Erro no CRM');
+      notify.error(err.message || 'Erro ao salvar informações do lead', 'Erro');
     }
   };
 

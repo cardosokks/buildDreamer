@@ -395,15 +395,15 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
       });
       if (res.ok) {
         setSaveStatus('saved');
-        notify.success(`Página "${activePage.name}" salva no banco e sincronizada no FTP!`, 'Salvo no Banco');
+        notify.success(`Página "${activePage.name}" salva com sucesso!`, 'Salvo');
       } else {
         setSaveStatus('error');
-        notify.error('Não foi possível salvar as alterações no servidor.', 'Erro ao Salvar');
+        notify.error('Não foi possível salvar as alterações.', 'Erro');
       }
     } catch (e: any) {
       console.error("Erro ao salvar:", e);
       setSaveStatus('error');
-      notify.error(e.message || 'Falha de conexão ao salvar página.', 'Erro ao Salvar');
+      notify.error(e.message || 'Falha ao salvar página.', 'Erro');
     }
   };
 
@@ -961,7 +961,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
                 ? 'bg-red-950/40 border-red-500/40 text-red-300 hover:bg-red-900/40'
                 : 'bg-slate-900 hover:bg-slate-800 border-slate-800 text-slate-200 hover:border-purple-500/40'
             }`}
-            title="Salvar Alterações & Sincronizar FTP (Ctrl+S)"
+            title="Salvar Alterações (Ctrl+S)"
           >
             <span
               className={`w-2 h-2 rounded-full shrink-0 ${
