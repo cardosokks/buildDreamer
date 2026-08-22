@@ -917,14 +917,6 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
             <ArrowLeft className="w-4 h-4" />
           </button>
 
-          <button 
-            onClick={() => setShowSidebar(!showSidebar)}
-            className={`p-1.5 rounded-lg transition-all cursor-pointer ${showSidebar ? 'bg-purple-600/20 text-purple-300 border border-purple-500/30' : 'bg-slate-900 text-slate-500 hover:text-white'}`}
-            title="Alternar Árvore DOM / Páginas"
-          >
-            <PanelLeftClose className="w-4 h-4" />
-          </button>
-
           <div className="flex items-center gap-2 truncate">
             <span className="font-bold text-white tracking-wide text-xs sm:text-sm truncate">{project?.name || 'Studio'}</span>
             <span className="text-xs text-slate-600">/</span>
@@ -1156,15 +1148,6 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
             title={theme === 'dark' ? 'Mudar para Modo Claro' : 'Mudar para Modo Escuro'}
           >
             {theme === 'dark' ? <Sun className="w-3.5 h-3.5 text-amber-400" /> : <Moon className="w-3.5 h-3.5 text-indigo-600" />}
-          </button>
-
-          {/* Toggle Styles Panel */}
-          <button 
-            onClick={() => setShowStylesPanel(!showStylesPanel)}
-            className={`p-2 rounded-xl transition-all cursor-pointer ${showStylesPanel ? 'bg-purple-600/20 text-purple-300 border border-purple-500/30' : 'bg-slate-900 text-slate-500 hover:text-white'}`}
-            title="Painel de Propriedades"
-          >
-            <PanelRightClose className="w-4 h-4" />
           </button>
         </div>
       </header>
