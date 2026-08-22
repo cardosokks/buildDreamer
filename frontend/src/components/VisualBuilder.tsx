@@ -36,6 +36,7 @@ import { PropertiesPanel } from './PropertiesPanel';
 import { CodeEditor } from './CodeEditor';
 import { ChatPanel } from './ChatPanel';
 import { API_URL } from '../config';
+import { useNotification } from '../context/NotificationContext';
 
 interface Page {
   id: string;
@@ -71,6 +72,7 @@ interface HistoryState {
 export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack }) => {
   const { token } = useAuth();
   const { theme, toggleTheme } = useTheme();
+  const notify = useNotification();
   const [project, setProject] = useState<ProjectData | null>(null);
   const [activePageId, setActivePageId] = useState<string>('');
   
@@ -393,12 +395,15 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
       });
       if (res.ok) {
         setSaveStatus('saved');
+        notify.success(`Página "${activePage.name}" salva no banco e sincronizada no FTP!`, 'Salvo no Banco');
       } else {
         setSaveStatus('error');
+        notify.error('Não foi possível salvar as alterações no servidor.', 'Erro ao Salvar');
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error("Erro ao salvar:", e);
       setSaveStatus('error');
+      notify.error(e.message || 'Falha de conexão ao salvar página.', 'Erro ao Salvar');
     }
   };
 

@@ -32,6 +32,7 @@ import {
   Link as LinkIcon
 } from 'lucide-react';
 import { API_URL } from '../config';
+import { useNotification } from '../context/NotificationContext';
 
 export type LeadStatus = 'PROSPECT' | 'CONTACTED' | 'PROPOSAL_SENT' | 'IN_NEGOTIATION' | 'WON' | 'LOST';
 
@@ -73,27 +74,27 @@ const STATUS_CONFIG: Record<LeadStatus, { label: string; color: string; bg: stri
   },
   CONTACTED: {
     label: 'Primeiro Contato Feito',
-    color: 'text-amber-400',
-    bg: 'bg-amber-950/30',
-    border: 'border-amber-500/30',
-    desc: 'Mensagem enviada por WhatsApp, ligação ou e-mail'
-  },
-  PROPOSAL_SENT: {
-    label: 'Proposta / Preview Criado',
-    color: 'text-purple-400',
-    bg: 'bg-purple-950/30',
-    border: 'border-purple-500/30',
-    desc: 'Site protótipo gerado com IA e enviado ao cliente'
-  },
-  IN_NEGOTIATION: {
-    label: 'Em Negociação',
     color: 'text-indigo-400',
     bg: 'bg-indigo-950/30',
     border: 'border-indigo-500/30',
-    desc: 'Ajustando detalhes comerciais e contrato'
+    desc: 'Abordagem inicial realizada pelo WhatsApp/Telefone'
+  },
+  PROPOSAL_SENT: {
+    label: 'Proposta / Mockup Enviado',
+    color: 'text-purple-400',
+    bg: 'bg-purple-950/30',
+    border: 'border-purple-500/30',
+    desc: 'Demonstração do site ou proposta comercial enviada'
+  },
+  IN_NEGOTIATION: {
+    label: 'Em Negociação',
+    color: 'text-amber-400',
+    bg: 'bg-amber-950/30',
+    border: 'border-amber-500/30',
+    desc: 'Ajustes de escopo, valores e condições de fechamento'
   },
   WON: {
-    label: 'Venda Fechada (Ganho)',
+    label: 'Ganho / Venda Fechada',
     color: 'text-emerald-400',
     bg: 'bg-emerald-950/30',
     border: 'border-emerald-500/30',
@@ -120,6 +121,7 @@ const STATUS_COLUMNS: LeadStatus[] = [
 export const CRMManager: React.FC<CRMProps> = ({ onOpenRemasterModal, onOpenProject, projects = [] }) => {
   const { token } = useAuth();
   const { theme } = useTheme();
+  const notify = useNotification();
 
   const [leads, setLeads] = useState<CRMLead[]>([]);
   const [loading, setLoading] = useState(true);
@@ -232,6 +234,7 @@ export const CRMManager: React.FC<CRMProps> = ({ onOpenRemasterModal, onOpenProj
           const data = await res.json();
           setLeads(leads.map(l => l.id === editingLead.id ? { ...l, ...data.lead } : l));
           setShowModal(false);
+          notify.success(`Lead "${payload.name}" atualizado com sucesso no banco!`, 'Lead Atualizado');
         }
       } else {
         const res = await fetch(`${API_URL}/api/leads/crm`, {
@@ -246,10 +249,11 @@ export const CRMManager: React.FC<CRMProps> = ({ onOpenRemasterModal, onOpenProj
           const data = await res.json();
           setLeads([data.lead, ...leads]);
           setShowModal(false);
+          notify.success(`Lead "${payload.name}" cadastrado com sucesso no banco!`, 'Lead Criado');
         }
       }
-    } catch (err) {
-      console.error('Erro ao salvar lead:', err);
+    } catch (err: any) {
+      notify.error(err.message || 'Erro ao salvar informações do lead', 'Erro no CRM');
     }
   };
 

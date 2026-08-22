@@ -129,13 +129,16 @@ const MainApp: React.FC = () => {
 };
 
 import { ThemeProvider } from './context/ThemeContext';
+import { NotificationProvider } from './context/NotificationContext';
 
 export default function App() {
   return (
     <ThemeProvider>
-      <AuthProvider>
-        <MainApp />
-      </AuthProvider>
+      <NotificationProvider>
+        <AuthProvider>
+          <MainApp />
+        </AuthProvider>
+      </NotificationProvider>
     </ThemeProvider>
   );
 }

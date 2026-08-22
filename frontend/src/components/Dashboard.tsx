@@ -49,6 +49,7 @@ import {
 } from 'lucide-react';
 
 import { useTheme } from '../context/ThemeContext';
+import { useNotification } from '../context/NotificationContext';
 import { SettingsPage } from './SettingsPage';
 import { CRMManager } from './CRMManager';
 import { API_URL } from '../config';
@@ -107,6 +108,7 @@ interface DashboardProps {
 export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', onTabChange, onSelectProject }) => {
   const { token, logout, user } = useAuth();
   const { theme, toggleTheme } = useTheme();
+  const notify = useNotification();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -296,8 +298,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
       setProjects(prev => prev.map(p => p.id === updated.id ? { ...p, ...updated } : p));
       setSelectedProjectDetails(updated);
       setShowProjectModal(false);
+      notify.success(`Informações do projeto "${updated.name}" salvas no banco com sucesso!`, 'Salvo no Banco');
     } catch (err: any) {
-      alert(err.message || 'Erro ao salvar alterações do projeto');
+      notify.error(err.message || 'Erro ao salvar alterações do projeto', 'Erro ao Atualizar');
     } finally {
       setSavingProjectDetails(false);
     }
@@ -1081,8 +1084,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
       });
       if (!res.ok) throw new Error('Falha ao deletar projeto');
       setProjects(projects.filter(p => p.id !== id));
+      notify.success('Projeto excluído do banco de dados com sucesso.', 'Projeto Deletado');
     } catch (err: any) {
-      alert(err.message);
+      notify.error(err.message || 'Erro ao excluir projeto', 'Falha');
     }
   };
 
