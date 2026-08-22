@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Sparkles, Send, Bot, User, Check, Play, Undo2, Globe, Loader2, RotateCcw, AlertCircle, Layers, ChevronDown, CheckSquare, Square } from 'lucide-react';
+import { Sparkles, Send, Bot, User, Check, Play, Undo2, Globe, Loader2, RotateCcw, AlertCircle, Layers, ChevronDown, CheckSquare, Square, Copy } from 'lucide-react';
 import { API_URL } from '../config';
 
 interface PageInfo {
@@ -43,9 +43,10 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   onReloadAllPages 
 }) => {
   const { token } = useAuth();
-  
+  const chatStorageKey = projectId ? `chat_history_proj_${projectId}` : `chat_history_${pageId}`;
+
   const [messages, setMessages] = useState<Message[]>(() => {
-    const stored = localStorage.getItem(`chat_history_${pageId}`);
+    const stored = localStorage.getItem(chatStorageKey);
     return stored ? JSON.parse(stored) : [
       {
         role: 'assistant',
@@ -56,6 +57,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [copiedMessageIdx, setCopiedMessageIdx] = useState<number | null>(null);
   
   // Seleção de páginas alvo
   const [targetPageIds, setTargetPageIds] = useState<string[]>([pageId]);
@@ -64,6 +66,15 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   const [activeJobModel, setActiveJobModel] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const activePollRef = useRef<any>(null);
+
+  const handleCopyMessageText = (text: string, idx: number) => {
+    if (!text) return;
+    navigator.clipboard.writeText(text);
+    setCopiedMessageIdx(idx);
+    setTimeout(() => {
+      setCopiedMessageIdx(null);
+    }, 2000);
+  };
 
   // Sincroniza página atual com a seleção de páginas
   useEffect(() => {
@@ -81,12 +92,13 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   }, [messages, loading]);
 
   useEffect(() => {
-    localStorage.setItem(`chat_history_${pageId}`, JSON.stringify(messages));
-  }, [messages, pageId]);
+    localStorage.setItem(chatStorageKey, JSON.stringify(messages));
+  }, [messages, chatStorageKey]);
 
-  // Atualizar histórico quando o pageId mudar
+  // Atualizar histórico quando o projectId ou pageId mudar
   useEffect(() => {
-    const stored = localStorage.getItem(`chat_history_${pageId}`);
+    const key = projectId ? `chat_history_proj_${projectId}` : `chat_history_${pageId}`;
+    const stored = localStorage.getItem(key);
     if (stored) {
       try {
         setMessages(JSON.parse(stored));
@@ -99,7 +111,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
         }
       ]);
     }
-  }, [pageId]);
+  }, [projectId, pageId]);
 
   const [availableModels, setAvailableModels] = useState<Array<{ id: string; name: string }>>(() => {
     const stored = localStorage.getItem('custom_gemini_models');
@@ -525,7 +537,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
             </div>
 
             <div
-              className={`p-3.5 rounded-2xl text-xs leading-relaxed max-w-[95%] shadow-md ${
+              className={`p-3.5 rounded-2xl text-xs leading-relaxed max-w-[95%] shadow-md relative group/msg ${
                 msg.role === 'user'
                   ? 'bg-purple-700 text-white rounded-br-none shadow-[0_0_15px_rgba(168,85,247,0.2)] font-medium'
                   : msg.isError || msg.text.startsWith('Erro:')
@@ -533,11 +545,29 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                   : 'bg-slate-900/90 text-slate-200 border border-slate-800 rounded-bl-none'
               }`}
             >
-              <div className="flex items-start gap-2">
-                {(msg.isError || msg.text.startsWith('Erro:')) && (
-                  <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
-                )}
-                <p className="whitespace-pre-wrap flex-1">{msg.text}</p>
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-start gap-2 flex-1">
+                  {(msg.isError || msg.text.startsWith('Erro:')) && (
+                    <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                  )}
+                  <p className="whitespace-pre-wrap flex-1">{msg.text}</p>
+                </div>
+
+                {/* Botão de Copiar Texto do Balão */}
+                <button
+                  onClick={() => handleCopyMessageText(msg.text, idx)}
+                  className="opacity-40 group-hover/msg:opacity-100 hover:opacity-100 p-1 rounded-md text-slate-300 hover:text-white hover:bg-black/30 transition-all shrink-0 cursor-pointer"
+                  title="Copiar texto da mensagem"
+                >
+                  {copiedMessageIdx === idx ? (
+                    <span className="flex items-center gap-1 text-[10px] text-emerald-300 font-bold">
+                      <Check className="w-3.5 h-3.5" />
+                      Copiado!
+                    </span>
+                  ) : (
+                    <Copy className="w-3.5 h-3.5" />
+                  )}
+                </button>
               </div>
 
               {/* Botão de Tentar Novamente caso a mensagem tenha falhado */}
