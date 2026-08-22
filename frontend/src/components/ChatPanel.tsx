@@ -315,19 +315,18 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
 
   return (
     <aside className="w-80 bg-slate-950 border-l border-slate-900 flex flex-col h-full z-20 shrink-0 select-none">
-      {/* Header */}
-      <div className="p-3.5 border-b border-slate-900 flex items-center justify-between bg-slate-950/80 backdrop-blur">
+      {/* Header Compacto */}
+      <div className="px-3 py-2.5 border-b border-slate-900 flex items-center justify-between bg-slate-950/80 backdrop-blur">
         <div className="flex items-center gap-2">
           <div className="p-1.5 bg-gradient-to-tr from-purple-600 to-indigo-600 rounded-lg text-white shadow-sm shadow-purple-500/20">
-            <Sparkles className="w-4 h-4" />
+            <Sparkles className="w-3.5 h-3.5" />
           </div>
-          <div>
-            <h3 className="font-bold text-xs text-white flex items-center gap-1.5">
-              AI Copilot
-              {loading && <Loader2 className="w-3 h-3 text-amber-400 animate-spin" />}
-            </h3>
-            <p className="text-[10px] text-purple-400">Arquiteto Frontend</p>
-          </div>
+          {loading && (
+            <div className="flex items-center gap-1.5 text-[11px] text-amber-400 font-medium">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              <span>Gerando...</span>
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-1.5">
@@ -346,7 +345,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
           <select
             value={selectedModel}
             onChange={(e) => setSelectedModel(e.target.value)}
-            className="bg-slate-900 border border-slate-800 text-[10px] text-purple-300 font-mono rounded-lg px-2 py-1 focus:outline-none focus:border-purple-500 cursor-pointer"
+            className="bg-slate-900 border border-slate-800 text-[10px] text-purple-300 font-mono rounded-lg px-2 py-1 focus:outline-none focus:border-purple-500 cursor-pointer max-w-[135px] truncate"
+            title="Selecionar modelo de IA"
           >
             {availableModels.map(m => (
               <option key={m.id} value={m.id} className="bg-slate-950 text-white">
