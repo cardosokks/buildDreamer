@@ -138,6 +138,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
   const [ngrokOnline, setNgrokOnline] = useState(false);
   const [ngrokUrl, setNgrokUrl] = useState<string | null>(null);
   const [ngrokLoading, setNgrokLoading] = useState(false);
+  const [ngrokStatus, setNgrokStatus] = useState<'idle' | 'starting' | 'online' | 'error'>('idle');
 
   const checkNgrokStatus = async () => {
     try {
@@ -146,8 +147,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
       });
       if (res.ok) {
         const data = await res.json();
-        setNgrokOnline(!!data.active);
+        setNgrokOnline(!!data.active && !!data.url);
         setNgrokUrl(data.url || null);
+        setNgrokStatus(data.status || (data.active ? 'online' : 'idle'));
+        if (data.status === 'online' || data.status === 'error' || data.status === 'idle') {
+          setNgrokLoading(false);
+        }
       }
     } catch {}
   };
@@ -162,7 +167,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
         });
         setNgrokOnline(false);
         setNgrokUrl(null);
+        setNgrokStatus('idle');
       } else {
+        setNgrokStatus('starting');
         const customToken = localStorage.getItem('ngrok_authtoken') || '';
         const res = await fetch(`${API_URL}/api/ngrok/start`, {
           method: 'POST',
@@ -173,21 +180,27 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
           }
         });
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Erro ao iniciar Ngrok');
-        setNgrokOnline(true);
-        setNgrokUrl(data.url);
+        if (!res.ok) throw new Error(data.error || 'Erro ao disparar job do Ngrok');
+        if (data.url) {
+          setNgrokOnline(true);
+          setNgrokUrl(data.url);
+          setNgrokStatus('online');
+        }
       }
     } catch (err: any) {
+      setNgrokStatus('error');
       alert(`Falha no Ngrok: ${err.message}`);
     } finally {
-      setNgrokLoading(false);
-      checkNgrokStatus();
+      // Polling rápido para acompanhar a conclusão do job
+      setTimeout(checkNgrokStatus, 800);
+      setTimeout(checkNgrokStatus, 2000);
+      setTimeout(checkNgrokStatus, 3500);
     }
   };
 
   useEffect(() => {
     checkNgrokStatus();
-    const interval = setInterval(checkNgrokStatus, 5000);
+    const interval = setInterval(checkNgrokStatus, 3000);
     return () => clearInterval(interval);
   }, []);
 
@@ -764,22 +777,33 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
 
           {/* Accessibility & Theme Controls */}
           <div className="flex items-center gap-2.5">
-            {/* Botão de Conexão Ngrok do Sistema */}
+            {/* Botão de Conexão Ngrok do Sistema (Executado via Job) */}
             <div className="flex items-center gap-1.5">
               <button
                 onClick={handleToggleNgrok}
-                disabled={ngrokLoading}
+                disabled={ngrokLoading || ngrokStatus === 'starting'}
                 className={`px-3 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm ${
                   ngrokOnline
                     ? 'bg-emerald-950/60 border-emerald-500/50 text-emerald-300 hover:bg-emerald-900/60'
+                    : ngrokStatus === 'starting'
+                    ? 'bg-amber-950/60 border-amber-500/50 text-amber-300'
                     : theme === 'light'
                     ? 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-700'
                     : 'bg-slate-900/80 hover:bg-slate-800 border-slate-800 text-slate-300'
                 }`}
-                title={ngrokOnline ? `Sistema no Ngrok (${ngrokUrl}) - Clique para desligar` : 'Subir URL do sistema no Ngrok para acesso externo e previews'}
+                title={
+                  ngrokOnline 
+                    ? `Sistema Online no Ngrok (${ngrokUrl}) - Clique para desligar` 
+                    : ngrokStatus === 'starting' 
+                    ? 'Iniciando túnel do Ngrok em background...' 
+                    : 'Subir URL do sistema no Ngrok para acesso externo e previews'
+                }
               >
-                {ngrokLoading ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-400" />
+                {ngrokLoading || ngrokStatus === 'starting' ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400" />
+                    <span className="hidden sm:inline">Conectando...</span>
+                  </>
                 ) : ngrokOnline ? (
                   <>
                     <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
@@ -799,10 +823,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                   href={ngrokUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="p-1.5 rounded-xl bg-slate-900 border border-slate-800 text-cyan-400 hover:text-cyan-300 hover:bg-slate-850 transition-all cursor-pointer"
+                  className="px-2.5 py-1.5 rounded-xl bg-slate-900 border border-emerald-500/40 text-emerald-400 hover:text-emerald-300 hover:bg-slate-850 text-xs font-mono flex items-center gap-1.5 transition-all cursor-pointer shadow-md"
                   title="Abrir Dashboard no Link Público do Ngrok"
                 >
-                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span className="max-w-[140px] truncate hidden md:inline">{ngrokUrl.replace('https://', '')}</span>
+                  <ExternalLink className="w-3.5 h-3.5 shrink-0" />
                 </a>
               )}
             </div>
