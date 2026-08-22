@@ -81,7 +81,7 @@ export const Canvas: React.FC<CanvasProps> = ({
             position: absolute;
             display: none;
             border: 2px solid #a855f7;
-            pointer-events: auto;
+            pointer-events: none;
             z-index: 999990;
             box-sizing: border-box;
             border-radius: 4px;
@@ -97,6 +97,7 @@ export const Canvas: React.FC<CanvasProps> = ({
             border: 2px solid #a855f7;
             border-radius: 2px;
             z-index: 999995;
+            pointer-events: auto;
             box-shadow: 0 0 4px rgba(0,0,0,0.4);
           }
           .handle-r { right: -5px; top: calc(50% - 4.5px); cursor: ew-resize; }
@@ -298,10 +299,17 @@ export const Canvas: React.FC<CanvasProps> = ({
             const selector = selectorParts.join(' > ') || target.tagName.toLowerCase();
             const elementPath = currentSelectedPath;
 
+            // Validação precisa de tags que contêm texto editável diretamente
+            const textTags = ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'span', 'a', 'button', 'li', 'label', 'b', 'strong', 'em', 'small', 'blockquote', 'caption', 'td', 'th'];
+            const tagLower = target.tagName.toLowerCase();
+            const hasDirectOnlyText = target.childElementCount === 0 || Array.from(target.childNodes).every(n => n.nodeType === Node.TEXT_NODE || (n.nodeType === Node.ELEMENT_NODE && ['span', 'b', 'strong', 'em', 'i', 'br'].includes(n.nodeName.toLowerCase())));
+            const isTextEditable = textTags.includes(tagLower) || (hasDirectOnlyText && target.childElementCount === 0);
+
             // Extract Attributes
             const attrs = {
-              _tag: target.tagName.toLowerCase(),
-              _textContent: target.childElementCount === 0 ? (target.textContent || '') : (target.innerText || ''),
+              _tag: tagLower,
+              _textContent: isTextEditable ? (target.innerHTML || target.textContent || '') : '',
+              _isTextEditable: isTextEditable ? 'true' : 'false',
               _hasChildren: target.childElementCount > 0 ? 'true' : 'false',
             };
             ['id', 'class', 'href', 'src', 'alt', 'target', 'placeholder', 'type', 'name', 'value'].forEach(a => {

@@ -582,18 +582,20 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             )}
           </div>
 
-          {/* Edição de Texto / Conteúdo do Elemento */}
-          <div>
-            <Label>Texto / Conteúdo Interno</Label>
-            <textarea
-              rows={3}
-              placeholder="Digite o texto deste elemento..."
-              value={selectedAttrs['_textContent'] || ''}
-              onChange={e => onAttrChange('_textContent', e.target.value)}
-              className={`${inputCls} resize-none`}
-            />
-            <span className="text-[9px] text-slate-500 block mt-1">Dica: Você também pode dar 2 cliques rápidos direto no canvas para editar o texto inline.</span>
-          </div>
+          {/* Edição de Texto / Conteúdo do Elemento (Apenas para elementos textuais reais) */}
+          {(selectedAttrs['_isTextEditable'] === 'true' || ['p','h1','h2','h3','h4','h5','h6','span','a','button','li','label','b','strong','em','small','blockquote'].includes(tag)) && (
+            <div>
+              <Label>Texto / Conteúdo</Label>
+              <textarea
+                rows={3}
+                placeholder="Digite o texto deste elemento..."
+                value={selectedAttrs['_textContent'] || ''}
+                onChange={e => onAttrChange('_textContent', e.target.value)}
+                className={`${inputCls} resize-none`}
+              />
+              <span className="text-[9px] text-slate-500 block mt-1">Dica: 2 cliques no canvas ativam a digitação direta inline.</span>
+            </div>
+          )}
 
           <div>
             <Label>ID do Elemento</Label>
