@@ -43,29 +43,9 @@ const MainApp: React.FC = () => {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  // Update dynamic document title and browser URL based on route
-  const getPageTitle = (r: AppRoute): string => {
-    if (r.type === 'auth') return 'Entrar | BuildDreamer';
-    if (r.type === 'builder') return 'Editor Visual | BuildDreamer';
-    if (r.type === 'dashboard') {
-      switch (r.tab) {
-        case 'crm': return 'CRM de Vendas | BuildDreamer';
-        case 'leads': return 'Buscador de Clientes | BuildDreamer';
-        case 'saved-leads': return 'Leads Salvos | BuildDreamer';
-        case 'presets': return 'Filtros Pré-Prontos | BuildDreamer';
-        case 'settings': return 'Configurações | BuildDreamer';
-        case 'projects': return 'Meus Sites | BuildDreamer';
-        case 'general':
-        default:
-          return 'Visão Geral | BuildDreamer';
-      }
-    }
-    return 'BuildDreamer | Criador de Sites com IA & CRM';
-  };
-
   useEffect(() => {
-    document.title = getPageTitle(route);
-  }, [route]);
+    document.title = 'BuildDreamer';
+  }, []);
 
   // Update browser URL
   const navigate = (newRoute: AppRoute) => {

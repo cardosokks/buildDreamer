@@ -1091,7 +1091,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
   };
 
   return (
-    <div className={`min-h-screen font-sans flex flex-col transition-colors duration-200 ${
+    <div className={`h-screen w-screen font-sans flex flex-col overflow-hidden transition-colors duration-200 ${
       theme === 'light' ? 'bg-slate-50 text-slate-900' : 'bg-[#0a0c10] text-slate-100'
     }`}>
       {/* Top Navbar with Size and Minimized State Toggle */}
@@ -1100,7 +1100,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
           ? 'bg-white/95 border-slate-200 shadow-sm'
           : 'bg-[#0f1117]/95 border-slate-800/80 shadow-[0_4px_20px_rgba(0,0,0,0.3)]'
       } ${
-        navbarMinimized ? 'h-9 py-0' : navbarSize === 'compact' ? 'h-13 py-1' : navbarSize === 'large' ? 'h-18 py-2' : 'h-15 py-1.5'
+        navbarMinimized ? 'h-9 py-0' : navbarSize === 'compact' ? 'h-11 py-1' : navbarSize === 'large' ? 'h-14 py-1.5' : 'h-12 py-1'
       }`}>
         <div className="w-full px-4 sm:px-6 h-full flex items-center justify-between gap-4">
           
@@ -1119,17 +1119,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
               {mobileMenuOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
             </button>
 
-            <div className={`w-8 h-8 rounded-xl overflow-hidden border shrink-0 flex items-center justify-center shadow-inner ${
+            <div className={`w-7 h-7 rounded-xl overflow-hidden border shrink-0 flex items-center justify-center shadow-inner ${
               theme === 'light' ? 'border-amber-600/30 bg-amber-50' : 'border-amber-500/30 bg-black/40'
             }`}>
               <img src="/logo.png" alt="Real Premise" className="w-full h-full object-cover" />
             </div>
             {!navbarMinimized && (
               <div className="flex items-center gap-2">
-                <span className={`font-extrabold text-sm sm:text-base tracking-wider ${
+                <span className={`font-extrabold text-xs sm:text-sm tracking-wider ${
                   theme === 'light' ? 'text-slate-900' : 'text-white'
                 }`}>REAL PREMISE</span>
-                <span className={`hidden sm:inline-block px-2 py-0.5 rounded-md border text-[9px] font-mono tracking-widest ${
+                <span className={`hidden sm:inline-block px-1.5 py-0.5 rounded-md border text-[8px] font-mono tracking-widest ${
                   theme === 'light'
                     ? 'border-slate-300 bg-slate-100 text-slate-600 font-semibold'
                     : 'border-slate-700 bg-slate-800/80 text-slate-300'
@@ -1401,9 +1401,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
         {/* Left Navigation Sidebar with Collapse (Icons Only), Hide & Drag-to-Resize Handle */}
         {!sidebarHidden && (
           <aside 
-            style={{ width: sidebarCollapsed ? '64px' : `${sidebarWidth}px` }}
-            className={`border-r flex flex-col justify-between shrink-0 ${
-              sidebarCollapsed ? 'p-2' : 'p-4'
+            style={{ width: sidebarCollapsed ? '60px' : `${sidebarWidth}px` }}
+            className={`border-r flex flex-col justify-between shrink-0 h-full overflow-y-auto ${
+              sidebarCollapsed ? 'p-2' : 'p-3.5'
             } hidden md:flex relative select-none transition-[width,padding] duration-200 ${
               theme === 'light'
                 ? 'bg-white border-slate-200'
@@ -1412,9 +1412,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
           >
             <div className="space-y-1">
               {/* Toggle Collapse/Expand Header on Sidebar */}
-              <div className={`flex items-center ${sidebarCollapsed ? 'justify-center pb-3' : 'justify-between pb-2'} border-b border-slate-850/60 mb-2`}>
+              <div className={`flex items-center ${sidebarCollapsed ? 'justify-center pb-2' : 'justify-between pb-2'} border-b border-slate-850/60 mb-2`}>
                 {!sidebarCollapsed && (
-                  <span className={`text-[10px] font-bold uppercase tracking-wider ${
+                  <span className={`text-[9px] font-bold uppercase tracking-wider ${
                     theme === 'light' ? 'text-slate-400' : 'text-slate-500'
                   }`}>
                     Navegação
@@ -1423,7 +1423,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                 <button
                   onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
                   className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-850 rounded-lg transition-colors cursor-pointer"
-                  title={sidebarCollapsed ? "Expandir barra lateral (Mostrar texto)" : "Diminuir barra lateral (Apenas ícones)"}
+                  title={sidebarCollapsed ? "Expandir barra lateral" : "Recolher barra lateral"}
                 >
                   <Minimize2 className={`w-3.5 h-3.5 ${sidebarCollapsed ? 'rotate-90 text-purple-400' : ''}`} />
                 </button>
@@ -1688,41 +1688,41 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
         )}
 
         {/* Dynamic Content Panel */}
-        <main className="flex-1 overflow-y-auto px-6 py-8">
+        <main className="flex-1 overflow-y-auto px-4 py-5 sm:px-6 sm:py-6">
           {activeTab === 'general' ? (
-            <div className="max-w-6xl mx-auto space-y-8">
-              {/* Header com Boas-Vindas e Ação Principal */}
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="max-w-6xl mx-auto space-y-5">
+              {/* Header de Ação Rápida */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                  <h1 className="text-3xl font-extrabold text-white tracking-tight flex items-center gap-2.5">
-                    <Sparkles className="w-8 h-8 text-purple-400" />
-                    Visão Geral da Plataforma
-                  </h1>
-                  <p className="text-slate-400 mt-1">
-                    Central de comando: crie sites com IA, prospecte clientes e publique em produção.
+                  <h2 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
+                    <Sparkles className="w-5 h-5 text-purple-400" />
+                    Visão Geral
+                  </h2>
+                  <p className="text-xs text-slate-400">
+                    Crie sites com IA, prospecte novos clientes e publique em tempo recorde.
                   </p>
                 </div>
 
-                <div className="flex items-center gap-2.5 flex-wrap">
+                <div className="flex items-center gap-2 flex-wrap">
                   <button
                     onClick={() => { setCreationMode('ai'); setShowCreateModal(true); }}
-                    className="px-4 py-2.5 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-purple-600/30 transition-all flex items-center gap-1.5 cursor-pointer"
+                    className="px-3.5 py-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
                   >
-                    <Zap className="w-4 h-4" />
-                    Criar Site com IA
+                    <Zap className="w-3.5 h-3.5" />
+                    Criar com IA
                   </button>
                   <button
                     onClick={() => setActiveTab('leads')}
-                    className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-200 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
+                    className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-200 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
                   >
-                    <Users className="w-4 h-4 text-pink-400" />
-                    Buscar Novos Leads
+                    <Users className="w-3.5 h-3.5 text-pink-400" />
+                    Buscar Leads
                   </button>
                 </div>
               </div>
 
               {/* Status & Estatísticas em Grid Principal */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
                 {/* Total de Projetos */}
                 <div 
                   onClick={() => setActiveTab('projects')}
@@ -1952,18 +1952,18 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
               )}
             </div>
           ) : activeTab === 'projects' ? (
-            <div className="max-w-6xl mx-auto">
-              {/* Welcome Section */}
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
+            <div className="max-w-6xl mx-auto space-y-4">
+              {/* Header de Projetos */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                  <h1 className="text-3xl font-extrabold text-white tracking-tight">Gerenciamento de Projetos</h1>
-                  <p className="text-slate-400 mt-1">Crie, modifique e publique seus sites em ambiente de produção.</p>
+                  <h2 className="text-xl font-bold text-white tracking-tight">Meus Sites & Projetos</h2>
+                  <p className="text-xs text-slate-400">Gerencie, edite ou crie novos sites com IA.</p>
                 </div>
                 <button
                   onClick={() => setShowCreateModal(true)}
-                  className="flex items-center gap-2 px-5 py-3 bg-purple-700 hover:bg-purple-650 text-white font-semibold rounded-xl transition-all shadow-[0_0_15px_rgba(168,85,247,0.3)] hover:shadow-[0_0_20px_rgba(168,85,247,0.5)] cursor-pointer"
+                  className="flex items-center gap-1.5 px-4 py-2 bg-purple-700 hover:bg-purple-650 text-white text-xs font-bold rounded-xl transition-all shadow-md cursor-pointer self-start sm:self-auto"
                 >
-                  <FolderPlus className="w-5 h-5" />
+                  <FolderPlus className="w-4 h-4" />
                   Novo Projeto
                 </button>
               </div>
@@ -2096,30 +2096,29 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
             </div>
           ) : activeTab === 'saved-leads' ? (
             /* LEADS SALVOS SUBMENU TAB */
-            <div className="max-w-6xl mx-auto space-y-6">
-              <div className="flex items-center justify-between">
+            <div className="max-w-6xl mx-auto space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                  <h1 className="text-3xl font-extrabold text-white tracking-tight flex items-center gap-2.5">
-                    <Bookmark className="w-8 h-8 text-yellow-400" />
+                  <h2 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
+                    <Bookmark className="w-5 h-5 text-yellow-400" />
                     Leads Salvos ({savedLeads.length})
-                  </h1>
-                  <p className="text-slate-450 mt-1">Gerencie os potenciais clientes favoritados para abordagem e criação de sites.</p>
+                  </h2>
+                  <p className="text-xs text-slate-400">Potenciais clientes favoritados para abordagem e propostas.</p>
                 </div>
-                <div className="flex items-center gap-2.5">
+                <div className="flex items-center gap-2">
                   <button
                     onClick={() => setShowManualLeadModal(true)}
-                    className="px-4 py-2 bg-yellow-500 hover:bg-yellow-400 text-slate-950 font-bold rounded-xl text-xs transition-all shadow-md shadow-yellow-500/20 flex items-center gap-2 cursor-pointer"
-                    title="Cadastrar um novo lead manualmente"
+                    className="px-3 py-1.5 bg-yellow-500 hover:bg-yellow-400 text-slate-950 font-bold rounded-xl text-xs transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
                   >
-                    <Plus className="w-4 h-4" />
-                    Adicionar Lead Manual
+                    <Plus className="w-3.5 h-3.5" />
+                    Novo Lead
                   </button>
                   <button
                     onClick={() => setActiveTab('leads')}
-                    className="px-4 py-2 bg-purple-700 hover:bg-purple-600 text-white font-semibold rounded-xl text-xs transition-all flex items-center gap-2 cursor-pointer"
+                    className="px-3 py-1.5 bg-purple-700 hover:bg-purple-600 text-white font-semibold rounded-xl text-xs transition-all flex items-center gap-1.5 cursor-pointer"
                   >
-                    <Search className="w-4 h-4" />
-                    Buscar no Maps
+                    <Search className="w-3.5 h-3.5" />
+                    Buscar Leads
                   </button>
                 </div>
               </div>
@@ -2465,14 +2464,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
             />
           ) : activeTab === 'presets' ? (
             /* FILTROS PRÉ-PRONTOS (CRUD DE PRESETS) */
-            <div className="max-w-5xl mx-auto space-y-6">
-              <div className="flex items-center justify-between">
+            <div className="max-w-5xl mx-auto space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                  <h1 className="text-3xl font-extrabold text-white tracking-tight flex items-center gap-2.5">
-                    <SlidersHorizontal className="w-8 h-8 text-cyan-400" />
-                    Filtros Pré-Prontos de Prospecção
-                  </h1>
-                  <p className="text-slate-450 mt-1">Configure modelos de busca frequentes para prospectar estabelecimentos com 1 clique.</p>
+                  <h2 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
+                    <SlidersHorizontal className="w-5 h-5 text-cyan-400" />
+                    Filtros Pré-Prontos
+                  </h2>
+                  <p className="text-xs text-slate-400">Configure modelos de busca para prospectar com 1 clique.</p>
                 </div>
                 <button
                   onClick={() => {
@@ -2489,9 +2488,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                     });
                     setPresetModalOpen(true);
                   }}
-                  className="px-4 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold rounded-xl text-xs transition-all flex items-center gap-1.5 cursor-pointer shadow-lg shadow-cyan-600/20"
+                  className="px-3.5 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold rounded-xl text-xs transition-all flex items-center gap-1.5 cursor-pointer shadow-sm self-start sm:self-auto"
                 >
-                  <Plus className="w-4 h-4" />
+                  <Plus className="w-3.5 h-3.5" />
                   Novo Filtro
                 </button>
               </div>
@@ -2575,29 +2574,29 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
               </div>
             </div>
           ) : activeTab === 'leads' ? (
-            /* BUSCAR CLIENTES (LEADS CRAWLER TAB SEM MAPA PESADO) */
-            <div className="max-w-6xl mx-auto space-y-6">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            /* BUSCAR CLIENTES */
+            <div className="max-w-6xl mx-auto space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                  <h1 className="text-3xl font-extrabold text-white tracking-tight flex items-center gap-2.5">
-                    <Users className="w-8 h-8 text-pink-400" />
-                    Buscador de Leads Autônomo
-                  </h1>
-                  <p className="text-slate-450 mt-1">Prospecte estabelecimentos comerciais locais sem website com o motor de extração Overpass e Web Index.</p>
+                  <h2 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
+                    <Users className="w-5 h-5 text-pink-400" />
+                    Buscador de Clientes & Leads
+                  </h2>
+                  <p className="text-xs text-slate-400">Encontre empresas locais sem site para oferecer seus serviços.</p>
                 </div>
                 
                 {/* Botões rápidos de atalho */}
                 <div className="flex items-center gap-2 flex-wrap">
                   <button
                     onClick={() => setActiveTab('saved-leads')}
-                    className="px-3.5 py-2 bg-yellow-500/10 hover:bg-yellow-500/20 border border-yellow-500/30 text-yellow-300 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5"
+                    className="px-3 py-1.5 bg-yellow-500/10 hover:bg-yellow-500/20 border border-yellow-500/30 text-yellow-300 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
                   >
                     <Bookmark className="w-3.5 h-3.5" />
-                    Ver Salvos ({savedLeads.length})
+                    Salvos ({savedLeads.length})
                   </button>
                   <button
                     onClick={() => setActiveTab('presets')}
-                    className="px-3.5 py-2 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5"
+                    className="px-3 py-1.5 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
                   >
                     <SlidersHorizontal className="w-3.5 h-3.5" />
                     Filtros Prontos

@@ -312,111 +312,111 @@ export const CRMManager: React.FC<CRMProps> = ({ onOpenRemasterModal, onOpenProj
     : 0;
 
   return (
-    <div className="max-w-7xl mx-auto space-y-8 animate-fade-in pb-16">
+    <div className="max-w-7xl mx-auto space-y-4 animate-fade-in pb-10">
       
-      {/* Header do CRM com Métricas de Vendas */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-850 pb-6">
+      {/* Header do CRM */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-extrabold text-white tracking-tight flex items-center gap-3">
-            <div className="p-2.5 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-600 text-white shadow-lg shadow-emerald-600/30">
-              <TrendingUp className="w-7 h-7" />
-            </div>
-            CRM de Vendas de Sites
-          </h1>
-          <p className="text-slate-400 mt-1.5 text-sm">
-            Gerencie seu funil de clientes, status de negociação e conecte protótipos de sites gerados com IA.
+          <h2 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
+            <TrendingUp className="w-5 h-5 text-emerald-400" />
+            CRM & Funil de Vendas
+          </h2>
+          <p className="text-xs text-slate-400">
+            Gerencie contatos, negociações e propostas comerciais.
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <div className="p-1 bg-slate-900 border border-slate-800 rounded-xl flex items-center gap-1">
             <button
               onClick={() => setViewMode('kanban')}
-              className={`p-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
                 viewMode === 'kanban'
                   ? 'bg-purple-600 text-white shadow-sm'
                   : 'text-slate-400 hover:text-white'
               }`}
               title="Visualização em Quadro Kanban"
             >
-              <Kanban className="w-4 h-4" />
-              <span className="hidden sm:inline">Kanban</span>
+              <Kanban className="w-3.5 h-3.5" />
+              <span>Kanban</span>
             </button>
 
             <button
               onClick={() => setViewMode('list')}
-              className={`p-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
                 viewMode === 'list'
                   ? 'bg-purple-600 text-white shadow-sm'
                   : 'text-slate-400 hover:text-white'
               }`}
               title="Visualização em Tabela/Lista"
             >
-              <List className="w-4 h-4" />
-              <span className="hidden sm:inline">Lista</span>
+              <List className="w-3.5 h-3.5" />
+              <span>Lista</span>
             </button>
           </div>
 
           <button
             onClick={handleOpenCreateModal}
-            className="px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-emerald-600/30 transition-all flex items-center gap-2 cursor-pointer"
+            className="px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-xs font-bold shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
           >
-            <Plus className="w-4 h-4" />
-            <span>Adicionar Cliente</span>
+            <Plus className="w-3.5 h-3.5" />
+            <span>Novo Cliente</span>
           </button>
         </div>
       </div>
 
       {/* Cards de Métricas e Performance do Funil */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="p-5 rounded-2xl bg-[#0f0b18] border border-slate-850 shadow-xl flex items-center justify-between">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="p-4 rounded-2xl bg-[#0f0b18] border border-slate-850 shadow-md flex items-center justify-between">
           <div>
-            <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider block">Total de Leads</span>
-            <span className="text-2xl font-extrabold text-white mt-1 block font-mono">{totalLeadsCount}</span>
-            <span className="text-[10px] text-slate-500 mt-0.5 block">No pipeline de vendas</span>
+            <span className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider block">Total de Leads</span>
+            <span className="text-xl font-extrabold text-white mt-0.5 block font-mono">{totalLeadsCount}</span>
+            <span className="text-[10px] text-slate-500 block">No pipeline de vendas</span>
           </div>
-          <div className="p-3 bg-purple-950/60 border border-purple-500/30 rounded-2xl text-purple-400">
-            <UserCheck className="w-6 h-6" />
+          <div className="p-2.5 bg-purple-950/60 border border-purple-500/30 rounded-xl text-purple-400">
+            <UserCheck className="w-5 h-5" />
           </div>
         </div>
 
-        <div className="p-5 rounded-2xl bg-[#0f0b18] border border-slate-850 shadow-xl flex items-center justify-between">
+        <div className="p-4 rounded-2xl bg-[#0f0b18] border border-slate-850 shadow-md flex items-center justify-between">
           <div>
-            <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider block">Pipeline Ativo</span>
-            <span className="text-2xl font-extrabold text-sky-400 mt-1 block font-mono">
+            <span className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider block">Pipeline Ativo</span>
+            <span className="text-xl font-extrabold text-sky-400 mt-0.5 block font-mono">
               R$ {totalPipelineValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </span>
-            <span className="text-[10px] text-slate-500 mt-0.5 block">Oportunidades em aberto</span>
+            <span className="text-[10px] text-slate-500 block">Oportunidades em aberto</span>
           </div>
-          <div className="p-3 bg-sky-950/60 border border-sky-500/30 rounded-2xl text-sky-400">
-            <DollarSign className="w-6 h-6" />
+          <div className="p-2.5 bg-sky-950/60 border border-sky-500/30 rounded-xl text-sky-400">
+            <DollarSign className="w-5 h-5" />
           </div>
         </div>
 
-        <div className="p-5 rounded-2xl bg-[#0f0b18] border border-slate-850 shadow-xl flex items-center justify-between">
+        <div className="p-4 rounded-2xl bg-[#0f0b18] border border-slate-850 shadow-md flex items-center justify-between">
           <div>
-            <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider block">Vendas Fechadas</span>
-            <span className="text-2xl font-extrabold text-emerald-400 mt-1 block font-mono">
+            <span className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider block">Vendas Fechadas</span>
+            <span className="text-xl font-extrabold text-emerald-400 mt-0.5 block font-mono">
               R$ {totalWonValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </span>
-            <span className="text-[10px] text-emerald-500 mt-0.5 block font-semibold">{leads.filter(l => l.status === 'WON').length} contratos ganhos</span>
+            <span className="text-[10px] text-emerald-500 block font-semibold">{leads.filter(l => l.status === 'WON').length} contratos ganhos</span>
           </div>
-          <div className="p-3 bg-emerald-950/60 border border-emerald-500/30 rounded-2xl text-emerald-400">
-            <CheckCircle2 className="w-6 h-6" />
+          <div className="p-2.5 bg-emerald-950/60 border border-emerald-500/30 rounded-xl text-emerald-400">
+            <CheckCircle2 className="w-5 h-5" />
           </div>
         </div>
 
-        <div className="p-5 rounded-2xl bg-[#0f0b18] border border-slate-850 shadow-xl flex items-center justify-between">
+        <div className="p-4 rounded-2xl bg-[#0f0b18] border border-slate-850 shadow-md flex items-center justify-between">
           <div>
-            <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider block">Taxa de Conversão</span>
-            <span className="text-2xl font-extrabold text-amber-400 mt-1 block font-mono">{conversionRate}%</span>
-            <span className="text-[10px] text-slate-500 mt-0.5 block">Leads convertidos em vendas</span>
+            <span className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider block">Taxa de Conversão</span>
+            <span className="text-xl font-extrabold text-amber-400 mt-0.5 block font-mono">{conversionRate}%</span>
+            <span className="text-[10px] text-slate-500 block">Leads convertidos</span>
           </div>
-          <div className="p-3 bg-amber-950/60 border border-amber-500/30 rounded-2xl text-amber-400">
-            <TrendingUp className="w-6 h-6" />
+          <div className="p-2.5 bg-amber-950/60 border border-amber-500/30 rounded-xl text-amber-400">
+            <TrendingUp className="w-5 h-5" />
           </div>
         </div>
       </div>
+
+
 
       {/* Barra de Filtros e Busca */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-[#0f0b18] border border-slate-850 p-3 rounded-2xl">
