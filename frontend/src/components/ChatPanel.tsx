@@ -118,6 +118,11 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   });
 
   const [selectedModel, setSelectedModel] = useState<string>(() => {
+    // 1. Prioriza o último modelo salvo pelo usuário
+    const savedLastModel = localStorage.getItem('last_selected_ai_model');
+    if (savedLastModel) return savedLastModel;
+
+    // 2. Se não houver, tenta o primeiro modelo customizado configurado
     const stored = localStorage.getItem('custom_gemini_models');
     if (stored) {
       try {
@@ -128,6 +133,14 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     return 'gemini-2.5-flash';
   });
 
+  // Salvar no localStorage sempre que o usuário alterar o modelo
+  const handleModelChange = (modelId: string) => {
+    setSelectedModel(modelId);
+    try {
+      localStorage.setItem('last_selected_ai_model', modelId);
+    } catch {}
+  };
+
   useEffect(() => {
     const loadStoredModels = () => {
       const stored = localStorage.getItem('custom_gemini_models');
@@ -136,7 +149,10 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
           const parsed = JSON.parse(stored);
           if (Array.isArray(parsed) && parsed.length > 0) {
             setAvailableModels(parsed);
-            if (!parsed.some((m: any) => m.id === selectedModel)) {
+            const savedLastModel = localStorage.getItem('last_selected_ai_model');
+            if (savedLastModel && parsed.some((m: any) => m.id === savedLastModel)) {
+              setSelectedModel(savedLastModel);
+            } else if (!parsed.some((m: any) => m.id === selectedModel)) {
               setSelectedModel(parsed[0].id);
             }
           }
@@ -386,9 +402,9 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
           {/* Model Selector Dropdown */}
           <select
             value={selectedModel}
-            onChange={(e) => setSelectedModel(e.target.value)}
+            onChange={(e) => handleModelChange(e.target.value)}
             className="bg-slate-900 border border-slate-800 text-[10px] text-purple-300 font-mono rounded-lg px-2 py-1 focus:outline-none focus:border-purple-500 cursor-pointer max-w-[135px] truncate"
-            title="Selecionar modelo de IA"
+            title="Selecionar modelo de IA (lembrado automaticamente)"
           >
             {availableModels.map(m => (
               <option key={m.id} value={m.id} className="bg-slate-950 text-white">
