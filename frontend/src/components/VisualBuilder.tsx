@@ -492,8 +492,8 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
     }
   };
 
-  // Element Reorder
-  const handleMoveElement = (sourcePath: string, targetPath: string) => {
+  // Element Reorder (before, after or inside)
+  const handleMoveElement = (sourcePath: string, targetPath: string, position: 'before' | 'after' | 'inside' = 'inside') => {
     if (!activePage || sourcePath === targetPath) return;
     if (targetPath.startsWith(sourcePath + '.')) return;
     const doc = parseDocFromHtml(activePage.html);
@@ -502,7 +502,13 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
     const tgtEl = getElementByPath(root, targetPath);
     if (srcEl && tgtEl && srcEl.parentElement) {
       srcEl.parentElement.removeChild(srcEl);
-      tgtEl.appendChild(srcEl);
+      if (position === 'before' && tgtEl.parentElement) {
+        tgtEl.parentElement.insertBefore(srcEl, tgtEl);
+      } else if (position === 'after' && tgtEl.parentElement) {
+        tgtEl.parentElement.insertBefore(srcEl, tgtEl.nextSibling);
+      } else {
+        tgtEl.appendChild(srcEl);
+      }
       const newHtml = serializeBodyContent(doc);
       handleCodeChange('html', newHtml);
       setSelectedPath(null);
@@ -859,25 +865,6 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
               Mobile (Android)
             </button>
           </div>
-
-          {/* Zoom Controls */}
-          <div className="flex items-center gap-1 bg-slate-950/80 border border-slate-900 rounded-xl px-2 py-1">
-            <button 
-              onClick={() => setZoom(z => Math.max(50, z - 10))}
-              className="p-1 text-slate-400 hover:text-white cursor-pointer"
-              title="Diminuir Zoom"
-            >
-              <ZoomOut className="w-3.5 h-3.5" />
-            </button>
-            <span className="text-[11px] text-slate-300 font-mono w-10 text-center">{zoom}%</span>
-            <button 
-              onClick={() => setZoom(z => Math.min(150, z + 10))}
-              className="p-1 text-slate-400 hover:text-white cursor-pointer"
-              title="Aumentar Zoom"
-            >
-              <ZoomIn className="w-3.5 h-3.5" />
-            </button>
-          </div>
         </div>
 
         {/* Actions & Utilities */}
@@ -939,15 +926,6 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
             title="AI Copilot Studio"
           >
             <MessageSquare className="w-4 h-4" />
-          </button>
-
-          {/* Code View Modal */}
-          <button 
-            onClick={() => setShowCodeModal(true)}
-            className="p-2 bg-slate-900 border border-slate-800 hover:border-purple-500/40 rounded-xl text-slate-400 hover:text-white transition-all cursor-pointer"
-            title="Editor de Código"
-          >
-            <Code2 className="w-4 h-4" />
           </button>
 
           {/* Botão Unificado de Preview (Local + Ngrok) */}
@@ -1223,7 +1201,19 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
         )}
 
         {/* Central Interactive Sandbox Canvas */}
-        <main className="flex-1 flex justify-center items-center overflow-auto bg-[#07020d] p-3 md:p-6 min-w-0">
+        <main 
+          className="flex-1 flex justify-center items-center overflow-auto bg-[#07020d] p-3 md:p-6 min-w-0"
+          onWheel={(e) => {
+            if (e.altKey) {
+              e.preventDefault();
+              if (e.deltaY < 0) {
+                setZoom(z => Math.min(150, z + 5));
+              } else {
+                setZoom(z => Math.max(50, z - 5));
+              }
+            }
+          }}
+        >
           <div 
             className="transition-all duration-200 h-full flex items-center justify-center relative"
             style={{
@@ -1266,6 +1256,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
                 onDeleteElement={handleDeleteElement}
                 onDuplicateElement={handleDuplicateElement}
                 onMoveElementDirection={handleMoveElementDirection}
+                onHtmlChange={(newHtml) => handleCodeChange('html', newHtml)}
               />
             )}
           </div>

@@ -55,7 +55,7 @@ interface SidebarProps {
   onHoverLayer?: (path: string | null) => void;
   onDeleteElement: (path: string) => void;
   onDuplicateElement: (path: string) => void;
-  onMoveElement: (sourcePath: string, targetPath: string) => void;
+  onMoveElement: (sourcePath: string, targetPath: string, position?: 'before' | 'after' | 'inside') => void;
   onMoveElementDirection?: (path: string, direction: 'up' | 'down') => void;
   onInsertBlock?: (htmlBlock: string, cssBlock?: string) => void;
   selectedPath?: string | null;
@@ -201,6 +201,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
     setExpandedPaths(new Set());
   };
 
+  const [dragOverPosition, setDragOverPosition] = useState<'before' | 'after' | 'inside' | null>(null);
+
   const renderLayers = (nodes: ElementNode[], depth = 0, parentPath = '') => {
     return nodes.map((node, index) => {
       const path = parentPath ? `${parentPath}.${index}` : `${index}`;
@@ -214,20 +216,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
       const isDragOver = dragOver === path;
 
       return (
-        <div key={path} role="treeitem" aria-expanded={hasChildren ? isExpanded : undefined} aria-selected={isSelected}>
+        <div key={path} role="treeitem" aria-expanded={hasChildren ? isExpanded : undefined} aria-selected={isSelected} className="relative">
+          {/* Linha Indicadora de Drop 'Antes' */}
+          {isDragOver && dragOverPosition === 'before' && (
+            <div className="absolute top-0 left-0 right-0 h-1 bg-purple-500 rounded-full z-10 shadow-[0_0_8px_rgba(168,85,247,0.8)]" />
+          )}
+
           <div
-            className={`group relative flex items-center justify-between gap-1.5 rounded-lg text-xs transition-all duration-100 cursor-pointer select-none ${
+            className={`group relative flex items-center justify-between gap-2 rounded-lg text-xs transition-all duration-100 cursor-pointer select-none ${
               isSelected
                 ? 'bg-purple-600/35 text-white border border-purple-500/60 shadow-sm font-semibold'
-                : isDragOver
+                : isDragOver && dragOverPosition === 'inside'
                 ? 'bg-indigo-600/30 border-2 border-indigo-400 text-indigo-200'
                 : 'hover:bg-slate-900/90 text-slate-300 hover:text-white border border-transparent'
             }`}
             style={{ 
               paddingLeft: `${Math.max(6, depth * 14 + 6)}px`, 
-              paddingRight: '6px', 
-              paddingTop: '5px', 
-              paddingBottom: '5px' 
+              paddingRight: '8px', 
+              paddingTop: '6px', 
+              paddingBottom: '6px' 
             }}
             onClick={() => onSelectLayer(selector, path)}
             onContextMenu={(e) => handleContextMenu(e, 'layer', path)}
@@ -242,20 +249,36 @@ export const Sidebar: React.FC<SidebarProps> = ({
             onDragOver={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              if (dragSource !== path) setDragOver(path);
+              if (dragSource !== path) {
+                setDragOver(path);
+                const rect = e.currentTarget.getBoundingClientRect();
+                const offsetY = e.clientY - rect.top;
+                if (offsetY < rect.height * 0.25) {
+                  setDragOverPosition('before');
+                } else if (offsetY > rect.height * 0.75) {
+                  setDragOverPosition('after');
+                } else {
+                  setDragOverPosition('inside');
+                }
+              }
             }}
-            onDragLeave={() => setDragOver(null)}
+            onDragLeave={() => {
+              setDragOver(null);
+              setDragOverPosition(null);
+            }}
             onDrop={(e) => {
               e.preventDefault();
               e.stopPropagation();
+              const pos = dragOverPosition || 'inside';
               setDragOver(null);
+              setDragOverPosition(null);
               if (dragSource && dragSource !== path) {
-                onMoveElement(dragSource, path);
+                onMoveElement(dragSource, path, pos);
               }
             }}
           >
-            <div className="flex items-center gap-1.5 min-w-0 flex-1">
-              <GripVertical className="w-3 h-3 text-slate-600 group-hover:text-slate-400 cursor-grab shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+              <GripVertical className="w-3.5 h-3.5 text-slate-600 group-hover:text-slate-400 cursor-grab shrink-0 opacity-40 group-hover:opacity-100 transition-opacity" />
               
               {hasChildren ? (
                 <button
@@ -270,69 +293,32 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
               {icon}
 
-              <div className="flex items-center gap-1.5 truncate">
-                <span className="truncate font-sans text-xs">{name}</span>
+              {/* Rótulo Legível e Expandido do Componente */}
+              <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                <span className="font-sans text-xs text-white font-medium truncate">{name}</span>
                 {node.id && (
-                  <span className="text-[10px] text-cyan-400 font-mono bg-cyan-950/60 px-1 rounded border border-cyan-500/20">
+                  <span className="text-[10px] text-cyan-400 font-mono bg-cyan-950/60 px-1.5 py-0.5 rounded border border-cyan-500/20 shrink-0">
                     #{node.id}
                   </span>
                 )}
                 {cleanClass && !node.id && (
-                  <span className="text-[10px] text-purple-400 font-mono truncate opacity-70">
-                    .{cleanClass.slice(0, 10)}
+                  <span className="text-[10px] text-purple-400/90 font-mono truncate max-w-[100px] shrink-0">
+                    .{cleanClass}
                   </span>
                 )}
               </div>
             </div>
 
-            {/* Quick Actions (WordPress Gutenberg Style) */}
-            <div className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 shrink-0 transition-opacity">
-              {onMoveElementDirection && (
-                <>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onMoveElementDirection(path, 'up');
-                    }}
-                    className="p-1 hover:text-white rounded hover:bg-slate-800 text-slate-400"
-                    title="Mover para Cima"
-                  >
-                    <ArrowUp className="w-3 h-3" />
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onMoveElementDirection(path, 'down');
-                    }}
-                    className="p-1 hover:text-white rounded hover:bg-slate-800 text-slate-400"
-                    title="Mover para Baixo"
-                  >
-                    <ArrowDown className="w-3 h-3" />
-                  </button>
-                </>
-              )}
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDuplicateElement(path);
-                }}
-                className="p-1 hover:text-white rounded hover:bg-slate-800 text-slate-400"
-                title="Duplicar Bloco (Ctrl+D)"
-              >
-                <Copy className="w-3 h-3" />
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDeleteElement(path);
-                }}
-                className="p-1 hover:text-red-400 rounded hover:bg-red-500/20 text-slate-400"
-                title="Excluir Bloco (Delete)"
-              >
-                <Trash2 className="w-3 h-3" />
-              </button>
-            </div>
+            {/* Dica discreta ao passar o mouse */}
+            <span className="text-[10px] text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity font-mono shrink-0">
+              Botão Direito
+            </span>
           </div>
+
+          {/* Linha Indicadora de Drop 'Depois' */}
+          {isDragOver && dragOverPosition === 'after' && (
+            <div className="absolute bottom-0 left-0 right-0 h-1 bg-purple-500 rounded-full z-10 shadow-[0_0_8px_rgba(168,85,247,0.8)]" />
+          )}
 
           {hasChildren && isExpanded && (
             <div role="group" className="border-l border-slate-800/80 ml-3 pl-0.5">

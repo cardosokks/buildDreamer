@@ -13,6 +13,7 @@ interface CanvasProps {
   onDuplicateElement?: (elementPath: string) => void;
   onMoveElementDirection?: (elementPath: string, direction: 'up' | 'down') => void;
   onSelectParentElement?: (elementPath: string) => void;
+  onHtmlChange?: (newHtml: string) => void;
 }
 
 export const Canvas: React.FC<CanvasProps> = ({
@@ -27,7 +28,8 @@ export const Canvas: React.FC<CanvasProps> = ({
   onDeleteElement,
   onDuplicateElement,
   onMoveElementDirection,
-  onSelectParentElement
+  onSelectParentElement,
+  onHtmlChange
 }) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const isInitializedRef = useRef(false);
@@ -77,12 +79,27 @@ export const Canvas: React.FC<CanvasProps> = ({
             position: absolute;
             display: none;
             border: 2px solid #a855f7;
-            pointer-events: none;
+            pointer-events: auto;
             z-index: 999990;
             box-sizing: border-box;
             border-radius: 4px;
             box-shadow: 0 0 0 1px rgba(168,85,247,0.3);
           }
+
+          /* Resize Handles */
+          .studio-resize-handle {
+            position: absolute;
+            width: 9px;
+            height: 9px;
+            background: #ffffff;
+            border: 2px solid #a855f7;
+            border-radius: 2px;
+            z-index: 999995;
+            box-shadow: 0 0 4px rgba(0,0,0,0.4);
+          }
+          .handle-r { right: -5px; top: calc(50% - 4.5px); cursor: ew-resize; }
+          .handle-b { bottom: -5px; left: calc(50% - 4.5px); cursor: ns-resize; }
+          .handle-br { right: -5px; bottom: -5px; cursor: nwse-resize; }
 
           #studio-hover-box {
             position: absolute;
@@ -162,8 +179,12 @@ export const Canvas: React.FC<CanvasProps> = ({
           ${html}
         </div>
 
-        <!-- Overlays -->
-        <div id="studio-selection-box"></div>
+        <!-- Overlays & Handles -->
+        <div id="studio-selection-box">
+          <div class="studio-resize-handle handle-r" data-handle="r" title="Redimensionar Largura"></div>
+          <div class="studio-resize-handle handle-b" data-handle="b" title="Redimensionar Altura"></div>
+          <div class="studio-resize-handle handle-br" data-handle="br" title="Redimensionar Ambos"></div>
+        </div>
         <div id="studio-hover-box"></div>
 
         <!-- Floating Quick Toolbar -->
@@ -372,6 +393,64 @@ export const Canvas: React.FC<CanvasProps> = ({
             }
           });
 
+          // Visual Resize Logic
+          let isResizing = false;
+          let currentHandle = null;
+          let startX = 0;
+          let startY = 0;
+          let startWidth = 0;
+          let startHeight = 0;
+
+          document.querySelectorAll('.studio-resize-handle').forEach(handle => {
+            handle.addEventListener('mousedown', (e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              if (!currentSelected) return;
+              isResizing = true;
+              currentHandle = handle.getAttribute('data-handle');
+              startX = e.clientX;
+              startY = e.clientY;
+              const rect = currentSelected.getBoundingClientRect();
+              startWidth = rect.width;
+              startHeight = rect.height;
+
+              const onMouseMove = (moveEvent) => {
+                if (!isResizing || !currentSelected) return;
+                const dx = moveEvent.clientX - startX;
+                const dy = moveEvent.clientY - startY;
+
+                if (currentHandle === 'r' || currentHandle === 'br') {
+                  const newW = Math.max(30, startWidth + dx);
+                  currentSelected.style.width = newW + 'px';
+                }
+                if (currentHandle === 'b' || currentHandle === 'br') {
+                  const newH = Math.max(20, startHeight + dy);
+                  currentSelected.style.height = newH + 'px';
+                }
+                updateOverlayPosition();
+              };
+
+              const onMouseUp = () => {
+                if (isResizing && currentSelected) {
+                  isResizing = false;
+                  currentHandle = null;
+                  const canvasRoot = document.getElementById('canvas-root');
+                  if (canvasRoot) {
+                    window.parent.postMessage({
+                      type: 'CANVAS_HTML_CHANGED',
+                      html: canvasRoot.innerHTML
+                    }, '*');
+                  }
+                  window.removeEventListener('mousemove', onMouseMove);
+                  window.removeEventListener('mouseup', onMouseUp);
+                }
+              };
+
+              window.addEventListener('mousemove', onMouseMove);
+              window.addEventListener('mouseup', onMouseUp);
+            });
+          });
+
           window.addEventListener('resize', updateOverlayPosition);
           window.addEventListener('scroll', updateOverlayPosition);
 
@@ -574,11 +653,14 @@ export const Canvas: React.FC<CanvasProps> = ({
       if (event.data?.type === 'ACTION_MOVE_ELEMENT_DIRECTION' && onMoveElementDirection) {
         onMoveElementDirection(event.data.path, event.data.direction);
       }
+      if (event.data?.type === 'CANVAS_HTML_CHANGED' && onHtmlChange) {
+        onHtmlChange(event.data.html);
+      }
     };
 
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [onElementSelect, onInlineContentChange, onDeleteElement, onDuplicateElement, onMoveElementDirection]);
+  }, [onElementSelect, onInlineContentChange, onDeleteElement, onDuplicateElement, onMoveElementDirection, onHtmlChange]);
 
   const scale = zoom / 100;
 
