@@ -11,6 +11,10 @@ import {
   Check,
   PanelLeftClose,
   PanelRightClose,
+  PanelLeft,
+  PanelRight,
+  ChevronLeft,
+  ChevronRight,
   MessageSquare,
   Sparkles,
   Smartphone,
@@ -1261,21 +1265,27 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
         )}
 
         {/* ─── Toggle da Sidebar Esquerda (Páginas/DOM) ─── */}
-        <div className="relative flex items-start">
-          <button
-            onClick={() => setShowSidebar(!showSidebar)}
-            className={`absolute top-4 z-20 h-12 flex items-center justify-center transition-all cursor-pointer rounded-r-xl border-y border-r shadow-md group ${
-              showSidebar
-                ? 'left-0 w-5 bg-slate-900/90 border-slate-800 text-slate-500 hover:text-white hover:bg-slate-800'
-                : 'left-0 w-7 bg-purple-700 border-purple-600 text-white hover:bg-purple-600'
-            }`}
-            title={showSidebar ? 'Recolher painel de páginas' : 'Abrir painel de páginas'}
-          >
-            <span className="text-[10px] font-black select-none" style={{ writingMode: 'vertical-rl' }}>
-              {showSidebar ? '◀' : '▶'}
-            </span>
-          </button>
-        </div>
+        <button
+          onClick={() => setShowSidebar(!showSidebar)}
+          title={showSidebar ? 'Recolher painel de páginas (Layers)' : 'Abrir painel de páginas (Layers)'}
+          className={`
+            relative z-20 self-start mt-4 flex flex-col items-center justify-center gap-1
+            w-6 transition-all duration-200 cursor-pointer select-none rounded-r-xl
+            border-y border-r py-3 shrink-0
+            ${showSidebar
+              ? 'bg-slate-900/80 border-slate-800 text-slate-500 hover:text-purple-300 hover:bg-slate-800 hover:border-purple-500/40'
+              : 'bg-gradient-to-b from-purple-700 to-purple-900 border-purple-600/60 text-purple-200 hover:from-purple-600 hover:to-purple-800 shadow-[2px_0_12px_rgba(168,85,247,0.3)]'
+            }
+          `}
+        >
+          {showSidebar
+            ? <ChevronLeft className="w-3 h-3" />
+            : <>
+                <PanelLeft className="w-3 h-3" />
+                <span className="text-[8px] font-bold tracking-widest uppercase" style={{ writingMode: 'vertical-rl', letterSpacing: '0.15em' }}>DOM</span>
+              </>
+          }
+        </button>
         {/* Central Interactive Sandbox Canvas */}
         <main 
           className="flex-1 flex justify-center items-center overflow-auto bg-[#07020d] p-3 md:p-6 min-w-0"
@@ -1341,20 +1351,27 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
 
         {/* Right Inspector & Properties Panel */}
         <div className="relative flex items-start">
-          {/* Toggle da Sidebar Direita (Propriedades) */}
+          {/* ─── Toggle da Sidebar Direita (Propriedades) ─── */}
           <button
             onClick={() => setShowStylesPanel(!showStylesPanel)}
-            className={`absolute top-4 z-20 h-12 flex items-center justify-center transition-all cursor-pointer rounded-l-xl border-y border-l shadow-md ${
-              showStylesPanel
-                ? 'right-0 translate-x-0 w-5 bg-slate-900/90 border-slate-800 text-slate-500 hover:text-white hover:bg-slate-800'
-                : 'right-0 w-7 bg-indigo-700 border-indigo-600 text-white hover:bg-indigo-600'
-            }`}
-            style={{ right: showStylesPanel ? 'auto' : 0, left: showStylesPanel ? -5 : 'auto' }}
             title={showStylesPanel ? 'Recolher painel de propriedades' : 'Abrir painel de propriedades'}
+            className={`
+              relative z-20 self-start mt-4 flex flex-col items-center justify-center gap-1
+              w-6 transition-all duration-200 cursor-pointer select-none rounded-l-xl
+              border-y border-l py-3 shrink-0
+              ${showStylesPanel
+                ? 'bg-slate-900/80 border-slate-800 text-slate-500 hover:text-indigo-300 hover:bg-slate-800 hover:border-indigo-500/40'
+                : 'bg-gradient-to-b from-indigo-700 to-indigo-900 border-indigo-600/60 text-indigo-200 hover:from-indigo-600 hover:to-indigo-800 shadow-[-2px_0_12px_rgba(99,102,241,0.3)]'
+              }
+            `}
           >
-            <span className="text-[10px] font-black select-none" style={{ writingMode: 'vertical-rl' }}>
-              {showStylesPanel ? '▶' : '◀'}
-            </span>
+            {showStylesPanel
+              ? <ChevronRight className="w-3 h-3" />
+              : <>
+                  <PanelRight className="w-3 h-3" />
+                  <span className="text-[8px] font-bold tracking-widest uppercase" style={{ writingMode: 'vertical-rl', letterSpacing: '0.15em' }}>CSS</span>
+                </>
+            }
           </button>
 
           {showStylesPanel && (
