@@ -272,6 +272,22 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
     return 256;
   });
 
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+    try {
+      const stored = localStorage.getItem('rp_sidebar_collapsed');
+      if (stored) return JSON.parse(stored);
+    } catch {}
+    return false;
+  });
+
+  const [sidebarHidden, setSidebarHidden] = useState<boolean>(() => {
+    try {
+      const stored = localStorage.getItem('rp_sidebar_hidden');
+      if (stored) return JSON.parse(stored);
+    } catch {}
+    return false;
+  });
+
   const [isResizingSidebar, setIsResizingSidebar] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -293,6 +309,41 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
       localStorage.setItem('rp_sidebar_width', sidebarWidth.toString());
     } catch {}
   }, [sidebarWidth]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('rp_sidebar_collapsed', JSON.stringify(sidebarCollapsed));
+    } catch {}
+  }, [sidebarCollapsed]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('rp_sidebar_hidden', JSON.stringify(sidebarHidden));
+    } catch {}
+  }, [sidebarHidden]);
+
+  // Listener para redimensionar barra lateral com drag do mouse
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizingSidebar) return;
+      const newWidth = Math.min(Math.max(e.clientX, 160), 420);
+      setSidebarWidth(newWidth);
+    };
+
+    const handleMouseUp = () => {
+      setIsResizingSidebar(false);
+    };
+
+    if (isResizingSidebar) {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+    }
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizingSidebar]);
 
   // User Profile Dropdown state
   const [showUserDropdown, setShowUserDropdown] = useState(false);
@@ -1109,6 +1160,46 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
               )}
             </button>
 
+            {/* Botões de Controle Rápido da Barra Lateral (Ícones / Ocultar) */}
+            <div className="hidden md:flex items-center gap-1 p-0.5 border rounded-xl bg-slate-950/40 border-slate-800">
+              <button
+                onClick={() => {
+                  if (sidebarHidden) {
+                    setSidebarHidden(false);
+                    setSidebarCollapsed(true);
+                  } else {
+                    setSidebarCollapsed(!sidebarCollapsed);
+                  }
+                }}
+                className={`p-1.5 rounded-lg text-xs transition-all cursor-pointer flex items-center gap-1 ${
+                  sidebarCollapsed && !sidebarHidden
+                    ? 'bg-purple-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-850'
+                }`}
+                title={sidebarCollapsed ? "Expandir Menu Lateral (Mostrar Textos)" : "Menu Lateral Compacto (Apenas Ícones)"}
+              >
+                <Minimize2 className={`w-3.5 h-3.5 ${sidebarCollapsed ? 'text-white' : ''}`} />
+                <span className="text-[10px] hidden xl:inline font-mono">
+                  {sidebarCollapsed ? "Expandir" : "Ícones"}
+                </span>
+              </button>
+
+              <button
+                onClick={() => setSidebarHidden(!sidebarHidden)}
+                className={`p-1.5 rounded-lg text-xs transition-all cursor-pointer flex items-center gap-1 ${
+                  sidebarHidden
+                    ? 'bg-amber-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-850'
+                }`}
+                title={sidebarHidden ? "Mostrar Menu Lateral" : "Ocultar Menu Lateral Totalmente (Ganhar Espaço Máximo)"}
+              >
+                <Maximize2 className="w-3.5 h-3.5" />
+                <span className="text-[10px] hidden xl:inline font-mono">
+                  {sidebarHidden ? "Mostrar Barra" : "Ocultar"}
+                </span>
+              </button>
+            </div>
+
             {/* Density Selector */}
             {!navbarMinimized && (
               <div className={`hidden lg:flex items-center gap-1.5 px-2.5 py-1 border rounded-xl ${
@@ -1278,156 +1369,223 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
           </div>
         )}
 
-        {/* Left Navigation Sidebar with Drag-to-Resize Handle */}
-        <aside 
-          style={{ width: `${sidebarWidth}px` }}
-          className={`border-r flex flex-col justify-between shrink-0 p-4 hidden md:flex relative select-none transition-colors duration-200 ${
-            theme === 'light'
-              ? 'bg-white border-slate-200'
-              : 'bg-[#0b0d13] border-slate-800/80'
-          }`}
-        >
-          <div className="space-y-1">
-            <button
-              onClick={() => setActiveTab('general')}
-              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                activeTab === 'general'
-                  ? theme === 'light'
-                    ? 'bg-indigo-50 text-indigo-700 font-bold'
-                    : 'bg-slate-800 text-white font-bold'
-                  : theme === 'light'
-                    ? 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                    : 'text-slate-400 hover:bg-slate-900/60 hover:text-slate-200'
-              }`}
-            >
-              <Sparkles className="w-4 h-4 text-indigo-500 shrink-0" />
-              <span className="truncate">Visão Geral</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('projects')}
-              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                activeTab === 'projects'
-                  ? theme === 'light'
-                    ? 'bg-indigo-50 text-indigo-700 font-bold'
-                    : 'bg-slate-800 text-white font-bold'
-                  : theme === 'light'
-                    ? 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                    : 'text-slate-400 hover:bg-slate-900/60 hover:text-slate-200'
-              }`}
-            >
-              <Layout className="w-4 h-4 text-indigo-500 shrink-0" />
-              <span className="truncate">Projetos / Sites</span>
-            </button>
-            
-            {/* Prospecting Section Divider */}
-            <div className={`pt-4 pb-1 px-3 text-[10px] font-bold uppercase tracking-wider ${
-              theme === 'light' ? 'text-slate-400' : 'text-slate-500'
-            }`}>
-              Prospecção de Leads
-            </div>
-
-            <button
-              onClick={() => setActiveTab('leads')}
-              className={`w-full flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                activeTab === 'leads'
-                  ? theme === 'light'
-                    ? 'bg-indigo-50 text-indigo-700 font-bold'
-                    : 'bg-slate-800 text-white font-bold'
-                  : theme === 'light'
-                    ? 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                    : 'text-slate-400 hover:bg-slate-900/60 hover:text-slate-200'
-              }`}
-            >
-              <Users className="w-4 h-4 text-indigo-500 shrink-0" />
-              <span className="truncate">Buscador de Clientes</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('saved-leads')}
-              className={`w-full flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                activeTab === 'saved-leads'
-                  ? theme === 'light'
-                    ? 'bg-amber-50 text-amber-800 font-bold'
-                    : 'bg-slate-800 text-amber-300 font-bold'
-                  : theme === 'light'
-                    ? 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                    : 'text-slate-400 hover:bg-slate-900/60 hover:text-slate-200'
-              }`}
-            >
-              <Bookmark className="w-4 h-4 text-amber-500 shrink-0" />
-              <span className="truncate flex-1 text-left">Leads Salvos</span>
-              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
-                theme === 'light' ? 'bg-amber-100 text-amber-800' : 'bg-amber-950/60 text-amber-300 border border-amber-500/30'
-              }`}>
-                {savedLeads.length}
-              </span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('presets')}
-              className={`w-full flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                activeTab === 'presets'
-                  ? theme === 'light'
-                    ? 'bg-indigo-50 text-indigo-700 font-bold'
-                    : 'bg-slate-800 text-white font-bold'
-                  : theme === 'light'
-                    ? 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                    : 'text-slate-400 hover:bg-slate-900/60 hover:text-slate-200'
-              }`}
-            >
-              <SlidersHorizontal className="w-4 h-4 text-indigo-500 shrink-0" />
-              <span className="truncate flex-1 text-left">Filtros Pré-Prontos</span>
-              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
-                theme === 'light' ? 'bg-slate-200 text-slate-700' : 'bg-slate-800 text-slate-300 border border-slate-700'
-              }`}>
-                {filterPresets.length}
-              </span>
-            </button>
-
-            {/* Configurações do Sistema na Sidebar */}
-            <div className={`pt-4 pb-1 px-3 text-[10px] font-bold uppercase tracking-wider ${
-              theme === 'light' ? 'text-slate-400' : 'text-slate-500'
-            }`}>
-              Sistema & Conta
-            </div>
-
-            <button
-              onClick={() => setActiveTab('settings')}
-              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                activeTab === 'settings'
-                  ? theme === 'light'
-                    ? 'bg-purple-50 text-purple-700 font-bold'
-                    : 'bg-gradient-to-r from-purple-900/50 to-indigo-900/50 text-white font-bold border border-purple-500/40 shadow-sm'
-                  : theme === 'light'
-                    ? 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                    : 'text-slate-400 hover:bg-slate-900/60 hover:text-slate-200'
-              }`}
-            >
-              <Settings className="w-4 h-4 text-purple-400 shrink-0" />
-              <span className="truncate flex-1 text-left">Configurações</span>
-            </button>
-          </div>
-
-          <div className={`p-3 border rounded-xl ${
-            theme === 'light' ? 'bg-slate-50 border-slate-200' : 'bg-slate-900/40 border-slate-800/80'
-          }`}>
-            <span className={`block text-[10px] font-bold uppercase tracking-wider ${
-              theme === 'light' ? 'text-slate-400' : 'text-slate-500'
-            }`}>Ambiente de Deploy</span>
-            <span className={`block text-xs mt-0.5 font-mono truncate ${
-              theme === 'light' ? 'text-indigo-600 font-semibold' : 'text-indigo-400'
-            }`}>Real Premise Live FTP</span>
-          </div>
-
-          {/* Draggable Resize Divider */}
-          <div
-            onMouseDown={() => setIsResizingSidebar(true)}
-            className="absolute -right-1.5 top-0 bottom-0 w-3 cursor-col-resize z-20 group flex items-center justify-center hover:bg-purple-500/20 transition-all"
-            title="Arrastar para redimensionar barra lateral"
+        {/* Left Navigation Sidebar with Collapse (Icons Only), Hide & Drag-to-Resize Handle */}
+        {!sidebarHidden && (
+          <aside 
+            style={{ width: sidebarCollapsed ? '64px' : `${sidebarWidth}px` }}
+            className={`border-r flex flex-col justify-between shrink-0 ${
+              sidebarCollapsed ? 'p-2' : 'p-4'
+            } hidden md:flex relative select-none transition-[width,padding] duration-200 ${
+              theme === 'light'
+                ? 'bg-white border-slate-200'
+                : 'bg-[#0b0d13] border-slate-800/80'
+            }`}
           >
-            <div className="w-1 h-8 rounded-full bg-slate-700 group-hover:bg-purple-400 transition-colors" />
+            <div className="space-y-1">
+              {/* Toggle Collapse/Expand Header on Sidebar */}
+              <div className={`flex items-center ${sidebarCollapsed ? 'justify-center pb-3' : 'justify-between pb-2'} border-b border-slate-850/60 mb-2`}>
+                {!sidebarCollapsed && (
+                  <span className={`text-[10px] font-bold uppercase tracking-wider ${
+                    theme === 'light' ? 'text-slate-400' : 'text-slate-500'
+                  }`}>
+                    Navegação
+                  </span>
+                )}
+                <button
+                  onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+                  className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-850 rounded-lg transition-colors cursor-pointer"
+                  title={sidebarCollapsed ? "Expandir barra lateral (Mostrar texto)" : "Diminuir barra lateral (Apenas ícones)"}
+                >
+                  <Minimize2 className={`w-3.5 h-3.5 ${sidebarCollapsed ? 'rotate-90 text-purple-400' : ''}`} />
+                </button>
+              </div>
+
+              <button
+                onClick={() => setActiveTab('general')}
+                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2 py-2.5' : 'gap-3 px-3.5 py-2.5'} rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                  activeTab === 'general'
+                    ? theme === 'light'
+                      ? 'bg-indigo-50 text-indigo-700 font-bold'
+                      : 'bg-slate-800 text-white font-bold'
+                    : theme === 'light'
+                      ? 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                      : 'text-slate-400 hover:bg-slate-900/60 hover:text-slate-200'
+                }`}
+                title="Visão Geral"
+              >
+                <Sparkles className="w-4 h-4 text-indigo-500 shrink-0" />
+                {!sidebarCollapsed && <span className="truncate">Visão Geral</span>}
+              </button>
+
+              <button
+                onClick={() => setActiveTab('projects')}
+                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2 py-2.5' : 'gap-3 px-3.5 py-2.5'} rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                  activeTab === 'projects'
+                    ? theme === 'light'
+                      ? 'bg-indigo-50 text-indigo-700 font-bold'
+                      : 'bg-slate-800 text-white font-bold'
+                    : theme === 'light'
+                      ? 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                      : 'text-slate-400 hover:bg-slate-900/60 hover:text-slate-200'
+                }`}
+                title="Projetos / Sites"
+              >
+                <Layout className="w-4 h-4 text-indigo-500 shrink-0" />
+                {!sidebarCollapsed && <span className="truncate">Projetos / Sites</span>}
+              </button>
+              
+              {/* Prospecting Section Divider */}
+              {!sidebarCollapsed ? (
+                <div className={`pt-4 pb-1 px-3 text-[10px] font-bold uppercase tracking-wider ${
+                  theme === 'light' ? 'text-slate-400' : 'text-slate-500'
+                }`}>
+                  Prospecção de Leads
+                </div>
+              ) : (
+                <div className="border-t border-slate-850/60 my-2" />
+              )}
+
+              <button
+                onClick={() => setActiveTab('leads')}
+                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2 py-2.5' : 'gap-3 px-3.5 py-2'} rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                  activeTab === 'leads'
+                    ? theme === 'light'
+                      ? 'bg-indigo-50 text-indigo-700 font-bold'
+                      : 'bg-slate-800 text-white font-bold'
+                    : theme === 'light'
+                      ? 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                      : 'text-slate-400 hover:bg-slate-900/60 hover:text-slate-200'
+                }`}
+                title="Buscador de Clientes"
+              >
+                <Users className="w-4 h-4 text-indigo-500 shrink-0" />
+                {!sidebarCollapsed && <span className="truncate">Buscador de Clientes</span>}
+              </button>
+
+              <button
+                onClick={() => setActiveTab('saved-leads')}
+                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2 py-2.5 relative' : 'gap-3 px-3.5 py-2'} rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                  activeTab === 'saved-leads'
+                    ? theme === 'light'
+                      ? 'bg-amber-50 text-amber-800 font-bold'
+                      : 'bg-slate-800 text-amber-300 font-bold'
+                    : theme === 'light'
+                      ? 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                      : 'text-slate-400 hover:bg-slate-900/60 hover:text-slate-200'
+                }`}
+                title={`Leads Salvos (${savedLeads.length})`}
+              >
+                <Bookmark className="w-4 h-4 text-amber-500 shrink-0" />
+                {!sidebarCollapsed ? (
+                  <>
+                    <span className="truncate flex-1 text-left">Leads Salvos</span>
+                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                      theme === 'light' ? 'bg-amber-100 text-amber-800' : 'bg-amber-950/60 text-amber-300 border border-amber-500/30'
+                    }`}>
+                      {savedLeads.length}
+                    </span>
+                  </>
+                ) : savedLeads.length > 0 && (
+                  <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-amber-400" />
+                )}
+              </button>
+
+              <button
+                onClick={() => setActiveTab('presets')}
+                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2 py-2.5 relative' : 'gap-3 px-3.5 py-2'} rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                  activeTab === 'presets'
+                    ? theme === 'light'
+                      ? 'bg-indigo-50 text-indigo-700 font-bold'
+                      : 'bg-slate-800 text-white font-bold'
+                    : theme === 'light'
+                      ? 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                      : 'text-slate-400 hover:bg-slate-900/60 hover:text-slate-200'
+                }`}
+                title={`Filtros Pré-Prontos (${filterPresets.length})`}
+              >
+                <SlidersHorizontal className="w-4 h-4 text-indigo-500 shrink-0" />
+                {!sidebarCollapsed ? (
+                  <>
+                    <span className="truncate flex-1 text-left">Filtros Pré-Prontos</span>
+                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                      theme === 'light' ? 'bg-slate-200 text-slate-700' : 'bg-slate-800 text-slate-300 border border-slate-700'
+                    }`}>
+                      {filterPresets.length}
+                    </span>
+                  </>
+                ) : filterPresets.length > 0 && (
+                  <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-cyan-400" />
+                )}
+              </button>
+
+              {/* Configurações do Sistema na Sidebar */}
+              {!sidebarCollapsed ? (
+                <div className={`pt-4 pb-1 px-3 text-[10px] font-bold uppercase tracking-wider ${
+                  theme === 'light' ? 'text-slate-400' : 'text-slate-500'
+                }`}>
+                  Sistema & Conta
+                </div>
+              ) : (
+                <div className="border-t border-slate-850/60 my-2" />
+              )}
+
+              <button
+                onClick={() => setActiveTab('settings')}
+                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2 py-2.5' : 'gap-3 px-3.5 py-2.5'} rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                  activeTab === 'settings'
+                    ? theme === 'light'
+                      ? 'bg-purple-50 text-purple-700 font-bold'
+                      : 'bg-gradient-to-r from-purple-900/50 to-indigo-900/50 text-white font-bold border border-purple-500/40 shadow-sm'
+                    : theme === 'light'
+                      ? 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                      : 'text-slate-400 hover:bg-slate-900/60 hover:text-slate-200'
+                }`}
+                title="Configurações & Chaves"
+              >
+                <Settings className="w-4 h-4 text-purple-400 shrink-0" />
+                {!sidebarCollapsed && <span className="truncate flex-1 text-left">Configurações</span>}
+              </button>
+            </div>
+
+            {!sidebarCollapsed && (
+              <div className={`p-3 border rounded-xl ${
+                theme === 'light' ? 'bg-slate-50 border-slate-200' : 'bg-slate-900/40 border-slate-800/80'
+              }`}>
+                <span className={`block text-[10px] font-bold uppercase tracking-wider ${
+                  theme === 'light' ? 'text-slate-400' : 'text-slate-500'
+                }`}>Ambiente de Deploy</span>
+                <span className={`block text-xs mt-0.5 font-mono truncate ${
+                  theme === 'light' ? 'text-indigo-600 font-semibold' : 'text-indigo-400'
+                }`}>Real Premise Live FTP</span>
+              </div>
+            )}
+
+            {/* Draggable Resize Divider */}
+            {!sidebarCollapsed && (
+              <div
+                onMouseDown={() => setIsResizingSidebar(true)}
+                className="absolute -right-1.5 top-0 bottom-0 w-3 cursor-col-resize z-20 group flex items-center justify-center hover:bg-purple-500/20 transition-all"
+                title="Arrastar para redimensionar barra lateral"
+              >
+                <div className="w-1 h-8 rounded-full bg-slate-700 group-hover:bg-purple-400 transition-colors" />
+              </div>
+            )}
+          </aside>
+        )}
+
+        {/* Floating Trigger to Restore Sidebar when Hidden */}
+        {sidebarHidden && (
+          <div className="absolute left-3 top-3 z-30 animate-in fade-in slide-in-from-left duration-200">
+            <button
+              onClick={() => { setSidebarHidden(false); setSidebarCollapsed(false); }}
+              className="p-2.5 rounded-xl bg-slate-900/90 border border-purple-500/40 text-purple-300 hover:text-white hover:bg-purple-900/40 shadow-xl backdrop-blur-md transition-all cursor-pointer flex items-center gap-2"
+              title="Mostrar Barra Lateral de Navegação"
+            >
+              <Menu className="w-4 h-4" />
+              <span className="text-xs font-semibold hidden sm:inline">Mostrar Menu</span>
+            </button>
           </div>
-        </aside>
+        )}
 
         {/* Dynamic Content Panel */}
         <main className="flex-1 overflow-y-auto px-6 py-8">
