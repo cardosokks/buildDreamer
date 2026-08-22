@@ -6,7 +6,7 @@ import { VisualBuilder } from './components/VisualBuilder';
 
 export interface AppRoute {
   type: 'dashboard' | 'builder' | 'auth';
-  tab?: 'general' | 'projects' | 'leads' | 'saved-leads' | 'presets' | 'settings';
+  tab?: 'general' | 'projects' | 'crm' | 'leads' | 'saved-leads' | 'presets' | 'settings';
   projectId?: string;
 }
 
@@ -20,6 +20,7 @@ const parseUrlToRoute = (): AppRoute => {
   }
   
   if (path === '/projects') return { type: 'dashboard', tab: 'projects' };
+  if (path === '/crm') return { type: 'dashboard', tab: 'crm' };
   if (path === '/leads') return { type: 'dashboard', tab: 'leads' };
   if (path === '/saved-leads') return { type: 'dashboard', tab: 'saved-leads' };
   if (path === '/presets') return { type: 'dashboard', tab: 'presets' };
@@ -49,9 +50,11 @@ const MainApp: React.FC = () => {
       url = `/builder/${newRoute.projectId}`;
     } else if (newRoute.type === 'dashboard') {
       if (newRoute.tab === 'projects') url = '/projects';
+      else if (newRoute.tab === 'crm') url = '/crm';
       else if (newRoute.tab === 'leads') url = '/leads';
       else if (newRoute.tab === 'saved-leads') url = '/saved-leads';
       else if (newRoute.tab === 'presets') url = '/presets';
+      else if (newRoute.tab === 'settings') url = '/settings';
       else url = '/';
     } else if (newRoute.type === 'auth') {
       url = '/auth';

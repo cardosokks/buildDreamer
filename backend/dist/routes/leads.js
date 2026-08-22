@@ -2,16 +2,221 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.leadsRouter = void 0;
 const express_1 = require("express");
+const db_1 = require("../db");
 const router = (0, express_1.Router)();
-// Endpoint mock/integração para busca de estabelecimentos
+// Garante que a tabela Lead existe com todas as colunas necessárias para o CRM
+async function ensureLeadTable() {
+    try {
+        await db_1.prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "Lead" (
+        "id" TEXT PRIMARY KEY,
+        "name" TEXT NOT NULL,
+        "company" TEXT,
+        "phone" TEXT,
+        "email" TEXT,
+        "website" TEXT,
+        "address" TEXT,
+        "rating" TEXT,
+        "dealValue" DOUBLE PRECISION DEFAULT 0,
+        "status" TEXT DEFAULT 'PROSPECT',
+        "notes" TEXT,
+        "origin" TEXT DEFAULT 'MANUAL',
+        "tags" JSONB DEFAULT '[]'::jsonb,
+        "lastContactDate" TIMESTAMP,
+        "userId" TEXT NOT NULL,
+        "projectId" TEXT,
+        "createdAt" TIMESTAMP DEFAULT NOW(),
+        "updatedAt" TIMESTAMP DEFAULT NOW()
+      );
+    `);
+        // Adiciona colunas se faltarem
+        await db_1.prisma.$executeRawUnsafe(`ALTER TABLE "Lead" ADD COLUMN IF NOT EXISTS "dealValue" DOUBLE PRECISION DEFAULT 0;`).catch(() => { });
+        await db_1.prisma.$executeRawUnsafe(`ALTER TABLE "Lead" ADD COLUMN IF NOT EXISTS "status" TEXT DEFAULT 'PROSPECT';`).catch(() => { });
+        await db_1.prisma.$executeRawUnsafe(`ALTER TABLE "Lead" ADD COLUMN IF NOT EXISTS "notes" TEXT;`).catch(() => { });
+        await db_1.prisma.$executeRawUnsafe(`ALTER TABLE "Lead" ADD COLUMN IF NOT EXISTS "origin" TEXT DEFAULT 'MANUAL';`).catch(() => { });
+        await db_1.prisma.$executeRawUnsafe(`ALTER TABLE "Lead" ADD COLUMN IF NOT EXISTS "tags" JSONB DEFAULT '[]'::jsonb;`).catch(() => { });
+        await db_1.prisma.$executeRawUnsafe(`ALTER TABLE "Lead" ADD COLUMN IF NOT EXISTS "lastContactDate" TIMESTAMP;`).catch(() => { });
+        await db_1.prisma.$executeRawUnsafe(`ALTER TABLE "Lead" ADD COLUMN IF NOT EXISTS "projectId" TEXT;`).catch(() => { });
+    }
+    catch (e) {
+        console.warn('[CRM DB] Aviso ao verificar tabela Lead:', e);
+    }
+}
+// ─── ENDPOINTS DO CRM DE VENDAS DE SITES ───
+// 1. Listar todos os leads do CRM do usuário logado (com dados de projeto vinculado se houver)
+router.get('/crm', async (req, res) => {
+    try {
+        await ensureLeadTable();
+        const rows = await db_1.prisma.$queryRawUnsafe(`
+      SELECT 
+        l.*,
+        p."name" as "projectName",
+        p."status" as "projectStatus"
+      FROM "Lead" l
+      LEFT JOIN "Project" p ON l."projectId" = p."id"
+      WHERE l."userId" = $1
+      ORDER BY l."createdAt" DESC;
+    `, req.userId);
+        return res.json({ leads: rows });
+    }
+    catch (error) {
+        console.error('Erro ao buscar leads do CRM:', error);
+        return res.status(500).json({ error: error.message });
+    }
+});
+// 2. Criar ou Salvar Lead no CRM
+router.post('/crm', async (req, res) => {
+    try {
+        await ensureLeadTable();
+        const { name, company, phone, email, website, address, rating, dealValue, status, notes, origin, tags, projectId } = req.body;
+        if (!name) {
+            return res.status(400).json({ error: 'Nome do lead/empresa é obrigatório' });
+        }
+        const id = `lead-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
+        const parsedDealValue = typeof dealValue === 'number' ? dealValue : parseFloat(dealValue || '0') || 0;
+        const initialStatus = status || 'PROSPECT';
+        const tagsJson = JSON.stringify(Array.isArray(tags) ? tags : []);
+        await db_1.prisma.$executeRawUnsafe(`
+      INSERT INTO "Lead" (
+        "id", "name", "company", "phone", "email", "website", "address", "rating",
+        "dealValue", "status", "notes", "origin", "tags", "userId", "projectId", "createdAt", "updatedAt"
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, $14, $15, NOW(), NOW()
+      );
+    `, id, name, company || null, phone || null, email || null, website || null, address || null, rating || null, parsedDealValue, initialStatus, notes || null, origin || 'MANUAL', tagsJson, req.userId, projectId || null);
+        const created = await db_1.prisma.$queryRawUnsafe(`SELECT * FROM "Lead" WHERE "id" = $1 LIMIT 1`, id);
+        return res.status(201).json({ lead: created[0] });
+    }
+    catch (error) {
+        console.error('Erro ao criar lead no CRM:', error);
+        return res.status(500).json({ error: error.message });
+    }
+});
+// 3. Atualizar Lead (Status, Valor, Notas, Data de Contato, Projeto Vinculado)
+router.put('/crm/:id', async (req, res) => {
+    try {
+        await ensureLeadTable();
+        const { id } = req.params;
+        const { name, company, phone, email, website, address, rating, dealValue, status, notes, origin, tags, projectId, lastContactDate } = req.body;
+        const fields = ['"updatedAt" = NOW()'];
+        const values = [];
+        let idx = 1;
+        if (name !== undefined) {
+            fields.push(`"name" = $${idx++}`);
+            values.push(name);
+        }
+        if (company !== undefined) {
+            fields.push(`"company" = $${idx++}`);
+            values.push(company);
+        }
+        if (phone !== undefined) {
+            fields.push(`"phone" = $${idx++}`);
+            values.push(phone);
+        }
+        if (email !== undefined) {
+            fields.push(`"email" = $${idx++}`);
+            values.push(email);
+        }
+        if (website !== undefined) {
+            fields.push(`"website" = $${idx++}`);
+            values.push(website);
+        }
+        if (address !== undefined) {
+            fields.push(`"address" = $${idx++}`);
+            values.push(address);
+        }
+        if (rating !== undefined) {
+            fields.push(`"rating" = $${idx++}`);
+            values.push(rating);
+        }
+        if (dealValue !== undefined) {
+            fields.push(`"dealValue" = $${idx++}`);
+            values.push(typeof dealValue === 'number' ? dealValue : parseFloat(dealValue || '0') || 0);
+        }
+        if (status !== undefined) {
+            fields.push(`"status" = $${idx++}`);
+            values.push(status);
+        }
+        if (notes !== undefined) {
+            fields.push(`"notes" = $${idx++}`);
+            values.push(notes);
+        }
+        if (origin !== undefined) {
+            fields.push(`"origin" = $${idx++}`);
+            values.push(origin);
+        }
+        if (tags !== undefined) {
+            fields.push(`"tags" = $${idx++}::jsonb`);
+            values.push(JSON.stringify(tags));
+        }
+        if (projectId !== undefined) {
+            fields.push(`"projectId" = $${idx++}`);
+            values.push(projectId);
+        }
+        if (lastContactDate !== undefined) {
+            fields.push(`"lastContactDate" = $${idx++}`);
+            values.push(lastContactDate ? new Date(lastContactDate) : null);
+        }
+        values.push(id);
+        values.push(req.userId);
+        await db_1.prisma.$executeRawUnsafe(`
+      UPDATE "Lead" SET ${fields.join(', ')} 
+      WHERE "id" = $${idx++} AND "userId" = $${idx++};
+    `, ...values);
+        const updated = await db_1.prisma.$queryRawUnsafe(`
+      SELECT 
+        l.*,
+        p."name" as "projectName",
+        p."status" as "projectStatus"
+      FROM "Lead" l
+      LEFT JOIN "Project" p ON l."projectId" = p."id"
+      WHERE l."id" = $1 AND l."userId" = $2 LIMIT 1
+    `, id, req.userId);
+        return res.json({ lead: updated[0] });
+    }
+    catch (error) {
+        console.error('Erro ao atualizar lead do CRM:', error);
+        return res.status(500).json({ error: error.message });
+    }
+});
+// 4. Excluir Lead do CRM
+router.delete('/crm/:id', async (req, res) => {
+    try {
+        await ensureLeadTable();
+        const { id } = req.params;
+        await db_1.prisma.$executeRawUnsafe(`DELETE FROM "Lead" WHERE "id" = $1 AND "userId" = $2;`, id, req.userId);
+        return res.json({ message: 'Lead excluído com sucesso do CRM.' });
+    }
+    catch (error) {
+        console.error('Erro ao excluir lead do CRM:', error);
+        return res.status(500).json({ error: error.message });
+    }
+});
+// 5. Vincular Projeto / Site criado ao Lead do CRM
+router.post('/crm/:id/link-project', async (req, res) => {
+    try {
+        await ensureLeadTable();
+        const { id } = req.params;
+        const { projectId } = req.body;
+        await db_1.prisma.$executeRawUnsafe(`
+      UPDATE "Lead" 
+      SET "projectId" = $1, "status" = CASE WHEN "status" = 'PROSPECT' THEN 'PROPOSAL_SENT' ELSE "status" END, "updatedAt" = NOW()
+      WHERE "id" = $2 AND "userId" = $3;
+    `, projectId, id, req.userId);
+        return res.json({ message: 'Projeto vinculado ao lead com sucesso!' });
+    }
+    catch (error) {
+        console.error('Erro ao vincular projeto ao lead:', error);
+        return res.status(500).json({ error: error.message });
+    }
+});
+// ─── ENDPOINTS DE BUSCADOR DE CLIENTES (SCRAPING / PLACES) ───
 router.post('/search-leads', async (req, res) => {
     try {
         const { query, location } = req.body;
         if (!query) {
             return res.status(400).json({ error: 'Termo de busca é obrigatório' });
         }
-        // Se o usuário configurar uma chave da Foursquare ou Google nas variáveis de ambiente, podemos fazer a chamada real.
-        // Foursquare API fornece dados comerciais excelentes e com cotas de testes robustas para o desenvolvedor.
         const fsqApiKey = process.env.FOURSQUARE_API_KEY;
         const cleanLocation = location || 'sua região';
         // 1. Tentar Foursquare API se a chave estiver configurada
@@ -137,7 +342,6 @@ router.post('/search-leads', async (req, res) => {
         catch (opErr) {
             console.error('Erro ao consultar Overpass API:', opErr);
         }
-        // Se a API não encontrar estabelecimentos para os termos buscados, retorna lista vazia real
         return res.json({ leads: [] });
     }
     catch (error) {

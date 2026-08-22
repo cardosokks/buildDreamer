@@ -50,6 +50,7 @@ import {
 
 import { useTheme } from '../context/ThemeContext';
 import { SettingsPage } from './SettingsPage';
+import { CRMManager } from './CRMManager';
 import { API_URL } from '../config';
 
 interface Project {
@@ -98,8 +99,8 @@ interface FilterPreset {
 }
 
 interface DashboardProps {
-  initialTab?: 'general' | 'projects' | 'leads' | 'saved-leads' | 'presets' | 'settings';
-  onTabChange?: (tab: 'general' | 'projects' | 'leads' | 'saved-leads' | 'presets' | 'settings') => void;
+  initialTab?: 'general' | 'projects' | 'crm' | 'leads' | 'saved-leads' | 'presets' | 'settings';
+  onTabChange?: (tab: 'general' | 'projects' | 'crm' | 'leads' | 'saved-leads' | 'presets' | 'settings') => void;
   onSelectProject: (projectId: string) => void;
 }
 
@@ -110,17 +111,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
-  const [activeTab, setActiveTabState] = useState<'general' | 'projects' | 'leads' | 'saved-leads' | 'presets' | 'settings'>(() => {
+  const [activeTab, setActiveTabState] = useState<'general' | 'projects' | 'crm' | 'leads' | 'saved-leads' | 'presets' | 'settings'>(() => {
     try {
       const stored = localStorage.getItem('rp_dashboard_active_tab');
-      if (stored === 'general' || stored === 'projects' || stored === 'leads' || stored === 'saved-leads' || stored === 'presets' || stored === 'settings') {
+      if (stored === 'general' || stored === 'projects' || stored === 'crm' || stored === 'leads' || stored === 'saved-leads' || stored === 'presets' || stored === 'settings') {
         return stored;
       }
     } catch {}
     return initialTab === 'tunnels' as any ? 'general' : initialTab;
   });
 
-  const setActiveTab = (tab: 'general' | 'projects' | 'leads' | 'saved-leads' | 'presets' | 'settings') => {
+  const setActiveTab = (tab: 'general' | 'projects' | 'crm' | 'leads' | 'saved-leads' | 'presets' | 'settings') => {
     setActiveTabState(tab);
     if (onTabChange) onTabChange(tab);
     try {
@@ -1405,9 +1406,44 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                 {!sidebarCollapsed && <span className="truncate">Projetos / Sites</span>}
               </button>
               
-              {/* Prospecting Section Divider */}
+              {/* CRM & Vendas Section Divider */}
               {!sidebarCollapsed ? (
                 <div className={`pt-4 pb-1 px-3 text-[10px] font-bold uppercase tracking-wider ${
+                  theme === 'light' ? 'text-slate-400' : 'text-slate-500'
+                }`}>
+                  CRM & Vendas
+                </div>
+              ) : (
+                <div className="border-t border-slate-850/60 my-2" />
+              )}
+
+              <button
+                onClick={() => setActiveTab('crm')}
+                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2 py-2.5' : 'gap-3 px-3.5 py-2.5'} rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                  activeTab === 'crm'
+                    ? theme === 'light'
+                      ? 'bg-emerald-50 text-emerald-700 font-bold shadow-sm'
+                      : 'bg-emerald-950/40 text-emerald-300 border border-emerald-500/30 font-bold shadow-sm'
+                    : theme === 'light'
+                      ? 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                      : 'text-slate-400 hover:bg-slate-900/60 hover:text-slate-200'
+                }`}
+                title="CRM de Vendas de Sites"
+              >
+                <TrendingUp className="w-4 h-4 text-emerald-400 shrink-0" />
+                {!sidebarCollapsed && (
+                  <>
+                    <span className="truncate flex-1 text-left">CRM de Vendas</span>
+                    <span className="text-[9px] px-1.5 py-0.2 rounded-full font-mono bg-emerald-950 border border-emerald-500/30 text-emerald-400 font-bold">
+                      Funil
+                    </span>
+                  </>
+                )}
+              </button>
+
+              {/* Prospecting Section Divider */}
+              {!sidebarCollapsed ? (
+                <div className={`pt-3 pb-1 px-3 text-[10px] font-bold uppercase tracking-wider ${
                   theme === 'light' ? 'text-slate-400' : 'text-slate-500'
                 }`}>
                   Prospecção de Leads
@@ -1628,21 +1664,21 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                   </span>
                 </div>
 
-                {/* Total de Projetos */}
+                {/* CRM de Vendas de Sites */}
                 <div 
-                  onClick={() => setActiveTab('projects')}
-                  className="bg-[#0f0b18] border border-slate-850 hover:border-purple-500/40 rounded-2xl p-5 shadow-xl relative overflow-hidden group cursor-pointer transition-all"
+                  onClick={() => setActiveTab('crm')}
+                  className="bg-[#0f0b18] border border-slate-850 hover:border-emerald-500/40 rounded-2xl p-5 shadow-xl relative overflow-hidden group cursor-pointer transition-all"
                 >
-                  <div className="absolute top-0 right-0 w-20 h-20 bg-purple-500/10 rounded-full blur-xl group-hover:bg-purple-500/20 transition-all" />
+                  <div className="absolute top-0 right-0 w-20 h-20 bg-emerald-500/10 rounded-full blur-xl group-hover:bg-emerald-500/20 transition-all" />
                   <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">Total de Sites</span>
-                    <div className="p-2 rounded-xl bg-purple-500/10 text-purple-400 border border-purple-500/20">
-                      <Layout className="w-4 h-4" />
+                    <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">CRM de Vendas</span>
+                    <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                      <TrendingUp className="w-4 h-4" />
                     </div>
                   </div>
-                  <p className="text-3xl font-black text-white mt-2">{projects.length}</p>
-                  <span className="text-[11px] text-purple-400 font-medium flex items-center gap-1 mt-2">
-                    Gerenciar projetos <ChevronRight className="w-3 h-3" />
+                  <p className="text-3xl font-black text-emerald-400 mt-2">Pipeline</p>
+                  <span className="text-[11px] text-emerald-400 font-medium flex items-center gap-1 mt-2">
+                    Acessar Funil de Vendas <ChevronRight className="w-3 h-3" />
                   </span>
                 </div>
 
@@ -2332,6 +2368,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                 </div>
               )}
             </div>
+          ) : activeTab === 'crm' ? (
+            /* CRM DE VENDAS DE SITES */
+            <CRMManager
+              onOpenRemasterModal={(lead) => handleStartRemasterFlow(lead as any)}
+              onOpenProject={(projId) => onSelectProject(projId)}
+              projects={projects}
+            />
           ) : activeTab === 'presets' ? (
             /* FILTROS PRÉ-PRONTOS (CRUD DE PRESETS) */
             <div className="max-w-5xl mx-auto space-y-6">
