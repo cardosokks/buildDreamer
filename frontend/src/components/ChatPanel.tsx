@@ -1,11 +1,19 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Sparkles, Send, Bot, User, Check, Play, Undo2, Globe, Loader2, RotateCcw, AlertCircle } from 'lucide-react';
+import { Sparkles, Send, Bot, User, Check, Play, Undo2, Globe, Loader2, RotateCcw, AlertCircle, Layers, ChevronDown, CheckSquare, Square } from 'lucide-react';
 import { API_URL } from '../config';
+
+interface PageInfo {
+  id: string;
+  name: string;
+  slug: string;
+  isHomepage?: boolean;
+}
 
 interface ChatPanelProps {
   pageId: string;
   projectId?: string;
+  pages?: PageInfo[];
   onApplyChanges: (html: string, css: string, js: string, targetPageId?: string) => void;
   onUndo?: () => void;
   canUndo?: boolean;
@@ -28,6 +36,7 @@ interface Message {
 export const ChatPanel: React.FC<ChatPanelProps> = ({ 
   pageId, 
   projectId,
+  pages = [],
   onApplyChanges, 
   onUndo, 
   canUndo, 
@@ -40,17 +49,28 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     return stored ? JSON.parse(stored) : [
       {
         role: 'assistant',
-        text: 'Olá! Sou o seu AI Copilot e Arquiteto Frontend. Peça qualquer alteração ("adicione botão WhatsApp", "mude a cor da navbar em todas as páginas", "crie tabela de preços") e aplicarei imediatamente!'
+        text: 'Olá! Sou o seu AI Copilot e Arquiteto Frontend. Peça qualquer alteração ("adicione botão WhatsApp", "padronize a navbar para todas as páginas", "crie tabela de preços") e aplicarei imediatamente!'
       }
     ];
   });
   
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [applyToAllPages, setApplyToAllPages] = useState(false);
+  
+  // Seleção de páginas alvo
+  const [targetPageIds, setTargetPageIds] = useState<string[]>([pageId]);
+  const [showPagesDropdown, setShowPagesDropdown] = useState(false);
+  
   const [activeJobModel, setActiveJobModel] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const activePollRef = useRef<any>(null);
+
+  // Sincroniza página atual com a seleção de páginas
+  useEffect(() => {
+    if (pageId && !targetPageIds.includes(pageId)) {
+      setTargetPageIds([pageId]);
+    }
+  }, [pageId]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -248,7 +268,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
 
     const localGeminiKey = localStorage.getItem('gemini_api_key') || '';
     const currentRequestPageId = pageId;
-    const shouldApplyToAll = applyToAllPages;
+    const isMultiTarget = targetPageIds.length > 1 || (pages.length > 0 && targetPageIds.length === pages.length);
 
     try {
       let registeredModelIds: string[] = [];
@@ -271,7 +291,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
           prompt: userMessage.trim(), 
           pageId: currentRequestPageId, 
           model: selectedModel,
-          applyToAll: shouldApplyToAll
+          applyToAll: isMultiTarget,
+          targetPageIds: targetPageIds
         })
       });
 
@@ -312,6 +333,26 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     const targetPrompt = promptToRetry || lastUserPrompt;
     if (!targetPrompt || loading) return;
     executeSendPrompt(targetPrompt);
+  };
+
+  const togglePageSelection = (id: string) => {
+    if (targetPageIds.includes(id)) {
+      if (targetPageIds.length > 1) {
+        setTargetPageIds(targetPageIds.filter(pid => pid !== id));
+      }
+    } else {
+      setTargetPageIds([...targetPageIds, id]);
+    }
+  };
+
+  const selectAllPages = () => {
+    if (pages.length > 0) {
+      setTargetPageIds(pages.map(p => p.id));
+    }
+  };
+
+  const selectOnlyCurrentPage = () => {
+    setTargetPageIds([pageId]);
   };
 
   return (
@@ -358,6 +399,87 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
         </div>
       </div>
 
+      {/* Seletor de Escopo de Páginas (Dropdown Multi-Select) */}
+      {pages && pages.length > 0 && (
+        <div className="px-3 py-2 border-b border-slate-900 bg-slate-900/40 relative">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5 text-xs text-slate-300 font-semibold">
+              <Layers className="w-3.5 h-3.5 text-purple-400" />
+              <span>Escopo de Aplicação:</span>
+            </div>
+            
+            <button
+              type="button"
+              onClick={() => setShowPagesDropdown(!showPagesDropdown)}
+              className="flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-950 border border-purple-500/30 text-purple-300 hover:text-white hover:border-purple-400 text-[11px] font-mono transition-all cursor-pointer"
+            >
+              <span>
+                {targetPageIds.length === 1 && targetPageIds[0] === pageId
+                  ? 'Apenas Esta Página'
+                  : targetPageIds.length === pages.length
+                  ? 'Todas as Páginas'
+                  : `${targetPageIds.length} Páginas Selecionadas`}
+              </span>
+              <ChevronDown className={`w-3 h-3 transition-transform ${showPagesDropdown ? 'rotate-180' : ''}`} />
+            </button>
+          </div>
+
+          {/* Dropdown Popup para Selecionar Páginas */}
+          {showPagesDropdown && (
+            <div className="absolute left-3 right-3 top-full mt-1.5 bg-slate-950 border border-slate-800 rounded-xl shadow-2xl p-2 z-50 space-y-1.5 animate-in fade-in zoom-in-95 duration-100">
+              <div className="flex items-center justify-between pb-1.5 border-b border-slate-850 px-1 text-[10px]">
+                <button
+                  type="button"
+                  onClick={selectAllPages}
+                  className="text-purple-400 hover:text-purple-300 font-bold cursor-pointer"
+                >
+                  Marcar Todas
+                </button>
+                <button
+                  type="button"
+                  onClick={selectOnlyCurrentPage}
+                  className="text-slate-400 hover:text-white cursor-pointer"
+                >
+                  Apenas Atual
+                </button>
+              </div>
+
+              <div className="max-h-48 overflow-y-auto space-y-1 py-1">
+                {pages.map((p) => {
+                  const isChecked = targetPageIds.includes(p.id);
+                  const isCurrent = p.id === pageId;
+                  return (
+                    <label
+                      key={p.id}
+                      onClick={() => togglePageSelection(p.id)}
+                      className={`flex items-center justify-between p-1.5 rounded-lg text-xs cursor-pointer transition-colors ${
+                        isChecked 
+                          ? 'bg-purple-950/40 text-purple-200 border border-purple-500/30' 
+                          : 'hover:bg-slate-900 text-slate-400 border border-transparent'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 truncate">
+                        {isChecked ? (
+                          <CheckSquare className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                        ) : (
+                          <Square className="w-3.5 h-3.5 text-slate-600 shrink-0" />
+                        )}
+                        <span className="truncate font-medium">{p.name}</span>
+                      </div>
+                      {isCurrent && (
+                        <span className="text-[9px] px-1.5 py-0.2 rounded bg-purple-900/60 text-purple-300 font-mono shrink-0">
+                          atual
+                        </span>
+                      )}
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Messages Feed */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {messages.map((msg, idx) => (
@@ -374,7 +496,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                   </span>
                   {msg.scope === 'all' && (
                     <span className="text-[9px] px-1.5 py-0.2 rounded bg-indigo-950 text-indigo-300 border border-indigo-500/30 font-bold">
-                      Todas as Páginas
+                      Multi-Páginas
                     </span>
                   )}
                 </>
@@ -464,18 +586,28 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input Form com Toggle "Aplicar em Todas as Páginas" */}
+      {/* Input Form com Indicação do Escopo Selecionado */}
       <form onSubmit={handleSend} className="p-3 border-t border-slate-900/80 bg-slate-950/80 space-y-2">
-        <label className="flex items-center gap-2 text-[11px] text-slate-400 hover:text-white cursor-pointer select-none">
-          <input
-            type="checkbox"
-            checked={applyToAllPages}
-            onChange={(e) => setApplyToAllPages(e.target.checked)}
-            className="rounded bg-slate-900 border-slate-700 text-purple-600 focus:ring-0 cursor-pointer"
-          />
-          <Globe className="w-3.5 h-3.5 text-indigo-400" />
-          <span>Aplicar alteração em <strong>todas as páginas</strong></span>
-        </label>
+        <div className="flex items-center justify-between text-[11px] text-slate-400 px-0.5">
+          <div className="flex items-center gap-1.5">
+            <Globe className="w-3.5 h-3.5 text-indigo-400" />
+            <span>
+              Aplicando em:{' '}
+              <strong className="text-purple-300">
+                {targetPageIds.length === 1 && targetPageIds[0] === pageId
+                  ? 'Página atual'
+                  : targetPageIds.length === pages.length
+                  ? 'Todas as páginas'
+                  : `${targetPageIds.length} páginas`}
+              </strong>
+            </span>
+          </div>
+          {targetPageIds.length > 1 && (
+            <span className="text-[10px] px-1.5 py-0.2 rounded bg-purple-950 border border-purple-500/30 text-purple-300 font-mono">
+              Navbar/Footer sincronizados
+            </span>
+          )}
+        </div>
 
         <div className="relative">
           <textarea
