@@ -134,6 +134,63 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
     }
   }, [initialTab]);
 
+  // Global System Ngrok State
+  const [ngrokOnline, setNgrokOnline] = useState(false);
+  const [ngrokUrl, setNgrokUrl] = useState<string | null>(null);
+  const [ngrokLoading, setNgrokLoading] = useState(false);
+
+  const checkNgrokStatus = async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/ngrok/status`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setNgrokOnline(!!data.active);
+        setNgrokUrl(data.url || null);
+      }
+    } catch {}
+  };
+
+  const handleToggleNgrok = async () => {
+    setNgrokLoading(true);
+    try {
+      if (ngrokOnline) {
+        await fetch(`${API_URL}/api/ngrok/stop`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        setNgrokOnline(false);
+        setNgrokUrl(null);
+      } else {
+        const customToken = localStorage.getItem('ngrok_authtoken') || '';
+        const res = await fetch(`${API_URL}/api/ngrok/start`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+            'x-ngrok-token': customToken
+          }
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Erro ao iniciar Ngrok');
+        setNgrokOnline(true);
+        setNgrokUrl(data.url);
+      }
+    } catch (err: any) {
+      alert(`Falha no Ngrok: ${err.message}`);
+    } finally {
+      setNgrokLoading(false);
+      checkNgrokStatus();
+    }
+  };
+
+  useEffect(() => {
+    checkNgrokStatus();
+    const interval = setInterval(checkNgrokStatus, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
   // Accessibility & UX Customization States (Persistência no LocalStorage)
   const [navbarMinimized, setNavbarMinimized] = useState<boolean>(() => {
     try {
@@ -702,6 +759,49 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
 
           {/* Accessibility & Theme Controls */}
           <div className="flex items-center gap-2.5">
+            {/* Botão de Conexão Ngrok do Sistema */}
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={handleToggleNgrok}
+                disabled={ngrokLoading}
+                className={`px-3 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm ${
+                  ngrokOnline
+                    ? 'bg-emerald-950/60 border-emerald-500/50 text-emerald-300 hover:bg-emerald-900/60'
+                    : theme === 'light'
+                    ? 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-700'
+                    : 'bg-slate-900/80 hover:bg-slate-800 border-slate-800 text-slate-300'
+                }`}
+                title={ngrokOnline ? `Sistema no Ngrok (${ngrokUrl}) - Clique para desligar` : 'Subir URL do sistema no Ngrok para acesso externo e previews'}
+              >
+                {ngrokLoading ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-400" />
+                ) : ngrokOnline ? (
+                  <>
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                    <Globe className="w-3.5 h-3.5 text-emerald-400" />
+                    <span className="hidden sm:inline">Ngrok Online</span>
+                  </>
+                ) : (
+                  <>
+                    <Globe className="w-3.5 h-3.5 text-slate-400" />
+                    <span className="hidden sm:inline">Ligar Ngrok</span>
+                  </>
+                )}
+              </button>
+
+              {ngrokOnline && ngrokUrl && (
+                <a
+                  href={ngrokUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="p-1.5 rounded-xl bg-slate-900 border border-slate-800 text-cyan-400 hover:text-cyan-300 hover:bg-slate-850 transition-all cursor-pointer"
+                  title="Abrir Dashboard no Link Público do Ngrok"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+              )}
+            </div>
+
             {/* Botão de Alternar Modo Escuro / Modo Claro */}
             <button
               onClick={toggleTheme}

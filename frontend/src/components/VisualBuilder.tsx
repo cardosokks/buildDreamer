@@ -761,11 +761,46 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
     URL.revokeObjectURL(url);
   };
 
+  const [ngrokActive, setNgrokActive] = useState(false);
+  const [ngrokUrl, setNgrokUrl] = useState<string | null>(null);
+
+  // Consulta se o sistema está online no Ngrok
+  const checkSystemNgrokStatus = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/ngrok/status`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.active && data.url) {
+          setNgrokActive(true);
+          setNgrokUrl(data.url);
+        } else {
+          setNgrokActive(false);
+          setNgrokUrl(null);
+        }
+      }
+    } catch {}
+  }, [token]);
+
+  useEffect(() => {
+    checkSystemNgrokStatus();
+    const interval = setInterval(checkSystemNgrokStatus, 4000);
+    return () => clearInterval(interval);
+  }, [checkSystemNgrokStatus]);
+
   const handleOpenLivePreview = () => {
     const content = getFullHtmlDocument();
     const blob = new Blob([content], { type: 'text/html;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     window.open(url, '_blank');
+  };
+
+  const handleOpenNgrokPreview = () => {
+    if (!ngrokUrl) return;
+    // Abre a rota do editor/site ou a URL pública diretamente no Ngrok
+    const pageRoute = activePage ? `/builder/${projectId}` : '';
+    window.open(`${ngrokUrl}${pageRoute}`, '_blank');
   };
 
   return (
@@ -913,15 +948,29 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
             <Code2 className="w-4 h-4" />
           </button>
 
-          {/* Botão de Preview em Nova Aba */}
+          {/* Botão de Preview em Nova Aba Local */}
           <button
             onClick={handleOpenLivePreview}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-cyan-500/40 text-cyan-300 rounded-xl text-xs font-semibold transition-all cursor-pointer shadow-sm"
-            title="Abrir Preview do Site em Nova Janela"
+            title="Abrir Preview Local em Nova Aba"
           >
             <Eye className="w-3.5 h-3.5 text-cyan-400" />
             <span className="hidden sm:inline">Preview</span>
           </button>
+
+          {/* Botão de Preview Ngrok (Aparece quando o Ngrok estiver ativo) */}
+          {ngrokActive && ngrokUrl && (
+            <button
+              onClick={handleOpenNgrokPreview}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-950/70 hover:bg-emerald-900/80 border border-emerald-500/50 text-emerald-300 rounded-xl text-xs font-semibold transition-all cursor-pointer shadow-sm animate-in fade-in zoom-in-95 duration-200"
+              title={`Abrir no Ngrok: ${ngrokUrl}`}
+            >
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+              <Globe className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="hidden sm:inline">Link Ngrok</span>
+              <ExternalLink className="w-3 h-3 text-emerald-400/80" />
+            </button>
+          )}
 
           {/* Hidden ZIP File Input */}
           <input 

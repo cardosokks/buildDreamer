@@ -18,10 +18,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
   const [name, setName] = useState(user?.name || '');
   const [email, setEmail] = useState(user?.email || '');
 
-  // AI & Proxy credentials
+  // AI, Proxy & Ngrok credentials
   const [geminiKey, setGeminiKey] = useState(localStorage.getItem('gemini_api_key') || '');
   const [openaiKey, setOpenaiKey] = useState(localStorage.getItem('openai_api_key') || '');
   const [proxyUrl, setProxyUrl] = useState(localStorage.getItem('ai_proxy_url') || '');
+  const [ngrokToken, setNgrokToken] = useState(localStorage.getItem('ngrok_authtoken') || '');
 
   // Models CRUD fields
   const getStoredModels = () => {
@@ -64,7 +65,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
     localStorage.setItem('gemini_api_key', geminiKey);
     localStorage.setItem('openai_api_key', openaiKey);
     localStorage.setItem('ai_proxy_url', proxyUrl);
-    setSuccessMsg('Configurações de IA e Proxy salvas com sucesso!');
+    localStorage.setItem('ngrok_authtoken', ngrokToken);
+    setSuccessMsg('Configurações de IA, Proxy e Ngrok salvas com sucesso!');
     setLoading(false);
   };
 
@@ -262,6 +264,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
               </div>
 
               <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-455 mb-2 flex items-center justify-between">
+                  <span>Ngrok Authtoken</span>
+                  <span className="text-[10px] text-cyan-400 font-mono font-normal">Acesso Global ao Dashboard</span>
+                </label>
+                <input 
+                  type="password"
+                  placeholder="2xxxx_xxxxxxxxxxxxxxxxxxxx"
+                  value={ngrokToken}
+                  onChange={(e) => setNgrokToken(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl focus:outline-none focus:ring-1 focus:ring-cyan-500 text-xs text-white font-mono"
+                />
+                <p className="text-[10px] text-slate-500 mt-1">
+                  Seu token pessoal do ngrok.com para disponibilizar o painel e os previews do site na internet de qualquer lugar.
+                </p>
+              </div>
+
+              <div>
                 <label className="block text-xs font-semibold uppercase tracking-wider text-slate-455 mb-2">OpenAI API Key (Opcional)</label>
                 <input 
                   type="password"
@@ -270,6 +289,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                   onChange={(e) => setOpenaiKey(e.target.value)}
                   className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl focus:outline-none focus:ring-1 focus:ring-purple-500 text-xs text-white"
                 />
+              </div>
+
+              {/* Informações de Ambiente e Deploy FTP */}
+              <div className="pt-2 border-t border-slate-850 space-y-2">
+                <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-400">Ambiente de Deploy & Armazenamento</label>
+                <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl flex items-center justify-between">
+                  <div>
+                    <span className="text-xs font-bold text-white block">Servidor FTP Integrado</span>
+                    <span className="text-[10px] text-slate-500">Sincronização automática de arquivos e deploys</span>
+                  </div>
+                  <span className="text-[10px] font-mono bg-emerald-950/60 border border-emerald-500/30 text-emerald-400 px-2 py-0.5 rounded-full">
+                    Ativo
+                  </span>
+                </div>
               </div>
 
               <div className="pt-4">
