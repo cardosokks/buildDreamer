@@ -43,7 +43,7 @@ const router = (0, express_1.Router)();
 // In-memory queue system for AI chat modifications
 exports.aiChatJobsQueue = {};
 // Background worker for chat edits (suporta single-page, páginas selecionadas ou todas as páginas)
-async function processAIChatJob(jobId, prompt, pageId, applyToAll, clientGeminiKey, model, registeredModels, clientProxyUrl, customSkills, targetPageIds) {
+async function processAIChatJob(jobId, prompt, pageId, applyToAll, clientGeminiKey, model, registeredModels, clientProxyUrl, customSkills, targetPageIds, attachedFiles) {
     try {
         const page = await db_1.prisma.page.findUnique({
             where: { id: pageId },
@@ -121,7 +121,7 @@ async function processAIChatJob(jobId, prompt, pageId, applyToAll, clientGeminiK
                     html: p.html,
                     css: p.css,
                     js: p.js
-                }, clientGeminiKey, model, registeredModels, undefined, clientProxyUrl, customSkills);
+                }, clientGeminiKey, model, registeredModels, undefined, clientProxyUrl, customSkills, attachedFiles);
                 await db_1.prisma.page.update({
                     where: { id: p.id },
                     data: {
@@ -174,7 +174,7 @@ async function processAIChatJob(jobId, prompt, pageId, applyToAll, clientGeminiK
                     pageId,
                     projectId: page.projectId
                 };
-            }, clientProxyUrl, customSkills);
+            }, clientProxyUrl, customSkills, attachedFiles);
             // Persiste automaticamente a alteração no banco
             await db_1.prisma.page.update({
                 where: { id: page.id },
@@ -206,7 +206,7 @@ async function processAIChatJob(jobId, prompt, pageId, applyToAll, clientGeminiK
 // Endpoint para disparar alteração via Chat AI em background
 router.post('/chat', async (req, res) => {
     try {
-        const { prompt, pageId, model, applyToAll, targetPageIds } = req.body;
+        const { prompt, pageId, model, applyToAll, targetPageIds, attachedFiles } = req.body;
         if (!prompt || !pageId) {
             return res.status(400).json({ error: 'Prompt e pageId são obrigatórios' });
         }
@@ -251,7 +251,7 @@ router.post('/chat', async (req, res) => {
             projectId: page.projectId
         };
         // Disparar processamento assíncrono em background
-        processAIChatJob(jobId, prompt, pageId, hasGlobalIntent, clientGeminiKey, model, registeredModels, clientProxyUrl, customSkills, targetPageIds);
+        processAIChatJob(jobId, prompt, pageId, hasGlobalIntent, clientGeminiKey, model, registeredModels, clientProxyUrl, customSkills, targetPageIds, attachedFiles);
         return res.status(202).json({ jobId, status: 'pending', scope: hasGlobalIntent ? 'all' : 'single' });
     }
     catch (error) {

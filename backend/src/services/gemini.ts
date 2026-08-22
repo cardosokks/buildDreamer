@@ -132,6 +132,13 @@ function resilientJsonParse(rawString: string): any {
   throw new Error('Falha ao processar resposta JSON da IA.');
 }
 
+export interface AttachedFile {
+  name: string;
+  type: string;
+  data: string; // Base64 ou texto plano
+  isImage?: boolean;
+}
+
 export const generateAIResponse = async (
   prompt: string, 
   context: { html: string; css: string; js: string },
@@ -140,7 +147,8 @@ export const generateAIResponse = async (
   registeredModels?: string[],
   onModelAttempt?: (model: string, index: number, total: number) => void,
   customProxyUrl?: string,
-  customSkills?: Array<{ id: string; name: string; promptSnippet: string; enabled: boolean }>
+  customSkills?: Array<{ id: string; name: string; promptSnippet: string; enabled: boolean }>,
+  attachedFiles?: AttachedFile[]
 ) => {
   const activeKey = customApiKey || process.env.GEMINI_API_KEY;
   const proxyUrl = isValidHttpUrl(customProxyUrl) ? customProxyUrl!.trim() : defaultProxyUrl;
@@ -169,6 +177,40 @@ export const generateAIResponse = async (
     }
   }
 
+  // Monta referências de arquivos anexados
+  let attachmentsTextDirective = '';
+  const inlineImageParts: Array<{ inlineData: { mimeType: string; data: string } }> = [];
+
+  if (attachedFiles && attachedFiles.length > 0) {
+    const textFiles = attachedFiles.filter(f => !f.isImage && !f.type.startsWith('image/'));
+    const imageFiles = attachedFiles.filter(f => f.isImage || f.type.startsWith('image/'));
+
+    if (textFiles.length > 0) {
+      attachmentsTextDirective += `\n\nARQUIVOS DE REFERÊNCIA ANEXADOS PELO USUÁRIO (Código / Documentos / Exemplo):\n`;
+      textFiles.forEach(f => {
+        attachmentsTextDirective += `--- INÍCIO DO ARQUIVO: "${f.name}" (${f.type}) ---\n${f.data}\n--- FIM DO ARQUIVO: "${f.name}" ---\n\n`;
+      });
+    }
+
+    if (imageFiles.length > 0) {
+      attachmentsTextDirective += `\n\nIMAGENS E ATIVOS ENVIADOS PELO USUÁRIO (Logomarcas / Banners / Mockups):\n`;
+      imageFiles.forEach(img => {
+        attachmentsTextDirective += `- Imagem "${img.name}": O usuário enviou esta imagem em anexo. Se for uma logomarca ou foto, utilize o data URI diretamente na tag <img src="${img.data}" alt="${img.name}" /> nos locais pertinentes ou replique com precisão a estrutura visual solicitada.\n`;
+        
+        // Se o data for um Data URI (ex: data:image/png;base64,...), extrai o base64 puro para enviar ao Gemini Vision
+        const match = img.data.match(/^data:([^;]+);base64,(.+)$/);
+        if (match) {
+          inlineImageParts.push({
+            inlineData: {
+              mimeType: match[1],
+              data: match[2]
+            }
+          });
+        }
+      });
+    }
+  }
+
   const systemPrompt = `
     Você é um Arquiteto de Software Frontend de Elite, Designer Visual Sênior e Engenheiro de Design System especializado em ferramentas visuais No-Code / Code-generation (estilo Webflow, Framer, v0.dev e Tailwind UI).
 
@@ -180,6 +222,7 @@ export const generateAIResponse = async (
     - JS Atual
 
     ${skillsDirective}
+    ${attachmentsTextDirective}
 
     INSTRUÇÕES MANDATÓRIAS DE ARQUITETURA E SEPARAÇÃO DE CÓDIGO:
     1. SEPARAÇÃO TOTAL DE ARQUIVOS (HTML, CSS e JS TOTALMENTE SEPARADOS):
@@ -191,7 +234,10 @@ export const generateAIResponse = async (
        - Garanta que o layout seja 100% responsivo para mobile (375px) e desktop (1280px).
        - Mantenha IDs e classes semânticas.
        - Preserve o container <div id="canvas-root"> como nó raiz do conteúdo.
-    3. Retorne SEMPRE um objeto JSON estrito no formato abaixo:
+    3. ARQUIVOS ANEXADOS & LOGOMARCAS:
+       - Se o usuário enviou uma logomarca (imagem ou SVG), posicione-a com destaque e elegância na Navbar (<nav>/<header>), Rodapé (<footer>) ou seções hero.
+       - Se o usuário enviou um arquivo de código ou navbar de referência, replique a estrutura com perfeição mantendo o design responsivo.
+    4. Retorne SEMPRE um objeto JSON estrito no formato abaixo:
 
     Formato da Resposta JSON OBRIGATÓRIO:
     {
@@ -237,15 +283,18 @@ export const generateAIResponse = async (
         };
       }
 
+      const userParts: any[] = [
+        {
+          text: `${systemPrompt}\n\nContexto do site:\nHTML: ${context.html}\nCSS: ${context.css}\nJS: ${context.js}\n\nPedido do Usuário: ${prompt}`
+        },
+        ...inlineImageParts
+      ];
+
       const payload: any = {
         contents: [
           {
             role: 'user',
-            parts: [
-              {
-                text: `${systemPrompt}\n\nContexto do site:\nHTML: ${context.html}\nCSS: ${context.css}\nJS: ${context.js}\n\nPedido do Usuário: ${prompt}`
-              }
-            ]
+            parts: userParts
           }
         ],
         generationConfig

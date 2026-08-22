@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Sparkles, Send, Bot, User, Check, Play, Undo2, Globe, Loader2, RotateCcw, AlertCircle, Layers, ChevronDown, CheckSquare, Square, Copy } from 'lucide-react';
+import { Sparkles, Send, Bot, User, Check, Play, Undo2, Globe, Loader2, RotateCcw, AlertCircle, Layers, ChevronDown, CheckSquare, Square, Copy, Paperclip, X, Image as ImageIcon, FileCode } from 'lucide-react';
 import { API_URL } from '../config';
 
 interface PageInfo {
@@ -20,6 +20,13 @@ interface ChatPanelProps {
   onReloadAllPages?: () => void;
 }
 
+export interface AttachedFile {
+  name: string;
+  type: string;
+  data: string;
+  isImage?: boolean;
+}
+
 interface Message {
   role: 'user' | 'assistant';
   text: string;
@@ -31,6 +38,7 @@ interface Message {
   scope?: 'single' | 'all';
   isError?: boolean;
   failedPrompt?: string;
+  attachedFiles?: AttachedFile[];
 }
 
 export const ChatPanel: React.FC<ChatPanelProps> = ({ 
@@ -50,7 +58,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     return stored ? JSON.parse(stored) : [
       {
         role: 'assistant',
-        text: 'Olá! Sou o seu AI Copilot e Arquiteto Frontend. Peça qualquer alteração ("adicione botão WhatsApp", "padronize a navbar para todas as páginas", "crie tabela de preços") e aplicarei imediatamente!'
+        text: 'Olá! Sou o seu AI Copilot e Arquiteto Frontend. Peça qualquer alteração ("adicione botão WhatsApp", "padronize a navbar para todas as páginas", "crie tabela de preços") e envie arquivos ou logos para eu utilizar no projeto!'
       }
     ];
   });
@@ -58,6 +66,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [copiedMessageIdx, setCopiedMessageIdx] = useState<number | null>(null);
+  const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   // Seleção de páginas alvo
   const [targetPageIds, setTargetPageIds] = useState<string[]>([pageId]);
@@ -284,15 +294,70 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     }, 1500);
   };
 
-  const executeSendPrompt = async (userMessage: string) => {
-    if (!userMessage.trim() || loading) return;
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
 
-    setLastUserPrompt(userMessage.trim());
-    const updatedMessages = [...messages, { role: 'user', text: userMessage.trim() } as Message];
+    Array.from(files).forEach((file) => {
+      const isImg = file.type.startsWith('image/') || /\.(png|jpe?g|svg|webp|gif)$/i.test(file.name);
+      const reader = new FileReader();
+
+      if (isImg) {
+        reader.onload = () => {
+          setAttachedFiles(prev => [
+            ...prev,
+            {
+              name: file.name,
+              type: file.type || 'image/png',
+              data: reader.result as string,
+              isImage: true
+            }
+          ]);
+        };
+        reader.readAsDataURL(file);
+      } else {
+        reader.onload = () => {
+          setAttachedFiles(prev => [
+            ...prev,
+            {
+              name: file.name,
+              type: file.type || 'text/plain',
+              data: reader.result as string,
+              isImage: false
+            }
+          ]);
+        };
+        reader.readAsText(file);
+      }
+    });
+
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const removeAttachedFile = (index: number) => {
+    setAttachedFiles(prev => prev.filter((_, idx) => idx !== index));
+  };
+
+  const executeSendPrompt = async (userMessage: string, filesToSend?: AttachedFile[]) => {
+    const currentFiles = filesToSend !== undefined ? filesToSend : attachedFiles;
+    if ((!userMessage.trim() && currentFiles.length === 0) || loading) return;
+
+    const messageText = userMessage.trim() || (currentFiles.length > 0 ? `Analise e aplique as referências dos ${currentFiles.length} arquivo(s) anexo(s).` : '');
+
+    setLastUserPrompt(messageText);
+    const updatedMessages = [
+      ...messages, 
+      { 
+        role: 'user', 
+        text: messageText,
+        attachedFiles: currentFiles.length > 0 ? currentFiles : undefined
+      } as Message
+    ];
     setMessages(updatedMessages);
-    localStorage.setItem(`chat_history_${pageId}`, JSON.stringify(updatedMessages));
+    localStorage.setItem(chatStorageKey, JSON.stringify(updatedMessages));
     setLoading(true);
     setActiveJobModel(selectedModel);
+    setAttachedFiles([]);
 
     const localGeminiKey = localStorage.getItem('gemini_api_key') || '';
     const currentRequestPageId = pageId;
@@ -316,11 +381,12 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
           'x-ai-skills': localStorage.getItem('custom_ai_skills') || ''
         },
         body: JSON.stringify({ 
-          prompt: userMessage.trim(), 
+          prompt: messageText, 
           pageId: currentRequestPageId, 
           model: selectedModel,
           applyToAll: isMultiTarget,
-          targetPageIds: targetPageIds
+          targetPageIds: targetPageIds,
+          attachedFiles: currentFiles.length > 0 ? currentFiles : undefined
         })
       });
 
@@ -330,31 +396,30 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       }
       
       const { jobId } = await res.json();
-      startPollingJob(jobId, currentRequestPageId, userMessage.trim());
+      startPollingJob(jobId, currentRequestPageId, messageText);
     } catch (err: any) {
       setLoading(false);
       const errorMessage: Message = { 
         role: 'assistant', 
         text: `Erro: ${err.message}`,
         isError: true,
-        failedPrompt: userMessage.trim()
+        failedPrompt: messageText
       };
-      const freshStored = localStorage.getItem(`chat_history_${currentRequestPageId}`);
+      const freshStored = localStorage.getItem(chatStorageKey);
       const freshMessages = freshStored ? JSON.parse(freshStored) : updatedMessages;
       const finalMessages = [...freshMessages, errorMessage];
-      localStorage.setItem(`chat_history_${currentRequestPageId}`, JSON.stringify(finalMessages));
-      if (pageId === currentRequestPageId) {
-        setMessages(finalMessages);
-      }
+      localStorage.setItem(chatStorageKey, JSON.stringify(finalMessages));
+      setMessages(finalMessages);
     }
   };
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || loading) return;
+    if ((!input.trim() && attachedFiles.length === 0) || loading) return;
     const msg = input;
+    const files = [...attachedFiles];
     setInput('');
-    await executeSendPrompt(msg);
+    await executeSendPrompt(msg, files);
   };
 
   const handleRetryLastMessage = (promptToRetry?: string) => {
@@ -545,6 +610,24 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                   : 'bg-slate-900/90 text-slate-200 border border-slate-800 rounded-bl-none'
               }`}
             >
+              {/* Arquivos anexados nesta mensagem */}
+              {msg.attachedFiles && msg.attachedFiles.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-2 pb-2 border-b border-white/10">
+                  {msg.attachedFiles.map((file, fIdx) => (
+                    <div key={fIdx} className="flex items-center gap-1.5 bg-black/40 px-2 py-1 rounded-lg border border-white/10 text-[10px]">
+                      {file.isImage ? (
+                        <div className="w-5 h-5 rounded overflow-hidden bg-slate-800 shrink-0">
+                          <img src={file.data} alt={file.name} className="w-full h-full object-cover" />
+                        </div>
+                      ) : (
+                        <FileCode className="w-3.5 h-3.5 text-purple-300 shrink-0" />
+                      )}
+                      <span className="max-w-[120px] truncate text-slate-200">{file.name}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               <div className="flex items-start justify-between gap-2">
                 <div className="flex items-start gap-2 flex-1">
                   {(msg.isError || msg.text.startsWith('Erro:')) && (
@@ -632,7 +715,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input Form com Indicação do Escopo Selecionado */}
+      {/* Input Form com Indicação do Escopo Selecionado e Pré-visualização de Arquivos */}
       <form onSubmit={handleSend} className="p-3 border-t border-slate-900/80 bg-slate-950/80 space-y-2">
         <div className="flex items-center justify-between text-[11px] text-slate-400 px-0.5">
           <div className="flex items-center gap-1.5">
@@ -655,7 +738,50 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
           )}
         </div>
 
-        <div className="relative">
+        {/* Prévia de Arquivos Anexados no Input */}
+        {attachedFiles.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 p-2 bg-slate-900/90 border border-purple-500/30 rounded-xl">
+            {attachedFiles.map((file, index) => (
+              <div key={index} className="flex items-center gap-1.5 bg-slate-950 px-2 py-1 rounded-lg border border-slate-800 text-[11px] group">
+                {file.isImage ? (
+                  <img src={file.data} alt={file.name} className="w-4 h-4 rounded object-cover" />
+                ) : (
+                  <FileCode className="w-3.5 h-3.5 text-purple-400" />
+                )}
+                <span className="max-w-[110px] truncate text-slate-300">{file.name}</span>
+                <button
+                  type="button"
+                  onClick={() => removeAttachedFile(index)}
+                  className="text-slate-500 hover:text-red-400 ml-0.5 cursor-pointer"
+                  title="Remover anexo"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="relative flex items-center">
+          {/* Input Oculto de Arquivo */}
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileUpload}
+            multiple
+            accept="image/*,.html,.htm,.css,.js,.jsx,.ts,.tsx,.txt,.json,.svg"
+            className="hidden"
+          />
+
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="absolute left-2.5 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-purple-300 hover:bg-slate-800/60 rounded-lg transition-all cursor-pointer z-10"
+            title="Anexar arquivo, logo ou código de referência"
+          >
+            <Paperclip className="w-4 h-4" />
+          </button>
+
           <textarea
             rows={2}
             value={input}
@@ -666,12 +792,12 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                 handleSend(e);
               }
             }}
-            placeholder="Peça qualquer alteração ao Copilot (Enter para enviar)..."
-            className="w-full pl-3 pr-10 py-2.5 bg-slate-900/90 border border-slate-800 rounded-xl focus:outline-none focus:ring-1 focus:ring-purple-500 focus:border-purple-500 text-xs text-white placeholder-slate-500 resize-none"
+            placeholder="Peça alteração ou envie logos e referências (Enter para enviar)..."
+            className="w-full pl-9 pr-10 py-2.5 bg-slate-900/90 border border-slate-800 rounded-xl focus:outline-none focus:ring-1 focus:ring-purple-500 focus:border-purple-500 text-xs text-white placeholder-slate-500 resize-none"
           />
           <button
             type="submit"
-            disabled={!input.trim() || loading}
+            disabled={(!input.trim() && attachedFiles.length === 0) || loading}
             className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1.5 bg-purple-600 hover:bg-purple-500 disabled:opacity-40 text-white rounded-lg transition-all cursor-pointer shadow-sm"
           >
             <Send className="w-3.5 h-3.5" />

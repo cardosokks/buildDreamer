@@ -42,7 +42,8 @@ async function processAIChatJob(
   registeredModels?: string[],
   clientProxyUrl?: string,
   customSkills?: Array<{ id: string; name: string; promptSnippet: string; enabled: boolean }>,
-  targetPageIds?: string[]
+  targetPageIds?: string[],
+  attachedFiles?: Array<{ name: string; type: string; data: string; isImage?: boolean }>
 ) {
   try {
     const page = await prisma.page.findUnique({
@@ -135,7 +136,8 @@ async function processAIChatJob(
             registeredModels,
             undefined,
             clientProxyUrl,
-            customSkills
+            customSkills,
+            attachedFiles
           );
 
           await prisma.page.update({
@@ -202,7 +204,8 @@ async function processAIChatJob(
           };
         },
         clientProxyUrl,
-        customSkills
+        customSkills,
+        attachedFiles
       );
 
       // Persiste automaticamente a alteração no banco
@@ -237,7 +240,7 @@ async function processAIChatJob(
 // Endpoint para disparar alteração via Chat AI em background
 router.post('/chat', async (req: AuthenticatedRequest, res: any) => {
   try {
-    const { prompt, pageId, model, applyToAll, targetPageIds } = req.body;
+    const { prompt, pageId, model, applyToAll, targetPageIds, attachedFiles } = req.body;
 
     if (!prompt || !pageId) {
       return res.status(400).json({ error: 'Prompt e pageId são obrigatórios' });
@@ -297,7 +300,8 @@ router.post('/chat', async (req: AuthenticatedRequest, res: any) => {
       registeredModels, 
       clientProxyUrl,
       customSkills,
-      targetPageIds
+      targetPageIds,
+      attachedFiles
     );
 
     return res.status(202).json({ jobId, status: 'pending', scope: hasGlobalIntent ? 'all' : 'single' });
