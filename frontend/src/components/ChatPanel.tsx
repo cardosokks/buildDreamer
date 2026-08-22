@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Sparkles, Send, Bot, User, Check, Play, Undo2, Globe, Loader2 } from 'lucide-react';
+import { Sparkles, Send, Bot, User, Check, Play, Undo2, Globe, Loader2, RotateCcw, AlertCircle } from 'lucide-react';
 import { API_URL } from '../config';
 
 interface ChatPanelProps {
@@ -21,6 +21,8 @@ interface Message {
   modelUsed?: string;
   applied?: boolean;
   scope?: 'single' | 'all';
+  isError?: boolean;
+  failedPrompt?: string;
 }
 
 export const ChatPanel: React.FC<ChatPanelProps> = ({ 
@@ -162,7 +164,9 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     };
   }, [pageId, projectId, token]);
 
-  const startPollingJob = (jobId: string, targetPageId: string) => {
+  const [lastUserPrompt, setLastUserPrompt] = useState<string>('');
+
+  const startPollingJob = (jobId: string, targetPageId: string, promptSent?: string) => {
     if (activePollRef.current) clearInterval(activePollRef.current);
 
     activePollRef.current = setInterval(async () => {
@@ -212,7 +216,12 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
             setLoading(false);
             setActiveJobModel(null);
 
-            const errorMessage: Message = { role: 'assistant', text: `Erro: ${jobData.error || 'Falha ao processar alterações'}` };
+            const errorMessage: Message = { 
+              role: 'assistant', 
+              text: `Erro: ${jobData.error || 'Falha ao processar alterações com IA.'}`,
+              isError: true,
+              failedPrompt: promptSent || lastUserPrompt
+            };
             const freshStored = localStorage.getItem(`chat_history_${targetPageId}`);
             const freshMessages: Message[] = freshStored ? JSON.parse(freshStored) : [];
             const finalMessages = [...freshMessages, errorMessage];
@@ -227,14 +236,11 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     }, 1500);
   };
 
-  const handleSend = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!input.trim() || loading) return;
+  const executeSendPrompt = async (userMessage: string) => {
+    if (!userMessage.trim() || loading) return;
 
-    const userMessage = input.trim();
-    setInput('');
-    
-    const updatedMessages = [...messages, { role: 'user', text: userMessage } as Message];
+    setLastUserPrompt(userMessage.trim());
+    const updatedMessages = [...messages, { role: 'user', text: userMessage.trim() } as Message];
     setMessages(updatedMessages);
     localStorage.setItem(`chat_history_${pageId}`, JSON.stringify(updatedMessages));
     setLoading(true);
@@ -261,20 +267,28 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
           'x-proxy-url': localStorage.getItem('ai_proxy_url') || ''
         },
         body: JSON.stringify({ 
-          prompt: userMessage, 
+          prompt: userMessage.trim(), 
           pageId: currentRequestPageId, 
           model: selectedModel,
           applyToAll: shouldApplyToAll
         })
       });
 
-      if (!res.ok) throw new Error('Falha ao iniciar solicitação de IA');
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'Falha ao iniciar solicitação de IA');
+      }
       
       const { jobId } = await res.json();
-      startPollingJob(jobId, currentRequestPageId);
+      startPollingJob(jobId, currentRequestPageId, userMessage.trim());
     } catch (err: any) {
       setLoading(false);
-      const errorMessage: Message = { role: 'assistant', text: `Erro: ${err.message}` };
+      const errorMessage: Message = { 
+        role: 'assistant', 
+        text: `Erro: ${err.message}`,
+        isError: true,
+        failedPrompt: userMessage.trim()
+      };
       const freshStored = localStorage.getItem(`chat_history_${currentRequestPageId}`);
       const freshMessages = freshStored ? JSON.parse(freshStored) : updatedMessages;
       const finalMessages = [...freshMessages, errorMessage];
@@ -283,6 +297,20 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
         setMessages(finalMessages);
       }
     }
+  };
+
+  const handleSend = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!input.trim() || loading) return;
+    const msg = input;
+    setInput('');
+    await executeSendPrompt(msg);
+  };
+
+  const handleRetryLastMessage = (promptToRetry?: string) => {
+    const targetPrompt = promptToRetry || lastUserPrompt;
+    if (!targetPrompt || loading) return;
+    executeSendPrompt(targetPrompt);
   };
 
   return (
@@ -361,10 +389,35 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
               className={`p-3.5 rounded-2xl text-xs leading-relaxed max-w-[95%] shadow-md ${
                 msg.role === 'user'
                   ? 'bg-purple-700 text-white rounded-br-none shadow-[0_0_15px_rgba(168,85,247,0.2)] font-medium'
+                  : msg.isError || msg.text.startsWith('Erro:')
+                  ? 'bg-red-950/40 text-red-200 border border-red-500/40 rounded-bl-none shadow-[0_0_15px_rgba(239,68,68,0.1)]'
                   : 'bg-slate-900/90 text-slate-200 border border-slate-800 rounded-bl-none'
               }`}
             >
-              <p className="whitespace-pre-wrap">{msg.text}</p>
+              <div className="flex items-start gap-2">
+                {(msg.isError || msg.text.startsWith('Erro:')) && (
+                  <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                )}
+                <p className="whitespace-pre-wrap flex-1">{msg.text}</p>
+              </div>
+
+              {/* Botão de Tentar Novamente caso a mensagem tenha falhado */}
+              {(msg.isError || msg.text.startsWith('Erro:')) && (
+                <div className="mt-3 pt-2.5 border-t border-red-500/20 flex items-center justify-between gap-2">
+                  <span className="text-[10px] text-red-400/90 font-medium">
+                    Falha na resposta da IA
+                  </span>
+                  <button
+                    onClick={() => handleRetryLastMessage(msg.failedPrompt)}
+                    disabled={loading}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white font-bold rounded-lg text-[11px] transition-all shadow-sm hover:shadow-[0_0_10px_rgba(239,68,68,0.4)] cursor-pointer"
+                    title="Enviar este comando novamente para a IA"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    Tentar Novamente
+                  </button>
+                </div>
+              )}
 
               {/* Botão de Aplicação Manual / Reaplicação */}
               {msg.html && (
