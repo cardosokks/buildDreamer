@@ -383,6 +383,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               onChange={e => onAttrChange('_textContent', e.target.value)}
               className={`${inputCls} resize-none`}
             />
+            <span className="text-[9px] text-slate-500 block mt-1">Dica: Você também pode dar 2 cliques rápidos direto no canvas para editar o texto inline.</span>
           </div>
 
           <div>

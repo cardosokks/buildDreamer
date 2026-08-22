@@ -306,7 +306,13 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
   // Helpers to parse and serialize DOM trees safely
   const parseDocFromHtml = (htmlStr: string) => {
     const parser = new DOMParser();
-    return parser.parseFromString(htmlStr || '', 'text/html');
+    const cleanStr = String(htmlStr || '').trim();
+    // Se o HTML não tiver wrapper <div id="canvas-root">, envolve para manter a árvore normalizada
+    if (cleanStr.includes('id="canvas-root"')) {
+      return parser.parseFromString(cleanStr, 'text/html');
+    } else {
+      return parser.parseFromString(`<div id="canvas-root">${cleanStr}</div>`, 'text/html');
+    }
   };
 
   const serializeBodyContent = (doc: Document) => {
@@ -316,14 +322,20 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
   };
 
   const getElementByPath = (root: Element, path: string): Element | null => {
-    if (!path && path !== '0') return null;
-    const parts = String(path).split('.').map(Number);
-    let el: Element | null = root;
+    if (path === undefined || path === null || path === '') return null;
+    const parts = String(path).split('.').map(p => parseInt(p, 10)).filter(n => !isNaN(n));
+    if (parts.length === 0) return null;
+
+    let current: Element | null = root;
     for (const idx of parts) {
-      if (!el || !el.children) return null;
-      el = el.children.item(idx);
+      if (!current) return null;
+      const validChildren: Element[] = Array.from(current.children).filter(
+        (c: Element) => !c.id.startsWith('studio-') && !c.classList.contains('studio-tool-btn')
+      );
+      if (idx < 0 || idx >= validChildren.length) return null;
+      current = validChildren[idx];
     }
-    return el;
+    return current;
   };
 
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error'>('saved');
@@ -579,12 +591,20 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
     if (!htmlString) return [];
     try {
       const parser = new DOMParser();
-      const doc = parser.parseFromString(htmlString, 'text/html');
+      const cleanStr = String(htmlString || '').trim();
+      const doc = cleanStr.includes('id="canvas-root"') 
+        ? parser.parseFromString(cleanStr, 'text/html')
+        : parser.parseFromString(`<div id="canvas-root">${cleanStr}</div>`, 'text/html');
       
-      function nodeToElementNode(node: Element): ElementNode {
+      function nodeToElementNode(node: Element): ElementNode | null {
+        // Ignora overlays de seleção internos se existirem no snapshot
+        if (node.id && node.id.startsWith('studio-')) return null;
+        if (node.classList && node.classList.contains('studio-tool-btn')) return null;
+
         const childNodes: ElementNode[] = [];
         for (let i = 0; i < node.children.length; i++) {
-          childNodes.push(nodeToElementNode(node.children[i]));
+          const parsedChild = nodeToElementNode(node.children[i]);
+          if (parsedChild) childNodes.push(parsedChild);
         }
         
         return {
@@ -597,7 +617,9 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
 
       const canvasRoot = doc.getElementById('canvas-root');
       const rootElements = canvasRoot ? Array.from(canvasRoot.children) : Array.from(doc.body.children);
-      return rootElements.map(nodeToElementNode);
+      return rootElements
+        .map(nodeToElementNode)
+        .filter((n): n is ElementNode => n !== null);
     } catch (e) {
       console.error("Falha ao gerar árvore DOM:", e);
       return [];
