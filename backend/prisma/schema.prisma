@@ -7,12 +7,44 @@ generator client {
 }
 
 model User {
-  id           String          @id @default(uuid())
-  email        String          @unique
-  password     String
-  name         String?
-  projects     ProjectMember[]
-  createdAt    DateTime        @default(now())
+  id              String          @id @default(uuid())
+  email           String          @unique
+  password        String
+  name            String?
+  geminiApiKey    String?
+  openaiApiKey    String?
+  aiProxyUrl      String?
+  ngrokAuthToken  String?
+  customAiSkills  Json?
+  customAiModels  Json?
+  savedLeads      Json?
+  filterPresets   Json?
+  projects        ProjectMember[]
+  crmLeads        Lead[]
+  createdAt       DateTime        @default(now())
+}
+
+model Lead {
+  id              String          @id @default(uuid())
+  name            String
+  company         String?
+  phone           String?
+  email           String?
+  website         String?
+  address         String?
+  rating          String?
+  dealValue       Float           @default(0)
+  status          String          @default("PROSPECT") // PROSPECT, CONTACTED, PROPOSAL_SENT, IN_NEGOTIATION, WON, LOST
+  notes           String?
+  origin          String?         @default("MANUAL") // SEARCH, MANUAL, IMPORT
+  tags            String[]        @default([])
+  lastContactDate DateTime?
+  userId          String
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  projectId       String?
+  project         Project?        @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
 }
 
 model Project {
@@ -28,6 +60,7 @@ model Project {
   pages        Page[]
   assets       Asset[]
   versions     Version[]
+  crmLeads     Lead[]
 }
 
 model ProjectMember {

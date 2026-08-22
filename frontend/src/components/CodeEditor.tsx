@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Editor from '@monaco-editor/react';
+import { Save } from 'lucide-react';
 
 interface CodeEditorProps {
   html: string;
@@ -10,6 +11,20 @@ interface CodeEditorProps {
 
 export const CodeEditor: React.FC<CodeEditorProps> = ({ html, css, js, onChange }) => {
   const [activeTab, setActiveTab] = useState<'html' | 'css' | 'js'>('html');
+  
+  // Local code states to prevent real-time updates and apply changes only on save
+  const [localHtml, setLocalHtml] = useState(html);
+  const [localCss, setLocalCss] = useState(css);
+  const [localJs, setLocalJs] = useState(js);
+  const [hasChanges, setHasChanges] = useState(false);
+
+  // Sync state if props change (e.g. page switched)
+  useEffect(() => {
+    setLocalHtml(html);
+    setLocalCss(css);
+    setLocalJs(js);
+    setHasChanges(false);
+  }, [html, css, js]);
 
   const getLanguage = () => {
     if (activeTab === 'html') return 'html';
@@ -18,15 +33,24 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({ html, css, js, onChange 
   };
 
   const getValue = () => {
-    if (activeTab === 'html') return html;
-    if (activeTab === 'css') return css;
-    return js;
+    if (activeTab === 'html') return localHtml;
+    if (activeTab === 'css') return localCss;
+    return localJs;
   };
 
   const handleEditorChange = (value: string | undefined) => {
-    if (value !== undefined) {
-      onChange(activeTab, value);
-    }
+    if (value === undefined) return;
+    setHasChanges(true);
+    if (activeTab === 'html') setLocalHtml(value);
+    else if (activeTab === 'css') setLocalCss(value);
+    else setLocalJs(value);
+  };
+
+  const handleSave = () => {
+    if (activeTab === 'html') onChange('html', localHtml);
+    else if (activeTab === 'css') onChange('css', localCss);
+    else onChange('js', localJs);
+    setHasChanges(false);
   };
 
   return (
@@ -66,8 +90,24 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({ html, css, js, onChange 
           </button>
         </div>
 
-        <div className="text-[10px] text-slate-500 font-mono pr-2">
-          Monaco Editor
+        <div className="flex items-center gap-3">
+          {hasChanges && (
+            <span className="text-[10px] text-amber-500 font-medium animate-pulse">
+              Modificações não salvas
+            </span>
+          )}
+          <button
+            onClick={handleSave}
+            disabled={!hasChanges}
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+              hasChanges
+                ? 'bg-emerald-600 text-white hover:bg-emerald-500 active:scale-95'
+                : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+            }`}
+          >
+            <Save className="w-3.5 h-3.5" />
+            Salvar Código
+          </button>
         </div>
       </div>
 
