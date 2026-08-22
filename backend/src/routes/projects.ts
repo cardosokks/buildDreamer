@@ -163,15 +163,43 @@ router.post('/', async (req: AuthenticatedRequest, res: any) => {
       }
     });
 
-    const clientGeminiKey = (req.headers['x-gemini-key'] || req.headers['X-Gemini-Key']) as string || process.env.GEMINI_API_KEY;
-    const clientProxyUrl = (req.headers['x-proxy-url'] || req.headers['X-Proxy-Url']) as string || process.env.AI_PROXY_URL;
-    let registeredModels: string[] | undefined;
+    // Busca configurações salvas no banco de dados do usuário como fallback prioritário
+    let dbGeminiKey: string | undefined;
+    let dbProxyUrl: string | undefined;
+    let dbCustomModels: string[] | undefined;
+    let dbCustomSkills: any[] | undefined;
+
+    try {
+      const userRows: any[] = await prisma.$queryRawUnsafe(`
+        SELECT "geminiApiKey", "aiProxyUrl", "customAiModels", "customAiSkills" 
+        FROM "User" 
+        WHERE "id" = $1 LIMIT 1;
+      `, userId);
+
+      if (userRows && userRows.length > 0) {
+        const userSettings = userRows[0];
+        dbGeminiKey = userSettings.geminiApiKey || undefined;
+        dbProxyUrl = userSettings.aiProxyUrl || undefined;
+        if (userSettings.customAiModels && Array.isArray(userSettings.customAiModels)) {
+          dbCustomModels = (userSettings.customAiModels as any[]).map(m => typeof m === 'string' ? m : m.id);
+        }
+        if (userSettings.customAiSkills && Array.isArray(userSettings.customAiSkills)) {
+          dbCustomSkills = userSettings.customAiSkills as any[];
+        }
+      }
+    } catch (e) {
+      console.warn('Falha ao buscar configurações do usuário no banco:', e);
+    }
+
+    const clientGeminiKey = (req.headers['x-gemini-key'] || req.headers['X-Gemini-Key']) as string || dbGeminiKey || process.env.GEMINI_API_KEY;
+    const clientProxyUrl = (req.headers['x-proxy-url'] || req.headers['X-Proxy-Url']) as string || dbProxyUrl || process.env.AI_PROXY_URL;
+    let registeredModels: string[] | undefined = dbCustomModels;
     try {
       const rawModels = (req.headers['x-gemini-models'] || req.headers['X-Gemini-Models']) as string;
       if (rawModels) registeredModels = JSON.parse(rawModels);
     } catch {}
 
-    let customSkills: any[] | undefined;
+    let customSkills: any[] | undefined = dbCustomSkills;
     try {
       const rawSkills = (req.headers['x-ai-skills'] || req.headers['X-Ai-Skills'] || req.headers['X-AI-Skills']) as string;
       if (rawSkills) customSkills = JSON.parse(rawSkills);

@@ -1006,12 +1006,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
         return;
       }
 
-      let finalName = newProjectName;
-      let finalDesc = newProjectDesc;
+      let finalName = newProjectName.trim();
+      let finalDesc = newProjectDesc.trim();
 
       if (creationMode === 'ai') {
-        finalName = businessName;
-        finalDesc = `Segmento: ${segment}. Estilo: ${visualStyle}. ${newProjectDesc}`;
+        finalName = businessName.trim() || 'Novo Negócio IA';
+        finalDesc = `Segmento: ${segment.trim() || 'Geral'}. Estilo: ${visualStyle.trim() || 'Moderno'}. ${newProjectDesc.trim()}`;
+      }
+
+      if (!finalName) {
+        throw new Error('Por favor, informe o nome do projeto ou empresa.');
       }
 
       // Get registered custom models from user settings
@@ -1038,11 +1042,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
         })
       });
 
-      if (!res.ok) throw new Error('Falha ao criar projeto');
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Falha ao criar projeto.');
+      }
       const newProject = await res.json();
       
       setProjects([newProject, ...projects]);
       setShowCreateModal(false);
+      notify.success(`Projeto "${finalName}" criado com sucesso!`, 'Criado');
 
       // Se for geração com IA, marcamos o projeto como 'em geração' e mantemos o usuário na aba de Projetos para acompanhar o status
       if (creationMode === 'ai') {
@@ -1065,7 +1073,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
       setSelectedZipBase64(null);
       setSelectedZipName('');
     } catch (err: any) {
-      alert(err.message);
+      notify.error(err.message || 'Falha ao criar projeto', 'Erro');
     } finally {
       setCreating(false);
     }
