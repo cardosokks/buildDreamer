@@ -54,7 +54,8 @@ import {
   User,
   Link as LinkIcon,
   PanelLeftClose,
-  PanelLeftOpen
+  PanelLeftOpen,
+  Bell
 } from 'lucide-react';
 
 import { useTheme } from '../context/ThemeContext';
@@ -414,6 +415,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
 
   // User Profile Dropdown state
   const [showUserDropdown, setShowUserDropdown] = useState(false);
+  const [showBellDropdown, setShowBellDropdown] = useState(false);
+  const { bellNotifications, unreadBellCount, markBellRead, markAllBellRead, removeBellNotification, clearBell, addBellNotification } = useNotification();
 
   // Leads search states segmentados e filtros avançados
   const [leadQuery, setLeadQuery] = useState('');
@@ -796,6 +799,24 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
           const job = await res.json();
 
           if (job.status === 'completed' || job.status === 'failed') {
+            // 🔔 Bell notification for AI site generation
+            const proj = projects.find(p => p.id === pId);
+            if (job.status === 'completed') {
+              addBellNotification({
+                type: 'success',
+                emoji: '✨',
+                title: 'Site gerado com sucesso!',
+                message: `O site "${proj?.name || 'Novo Projeto'}" foi criado pela IA e está pronto para edição.`,
+              });
+              notify.success(`Site "${proj?.name || 'Novo Projeto'}" gerado! Clique para editar.`, '✨ Criação Completa!');
+            } else {
+              addBellNotification({
+                type: 'error',
+                emoji: '⚠️',
+                title: 'Falha na geração do site',
+                message: `Ocorreu um erro ao gerar o site "${proj?.name || 'Projeto'}". Tente novamente.`,
+              });
+            }
             setGeneratingProjectJobs(prev => {
               const copy = { ...prev };
               delete copy[pId];
@@ -1160,6 +1181,23 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
       setShowCreateModal(false);
       notify.success(`Projeto "${finalName}" criado com sucesso!`, 'Criado');
 
+      // 🔔 Bell: project created
+      if (creationMode === 'ai') {
+        addBellNotification({
+          type: 'info',
+          emoji: '🤖',
+          title: 'IA trabalhando no seu site!',
+          message: `Gerando todas as páginas de "${finalName}" com inteligência artificial...`,
+        });
+      } else {
+        addBellNotification({
+          type: 'success',
+          emoji: '🚀',
+          title: 'Novo projeto criado!',
+          message: `"${finalName}" foi criado com sucesso. Clique para começar a editar.`,
+        });
+      }
+
       // Se for geração com IA, marcamos o projeto como 'em geração' e mantemos o usuário na aba de Projetos para acompanhar o status
       if (creationMode === 'ai') {
         setGeneratingProjectJobs(prev => ({
@@ -1199,8 +1237,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
         }
       });
       if (!res.ok) throw new Error('Falha ao deletar projeto');
+      const deletedProject = projects.find(p => p.id === id);
       setProjects(projects.filter(p => p.id !== id));
       notify.success('Projeto excluído com sucesso.', 'Projeto Excluído');
+      addBellNotification({
+        type: 'warning',
+        emoji: '🗑️',
+        title: 'Projeto excluído',
+        message: `"${deletedProject?.name || 'Projeto'}" foi removido permanentemente.`,
+      });
     } catch (err: any) {
       notify.error(err.message || 'Erro ao excluir projeto', 'Falha');
     }
@@ -1327,6 +1372,107 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
             </button>
 
 
+
+            {/* 🔔 Sino de Notificações */}
+            <div className="relative">
+              <button
+                onClick={() => { setShowBellDropdown(!showBellDropdown); setShowUserDropdown(false); if (!showBellDropdown) markAllBellRead(); }}
+                className={`relative w-9 h-9 border rounded-xl flex items-center justify-center transition-all cursor-pointer shadow-sm ${theme === 'light' ? 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-600' : 'bg-slate-900/80 hover:bg-slate-800 border-slate-800 text-slate-300 hover:text-white'}`}
+                title="Notificações"
+              >
+                <Bell className="w-4 h-4" />
+                {unreadBellCount > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center shadow-lg shadow-red-500/40 animate-bounce">
+                    {unreadBellCount > 9 ? '9+' : unreadBellCount}
+                  </span>
+                )}
+              </button>
+
+              {showBellDropdown && (
+                <div
+                  className={`absolute right-0 mt-2 w-96 max-w-[calc(100vw-2rem)] border rounded-2xl shadow-2xl z-50 animate-in fade-in slide-in-from-top-2 duration-150 overflow-hidden flex flex-col ${theme === 'light' ? 'bg-white border-slate-200' : 'bg-[#0f1117] border-slate-800'}`}
+                  style={{ maxHeight: '520px' }}
+                >
+                  {/* Header */}
+                  <div className={`flex items-center justify-between px-4 py-3 border-b shrink-0 ${theme === 'light' ? 'border-slate-100 bg-slate-50' : 'border-slate-800 bg-slate-900/60'}`}>
+                    <div className="flex items-center gap-2">
+                      <Bell className="w-4 h-4 text-purple-400" />
+                      <span className={`text-sm font-bold ${theme === 'light' ? 'text-slate-900' : 'text-white'}`}>Notificações</span>
+                      {unreadBellCount > 0 && (
+                        <span className="px-1.5 py-0.5 rounded-full bg-purple-600 text-white text-[10px] font-bold">{unreadBellCount} nova{unreadBellCount !== 1 ? 's' : ''}</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      {bellNotifications.length > 0 && (
+                        <button onClick={clearBell} className="text-[10px] text-slate-400 hover:text-red-400 px-2 py-1 rounded-lg hover:bg-red-500/10 transition-all cursor-pointer font-semibold">Limpar tudo</button>
+                      )}
+                      <button onClick={() => setShowBellDropdown(false)} className={`p-1.5 rounded-lg transition-colors cursor-pointer ${theme === 'light' ? 'text-slate-400 hover:bg-slate-200' : 'text-slate-400 hover:bg-slate-800'}`}>
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Lista */}
+                  <div className="overflow-y-auto flex-1">
+                    {bellNotifications.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-12 gap-3">
+                        <div className="w-14 h-14 rounded-2xl bg-slate-800/60 flex items-center justify-center text-2xl">🔔</div>
+                        <p className={`text-sm font-semibold ${theme === 'light' ? 'text-slate-500' : 'text-slate-400'}`}>Nenhuma notificação</p>
+                        <p className={`text-xs ${theme === 'light' ? 'text-slate-400' : 'text-slate-500'}`}>Ações importantes aparecerão aqui</p>
+                      </div>
+                    ) : (
+                      <div className="divide-y divide-slate-800/40">
+                        {bellNotifications.map((n) => {
+                          const timeAgo = (() => {
+                            const diff = Date.now() - new Date(n.createdAt).getTime();
+                            if (diff < 60000) return 'agora';
+                            if (diff < 3600000) return `${Math.floor(diff / 60000)}min atrás`;
+                            if (diff < 86400000) return `${Math.floor(diff / 3600000)}h atrás`;
+                            return `${Math.floor(diff / 86400000)}d atrás`;
+                          })();
+                          return (
+                            <div
+                              key={n.id}
+                              onClick={() => markBellRead(n.id)}
+                              className={`flex items-start gap-3 px-4 py-3 transition-all cursor-default group ${
+                                !n.read
+                                  ? theme === 'light' ? 'bg-purple-50/80 hover:bg-purple-50' : 'bg-purple-950/20 hover:bg-purple-950/30'
+                                  : theme === 'light' ? 'hover:bg-slate-50' : 'hover:bg-slate-900/40'
+                              }`}
+                            >
+                              <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-lg shrink-0 shadow-sm ${
+                                n.type === 'success' ? 'bg-emerald-500/15 border border-emerald-500/30'
+                                : n.type === 'error' ? 'bg-red-500/15 border border-red-500/30'
+                                : n.type === 'warning' ? 'bg-amber-500/15 border border-amber-500/30'
+                                : 'bg-purple-500/15 border border-purple-500/30'
+                              }`}>
+                                {n.emoji}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-start justify-between gap-2">
+                                  <p className={`text-xs font-bold leading-tight truncate ${theme === 'light' ? 'text-slate-800' : 'text-slate-100'}`}>{n.title}</p>
+                                  <span className="text-[10px] text-slate-500 shrink-0 font-mono">{timeAgo}</span>
+                                </div>
+                                <p className={`text-[11px] mt-0.5 leading-snug ${theme === 'light' ? 'text-slate-500' : 'text-slate-400'}`}>{n.message}</p>
+                              </div>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); removeBellNotification(n.id); }}
+                                className="opacity-0 group-hover:opacity-100 p-1 rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-all cursor-pointer shrink-0"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                              {!n.read && (
+                                <span className="w-2 h-2 rounded-full bg-purple-500 shrink-0 mt-1.5" />
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* Botão de Minimizar Cabeçalho */}
             <button

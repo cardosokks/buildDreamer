@@ -252,6 +252,12 @@ export const CRMManager: React.FC<CRMProps> = ({ onOpenRemasterModal, onOpenProj
           setLeads([data.lead, ...leads]);
           setShowModal(false);
           notify.success(`Lead "${payload.name}" cadastrado com sucesso!`, 'Salvo');
+          notify.addBellNotification({
+            type: 'info',
+            emoji: '🤝',
+            title: 'Novo Lead Cadastrado!',
+            message: `O cliente "${payload.name}" (${payload.company || 'Pessoa Física'}) foi adicionado ao seu CRM.`
+          });
         } else {
           throw new Error(data.error || 'Erro ao cadastrar lead');
         }
@@ -262,8 +268,21 @@ export const CRMManager: React.FC<CRMProps> = ({ onOpenRemasterModal, onOpenProj
   };
 
   const handleUpdateStatus = async (leadId: string, newStatus: LeadStatus) => {
+    const targetLead = leads.find(l => l.id === leadId);
+    
     // Atualização otimista na interface
     setLeads(leads.map(l => l.id === leadId ? { ...l, status: newStatus } : l));
+
+    if (newStatus === 'WON' && targetLead && targetLead.status !== 'WON') {
+      const dealFormatted = Number(targetLead.dealValue || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+      notify.success(`Parabéns! Venda de ${dealFormatted} fechada com ${targetLead.name}! 🚀`, '🎉 Contrato Fechado!');
+      notify.addBellNotification({
+        type: 'success',
+        emoji: '💰',
+        title: 'Venda Fechada!',
+        message: `Contrato fechado com ${targetLead.name} no valor de ${dealFormatted}!`
+      });
+    }
 
     try {
       await fetch(`${API_URL}/api/leads/crm/${leadId}`, {
@@ -284,6 +303,12 @@ export const CRMManager: React.FC<CRMProps> = ({ onOpenRemasterModal, onOpenProj
     if (!window.confirm(`Deseja realmente remover o lead "${name}" do seu CRM?`)) return;
     
     setLeads(leads.filter(l => l.id !== leadId));
+    notify.addBellNotification({
+      type: 'warning',
+      emoji: '🗑️',
+      title: 'Lead Removido',
+      message: `O lead "${name}" foi excluído do seu pipeline de vendas.`
+    });
     try {
       await fetch(`${API_URL}/api/leads/crm/${leadId}`, {
         method: 'DELETE',
