@@ -1,47 +1,48 @@
 @import "tailwindcss";
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800;900&family=Fira+Code:wght@400;500;600&display=swap');
 
-/* ─── Minimalist Design System Variables ──────────────────────────── */
+/* ─── Professional Design System Variables ──────────────────────────── */
 :root {
-  --bg-app: #0a0c10;
-  --bg-surface: #0f1117;
-  --bg-sidebar: #0b0d13;
-  --bg-card: #13161f;
-  --bg-input: #0a0b10;
-  
-  --border-subtle: #1e222d;
-  --border-strong: #2a303f;
-  
-  --text-primary: #f8fafc;
-  --text-secondary: #94a3b8;
-  --text-muted: #64748b;
-  
+  --bg-app: #09090b;
+  --bg-surface: #0f0f12;
+  --bg-sidebar: #0c0c0f;
+  --bg-card: #131317;
+  --bg-input: #0a0a0d;
+
+  --border-subtle: #1a1a1f;
+  --border-strong: #252530;
+
+  --text-primary: #f4f4f5;
+  --text-secondary: #a1a1aa;
+  --text-muted: #52525b;
+
   --accent-primary: #6366f1;
   --accent-hover: #4f46e5;
-  --accent-light: rgba(99, 102, 241, 0.15);
-  
-  --gold-accent: #e5b95f;
+  --accent-light: rgba(99, 102, 241, 0.12);
+
+  --gold-accent: #a78bfa;
 }
 
+/* Light mode: more contrast, professional grey-blue tones */
 html.light {
-  --bg-app: #f8fafc;
+  --bg-app: #f0f2f5;
   --bg-surface: #ffffff;
-  --bg-sidebar: #f1f5f9;
+  --bg-sidebar: #e8eaed;
   --bg-card: #ffffff;
   --bg-input: #ffffff;
-  
-  --border-subtle: #e2e8f0;
-  --border-strong: #cbd5e1;
-  
-  --text-primary: #0f172a;
-  --text-secondary: #475569;
-  --text-muted: #94a3b8;
-  
+
+  --border-subtle: #d4d7dc;
+  --border-strong: #b8bcc4;
+
+  --text-primary: #0f1117;
+  --text-secondary: #3d4350;
+  --text-muted: #6b7280;
+
   --accent-primary: #4f46e5;
   --accent-hover: #4338ca;
-  --accent-light: rgba(79, 70, 229, 0.08);
-  
-  --gold-accent: #b88628;
+  --accent-light: rgba(79, 70, 229, 0.1);
+
+  --gold-accent: #7c3aed;
 }
 
 body {
@@ -57,15 +58,73 @@ h1, h2, h3, h4, .font-heading {
   font-family: 'Outfit', sans-serif;
 }
 
-/* ─── Global Theme Utility Overrides for Full Consistency ─────────── */
+/* ─── Dark Mode: Desaturate all vivid colors for professional look ───── */
+/* Amber/Orange → Zinc neutral tone */
+:root .text-amber-300,
+:root .text-amber-400 {
+  color: #a1a1aa !important;
+}
+:root .bg-amber-950\/60,
+:root .bg-amber-950\/40 {
+  background-color: rgba(24, 24, 27, 0.6) !important;
+}
+:root .border-amber-500\/30,
+:root .border-amber-500\/50 {
+  border-color: rgba(82, 82, 91, 0.3) !important;
+}
+
+/* Emerald/Green → Subtle teal-zinc, only for status indicators */
+:root .text-emerald-300,
+:root .text-emerald-400 {
+  color: #6ee7b7 !important;
+  opacity: 0.75;
+}
+:root .bg-emerald-950\/30,
+:root .bg-emerald-950\/40,
+:root .bg-emerald-950\/60 {
+  background-color: rgba(15, 20, 18, 0.6) !important;
+}
+:root .border-emerald-500\/30,
+:root .border-emerald-500\/40 {
+  border-color: rgba(52, 78, 65, 0.4) !important;
+}
+
+/* Pink → Muted slate */
+:root .text-pink-400 {
+  color: #94a3b8 !important;
+}
+
+/* Saturate-control: Reduce ALL vivid backgrounds on dark mode for pro look */
+:root .from-purple-600,
+:root .from-purple-700 {
+  --tw-gradient-from: #3730a3 !important;
+}
+:root .to-pink-600,
+:root .to-pink-500 {
+  --tw-gradient-to: #4f46e5 !important;
+}
+:root .from-purple-500 {
+  --tw-gradient-from: #4338ca !important;
+}
+:root .to-pink-500 {
+  --tw-gradient-to: #4f46e5 !important;
+}
+
+/* Sun/Claro button in dark - keep amber identity but mute slightly */
+:root .text-amber-300.hidden {
+  color: #a1a1aa !important;
+}
+
+/* ─── Light Mode: More contrast + professional look ────────────────── */
 html.light .bg-\[\#07020d\],
 html.light .bg-\[\#0a0c10\],
 html.light .bg-\[\#090a0f\],
 html.light .bg-\[\#0b0614\],
 html.light .bg-\[\#030007\],
+html.light .bg-\[\#09090b\],
 html.light .bg-slate-950 {
-  background-color: #f8fafc !important;
-  color: #0f172a !important;
+  background-color: #f0f2f5 !important;
+  color: #0f1117 !important;
 }
 
 html.light .bg-\[\#0f0b18\],
@@ -74,10 +133,12 @@ html.light .bg-\[\#0b0d13\],
 html.light .bg-\[\#130d1e\],
 html.light .bg-\[\#130d20\],
 html.light .bg-\[\#0f1117\],
+html.light .bg-\[\#0f0f12\],
 html.light .bg-\[\#151822\],
+html.light .bg-\[\#0c0c0f\],
 html.light .bg-slate-900 {
   background-color: #ffffff !important;
-  color: #0f172a !important;
+  color: #0f1117 !important;
 }
 
 html.light .bg-slate-900\/30,
@@ -89,8 +150,8 @@ html.light .bg-slate-950\/60,
 html.light .bg-slate-950\/80,
 html.light .bg-\[\#0f0b18\]\/60,
 html.light .bg-\[\#0f0b18\]\/90 {
-  background-color: rgba(241, 245, 249, 0.85) !important;
-  color: #0f172a !important;
+  background-color: rgba(232, 234, 237, 0.9) !important;
+  color: #0f1117 !important;
 }
 
 html.light .border-slate-800,
@@ -98,38 +159,69 @@ html.light .border-slate-850,
 html.light .border-slate-855,
 html.light .border-slate-900,
 html.light .border-slate-900\/80 {
-  border-color: #e2e8f0 !important;
+  border-color: #d4d7dc !important;
 }
 
 html.light .text-white {
-  color: #0f172a !important;
+  color: #0f1117 !important;
 }
 
 html.light .text-slate-100,
 html.light .text-slate-200 {
-  color: #1e293b !important;
+  color: #1a1f2e !important;
 }
 
 html.light .text-slate-300,
 html.light .text-slate-400 {
-  color: #475569 !important;
+  color: #3d4350 !important;
 }
 
 html.light .text-slate-500 {
-  color: #64748b !important;
+  color: #6b7280 !important;
 }
 
 html.light input,
 html.light select,
 html.light textarea {
   background-color: #ffffff !important;
-  border-color: #cbd5e1 !important;
-  color: #0f172a !important;
+  border-color: #b8bcc4 !important;
+  color: #0f1117 !important;
 }
 
 html.light input::placeholder,
 html.light textarea::placeholder {
-  color: #94a3b8 !important;
+  color: #9ca3af !important;
+}
+
+/* Light Mode: Sidebar with proper depth */
+html.light aside,
+html.light nav {
+  background-color: #e8eaed;
+}
+
+/* Light Mode: Tone down vivid accent badges */
+html.light .bg-emerald-50,
+html.light .bg-emerald-100 {
+  background-color: #e8f5f0 !important;
+}
+html.light .text-emerald-700,
+html.light .text-emerald-800 {
+  color: #166534 !important;
+}
+html.light .bg-amber-50,
+html.light .bg-amber-100 {
+  background-color: #f5f0e8 !important;
+}
+html.light .text-amber-800 {
+  color: #7c5a0e !important;
+}
+
+/* Vivid gradients in light mode → muted professional */
+html.light .from-purple-600 {
+  --tw-gradient-from: #4f46e5 !important;
+}
+html.light .to-pink-600 {
+  --tw-gradient-to: #6366f1 !important;
 }
 
 /* Minimalist Scrollbar */

@@ -1398,12 +1398,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                 onClick={handleToggleNgrok}
                 disabled={ngrokLoading || ngrokStatus === 'starting'}
                 className={`h-9 px-3 rounded-xl border text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer shadow-sm ${ngrokOnline
-                  ? 'bg-emerald-950/60 border-emerald-500/50 text-emerald-300 hover:bg-emerald-900/60'
+                  ? 'bg-indigo-950/60 border-indigo-500/40 text-indigo-300 hover:bg-indigo-900/60'
                   : ngrokStatus === 'starting'
-                    ? 'bg-amber-950/60 border-amber-500/50 text-amber-300'
+                    ? 'bg-zinc-900/60 border-zinc-700 text-zinc-300'
                     : theme === 'light'
                       ? 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-700'
-                      : 'bg-slate-900/80 hover:bg-slate-800 border-slate-800 text-slate-300'
+                      : 'bg-zinc-900/80 hover:bg-zinc-800 border-zinc-800 text-zinc-400'
                   }`}
                 title={
                   ngrokOnline
@@ -1415,18 +1415,18 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
               >
                 {ngrokLoading || ngrokStatus === 'starting' ? (
                   <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400" />
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-zinc-400" />
                     <span className="hidden sm:inline">Conectando...</span>
                   </>
                 ) : ngrokOnline ? (
                   <>
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                    <Globe className="w-3.5 h-3.5 text-emerald-400" />
+                    <span className="w-2 h-2 rounded-full bg-indigo-400 animate-ping" />
+                    <Globe className="w-3.5 h-3.5 text-indigo-400" />
                     <span className="hidden sm:inline">Ngrok Online</span>
                   </>
                 ) : (
                   <>
-                    <Globe className="w-3.5 h-3.5 text-slate-400" />
+                    <Globe className="w-3.5 h-3.5 text-zinc-500" />
                     <span className="hidden sm:inline">Ligar Ngrok</span>
                   </>
                 )}
@@ -1437,7 +1437,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                   href={ngrokUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="h-9 px-2.5 rounded-xl bg-slate-900 border border-emerald-500/40 text-emerald-400 hover:text-emerald-300 hover:bg-slate-850 text-xs font-mono flex items-center gap-1.5 transition-all cursor-pointer shadow-md"
+                  className="h-9 px-2.5 rounded-xl bg-zinc-900 border border-indigo-500/30 text-indigo-400 hover:text-indigo-300 hover:bg-zinc-800 text-xs font-mono flex items-center gap-1.5 transition-all cursor-pointer shadow-md"
                   title="Abrir Dashboard no Link Público do Ngrok"
                 >
                   <span className="max-w-[130px] truncate hidden md:inline">{ngrokUrl.replace('https://', '')}</span>
@@ -1450,20 +1450,20 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
             <button
               onClick={toggleTheme}
               className={`h-9 px-2.5 rounded-xl border transition-all cursor-pointer flex items-center gap-1.5 ${theme === 'light'
-                ? 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-800 shadow-sm'
-                : 'bg-slate-900/80 hover:bg-slate-800 border-slate-800 text-amber-300 shadow-sm'
+                ? 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-600 shadow-sm'
+                : 'bg-zinc-900/80 hover:bg-zinc-800 border-zinc-800 text-zinc-400 shadow-sm'
                 }`}
               title={theme === 'dark' ? 'Mudar para Modo Claro' : 'Mudar para Modo Escuro'}
             >
               {theme === 'dark' ? (
                 <>
-                  <Sun className="w-4 h-4 text-amber-400" />
-                  <span className="hidden sm:inline text-xs font-semibold text-amber-300">Claro</span>
+                  <Sun className="w-4 h-4 text-zinc-400" />
+                  <span className="hidden sm:inline text-xs font-semibold text-zinc-400">Claro</span>
                 </>
               ) : (
                 <>
-                  <Moon className="w-4 h-4 text-indigo-600" />
-                  <span className="hidden sm:inline text-xs font-semibold text-slate-700">Escuro</span>
+                  <Moon className="w-4 h-4 text-slate-500" />
+                  <span className="hidden sm:inline text-xs font-semibold text-slate-600">Escuro</span>
                 </>
               )}
             </button>
@@ -1533,15 +1533,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                               onClick={() => markBellRead(n.id)}
                               className={`flex items-start gap-3 px-4 py-3 transition-all cursor-default group ${
                                 !n.read
-                                  ? theme === 'light' ? 'bg-purple-50/80 hover:bg-purple-50' : 'bg-purple-950/20 hover:bg-purple-950/30'
-                                  : theme === 'light' ? 'hover:bg-slate-50' : 'hover:bg-slate-900/40'
+                                  ? theme === 'light' ? 'bg-slate-50 hover:bg-slate-100' : 'bg-zinc-900/40 hover:bg-zinc-900/60'
+                                  : theme === 'light' ? 'hover:bg-slate-50' : 'hover:bg-zinc-900/20'
                               }`}
                             >
                               <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-lg shrink-0 shadow-sm ${
-                                n.type === 'success' ? 'bg-emerald-500/15 border border-emerald-500/30'
-                                : n.type === 'error' ? 'bg-red-500/15 border border-red-500/30'
-                                : n.type === 'warning' ? 'bg-amber-500/15 border border-amber-500/30'
-                                : 'bg-purple-500/15 border border-purple-500/30'
+                                n.type === 'success' ? 'bg-zinc-800/50 border border-zinc-700/50'
+                                : n.type === 'error' ? 'bg-zinc-800/50 border border-red-900/30'
+                                : n.type === 'warning' ? 'bg-zinc-800/50 border border-zinc-700/50'
+                                : 'bg-zinc-800/50 border border-zinc-700/50'
                               }`}>
                                 {n.emoji}
                               </div>
@@ -1828,19 +1828,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                 onClick={() => setActiveTab('crm')}
                 className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2 py-2.5' : 'gap-3 px-3.5 py-2.5'} rounded-xl text-xs font-semibold transition-all cursor-pointer ${activeTab === 'crm'
                   ? theme === 'light'
-                    ? 'bg-emerald-50 text-emerald-700 font-bold shadow-sm'
-                    : 'bg-emerald-950/40 text-emerald-300 border border-emerald-500/30 font-bold shadow-sm'
+                    ? 'bg-slate-100 text-slate-900 font-bold shadow-sm border border-slate-200'
+                    : 'bg-zinc-800/60 text-zinc-200 border border-zinc-700/50 font-bold shadow-sm'
                   : theme === 'light'
                     ? 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                    : 'text-slate-400 hover:bg-slate-900/60 hover:text-slate-200'
+                    : 'text-zinc-400 hover:bg-zinc-900/60 hover:text-zinc-200'
                   }`}
                 title="Funil de Vendas"
               >
-                <TrendingUp className="w-4 h-4 text-emerald-400 shrink-0" />
+                <TrendingUp className="w-4 h-4 text-slate-400 shrink-0" />
                 {!sidebarCollapsed && (
                   <>
                     <span className="truncate flex-1 text-left">Funil de Vendas</span>
-                    <span className="text-[9px] px-1.5 py-0.2 rounded-full font-mono bg-emerald-950 border border-emerald-500/30 text-emerald-400 font-bold">
+                    <span className="text-[9px] px-1.5 py-0.2 rounded-full font-mono bg-zinc-800 border border-zinc-700 text-zinc-400 font-bold">
                       CRM
                     </span>
                   </>
@@ -1869,7 +1869,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                   }`}
                 title="Buscador de Clientes"
               >
-                <Users className="w-4 h-4 text-sky-400 shrink-0" />
+                <Users className="w-4 h-4 text-slate-400 shrink-0" />
                 {!sidebarCollapsed && <span className="truncate">Buscador de Clientes</span>}
               </button>
 
@@ -1877,25 +1877,24 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                 onClick={() => setActiveTab('saved-leads')}
                 className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2 py-2.5 relative' : 'gap-3 px-3.5 py-2.5'} rounded-xl text-xs font-semibold transition-all cursor-pointer ${activeTab === 'saved-leads'
                   ? theme === 'light'
-                    ? 'bg-amber-50 text-amber-800 font-bold'
-                    : 'bg-slate-800 text-amber-300 font-bold'
+                    ? 'bg-slate-100 text-slate-900 font-bold border border-slate-200'
+                    : 'bg-zinc-800/60 text-zinc-200 border border-zinc-700/50 font-bold'
                   : theme === 'light'
                     ? 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                    : 'text-slate-400 hover:bg-slate-900/60 hover:text-slate-200'
+                    : 'text-zinc-400 hover:bg-zinc-900/60 hover:text-slate-200'
                   }`}
                 title={`Leads Salvos (${savedLeads.length})`}
               >
-                <Bookmark className="w-4 h-4 text-amber-400 shrink-0" />
+                <Bookmark className="w-4 h-4 text-slate-400 shrink-0" />
                 {!sidebarCollapsed ? (
                   <>
                     <span className="truncate flex-1 text-left">Leads Salvos</span>
-                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${theme === 'light' ? 'bg-amber-100 text-amber-800' : 'bg-amber-950/60 text-amber-300 border border-amber-500/30'
-                      }`}>
+                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${theme === 'light' ? 'bg-slate-200 text-slate-700' : 'bg-zinc-800 text-zinc-400 border border-zinc-700'}`}>
                       {savedLeads.length}
                     </span>
                   </>
                 ) : savedLeads.length > 0 && (
-                  <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-amber-400" />
+                  <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-zinc-500" />
                 )}
               </button>
 
@@ -1947,21 +1946,21 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
 
                 {/* Link Ngrok quando online */}
                 {ngrokOnline && ngrokUrl && (
-                  <div className={`p-3 border rounded-xl animate-in fade-in duration-200 ${theme === 'light' ? 'bg-emerald-50 border-emerald-200' : 'bg-emerald-950/30 border-emerald-500/30'
+                  <div className={`p-3 border rounded-xl animate-in fade-in duration-200 ${theme === 'light' ? 'bg-slate-50 border-slate-200' : 'bg-zinc-900/60 border-zinc-800'
                     }`}>
                     <div className="flex items-center justify-between gap-1 mb-1">
                       <div className="flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                        <span className={`text-[10px] font-bold uppercase tracking-wider ${theme === 'light' ? 'text-emerald-800' : 'text-emerald-400'
+                        <span className="w-2 h-2 rounded-full bg-indigo-400 animate-ping" />
+                        <span className={`text-[10px] font-bold uppercase tracking-wider ${theme === 'light' ? 'text-slate-700' : 'text-zinc-400'
                           }`}>Ngrok Online</span>
                       </div>
-                      <Globe className="w-3.5 h-3.5 text-emerald-400" />
+                      <Globe className="w-3.5 h-3.5 text-zinc-500" />
                     </div>
                     <a
                       href={ngrokUrl}
                       target="_blank"
                       rel="noreferrer"
-                      className={`text-xs font-mono truncate block hover:underline transition-colors flex items-center justify-between gap-1 ${theme === 'light' ? 'text-emerald-700' : 'text-emerald-300'
+                      className={`text-xs font-mono truncate block hover:underline transition-colors flex items-center justify-between gap-1 ${theme === 'light' ? 'text-slate-700' : 'text-zinc-400'
                         }`}
                       title={ngrokUrl}
                     >
@@ -2005,7 +2004,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                 <div className="flex items-center gap-2 flex-wrap">
                   <button
                     onClick={() => { setCreationMode('ai'); setShowCreateModal(true); }}
-                    className="px-3.5 py-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
+                    className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
                   >
                     <Zap className="w-3.5 h-3.5" />
                     Criar com IA
@@ -2043,17 +2042,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                 {/* CRM de Vendas de Sites */}
                 <div
                   onClick={() => setActiveTab('crm')}
-                  className="bg-[#0f0b18] border border-slate-850 hover:border-emerald-500/40 rounded-2xl p-5 shadow-xl relative overflow-hidden group cursor-pointer transition-all"
+                  className="bg-[#0f0f12] border border-zinc-800 hover:border-indigo-500/30 rounded-2xl p-5 shadow-xl relative overflow-hidden group cursor-pointer transition-all"
                 >
-                  <div className="absolute top-0 right-0 w-20 h-20 bg-emerald-500/10 rounded-full blur-xl group-hover:bg-emerald-500/20 transition-all" />
+                  <div className="absolute top-0 right-0 w-20 h-20 bg-indigo-500/5 rounded-full blur-xl group-hover:bg-indigo-500/10 transition-all" />
                   <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">CRM de Vendas</span>
-                    <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                    <span className="text-[11px] text-zinc-500 font-bold uppercase tracking-wider">CRM de Vendas</span>
+                    <div className="p-2 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
                       <TrendingUp className="w-4 h-4" />
                     </div>
                   </div>
-                  <p className="text-3xl font-black text-emerald-400 mt-2">Pipeline</p>
-                  <span className="text-[11px] text-emerald-400 font-medium flex items-center gap-1 mt-2">
+                  <p className="text-3xl font-black text-zinc-200 mt-2">Pipeline</p>
+                  <span className="text-[11px] text-zinc-500 font-medium flex items-center gap-1 mt-2">
                     Acessar Funil de Vendas <ChevronRight className="w-3 h-3" />
                   </span>
                 </div>
@@ -2061,35 +2060,35 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                 {/* Leads Prospectados & Salvos */}
                 <div
                   onClick={() => setActiveTab('saved-leads')}
-                  className="bg-[#0f0b18] border border-slate-850 hover:border-amber-500/40 rounded-2xl p-5 shadow-xl relative overflow-hidden group cursor-pointer transition-all"
+                  className="bg-[#0f0f12] border border-zinc-800 hover:border-zinc-700 rounded-2xl p-5 shadow-xl relative overflow-hidden group cursor-pointer transition-all"
                 >
-                  <div className="absolute top-0 right-0 w-20 h-20 bg-amber-500/10 rounded-full blur-xl group-hover:bg-amber-500/20 transition-all" />
+                  <div className="absolute top-0 right-0 w-20 h-20 bg-zinc-700/10 rounded-full blur-xl group-hover:bg-zinc-700/20 transition-all" />
                   <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">Leads Salvos</span>
-                    <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                    <span className="text-[11px] text-zinc-500 font-bold uppercase tracking-wider">Leads Salvos</span>
+                    <div className="p-2 rounded-xl bg-zinc-800/60 text-zinc-400 border border-zinc-700">
                       <Bookmark className="w-4 h-4" />
                     </div>
                   </div>
-                  <p className="text-3xl font-black text-white mt-2">{savedLeads.length}</p>
-                  <span className="text-[11px] text-amber-400 font-medium flex items-center gap-1 mt-2">
+                  <p className="text-3xl font-black text-zinc-200 mt-2">{savedLeads.length}</p>
+                  <span className="text-[11px] text-zinc-500 font-medium flex items-center gap-1 mt-2">
                     Ver oportunidades <ChevronRight className="w-3 h-3" />
                   </span>
                 </div>
 
                 {/* Status do Servidor e Deploy */}
-                <div className="bg-[#0f0b18] border border-slate-850 rounded-2xl p-5 shadow-xl relative overflow-hidden group">
-                  <div className="absolute top-0 right-0 w-20 h-20 bg-emerald-500/10 rounded-full blur-xl group-hover:bg-emerald-500/20 transition-all" />
+                <div className="bg-[#0f0f12] border border-zinc-800 rounded-2xl p-5 shadow-xl relative overflow-hidden group">
+                  <div className="absolute top-0 right-0 w-20 h-20 bg-zinc-700/5 rounded-full blur-xl group-hover:bg-zinc-700/10 transition-all" />
                   <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">Servidor FTP</span>
-                    <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                    <span className="text-[11px] text-zinc-500 font-bold uppercase tracking-wider">Servidor FTP</span>
+                    <div className="p-2 rounded-xl bg-zinc-800/60 text-zinc-400 border border-zinc-700">
                       <Server className="w-4 h-4" />
                     </div>
                   </div>
-                  <p className="text-lg font-bold text-emerald-400 mt-2 flex items-center gap-1.5">
-                    <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full shadow-[0_0_8px_#10b981]" />
+                  <p className="text-lg font-bold text-zinc-300 mt-2 flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 bg-indigo-400 rounded-full" />
                     Conectado
                   </p>
-                  <span className="text-[11px] text-slate-500 font-mono mt-2 block">
+                  <span className="text-[11px] text-zinc-600 font-mono mt-2 block">
                     Sync Sandbox Live
                   </span>
                 </div>
@@ -2121,44 +2120,44 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
 
                     <button
                       onClick={() => setActiveTab('leads')}
-                      className="p-4 bg-slate-950 border border-slate-800/80 hover:border-pink-500/50 rounded-xl text-left transition-all group cursor-pointer"
+                      className="p-4 bg-zinc-950 border border-zinc-800/80 hover:border-zinc-700 rounded-xl text-left transition-all group cursor-pointer"
                     >
                       <div className="flex items-center justify-between mb-2">
-                        <span className="p-2 rounded-lg bg-pink-500/10 text-pink-400 border border-pink-500/20">
+                        <span className="p-2 rounded-lg bg-zinc-800/60 text-zinc-400 border border-zinc-700">
                           <Users className="w-4 h-4" />
                         </span>
-                        <ArrowUpRight className="w-4 h-4 text-slate-600 group-hover:text-pink-400 transition-colors" />
+                        <ArrowUpRight className="w-4 h-4 text-zinc-700 group-hover:text-zinc-400 transition-colors" />
                       </div>
-                      <span className="font-bold text-white text-sm block">Buscador de Clientes Locais</span>
-                      <span className="text-xs text-slate-400 mt-0.5 block">Prospecte comércios sem website e WhatsApp</span>
+                      <span className="font-bold text-zinc-200 text-sm block">Buscador de Clientes Locais</span>
+                      <span className="text-xs text-zinc-500 mt-0.5 block">Prospecte comércios sem website e WhatsApp</span>
                     </button>
 
                     <button
                       onClick={() => setActiveTab('presets')}
-                      className="p-4 bg-slate-950 border border-slate-800/80 hover:border-cyan-500/50 rounded-xl text-left transition-all group cursor-pointer"
+                      className="p-4 bg-zinc-950 border border-zinc-800/80 hover:border-zinc-700 rounded-xl text-left transition-all group cursor-pointer"
                     >
                       <div className="flex items-center justify-between mb-2">
-                        <span className="p-2 rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                        <span className="p-2 rounded-lg bg-zinc-800/60 text-zinc-400 border border-zinc-700">
                           <SlidersHorizontal className="w-4 h-4" />
                         </span>
-                        <ArrowUpRight className="w-4 h-4 text-slate-600 group-hover:text-cyan-400 transition-colors" />
+                        <ArrowUpRight className="w-4 h-4 text-zinc-700 group-hover:text-zinc-400 transition-colors" />
                       </div>
-                      <span className="font-bold text-white text-sm block">Filtros Pré-Configurados</span>
-                      <span className="text-xs text-slate-400 mt-0.5 block">Buscas automatizadas com 1 clique</span>
+                      <span className="font-bold text-zinc-200 text-sm block">Filtros Pré-Configurados</span>
+                      <span className="text-xs text-zinc-500 mt-0.5 block">Buscas automatizadas com 1 clique</span>
                     </button>
 
                     <button
                       onClick={() => setShowSettings(true)}
-                      className="p-4 bg-slate-950 border border-slate-800/80 hover:border-amber-500/50 rounded-xl text-left transition-all group cursor-pointer"
+                      className="p-4 bg-zinc-950 border border-zinc-800/80 hover:border-zinc-700 rounded-xl text-left transition-all group cursor-pointer"
                     >
                       <div className="flex items-center justify-between mb-2">
-                        <span className="p-2 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                        <span className="p-2 rounded-lg bg-zinc-800/60 text-zinc-400 border border-zinc-700">
                           <Settings className="w-4 h-4" />
                         </span>
-                        <ArrowUpRight className="w-4 h-4 text-slate-600 group-hover:text-amber-400 transition-colors" />
+                        <ArrowUpRight className="w-4 h-4 text-zinc-700 group-hover:text-zinc-400 transition-colors" />
                       </div>
-                      <span className="font-bold text-white text-sm block">Configurar IA & Proxies</span>
-                      <span className="text-xs text-slate-400 mt-0.5 block">Chaves de API do Gemini e Proxies</span>
+                      <span className="font-bold text-zinc-200 text-sm block">Configurar IA & Proxies</span>
+                      <span className="text-xs text-zinc-500 mt-0.5 block">Chaves de API do Gemini e Proxies</span>
                     </button>
                   </div>
                 </div>

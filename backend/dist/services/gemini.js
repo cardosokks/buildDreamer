@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.generateAIResponse = void 0;
+exports.generateAIResponse = exports.DEFAULT_AI_SKILLS = void 0;
 exports.cleanHtmlExtractAssets = cleanHtmlExtractAssets;
 const undici_1 = require("undici");
 function isValidHttpUrl(stringToTest) {
@@ -123,6 +123,56 @@ function resilientJsonParse(rawString) {
     }
     throw new Error('Falha ao processar resposta JSON da IA.');
 }
+exports.DEFAULT_AI_SKILLS = [
+    {
+        id: 'skill-3d-canvas',
+        name: 'Elementos 3D & Efeitos Canvas WebGL',
+        category: '3d',
+        description: 'Integra esferas 3D flutuantes, partículas interativas em Canvas e efeitos de profundidade com iluminação dinâmica.',
+        promptSnippet: 'Incorpore elementos visuais 3D avançados: adicione no JS um canvas interativo com partículas flutuantes reativas ao mouse ou geometrias 3D abstratas (com iluminação neon, wireframe dinâmico e gradientes de profundidade). Crie sensação de tecnologia de ponta.',
+        enabled: true
+    },
+    {
+        id: 'skill-parallax-gsap',
+        name: 'Scroll Parallax & Transições Cinemáticas',
+        category: 'animation',
+        description: 'Efeitos de rolagem com velocidade diferencial, reveal suave de seções e zoom sutil em imagens.',
+        promptSnippet: 'Implemente efeitos de Parallax cinemático: crie animações ativadas pelo scroll (reveal com transform translateY e opacity gradual) e utilize transform-style preserve-3d em cards ao passar o cursor (micro-tilt 3D suave).',
+        enabled: true
+    },
+    {
+        id: 'skill-hero-masterpiece',
+        name: 'Hero Section de Alto Impacto & Glassmorphism',
+        category: 'hero',
+        description: 'Hero sections cinematográficas com tipografia imponente, badges luminosos, floating cards e CTAs com brilho pulsante.',
+        promptSnippet: 'Crie uma Hero Section espetacular: use tipografia com gradiente metálico (bg-clip text), badges translúcidos com iluminação neon sutil, cards flutuantes de estatísticas e um botão de ação primária (CTA) com efeito de glow pulsante e gradiente suave.',
+        enabled: true
+    },
+    {
+        id: 'skill-micro-interactions',
+        name: 'Micro-Interações & Feedback Visual Tátil',
+        category: 'animation',
+        description: 'Efeitos magnéticos nos botões, ripples suaves, indicadores de progresso de leitura e feedbacks táteis.',
+        promptSnippet: 'Adicione micro-interações refinadas: efeitos de hover magnéticos ou elevação nos botões, ripples visuais ao clicar, bordas com gradiente animado em cards em destaque e barra de progresso de scroll discreta no topo da página.',
+        enabled: true
+    },
+    {
+        id: 'skill-cro-conversion',
+        name: 'Gatilhos de Conversão (CRO) & Prova Social',
+        category: 'conversion',
+        description: 'Seções de depoimentos com estrelas douradas, contadores animados de métricas, cronômetros de urgência e WhatsApp flutuante.',
+        promptSnippet: 'Otimize a página para alta conversão (CRO): adicione contador numérico animado para métricas de sucesso, grade de depoimentos com fotos circulares e 5 estrelas douradas, garantia visual e botão flutuante do WhatsApp no canto inferior direito com pulso de atenção.',
+        enabled: true
+    },
+    {
+        id: 'skill-dark-luxury',
+        name: 'Design System Dark Luxury & Glassmorphism',
+        category: 'layout',
+        description: 'Paletas luxuosas em tons de obsidian, violeta profundo, ouro champagne ou neon cyan com bordas translúcidas.',
+        promptSnippet: 'Utilize estética Dark Luxury de alto padrão: fundo em tons profundos (#07020d, #0b0714), painéis com glassmorphism translúcido (bg-slate-900/60 backdrop-blur-xl border border-purple-500/20), tipografia moderna (Outfit para títulos e Inter para textos) e contrastes meticulosamente calculados.',
+        enabled: true
+    }
+];
 const generateAIResponse = async (prompt, context, customApiKey, customModel, registeredModels, onModelAttempt, customProxyUrl, customSkills, attachedFiles) => {
     const activeKey = customApiKey || process.env.GEMINI_API_KEY;
     const proxyUrl = isValidHttpUrl(customProxyUrl) ? customProxyUrl.trim() : defaultProxyUrl;
@@ -139,14 +189,20 @@ const generateAIResponse = async (prompt, context, customApiKey, customModel, re
     else {
         candidateModels = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-2.5-pro'];
     }
-    // Monta as diretrizes de Skills Ativas
+    // Se customSkills for omitido ou vazio, usa DEFAULT_AI_SKILLS como fallback ativo
+    const skillsToUse = (customSkills && Array.isArray(customSkills) && customSkills.length > 0)
+        ? customSkills
+        : exports.DEFAULT_AI_SKILLS;
     let skillsDirective = '';
-    if (customSkills && customSkills.length > 0) {
-        const activeSkills = customSkills.filter(s => s.enabled !== false);
+    if (skillsToUse && skillsToUse.length > 0) {
+        const activeSkills = skillsToUse.filter(s => s.enabled !== false);
         if (activeSkills.length > 0) {
             skillsDirective = `
-    DIRETRIZES TÉCNICAS E SKILLS DE DESIGN AVANÇADAS ATIVAS (OBRIGATÓRIO INCORPORAR):
+    ========================================================
+    DIRETRIZES TÉCNICAS E SKILLS DE DESIGN OBRIGATÓRIAS ATIVAS (OBRIGATÓRIO INCORPORAR NO HTML, CSS E JS GENERADOS):
+    Você DEVE aplicar ativamente e obrigatoriamente as seguintes habilidades de inteligência artificial no código retornado:
     ${activeSkills.map((s, idx) => `${idx + 1}. [SKILL: ${s.name.toUpperCase()}]:\n${s.promptSnippet}`).join('\n\n')}
+    ========================================================
       `;
         }
     }

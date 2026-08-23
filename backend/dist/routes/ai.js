@@ -259,6 +259,27 @@ router.post('/chat', async (req, res) => {
                 customSkills = JSON.parse(rawSkills);
         }
         catch { }
+        if (!customSkills && req.userId) {
+            try {
+                const userRows = await db_1.prisma.$queryRawUnsafe(`
+          SELECT "customAiSkills" FROM "User" WHERE "id" = $1 LIMIT 1
+        `, req.userId);
+                if (userRows && userRows[0] && userRows[0].customAiSkills) {
+                    let s = userRows[0].customAiSkills;
+                    if (typeof s === 'string') {
+                        try {
+                            s = JSON.parse(s);
+                        }
+                        catch { }
+                    }
+                    if (Array.isArray(s) && s.length > 0)
+                        customSkills = s;
+                }
+            }
+            catch (dbSkillsErr) {
+                console.warn('Erro ao buscar skills do usuário no banco:', dbSkillsErr);
+            }
+        }
         const jobId = `chat-job-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
         exports.aiChatJobsQueue[jobId] = {
             status: 'pending',
