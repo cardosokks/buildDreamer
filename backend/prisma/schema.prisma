@@ -54,6 +54,8 @@ model Project {
   status       String          @default("development") // development, published
   domain       String?         @unique
   favicon      String?
+  navbarHtml   String          @default("")
+  footerHtml   String          @default("")
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
   members      ProjectMember[]

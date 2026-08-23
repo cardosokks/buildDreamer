@@ -81,6 +81,11 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
   const notify = useNotification();
   const [project, setProject] = useState<ProjectData | null>(null);
   const [activePageId, setActivePageId] = useState<string>('');
+  const activePageRef = useRef<Page | null>(null);
+  const pendingSaveRef = useRef<Page | null>(null);
+  const saveInFlightRef = useRef(false);
+  const saveTimerRef = useRef<number | null>(null);
+  const manualSaveRequestedRef = useRef(false);
   
   // Breakpoints & Viewports
   const [viewport, setViewport] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
@@ -229,6 +234,10 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
 
   const activePage = project?.pages.find(p => p.id === activePageId);
 
+  useEffect(() => {
+    activePageRef.current = activePage || null;
+  }, [activePage]);
+
   // Push Snapshot to Undo Stack
   const pushHistorySnapshot = useCallback((description: string) => {
     if (!activePage) return;
@@ -356,75 +365,121 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
 
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error'>('saved');
 
-  // Update Page Code with Database & FTP Sync
-  const handleCodeChange = async (type: 'html' | 'css' | 'js', value: string) => {
-    if (!activePage) return;
-    pushHistorySnapshot(`Edição de ${type.toUpperCase()}`);
-    setSaveStatus('saving');
-
-    const updatedPages = project?.pages.map(p => {
-      if (p.id === activePage.id) return { ...p, [type]: value };
-      return p;
+  const persistPage = useCallback(async (pageToSave: Page, showSuccessToast: boolean) => {
+    const res = await fetch(`${API_URL}/api/pages/${pageToSave.id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        html: pageToSave.html,
+        css: pageToSave.css,
+        js: pageToSave.js,
+        seoTitle: pageToSave.seoTitle,
+        seoDescription: pageToSave.seoDescription
+      })
     });
-    setProject(prev => prev ? { ...prev, pages: updatedPages || [] } : null);
+
+    if (!res.ok) {
+      throw new Error('Falha ao salvar alterações da página');
+    }
+
+    if (showSuccessToast) {
+      notify.success(`Página "${pageToSave.name}" salva com sucesso!`, 'Salvo');
+    }
+  }, [token, notify]);
+
+  const flushQueuedSave = useCallback(async () => {
+    if (saveInFlightRef.current) return;
+    const pageToSave = pendingSaveRef.current;
+    if (!pageToSave) return;
+
+    pendingSaveRef.current = null;
+    saveInFlightRef.current = true;
+    const shouldShowToast = manualSaveRequestedRef.current;
 
     try {
-      const res = await fetch(`${API_URL}/api/pages/${activePage.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ [type]: value })
-      });
-      if (res.ok) {
-        setSaveStatus('saved');
-      } else {
-        setSaveStatus('error');
+      setSaveStatus('saving');
+      await persistPage(pageToSave, shouldShowToast);
+      setSaveStatus('saved');
+      if (shouldShowToast) {
+        manualSaveRequestedRef.current = false;
       }
-    } catch (e) {
-      console.error("Erro ao sincronizar com banco e FTP:", e);
+    } catch (e: any) {
+      console.error('Erro ao sincronizar com banco e FTP:', e);
       setSaveStatus('error');
+      if (shouldShowToast) {
+        manualSaveRequestedRef.current = false;
+        notify.error(e?.message || 'Falha ao salvar página.', 'Erro');
+      }
+    } finally {
+      saveInFlightRef.current = false;
+      if (pendingSaveRef.current) {
+        void flushQueuedSave();
+      }
     }
+  }, [persistPage, notify]);
+
+  const queuePageSave = useCallback((pageToSave: Page) => {
+    pendingSaveRef.current = pageToSave;
+    setSaveStatus('saving');
+
+    if (saveTimerRef.current !== null) {
+      window.clearTimeout(saveTimerRef.current);
+    }
+
+    saveTimerRef.current = window.setTimeout(() => {
+      saveTimerRef.current = null;
+      void flushQueuedSave();
+    }, 500);
+  }, [flushQueuedSave]);
+
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current !== null) {
+        window.clearTimeout(saveTimerRef.current);
+      }
+    };
+  }, []);
+
+  // Update Page Code with Database & FTP Sync
+  const handleCodeChange = async (type: 'html' | 'css' | 'js', value: string) => {
+    const currentPage = activePageRef.current;
+    if (!currentPage) return;
+    pushHistorySnapshot(`Edição de ${type.toUpperCase()}`);
+    const updatedPage = { ...currentPage, [type]: value };
+    activePageRef.current = updatedPage;
+
+    setProject(prev => prev ? {
+      ...prev,
+      pages: prev.pages.map(p => p.id === updatedPage.id ? updatedPage : p)
+    } : null);
+
+    queuePageSave(updatedPage);
   };
 
   // Explicit Save Trigger
   const handleManualSave = async () => {
-    if (!activePage) return;
-    setSaveStatus('saving');
-    try {
-      const res = await fetch(`${API_URL}/api/pages/${activePage.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          html: activePage.html,
-          css: activePage.css,
-          js: activePage.js,
-          seoTitle: activePage.seoTitle,
-          seoDescription: activePage.seoDescription
-        })
-      });
-      if (res.ok) {
-        setSaveStatus('saved');
-        notify.success(`Página "${activePage.name}" salva com sucesso!`, 'Salvo');
-      } else {
-        setSaveStatus('error');
-        notify.error('Não foi possível salvar as alterações.', 'Erro');
-      }
-    } catch (e: any) {
-      console.error("Erro ao salvar:", e);
-      setSaveStatus('error');
-      notify.error(e.message || 'Falha ao salvar página.', 'Erro');
+    const currentPage = pendingSaveRef.current || activePageRef.current;
+    if (!currentPage) return;
+
+    manualSaveRequestedRef.current = true;
+    pendingSaveRef.current = currentPage;
+
+    if (saveTimerRef.current !== null) {
+      window.clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
     }
+
+    void flushQueuedSave();
   };
 
   // Inline content editable change handler
   const handleInlineTextChange = (path: string, newText: string) => {
-    if (!activePage) return;
-    const doc = parseDocFromHtml(activePage.html);
+    const currentPage = activePageRef.current;
+    if (!currentPage) return;
+    const doc = parseDocFromHtml(currentPage.html);
     const root = doc.getElementById('canvas-root') || doc.body;
     const el = getElementByPath(root, path);
     if (el) {
@@ -436,10 +491,11 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
 
   // Style change handler
   const handleStyleChange = (prop: string, value: string) => {
-    if (!activePage || !selectedPath) return;
+    const currentPage = activePageRef.current;
+    if (!currentPage || !selectedPath) return;
     setSelectedStyles(prev => ({ ...prev, [prop]: value }));
 
-    const doc = parseDocFromHtml(activePage.html);
+    const doc = parseDocFromHtml(currentPage.html);
     const root = doc.getElementById('canvas-root') || doc.body;
     const el = getElementByPath(root, selectedPath);
     if (el instanceof HTMLElement) {
@@ -455,10 +511,11 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
 
   // Attribute change handler
   const handleAttrChange = (attr: string, value: string) => {
-    if (!activePage || !selectedPath) return;
+    const currentPage = activePageRef.current;
+    if (!currentPage || !selectedPath) return;
     setSelectedAttrs(prev => ({ ...prev, [attr]: value }));
 
-    const doc = parseDocFromHtml(activePage.html);
+    const doc = parseDocFromHtml(currentPage.html);
     const root = doc.getElementById('canvas-root') || doc.body;
     const el = getElementByPath(root, selectedPath);
     if (el) {
@@ -475,8 +532,9 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
 
   // Move element up or down among siblings
   const handleMoveElementDirection = (path: string, direction: 'up' | 'down') => {
-    if (!activePage || !path) return;
-    const doc = parseDocFromHtml(activePage.html);
+    const currentPage = activePageRef.current;
+    if (!currentPage || !path) return;
+    const doc = parseDocFromHtml(currentPage.html);
     const root = doc.getElementById('canvas-root') || doc.body;
     const el = getElementByPath(root, path);
     if (!el || !el.parentElement) return;
@@ -499,8 +557,9 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
 
   // Element Delete
   const handleDeleteElement = (path: string) => {
-    if (!activePage) return;
-    const doc = parseDocFromHtml(activePage.html);
+    const currentPage = activePageRef.current;
+    if (!currentPage) return;
+    const doc = parseDocFromHtml(currentPage.html);
     const root = doc.getElementById('canvas-root') || doc.body;
     const el = getElementByPath(root, path);
     if (el && el.parentElement) {
@@ -514,8 +573,9 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
 
   // Element Duplicate
   const handleDuplicateElement = (path: string) => {
-    if (!activePage) return;
-    const doc = parseDocFromHtml(activePage.html);
+    const currentPage = activePageRef.current;
+    if (!currentPage) return;
+    const doc = parseDocFromHtml(currentPage.html);
     const root = doc.getElementById('canvas-root') || doc.body;
     const el = getElementByPath(root, path);
     if (el && el.parentElement) {
@@ -528,9 +588,10 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
 
   // Element Reorder (before, after or inside)
   const handleMoveElement = (sourcePath: string, targetPath: string, position: 'before' | 'after' | 'inside' = 'inside') => {
-    if (!activePage || sourcePath === targetPath) return;
+    const currentPage = activePageRef.current;
+    if (!currentPage || sourcePath === targetPath) return;
     if (targetPath.startsWith(sourcePath + '.')) return;
-    const doc = parseDocFromHtml(activePage.html);
+    const doc = parseDocFromHtml(currentPage.html);
     const root = doc.getElementById('canvas-root') || doc.body;
     const srcEl = getElementByPath(root, sourcePath);
     const tgtEl = getElementByPath(root, targetPath);
@@ -557,8 +618,9 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
     targetPath?: string, 
     position: 'before' | 'after' | 'inside' | 'append' = 'append'
   ) => {
-    if (!activePage) return;
-    const doc = parseDocFromHtml(activePage.html);
+    const currentPage = activePageRef.current;
+    if (!currentPage) return;
+    const doc = parseDocFromHtml(currentPage.html);
     const root = doc.getElementById('canvas-root') || doc.body;
 
     // Criar nós a partir do bloco HTML
@@ -586,15 +648,16 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
     }
 
     const newHtml = serializeBodyContent(doc);
-    const newCss = cssBlock ? `${activePage.css || ''}\n${cssBlock}` : activePage.css;
+    const newCss = cssBlock ? `${currentPage.css || ''}\n${cssBlock}` : currentPage.css;
     handleCodeChange('html', newHtml);
     if (cssBlock) handleCodeChange('css', newCss);
   };
 
   // Save selected element as a custom template
   const handleSaveSelectionAsTemplate = (title: string, category: string) => {
-    if (!activePage || !selectedPath) return;
-    const doc = parseDocFromHtml(activePage.html);
+    const currentPage = activePageRef.current;
+    if (!currentPage || !selectedPath) return;
+    const doc = parseDocFromHtml(currentPage.html);
     const root = doc.getElementById('canvas-root') || doc.body;
     const el = getElementByPath(root, selectedPath);
     if (!el) {
