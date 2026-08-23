@@ -309,12 +309,16 @@ export const SettingsPage: React.FC = () => {
     setErrorMsg(null);
     setSuccessMsg(null);
 
+    const safeHeader = (val: string) => {
+      try { return btoa(unescape(encodeURIComponent(val))); } catch { return ''; }
+    };
+
     try {
       const res = await fetch(`${API_URL}/api/ai/models`, {
         headers: {
           'Authorization': `Bearer ${token}`,
-          'x-gemini-key': geminiKey || localStorage.getItem('gemini_api_key') || '',
-          'x-proxy-url': proxyUrl || localStorage.getItem('ai_proxy_url') || ''
+          'x-gemini-key': safeHeader(geminiKey || localStorage.getItem('gemini_api_key') || ''),
+          'x-proxy-url': safeHeader(proxyUrl || localStorage.getItem('ai_proxy_url') || '')
         }
       });
 

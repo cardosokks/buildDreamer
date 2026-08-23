@@ -283,11 +283,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
 
     const activeKey = geminiKey || localStorage.getItem('gemini_api_key') || '';
 
+    const safeHeader = (val: string) => {
+      try { return btoa(unescape(encodeURIComponent(val))); } catch { return ''; }
+    };
+
     try {
       const res = await fetch(`${API_URL}/api/ai/models`, {
         headers: {
           'Authorization': `Bearer ${token}`,
-          'x-gemini-key': activeKey
+          'x-gemini-key': safeHeader(activeKey)
         }
       });
 

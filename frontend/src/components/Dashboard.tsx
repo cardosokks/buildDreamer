@@ -52,7 +52,9 @@ import {
   SortAsc,
   SortDesc,
   User,
-  Link as LinkIcon
+  Link as LinkIcon,
+  PanelLeftClose,
+  PanelLeftOpen
 } from 'lucide-react';
 
 import { useTheme } from '../context/ThemeContext';
@@ -925,13 +927,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
     setRemasterPages([]);
     setShowRemasterModal(true);
 
+    const safeHeader = (val: string) => {
+      try { return btoa(unescape(encodeURIComponent(val))); } catch { return ''; }
+    };
+
     try {
       const res = await fetch(`${API_URL}/api/ai/remaster/scrape`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Proxy-Url': localStorage.getItem('ai_proxy_url') || ''
+          'X-Proxy-Url': safeHeader(localStorage.getItem('ai_proxy_url') || '')
         },
         body: JSON.stringify({
           websiteUrl: targetUrl,
@@ -1320,43 +1326,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
               )}
             </button>
 
-            {/* Controles de Visibilidade da Barra Lateral (Ícones / Ocultar) */}
-            <div className="hidden md:flex items-center gap-1 p-0.5 h-9 border rounded-xl bg-slate-950/40 border-slate-800">
-              <button
-                onClick={() => {
-                  if (sidebarHidden) {
-                    setSidebarHidden(false);
-                    setSidebarCollapsed(true);
-                  } else {
-                    setSidebarCollapsed(!sidebarCollapsed);
-                  }
-                }}
-                className={`h-7 px-2 rounded-lg text-xs transition-all cursor-pointer flex items-center gap-1.5 ${sidebarCollapsed && !sidebarHidden
-                  ? 'bg-purple-600 text-white shadow-sm font-semibold'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-850'
-                  }`}
-                title={sidebarCollapsed ? "Expandir Menu Lateral (Mostrar Textos)" : "Menu Lateral Compacto (Apenas Ícones)"}
-              >
-                <Minimize2 className={`w-3.5 h-3.5 ${sidebarCollapsed ? 'text-white' : ''}`} />
-                <span className="text-[10px] hidden xl:inline font-mono">
-                  {sidebarCollapsed ? "Expandir" : "Ícones"}
-                </span>
-              </button>
 
-              <button
-                onClick={() => setSidebarHidden(!sidebarHidden)}
-                className={`h-7 px-2 rounded-lg text-xs transition-all cursor-pointer flex items-center gap-1.5 ${sidebarHidden
-                  ? 'bg-amber-600 text-white shadow-sm font-semibold'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-850'
-                  }`}
-                title={sidebarHidden ? "Mostrar Menu Lateral" : "Ocultar Menu Lateral Totalmente (Ganhar Espaço Máximo)"}
-              >
-                <Maximize2 className="w-3.5 h-3.5" />
-                <span className="text-[10px] hidden xl:inline font-mono">
-                  {sidebarHidden ? "Mostrar Barra" : "Ocultar"}
-                </span>
-              </button>
-            </div>
 
             {/* Botão de Minimizar Cabeçalho */}
             <button
@@ -1488,7 +1458,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
         )}
 
         {/* Left Navigation Sidebar with Collapse (Icons Only), Hide & Drag-to-Resize Handle */}
-        {!sidebarHidden && (
+        {sidebarHidden ? (
+          <div
+            className={`hidden md:flex flex-col items-center justify-start pt-3 pb-3 gap-2 w-8 shrink-0 h-full border-r transition-all duration-200 ${theme === 'light' ? 'bg-white border-slate-200' : 'bg-[#0b0d13] border-slate-800/80'}`}
+          >
+            <button
+              onClick={() => setSidebarHidden(false)}
+              className={`p-1.5 rounded-lg transition-all cursor-pointer ${theme === 'light' ? 'text-slate-400 hover:text-slate-900 hover:bg-slate-100' : 'text-slate-500 hover:text-white hover:bg-slate-800'}`}
+              title="Abrir barra lateral"
+            >
+              <PanelLeftOpen className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        ) : (
           <aside
             style={{ width: sidebarCollapsed ? '60px' : `${sidebarWidth}px` }}
             className={`border-r flex flex-col justify-between shrink-0 h-full overflow-y-auto ${sidebarCollapsed ? 'p-2' : 'p-3.5'
@@ -1507,11 +1489,21 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                   </span>
                 )}
                 <button
-                  onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-                  className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-850 rounded-lg transition-colors cursor-pointer"
-                  title={sidebarCollapsed ? "Expandir barra lateral" : "Recolher barra lateral"}
+                  onClick={() => {
+                    if (!sidebarCollapsed) {
+                      setSidebarCollapsed(true);
+                    } else {
+                      setSidebarHidden(true);
+                      setSidebarCollapsed(false);
+                    }
+                  }}
+                  className={`p-1.5 rounded-lg transition-all cursor-pointer group ${theme === 'light' ? 'text-slate-400 hover:text-slate-900 hover:bg-slate-100' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+                  title={sidebarCollapsed ? "Ocultar barra lateral" : "Recolher barra lateral (somente ícones)"}
                 >
-                  <Minimize2 className={`w-3.5 h-3.5 ${sidebarCollapsed ? 'rotate-90 text-purple-400' : ''}`} />
+                  {sidebarCollapsed
+                    ? <PanelLeftClose className="w-3.5 h-3.5 text-purple-400" />
+                    : <PanelLeftClose className="w-3.5 h-3.5" />
+                  }
                 </button>
               </div>
 
@@ -1759,20 +1751,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
               </div>
             )}
           </aside>
-        )}
-
-        {/* Floating Trigger to Restore Sidebar when Hidden */}
-        {sidebarHidden && (
-          <div className="absolute left-3 top-3 z-30 animate-in fade-in slide-in-from-left duration-200">
-            <button
-              onClick={() => { setSidebarHidden(false); setSidebarCollapsed(false); }}
-              className="p-2.5 rounded-xl bg-slate-900/90 border border-purple-500/40 text-purple-300 hover:text-white hover:bg-purple-900/40 shadow-xl backdrop-blur-md transition-all cursor-pointer flex items-center gap-2"
-              title="Mostrar Barra Lateral de Navegação"
-            >
-              <Menu className="w-4 h-4" />
-              <span className="text-xs font-semibold hidden sm:inline">Mostrar Menu</span>
-            </button>
-          </div>
         )}
 
         {/* Dynamic Content Panel */}
