@@ -418,7 +418,7 @@ router.post('/remaster/scrape', async (req: AuthenticatedRequest, res: any) => {
       return res.status(400).json({ error: 'A URL do website é obrigatória.' });
     }
 
-    const clientProxyUrl = (req.headers['x-proxy-url'] || req.headers['X-Proxy-Url']) as string || process.env.AI_PROXY_URL;
+    const clientProxyUrl = decodeHeader(req.headers['x-proxy-url'] as string) || process.env.AI_PROXY_URL;
     const jobId = `scrape-${Date.now()}-${Math.random().toString(36).substr(2, 7)}`;
 
     startWebsiteScrapeJob(
@@ -513,17 +513,17 @@ router.post('/remaster/generate', async (req: AuthenticatedRequest, res: any) =>
       }
     }
 
-    const clientGeminiKey = (req.headers['x-gemini-key'] || req.headers['X-Gemini-Key']) as string || process.env.GEMINI_API_KEY;
-    const clientProxyUrl = (req.headers['x-proxy-url'] || req.headers['X-Proxy-Url']) as string || process.env.AI_PROXY_URL;
+    const clientGeminiKey = decodeHeader(req.headers['x-gemini-key'] as string) || process.env.GEMINI_API_KEY;
+    const clientProxyUrl = decodeHeader(req.headers['x-proxy-url'] as string) || process.env.AI_PROXY_URL;
     let registeredModels: string[] | undefined;
     try {
-      const rawModels = (req.headers['x-gemini-models'] || req.headers['X-Gemini-Models']) as string;
+      const rawModels = decodeHeader(req.headers['x-gemini-models'] as string);
       if (rawModels) registeredModels = JSON.parse(rawModels);
     } catch {}
 
     let customSkills: any[] | undefined;
     try {
-      const rawSkills = (req.headers['x-ai-skills'] || req.headers['X-Ai-Skills'] || req.headers['X-AI-Skills']) as string;
+      const rawSkills = decodeHeader((req.headers['x-ai-skills'] || req.headers['X-Ai-Skills'] || req.headers['X-AI-Skills']) as string);
       if (rawSkills) customSkills = JSON.parse(rawSkills);
     } catch {}
 
