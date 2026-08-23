@@ -94,7 +94,7 @@ export const Canvas: React.FC<CanvasProps> = ({
             width: 9px;
             height: 9px;
             background: var(--bg-surface);
-            border: 2px solid #a855f7;
+            border: 2px solid var(--border-purple);
             border-radius: 2px;
             z-index: 999995;
             pointer-events: auto;
