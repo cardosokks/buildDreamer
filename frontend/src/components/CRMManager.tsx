@@ -248,6 +248,11 @@ export const CRMManager: React.FC<CRMProps> = ({ onOpenRemasterModal, onOpenProj
           body: JSON.stringify(payload)
         });
         const data = await res.json();
+        if (res.status === 409) {
+          // Duplicidade detectada
+          notify.error(data.error || 'Já existe um cliente com dados semelhantes no seu CRM.', '⚠️ Cliente Duplicado');
+          return;
+        }
         if (res.ok && data.lead) {
           setLeads([data.lead, ...leads]);
           setShowModal(false);

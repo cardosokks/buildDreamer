@@ -111,10 +111,53 @@ router.post('/crm', async (req: AuthenticatedRequest, res: any) => {
     const id = `lead-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
     const parsedDealValue = typeof dealValue === 'number' ? dealValue : parseFloat(String(dealValue || '0')) || 0;
     const initialStatus = (status && ['PROSPECT','CONTACTED','PROPOSAL_SENT','IN_NEGOTIATION','WON','LOST'].includes(status)) ? status : 'PROSPECT';
-    // Converte tags para o formato de array nativo do PostgreSQL (text[])
     const tagsArr: string[] = Array.isArray(tags) ? tags.map(String) : [];
     const tagsPgArr = tagsArr;
     const safeProjectId = projectId && projectId !== '' ? String(projectId) : null;
+
+    // ── Verificação de duplicidade ──────────────────────────────────────
+    const trimmedName = String(name).trim();
+    const trimmedEmail = email ? String(email).trim().toLowerCase() : null;
+    const trimmedPhone = phone ? String(phone).trim().replace(/\D/g, '') : null;
+
+    const duplicateConditions: string[] = [];
+    const dupParams: any[] = [String(userId)];
+    let paramIdx = 2;
+
+    // Sempre verifica por nome (case-insensitive)
+    duplicateConditions.push(`LOWER("name") = LOWER($${paramIdx})`);
+    dupParams.push(trimmedName);
+    paramIdx++;
+
+    // Se tiver email, verifica duplicidade por email também
+    if (trimmedEmail) {
+      duplicateConditions.push(`LOWER("email") = LOWER($${paramIdx})`);
+      dupParams.push(trimmedEmail);
+      paramIdx++;
+    }
+
+    // Se tiver telefone, verifica por telefone (só dígitos)
+    if (trimmedPhone) {
+      duplicateConditions.push(`REGEXP_REPLACE("phone", '[^0-9]', '', 'g') = $${paramIdx}`);
+      dupParams.push(trimmedPhone);
+      paramIdx++;
+    }
+
+    // Busca: mesmo nome OU mesmo email OU mesmo telefone (para o mesmo usuário)
+    const dupQuery = `
+      SELECT "id", "name", "email", "phone" FROM "Lead"
+      WHERE "userId" = $1 AND (${duplicateConditions.join(' OR ')})
+      LIMIT 1
+    `;
+    const existingLeads: any[] = await prisma.$queryRawUnsafe(dupQuery, ...dupParams);
+
+    if (existingLeads && existingLeads.length > 0) {
+      const existing = existingLeads[0];
+      return res.status(409).json({
+        error: `Já existe um cliente com dados semelhantes: "${existing.name}"${existing.email ? ` (${existing.email})` : ''}${existing.phone ? ` - ${existing.phone}` : ''}. Edite o lead existente ou altere os dados.`,
+        existingLead: existing
+      });
+    }
 
     await prisma.$executeRawUnsafe(`
       INSERT INTO "Lead" (
