@@ -372,7 +372,7 @@ router.get('/remaster/scrape/:jobId/status', (req, res) => {
  */
 router.post('/remaster/generate', async (req, res) => {
     try {
-        const { projectName, globalPrompt, pages, sharedComponents } = req.body;
+        const { projectName, globalPrompt, pages, sharedComponents, leadId } = req.body;
         if (!projectName || !pages || !Array.isArray(pages) || pages.length === 0) {
             return res.status(400).json({ error: 'Nome do projeto e lista de páginas são obrigatórios.' });
         }
@@ -407,6 +407,16 @@ router.post('/remaster/generate', async (req, res) => {
                 pages: true
             }
         });
+        if (leadId) {
+            try {
+                await db_1.prisma.$executeRawUnsafe(`
+          UPDATE "Lead" SET "projectId" = $1 WHERE "id" = $2 AND "userId" = $3
+        `, project.id, leadId, userId);
+            }
+            catch (err) {
+                console.warn('Erro ao vincular lead ao remaster:', err);
+            }
+        }
         const clientGeminiKey = (req.headers['x-gemini-key'] || req.headers['X-Gemini-Key']) || process.env.GEMINI_API_KEY;
         const clientProxyUrl = (req.headers['x-proxy-url'] || req.headers['X-Proxy-Url']) || process.env.AI_PROXY_URL;
         let registeredModels;

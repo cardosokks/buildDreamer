@@ -135,7 +135,7 @@ import { processWebsiteRemasterJob } from '../services/siteRemaster';
 // Create Project
 router.post('/', async (req: AuthenticatedRequest, res: any) => {
   try {
-    const { name, description, isAIPrompt, remasterWebsiteUrl } = req.body;
+    const { name, description, isAIPrompt, remasterWebsiteUrl, leadId } = req.body;
     if (!name) {
       return res.status(400).json({ error: 'Project name is required' });
     }
@@ -170,6 +170,17 @@ router.post('/', async (req: AuthenticatedRequest, res: any) => {
         pages: true
       }
     });
+
+    // Se um leadId foi fornecido, vincula o projeto diretamente ao lead no CRM
+    if (leadId) {
+      try {
+        await prisma.$executeRawUnsafe(`
+          UPDATE "Lead" SET "projectId" = $1 WHERE "id" = $2 AND "userId" = $3
+        `, project.id, leadId, userId);
+      } catch (leadLinkErr) {
+        console.warn('Erro ao vincular lead ao projeto recém-criado:', leadLinkErr);
+      }
+    }
 
     // Busca configurações salvas no banco de dados do usuário como fallback prioritário
     let dbGeminiKey: string | undefined;

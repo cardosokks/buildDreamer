@@ -638,6 +638,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
   const [businessName, setBusinessName] = useState('');
   const [segment, setSegment] = useState('');
   const [visualStyle, setVisualStyle] = useState('');
+  const [targetLeadForProject, setTargetLeadForProject] = useState<Lead | null>(null);
 
   // Rastreamento de projetos sendo gerados pela IA no momento
   const [generatingProjectJobs, setGeneratingProjectJobs] = useState<Record<string, { status: string; currentModel?: string; attempt?: number; total?: number }>>({});
@@ -925,8 +926,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
   // Convert a lead directly to a project setup
   const handleCreateProjectFromLead = (lead: Lead) => {
     setCreationMode('ai');
+    setTargetLeadForProject(lead);
     setBusinessName(lead.name);
-    setSegment(leadQuery || 'Comércio Local');
+    setSegment(leadQuery || lead.category || 'Comércio Local');
     setVisualStyle('moderno e escuro neon com foco em conversão');
     setNewProjectDesc(`Site profissional focado em capturar clientes locais para ${lead.name}, endereço: ${lead.address}, telefone: ${lead.phone}.`);
     setShowCreateModal(true);
@@ -1061,6 +1063,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
           projectName: remasterBusinessName,
           globalPrompt: remasterGlobalPrompt,
           pages: activePages,
+          leadId: remasterTargetLead?.id || undefined,
           sharedComponents: {
             repeatNavbar,
             repeatFooter
@@ -1074,6 +1077,31 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
       }
 
       const newProject = await res.json();
+
+      // Vincula no CRM se o lead for originário do buscador ou salvos
+      if (remasterTargetLead) {
+        try {
+          await fetch(`${API_URL}/api/leads/crm`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+              name: remasterTargetLead.name,
+              company: remasterTargetLead.category || 'Comércio',
+              phone: remasterTargetLead.phone || null,
+              website: remasterTargetLead.website || null,
+              address: remasterTargetLead.address || null,
+              dealValue: 1500,
+              status: 'PROPOSAL_SENT',
+              notes: 'Site remasterizado com IA pronto para apresentação de proposta comercial.',
+              projectId: newProject.id
+            })
+          });
+        } catch { }
+      }
+
       setProjects([newProject, ...projects]);
       setGeneratingProjectJobs(prev => ({
         ...prev,
@@ -1082,6 +1110,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
 
       setShowRemasterModal(false);
       setActiveTab('projects');
+      fetchProjects();
     } catch (err: any) {
       alert(err.message);
     } finally {
@@ -1167,7 +1196,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
         body: JSON.stringify({
           name: finalName,
           description: finalDesc,
-          isAIPrompt: creationMode === 'ai'
+          isAIPrompt: creationMode === 'ai',
+          leadId: targetLeadForProject?.id || undefined
         })
       });
 
@@ -1177,8 +1207,34 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
       }
       const newProject = await res.json();
 
+      // Se foi gerado a partir de um Lead do buscador/salvos, adiciona ou atualiza no CRM como PROPOSAL_SENT
+      if (targetLeadForProject) {
+        try {
+          await fetch(`${API_URL}/api/leads/crm`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+              name: targetLeadForProject.name,
+              company: targetLeadForProject.category || 'Comércio Local',
+              phone: targetLeadForProject.phone || null,
+              website: targetLeadForProject.website || null,
+              address: targetLeadForProject.address || null,
+              dealValue: 1500,
+              status: 'PROPOSAL_SENT',
+              notes: `Site criado automaticamente via IA para proposta comercial.`,
+              projectId: newProject.id
+            })
+          });
+        } catch { }
+      }
+
       setProjects([newProject, ...projects]);
       setShowCreateModal(false);
+      setTargetLeadForProject(null);
+      fetchProjects();
       notify.success(`Projeto "${finalName}" criado com sucesso!`, 'Criado');
 
       // 🔔 Bell: project created
@@ -2635,18 +2691,20 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                                           <MapPin className="w-3.5 h-3.5" />
                                         </a>
 
+                                        {/* Botão WhatsApp */}
                                         {lead.whatsappUrl && (
                                           <a
                                             href={lead.whatsappUrl}
                                             target="_blank"
                                             rel="noopener noreferrer"
-                                            className="px-2.5 py-1.5 bg-emerald-600/20 hover:bg-emerald-600/40 border border-emerald-500/40 text-emerald-400 text-xs font-bold rounded-lg transition-all"
-                                            title="WhatsApp"
+                                            className="p-1.5 bg-emerald-600/20 hover:bg-emerald-600/40 border border-emerald-500/40 text-emerald-400 rounded-lg transition-all"
+                                            title="Conversar no WhatsApp"
                                           >
-                                            WhatsApp
+                                            <Phone className="w-3.5 h-3.5" />
                                           </a>
                                         )}
 
+                                        {/* Botão Favoritar / Remover dos Salvos */}
                                         <button
                                           onClick={() => handleToggleSaveLead(lead)}
                                           className="p-1.5 bg-yellow-500/20 border border-yellow-500/40 text-yellow-300 hover:text-red-400 rounded-lg transition-all cursor-pointer"
@@ -2655,24 +2713,23 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                                           <BookmarkCheck className="w-3.5 h-3.5 fill-yellow-400" />
                                         </button>
 
-                                        {/* Botão: Gerar Site Normal */}
+                                        {/* Botão: Gerar Site */}
                                         <button
                                           onClick={() => handleCreateProjectFromLead(lead)}
-                                          className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg text-xs transition-all shadow-md cursor-pointer flex items-center gap-1"
+                                          className="p-1.5 bg-indigo-600/30 hover:bg-indigo-600 border border-indigo-500/40 text-indigo-200 hover:text-white rounded-lg transition-all shadow-sm cursor-pointer"
+                                          title="Gerar Site Profissional para este Cliente"
                                         >
-                                          <Sparkles className="w-3.5 h-3.5" />
-                                          Gerar Site
+                                          <Layout className="w-3.5 h-3.5" />
                                         </button>
 
                                         {/* Botão: Melhorar com IA (Apenas se tiver website) */}
                                         {lead.website && (
                                           <button
                                             onClick={() => handleStartRemasterFlow(lead)}
-                                            className="px-2.5 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold rounded-lg text-xs transition-all shadow-md cursor-pointer flex items-center gap-1"
-                                            title="Analisar todas as páginas e subpáginas e recriar versão moderna com IA"
+                                            className="p-1.5 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white rounded-lg transition-all shadow-md shadow-purple-600/20 cursor-pointer"
+                                            title="Melhorar com IA (Remasterizar subpáginas)"
                                           >
                                             <Sparkles className="w-3.5 h-3.5" />
-                                            Melhorar com IA
                                           </button>
                                         )}
                                       </div>
@@ -2735,42 +2792,41 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
 
                             <div className="mt-4 pt-4 border-t border-slate-850/80 flex items-center justify-between gap-2 flex-wrap">
                               <span className="text-[10px] text-slate-500 font-mono">Salvo na Lista</span>
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-1.5">
                                 <a
                                   href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${lead.name} ${lead.address || lead.city || ''}`)}`}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  className="px-2.5 py-1.5 bg-pink-950/30 hover:bg-pink-900/50 border border-pink-500/30 text-pink-300 text-xs font-semibold rounded-xl transition-all flex items-center gap-1"
+                                  className="p-2 bg-slate-900 hover:bg-pink-950/40 border border-slate-800 hover:border-pink-500/40 text-pink-400 rounded-xl transition-all shadow-sm"
                                   title="Ver no Google Maps"
                                 >
-                                  <MapPin className="w-3.5 h-3.5" />
-                                  Maps
+                                  <MapPin className="w-4 h-4" />
                                 </a>
                                 {lead.whatsappUrl && (
                                   <a
                                     href={lead.whatsappUrl}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="px-3 py-1.5 bg-emerald-600/20 hover:bg-emerald-600/40 border border-emerald-500/40 text-emerald-400 text-xs font-bold rounded-xl transition-all"
+                                    className="p-2 bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-500/40 text-emerald-400 rounded-xl transition-all shadow-sm"
+                                    title="Conversar no WhatsApp"
                                   >
-                                    WhatsApp
+                                    <Phone className="w-4 h-4" />
                                   </a>
                                 )}
                                 <button
                                   onClick={() => handleCreateProjectFromLead(lead)}
-                                  className="px-3.5 py-1.5 bg-indigo-600/30 hover:bg-indigo-600 border border-indigo-500/40 text-xs font-bold text-indigo-200 hover:text-white rounded-xl transition-all cursor-pointer shadow-sm flex items-center gap-1"
+                                  className="p-2 bg-indigo-600/20 hover:bg-indigo-600 border border-indigo-500/40 text-indigo-300 hover:text-white rounded-xl transition-all shadow-sm cursor-pointer"
+                                  title="Gerar Site com IA para este Cliente"
                                 >
-                                  <Layout className="w-3.5 h-3.5" />
-                                  Gerar Site
+                                  <Layout className="w-4 h-4" />
                                 </button>
                                 {lead.website && (
                                   <button
                                     onClick={() => handleStartRemasterFlow(lead)}
-                                    className="px-3.5 py-1.5 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-xs font-bold text-white rounded-xl transition-all cursor-pointer shadow-md shadow-purple-600/20 flex items-center gap-1"
-                                    title="Analisar site original e remasterizar com IA"
+                                    className="p-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white rounded-xl transition-all shadow-md hover:shadow-purple-500/30 cursor-pointer"
+                                    title="Melhorar com IA: Analisar páginas e recriar com IA"
                                   >
-                                    <Sparkles className="w-3.5 h-3.5" />
-                                    Melhorar com IA
+                                    <Sparkles className="w-4 h-4" />
                                   </button>
                                 )}
                               </div>

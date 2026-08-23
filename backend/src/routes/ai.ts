@@ -447,7 +447,8 @@ router.post('/remaster/generate', async (req: AuthenticatedRequest, res: any) =>
       projectName, 
       globalPrompt, 
       pages, 
-      sharedComponents 
+      sharedComponents,
+      leadId
     } = req.body;
 
     if (!projectName || !pages || !Array.isArray(pages) || pages.length === 0) {
@@ -486,6 +487,16 @@ router.post('/remaster/generate', async (req: AuthenticatedRequest, res: any) =>
         pages: true
       }
     });
+
+    if (leadId) {
+      try {
+        await prisma.$executeRawUnsafe(`
+          UPDATE "Lead" SET "projectId" = $1 WHERE "id" = $2 AND "userId" = $3
+        `, project.id, leadId, userId);
+      } catch (err) {
+        console.warn('Erro ao vincular lead ao remaster:', err);
+      }
+    }
 
     const clientGeminiKey = (req.headers['x-gemini-key'] || req.headers['X-Gemini-Key']) as string || process.env.GEMINI_API_KEY;
     const clientProxyUrl = (req.headers['x-proxy-url'] || req.headers['X-Proxy-Url']) as string || process.env.AI_PROXY_URL;
