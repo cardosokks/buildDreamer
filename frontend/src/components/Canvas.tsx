@@ -67,8 +67,8 @@ export const Canvas: React.FC<CanvasProps> = ({
             margin: 0;
             padding: 0;
             min-height: 100vh;
-            background: #ffffff;
-            color: #0f172a;
+            background: var(--bg-surface);
+            color: var(--text-primary);
             font-family: 'Inter', sans-serif;
             position: relative;
           }
@@ -80,7 +80,7 @@ export const Canvas: React.FC<CanvasProps> = ({
           #studio-selection-box {
             position: absolute;
             display: none;
-            border: 2px solid #a855f7;
+            border: 2px solid var(--border-purple);
             pointer-events: none;
             z-index: 999990;
             box-sizing: border-box;
@@ -93,7 +93,7 @@ export const Canvas: React.FC<CanvasProps> = ({
             position: absolute;
             width: 9px;
             height: 9px;
-            background: #ffffff;
+            background: var(--bg-surface);
             border: 2px solid #a855f7;
             border-radius: 2px;
             z-index: 999995;
@@ -107,7 +107,7 @@ export const Canvas: React.FC<CanvasProps> = ({
           #studio-hover-box {
             position: absolute;
             display: none;
-            border: 2px dashed #06b6d4;
+            border: 2px dashed var(--border-teal);
             pointer-events: none;
             z-index: 999980;
             box-sizing: border-box;
@@ -120,8 +120,8 @@ export const Canvas: React.FC<CanvasProps> = ({
             display: none;
             z-index: 999999;
             pointer-events: auto;
-            background: #0f0b18;
-            border: 1px solid #7e22ce;
+            background: var(--bg-panel);
+            border: 1px solid var(--border-deep);
             border-radius: 8px;
             padding: 3px 6px;
             box-shadow: 0 10px 25px rgba(0,0,0,0.5);
@@ -131,8 +131,8 @@ export const Canvas: React.FC<CanvasProps> = ({
           }
 
           #studio-tag-badge {
-            background: #9333ea;
-            color: #ffffff;
+            background: var(--bg-tag);
+            color: var(--text-primary);
             font-family: monospace;
             font-size: 10px;
             font-weight: 700;
@@ -143,9 +143,9 @@ export const Canvas: React.FC<CanvasProps> = ({
           }
 
           .studio-tool-btn {
-            background: #1e1630;
-            border: 1px solid #3b285a;
-            color: #e2e8f0;
+            background: var(--bg-toolbar);
+            border: 1px solid var(--border-toolbar);
+            color: var(--text-primary);
             border-radius: 4px;
             padding: 3px 6px;
             font-size: 10px;
@@ -156,17 +156,17 @@ export const Canvas: React.FC<CanvasProps> = ({
             transition: all 0.15s;
           }
           .studio-tool-btn:hover {
-            background: #9333ea;
-            color: #ffffff;
+            background: var(--bg-tag);
+            color: var(--text-primary);
           }
           .studio-tool-btn.danger:hover {
-            background: #ef4444;
-            border-color: #ef4444;
-            color: #ffffff;
+            background: var(--danger-color);
+            border-color: var(--danger-color);
+            color: var(--text-primary);
           }
 
           [contenteditable="true"] {
-            outline: 2px solid #22c55e !important;
+            outline: 2px solid var(--outline-success) !important;
             outline-offset: 3px !important;
             cursor: text !important;
             min-width: 1ch;

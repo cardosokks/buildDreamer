@@ -21,6 +21,15 @@
   --accent-light: rgba(99, 102, 241, 0.12);
 
   --gold-accent: #a78bfa;
+  --border-purple: #a855f7;
+  --border-teal: #06b6d4;
+  --bg-panel: #0f0b18;
+  --border-deep: #7e22ce;
+  --bg-tag: #9333ea;
+  --bg-toolbar: #1e1630;
+  --border-toolbar: #3b285a;
+  --danger-color: #ef4444;
+  --outline-success: #22c55e;
 }
 
 /* Light mode: more contrast, professional grey-blue tones */
@@ -117,29 +126,7 @@ h1, h2, h3, h4, .font-heading {
 
 /* ─── Light Mode: More contrast + professional look ────────────────── */
 html.light .bg-\[\#07020d\],
-html.light .bg-\[\#0a0c10\],
-html.light .bg-\[\#090a0f\],
-html.light .bg-\[\#0b0614\],
-html.light .bg-\[\#030007\],
-html.light .bg-\[\#09090b\],
-html.light .bg-slate-950 {
-  background-color: #f0f2f5 !important;
-  color: #0f1117 !important;
-}
 
-html.light .bg-\[\#0f0b18\],
-html.light .bg-\[\#090410\],
-html.light .bg-\[\#0b0d13\],
-html.light .bg-\[\#130d1e\],
-html.light .bg-\[\#130d20\],
-html.light .bg-\[\#0f1117\],
-html.light .bg-\[\#0f0f12\],
-html.light .bg-\[\#151822\],
-html.light .bg-\[\#0c0c0f\],
-html.light .bg-slate-900 {
-  background-color: #ffffff !important;
-  color: #0f1117 !important;
-}
 
 html.light .bg-slate-900\/30,
 html.light .bg-slate-900\/40,

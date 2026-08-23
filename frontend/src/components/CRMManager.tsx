@@ -644,7 +644,7 @@ export const CRMManager: React.FC<CRMProps> = ({ onOpenRemasterModal, onOpenProj
         <div className="bg-[#0f0b18] border border-slate-850 rounded-2xl overflow-hidden shadow-xl">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs text-slate-300">
-              <thead className="bg-[#090410] border-b border-slate-850 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+              <thead className="bg-[var(--bg-app)] border-b border-slate-850 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                 <tr>
                   <th className="py-3 px-4">Cliente / Empresa</th>
                   <th className="py-3 px-4">Status no Funil</th>
@@ -731,7 +731,7 @@ export const CRMManager: React.FC<CRMProps> = ({ onOpenRemasterModal, onOpenProj
       {showModal && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="w-full max-w-xl bg-slate-950 border border-slate-850 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-            <div className="px-6 py-4 bg-[#090410] border-b border-slate-850 flex items-center justify-between">
+            <div className="px-6 py-4 bg-[var(--bg-app)] border-b border-slate-850 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <TrendingUp className="w-5 h-5 text-emerald-400" />
                 <h3 className="text-base font-bold text-white">

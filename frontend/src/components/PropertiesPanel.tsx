@@ -427,7 +427,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const isInput = ['input', 'textarea', 'select'].includes(tag);
 
   return (
-    <aside className="w-80 border-l border-slate-900 bg-[#090410] flex flex-col h-full shrink-0 select-none shadow-2xl z-20">
+    <aside className="w-80 border-l border-slate-900 bg-[var(--bg-app)] flex flex-col h-full shrink-0 select-none shadow-2xl z-20">
       {/* Panel Top Tabs: Árvore DOM unificada com Estilos, Atributos e SEO */}
       <div className="flex border-b border-slate-900 bg-slate-950/80 p-1 gap-1">
         <button

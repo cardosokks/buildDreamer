@@ -918,10 +918,10 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
   };
 
   return (
-    <div className="h-screen w-screen bg-[#07020d] flex flex-col font-sans text-slate-100 overflow-hidden select-none">
+    <div className="h-screen w-screen bg-[var(--bg-app)] flex flex-col font-sans text-slate-100 overflow-hidden select-none">
       
       {/* ─── Top Studio Navbar ─── */}
-      <header className="h-14 border-b border-slate-900/80 bg-[#090410] flex items-center justify-between px-3 md:px-4 shrink-0 z-30 shadow-md">
+      <header className="h-14 border-b border-slate-900/80 bg-[var(--bg-app)] flex items-center justify-between px-3 md:px-4 shrink-0 z-30 shadow-md">
         <div className="flex items-center gap-3 min-w-0">
           <button 
             onClick={onBack}
@@ -1502,7 +1502,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
       {showCodeModal && activePage && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="w-full max-w-4xl h-[80vh] bg-slate-950 border border-slate-800 rounded-2xl flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-            <div className="px-5 py-3.5 bg-[#090410] border-b border-slate-850 flex items-center justify-between">
+            <div className="px-5 py-3.5 bg-[var(--bg-app)] border-b border-slate-850 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Code2 className="w-4 h-4 text-purple-400" />
                 <span className="font-bold text-sm text-white">Editor de Código - {activePage.name}</span>
@@ -1531,7 +1531,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
       {showExportModal && activePage && project && (
         <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="w-full max-w-2xl bg-slate-950 border border-slate-800 rounded-2xl flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 max-h-[90vh]">
-            <div className="px-5 py-4 bg-[#090410] border-b border-slate-850 flex items-center justify-between">
+            <div className="px-5 py-4 bg-[var(--bg-app)] border-b border-slate-850 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Download className="w-4 h-4 text-purple-400" />
                 <span className="font-bold text-sm text-white">Exportação do Projeto - {project.name}</span>

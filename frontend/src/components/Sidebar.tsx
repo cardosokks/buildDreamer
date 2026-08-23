@@ -409,17 +409,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
     <span style="display: inline-block; padding: 6px 16px; background: rgba(168,85,247,0.15); border: 1px solid rgba(168,85,247,0.4); border-radius: 99px; color: #d8b4fe; font-size: 13px; font-weight: 600; margin-bottom: 20px;">
       ✨ NOVIDADE EXCLUSIVA
     </span>
-    <h1 style="font-size: 42px; font-weight: 800; color: #ffffff; line-height: 1.2; margin-bottom: 20px; text-shadow: 0 0 20px rgba(168,85,247,0.3);">
+    <h1 style="font-size: 42px; font-weight: 800; color: var(--text-primary); line-height: 1.2; margin-bottom: 20px; text-shadow: 0 0 20px rgba(168,85,247,0.3);">
       Transforme Ideias em Realidade Digital
     </h1>
     <p style="font-size: 17px; color: #94a3b8; line-height: 1.6; max-width: 650px; margin: 0 auto 32px auto;">
       Construa interfaces extraordinárias, rápidas e responsivas para computadores e dispositivos móveis com total precisão.
     </p>
     <div style="display: flex; gap: 16px; justify-content: center; flex-wrap: wrap;">
-      <a href="#contato" style="padding: 14px 32px; background: #9333ea; color: #ffffff; text-decoration: none; border-radius: 12px; font-weight: 700; box-shadow: 0 0 20px rgba(147,51,234,0.4); transition: transform 0.2s;">
+      <a href="#contato" style="padding: 14px 32px; background: var(--accent-primary); color: var(--text-primary); text-decoration: none; border-radius: 12px; font-weight: 700; box-shadow: 0 0 20px rgba(147,51,234,0.4); transition: transform 0.2s;">
         Começar Agora
       </a>
-      <a href="#saiba-mais" style="padding: 14px 32px; background: rgba(255,255,255,0.05); color: #ffffff; text-decoration: none; border-radius: 12px; font-weight: 600; border: 1px solid rgba(255,255,255,0.1);">
+      <a href="#saiba-mais" style="padding: 14px 32px; background: rgba(var(--bg-app-rgb),0.05); color: var(--text-primary); text-decoration: none; border-radius: 12px; font-weight: 600; border: 1px solid rgba(var(--text-primary-rgb),0.1);">
         Saiba Mais
       </a>
     </div>
@@ -433,23 +433,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
       title: 'Grid de Benefícios 3 Colunas',
       category: 'Seções',
       html: `
-<section style="padding: 80px 20px; background: #090410; border-bottom: 1px solid rgba(255,255,255,0.05);">
+<section style="padding: 80px 20px; background: var(--bg-app); border-bottom: 1px solid rgba(255,255,255,0.05);">
   <div style="max-width: 1100px; margin: 0 auto;">
     <div style="text-align: center; margin-bottom: 50px;">
-      <h2 style="font-size: 32px; font-weight: 800; color: #ffffff; margin-bottom: 12px;">Nossos Diferenciais Exclusivos</h2>
+      <h2 style="font-size: 32px; font-weight: 800; color: var(--text-primary); margin-bottom: 12px;">Nossos Diferenciais Exclusivos</h2>
       <p style="color: #94a3b8; font-size: 15px;">Desenvolvido com tecnologia de ponta para alavancar seus resultados.</p>
     </div>
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px;">
       <div style="padding: 30px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px;">
-        <h3 style="font-size: 18px; font-weight: 700; color: #ffffff; margin-bottom: 10px;">⚡ Velocidade Extrema</h3>
+        <h3 style="font-size: 18px; font-weight: 700; color: var(--text-primary); margin-bottom: 10px;">⚡ Velocidade Extrema</h3>
         <p style="font-size: 14px; color: #94a3b8; line-height: 1.6;">Carregamento ultrarrápido com código otimizado e arquitetura moderna.</p>
       </div>
       <div style="padding: 30px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px;">
-        <h3 style="font-size: 18px; font-weight: 700; color: #ffffff; margin-bottom: 10px;">📱 100% Responsivo</h3>
+        <h3 style="font-size: 18px; font-weight: 700; color: var(--text-primary); margin-bottom: 10px;">📱 100% Responsivo</h3>
         <p style="font-size: 14px; color: #94a3b8; line-height: 1.6;">Adaptação impecável para celulares, tablets e telas de computador.</p>
       </div>
       <div style="padding: 30px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px;">
-        <h3 style="font-size: 18px; font-weight: 700; color: #ffffff; margin-bottom: 10px;">🛡️ Segurança Blindada</h3>
+        <h3 style="font-size: 18px; font-weight: 700; color: var(--text-primary); margin-bottom: 10px;">🛡️ Segurança Blindada</h3>
         <p style="font-size: 14px; color: #94a3b8; line-height: 1.6;">Proteção e confiabilidade garantidas em todas as etapas da navegação.</p>
       </div>
     </div>
@@ -464,9 +464,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
       category: 'Conversão',
       html: `
 <section style="padding: 60px 20px; background: linear-gradient(135deg, #4c1d95 0%, #1e1b4b 100%); text-align: center; border-radius: 24px; margin: 40px 20px;">
-  <h2 style="font-size: 30px; font-weight: 800; color: #ffffff; margin-bottom: 16px;">Pronto para transformar o seu negócio?</h2>
+  <h2 style="font-size: 30px; font-weight: 800; color: var(--text-primary); margin-bottom: 16px;">Pronto para transformar o seu negócio?</h2>
   <p style="color: #cbd5e1; font-size: 16px; max-width: 600px; margin: 0 auto 28px auto;">Fale agora com nossa equipe de especialistas e receba uma proposta personalizada sem compromisso.</p>
-  <a href="https://wa.me/5511999999999" target="_blank" style="display: inline-flex; align-items: center; gap: 8px; padding: 14px 32px; background: #22c55e; color: #ffffff; text-decoration: none; border-radius: 12px; font-weight: 700; box-shadow: 0 0 25px rgba(34,197,94,0.4);">
+  <a href="https://wa.me/5511999999999" target="_blank" style="display: inline-flex; align-items: center; gap: 8px; padding: 14px 32px; background: var(--accent-primary); color: var(--text-primary); text-decoration: none; border-radius: 12px; font-weight: 700; box-shadow: 0 0 25px rgba(34,197,94,0.4);">
     <span>💬 Chamar no WhatsApp</span>
   </a>
 </section>
@@ -481,7 +481,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <aside 
-      className="w-72 border-r border-slate-900 bg-[#090410] flex flex-col h-full shrink-0 select-none shadow-xl z-20"
+      className="w-80 border-l border-slate-900 bg-[var(--bg-app)] flex flex-col h-full shrink-0 select-none shadow-2xl z-20"
       onClick={closeContextMenu}
     >
       <div className="border-b border-slate-900 flex flex-col">
@@ -626,7 +626,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <select
               value={templateCategoryFilter}
               onChange={(e) => setTemplateCategoryFilter(e.target.value)}
-              className="bg-slate-900 border border-slate-800 text-[10px] text-slate-300 rounded-md px-1.5 py-1 focus:outline-none focus:border-purple-500 cursor-pointer flex-1"
+              className="bg-[var(--bg-app)] border-b border-slate-850 text-[10px] font-bold text-slate-400 uppercase tracking-wider rounded-md px-1.5 py-1 focus:outline-none focus:border-purple-500 cursor-pointer flex-1"
             >
               <option value="ALL">Todas as Categorias ({allTemplates.length})</option>
               {categories.filter(c => c !== 'ALL').map(c => (
@@ -689,7 +689,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {showNewTemplateModal && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="w-full max-w-lg bg-slate-950 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-            <div className="px-5 py-3.5 bg-[#090410] border-b border-slate-800 flex items-center justify-between">
+            <div className="px-5 py-3.5 bg-[var(--bg-app)] border-b border-slate-850 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Component className="w-4 h-4 text-purple-400" />
                 <h3 className="text-sm font-bold text-white">Cadastrar Novo Template / Bloco</h3>
