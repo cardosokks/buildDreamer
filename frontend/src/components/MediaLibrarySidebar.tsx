@@ -111,9 +111,17 @@ export const MediaLibrarySidebar: React.FC<MediaLibrarySidebarProps> = ({
     }
   };
 
+  const resolveFullImageUrl = (rawUrl: string): string => {
+    if (!rawUrl) return '';
+    if (rawUrl.startsWith('http://') || rawUrl.startsWith('https://')) return rawUrl;
+    const base = (API_URL || window.location.origin).replace(/\/$/, '');
+    const pathStr = rawUrl.startsWith('/') ? rawUrl : `/${rawUrl}`;
+    return `${base}${pathStr}`;
+  };
+
   const handleCopyUrl = (url: string, id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    const fullUrl = url.startsWith('http') ? url : `${API_URL}${url}`;
+    const fullUrl = resolveFullImageUrl(url);
     navigator.clipboard.writeText(fullUrl);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
@@ -212,7 +220,7 @@ export const MediaLibrarySidebar: React.FC<MediaLibrarySidebarProps> = ({
         ) : (
           <div className="grid grid-cols-2 gap-2.5">
             {filtered.map(media => {
-              const fullUrl = media.url.startsWith('http') ? media.url : `${API_URL}${media.url}`;
+              const fullUrl = resolveFullImageUrl(media.url);
 
               return (
                 <div

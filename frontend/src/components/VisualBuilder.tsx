@@ -1279,6 +1279,39 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
           <MediaLibrarySidebar
             onClose={() => setActiveLeftSidebar(null)}
             onInsertImageToCanvas={(url, name) => {
+              if (!activePage) return;
+
+              // Se houver um elemento selecionado no canvas
+              if (selectedPath) {
+                const doc = parseDocFromHtml(activePage.html);
+                const root = doc.getElementById('canvas-root') || doc.body;
+                const el = getElementByPath(root, selectedPath);
+
+                if (el) {
+                  if (el.tagName.toLowerCase() === 'img') {
+                    // Se for um elemento de imagem <img>, altera a fonte
+                    el.setAttribute('src', url);
+                    el.setAttribute('alt', name);
+                    const newHtml = serializeBodyContent(doc);
+                    handleCodeChange('html', newHtml);
+                    notify.success(`Imagem "${name}" trocada no elemento selecionado!`, 'Mídia Atualizada');
+                    return;
+                  } else {
+                    // Se for uma div/container, adiciona a tag img dentro dele
+                    const imgEl = doc.createElement('img');
+                    imgEl.setAttribute('src', url);
+                    imgEl.setAttribute('alt', name);
+                    imgEl.setAttribute('class', 'w-full h-auto max-w-full rounded-xl shadow-md my-4');
+                    el.appendChild(imgEl);
+                    const newHtml = serializeBodyContent(doc);
+                    handleCodeChange('html', newHtml);
+                    notify.success(`Imagem "${name}" adicionada dentro do elemento selecionado!`, 'Mídia Adicionada');
+                    return;
+                  }
+                }
+              }
+
+              // Se nenhum elemento específico estiver selecionado
               const imgHtml = `<img src="${url}" alt="${name}" class="w-full h-auto max-w-full rounded-xl shadow-md my-4" />`;
               handleInsertBlock(imgHtml);
               notify.success(`Imagem "${name}" adicionada ao site!`, 'Mídia Inserida');

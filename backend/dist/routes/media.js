@@ -55,9 +55,12 @@ router.post('/upload', auth_1.authenticateToken, async (req, res) => {
         if (!base64Data) {
             return res.status(400).json({ error: 'Dados da imagem (base64) são obrigatórios.' });
         }
-        const cleanBase64 = base64Data.replace(/^data:image\/\w+;base64,/, '');
+        const cleanBase64 = base64Data.includes(';base64,') ? base64Data.split(';base64,')[1] : base64Data;
         const buffer = Buffer.from(cleanBase64, 'base64');
-        const ext = (mimeType || 'image/png').split('/')[1] || 'png';
+        let ext = 'png';
+        if (mimeType && mimeType.includes('/')) {
+            ext = mimeType.split('/')[1].replace('+xml', '');
+        }
         const filename = `img_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${ext}`;
         const filePath = path_1.default.join(uploadsDir, filename);
         fs_1.default.writeFileSync(filePath, buffer);
