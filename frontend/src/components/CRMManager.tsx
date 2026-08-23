@@ -59,7 +59,7 @@ export interface CRMLead {
 }
 
 interface CRMProps {
-  onOpenRemasterModal?: (lead: { name: string; website?: string | null; phone?: string | null; address?: string | null }) => void;
+  onOpenRemasterModal?: (lead: { id?: string; name: string; website?: string | null; phone?: string | null; address?: string | null }) => void;
   onOpenProject?: (projectId: string) => void;
   projects?: Array<{ id: string; name: string; domain?: string | null }>;
 }
@@ -598,7 +598,7 @@ export const CRMManager: React.FC<CRMProps> = ({ onOpenRemasterModal, onOpenProj
                           </button>
                         ) : lead.website && onOpenRemasterModal ? (
                           <button
-                            onClick={() => onOpenRemasterModal({ name: lead.name, website: lead.website, phone: lead.phone, address: lead.address })}
+                            onClick={() => onOpenRemasterModal({ id: lead.id, name: lead.name, website: lead.website, phone: lead.phone, address: lead.address })}
                             className="w-full flex items-center justify-center gap-1.5 py-1.5 px-2.5 rounded-xl bg-gradient-to-r from-purple-600/80 to-indigo-600/80 hover:from-purple-600 hover:to-indigo-600 text-white text-[10px] font-bold transition-all shadow cursor-pointer truncate"
                             title="Criar proposta de novo site com IA para este lead"
                           >
@@ -697,7 +697,7 @@ export const CRMManager: React.FC<CRMProps> = ({ onOpenRemasterModal, onOpenProj
                         </button>
                       ) : lead.website && onOpenRemasterModal ? (
                         <button
-                          onClick={() => onOpenRemasterModal({ name: lead.name, website: lead.website, phone: lead.phone, address: lead.address })}
+                          onClick={() => onOpenRemasterModal({ id: lead.id, name: lead.name, website: lead.website, phone: lead.phone, address: lead.address })}
                           className="flex items-center gap-1 px-2.5 py-1 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg text-[10px] font-bold hover:opacity-90 cursor-pointer shadow"
                         >
                           <Sparkles className="w-3 h-3 text-pink-300" />

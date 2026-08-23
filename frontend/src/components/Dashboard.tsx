@@ -1122,24 +1122,41 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
       // Vincula no CRM se o lead for originário do buscador ou salvos
       if (remasterTargetLead) {
         try {
-          await fetch(`${API_URL}/api/leads/crm`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({
-              name: remasterTargetLead.name,
-              company: remasterTargetLead.category || 'Comércio',
-              phone: remasterTargetLead.phone || null,
-              website: remasterTargetLead.website || null,
-              address: remasterTargetLead.address || null,
-              dealValue: 1500,
-              status: 'PROPOSAL_SENT',
-              notes: 'Site remasterizado com IA pronto para apresentação de proposta comercial.',
-              projectId: newProject.id
-            })
-          });
+          if (remasterTargetLead.id) {
+            // Lead já existe no CRM → atualiza com o projectId do novo site
+            await fetch(`${API_URL}/api/leads/crm/${remasterTargetLead.id}`, {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+              },
+              body: JSON.stringify({
+                status: 'PROPOSAL_SENT',
+                notes: 'Site remasterizado com IA pronto para apresentação de proposta comercial.',
+                projectId: newProject.id
+              })
+            });
+          } else {
+            // Lead novo (veio do buscador) → cria no CRM
+            await fetch(`${API_URL}/api/leads/crm`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+              },
+              body: JSON.stringify({
+                name: remasterTargetLead.name,
+                company: remasterTargetLead.category || 'Comércio',
+                phone: remasterTargetLead.phone || null,
+                website: remasterTargetLead.website || null,
+                address: remasterTargetLead.address || null,
+                dealValue: 1500,
+                status: 'PROPOSAL_SENT',
+                notes: 'Site remasterizado com IA pronto para apresentação de proposta comercial.',
+                projectId: newProject.id
+              })
+            });
+          }
         } catch { }
       }
 
