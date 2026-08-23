@@ -1594,8 +1594,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
               >
                 {!navbarMinimized && (
                   <div className="text-right hidden sm:block">
-                    <p className={`text-xs font-bold leading-tight ${theme === 'light' ? 'text-slate-900' : 'text-white'
-                      }`}>{user?.name || 'Desenvolvedor'}</p>
+                    <div className="flex items-center justify-end gap-1.5">
+                      <p className={`text-xs font-bold leading-tight ${theme === 'light' ? 'text-slate-900' : 'text-white'
+                        }`}>{user?.name || 'Desenvolvedor'}</p>
+                      <span className={`text-[9px] px-1.5 py-0.2 rounded font-bold font-mono ${
+                        user?.role === 'ADMIN' ? 'bg-purple-950 text-purple-300 border border-purple-500/40' : 'bg-slate-800 text-slate-400 border border-slate-700'
+                      }`}>
+                        {user?.role || 'USER'}
+                      </span>
+                    </div>
                     <p className={`text-[9px] font-mono leading-tight ${theme === 'light' ? 'text-slate-500' : 'text-slate-400'
                       }`}>{user?.email}</p>
                   </div>
@@ -1616,7 +1623,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                 >
                   <div className={`p-3 border-b ${theme === 'light' ? 'border-slate-100 bg-slate-50' : 'border-slate-800 bg-slate-900/50'
                     }`}>
-                    <p className="text-xs font-semibold truncate">{user?.name || 'Desenvolvedor'}</p>
+                    <div className="flex items-center justify-between mb-0.5">
+                      <p className="text-xs font-semibold truncate">{user?.name || 'Desenvolvedor'}</p>
+                      <span className={`text-[9px] px-1.5 py-0.2 rounded font-bold font-mono ${
+                        user?.role === 'ADMIN' ? 'bg-purple-950 text-purple-300 border border-purple-500/40' : 'bg-slate-800 text-slate-400 border border-slate-700'
+                      }`}>
+                        {user?.role || 'USER'}
+                      </span>
+                    </div>
                     <p className="text-[10px] text-slate-500 font-mono truncate">{user?.email}</p>
                   </div>
 

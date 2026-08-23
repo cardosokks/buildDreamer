@@ -12,7 +12,9 @@ import { exportRouter } from './routes/export';
 import { leadsRouter } from './routes/leads';
 import { crawlerRouter } from './routes/crawler';
 import { ngrokRouter } from './routes/ngrok';
+import mediaRouter from './routes/media';
 import { authenticateToken } from './middleware/auth';
+import path from 'path';
 
 dotenv.config();
 
@@ -30,8 +32,12 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
+// Servir arquivos estáticos da galeria de uploads
+app.use('/uploads', express.static(path.join(process.cwd(), 'public', 'uploads')));
+
 // Routes
 app.use('/api/auth', authRouter);
+app.use('/api/media', authenticateToken, mediaRouter);
 app.use('/api/projects', authenticateToken, projectRouter);
 app.use('/api/export', authenticateToken, exportRouter);
 app.use('/api/ai', authenticateToken, aiRouter);

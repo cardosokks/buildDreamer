@@ -17,7 +17,9 @@ const export_1 = require("./routes/export");
 const leads_1 = require("./routes/leads");
 const crawler_1 = require("./routes/crawler");
 const ngrok_1 = require("./routes/ngrok");
+const media_1 = __importDefault(require("./routes/media"));
 const auth_2 = require("./middleware/auth");
+const path_1 = __importDefault(require("path"));
 dotenv_1.default.config();
 const app = (0, express_1.default)();
 const server = http_1.default.createServer(app);
@@ -31,8 +33,11 @@ app.use((0, morgan_1.default)('dev'));
 app.use((0, cors_1.default)());
 app.use(express_1.default.json({ limit: '50mb' }));
 app.use(express_1.default.urlencoded({ extended: true, limit: '50mb' }));
+// Servir arquivos estáticos da galeria de uploads
+app.use('/uploads', express_1.default.static(path_1.default.join(process.cwd(), 'public', 'uploads')));
 // Routes
 app.use('/api/auth', auth_1.authRouter);
+app.use('/api/media', auth_2.authenticateToken, media_1.default);
 app.use('/api/projects', auth_2.authenticateToken, projects_1.projectRouter);
 app.use('/api/export', auth_2.authenticateToken, export_1.exportRouter);
 app.use('/api/ai', auth_2.authenticateToken, ai_1.aiRouter);

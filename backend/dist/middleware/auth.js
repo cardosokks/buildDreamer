@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.authenticateToken = void 0;
+exports.requireAdmin = exports.authenticateToken = void 0;
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-key-change-in-prod';
 const authenticateToken = (req, res, next) => {
@@ -17,7 +17,15 @@ const authenticateToken = (req, res, next) => {
             return res.status(403).json({ error: 'Invalid or expired token' });
         }
         req.userId = decoded.userId;
+        req.userRole = decoded.role || 'USER';
         next();
     });
 };
 exports.authenticateToken = authenticateToken;
+const requireAdmin = (req, res, next) => {
+    if (req.userRole !== 'ADMIN') {
+        return res.status(403).json({ error: 'Acesso negado. Permissão de Administrador requerida.' });
+    }
+    next();
+};
+exports.requireAdmin = requireAdmin;

@@ -31,13 +31,15 @@ import {
   Square,
   ChevronDown,
   Loader2,
-  Upload
+  Upload,
+  Image as ImageIcon
 } from 'lucide-react';
 import { Sidebar } from './Sidebar';
 import type { ElementNode } from './Sidebar';
 import { Canvas } from './Canvas';
 import { PropertiesPanel } from './PropertiesPanel';
 import { CodeEditor } from './CodeEditor';
+import { MediaLibrarySidebar } from './MediaLibrarySidebar';
 import { ChatPanel } from './ChatPanel';
 import { API_URL } from '../config';
 import { useNotification } from '../context/NotificationContext';
@@ -92,14 +94,22 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
   const [selectedAttrs, setSelectedAttrs] = useState<Record<string, string>>({});
 
   // Layout Panels (Persistência no LocalStorage)
-  const [showSidebar, setShowSidebar] = useState<boolean>(() => {
+  const [activeLeftSidebar, setActiveLeftSidebar] = useState<'dom' | 'media' | null>(() => {
     try {
-      const stored = localStorage.getItem('vb_show_sidebar');
-      return stored !== null ? JSON.parse(stored) : true;
+      const stored = localStorage.getItem('vb_active_left_sidebar');
+      return stored !== null ? JSON.parse(stored) : 'dom';
     } catch {
-      return true;
+      return 'dom';
     }
   });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('vb_active_left_sidebar', JSON.stringify(activeLeftSidebar));
+    } catch {}
+  }, [activeLeftSidebar]);
+
+  const [showSidebar, setShowSidebar] = useState<boolean>(true);
 
   const [showStylesPanel, setShowStylesPanel] = useState<boolean>(() => {
     try {
@@ -1158,8 +1168,8 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
 
       {/* ─── Main Editor Workspace Layout ─── */}
       <div className="flex-1 flex overflow-hidden relative">
-        {/* Left Sidebar (Páginas + DOM Tree) */}
-        {showSidebar && project && activePage && (
+        {/* Left Sidebar 1 (Páginas + DOM Tree) */}
+        {activeLeftSidebar === 'dom' && project && activePage && (
           <Sidebar
             pages={project.pages}
             activePageId={activePageId}
@@ -1264,28 +1274,56 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
           />
         )}
 
-        {/* ─── Toggle da Sidebar Esquerda (Páginas/DOM) ─── */}
-        <button
-          onClick={() => setShowSidebar(!showSidebar)}
-          title={showSidebar ? 'Recolher painel de páginas (Layers)' : 'Abrir painel de páginas (Layers)'}
-          className={`
-            relative z-20 self-start mt-4 flex flex-col items-center justify-center gap-1
-            w-6 transition-all duration-200 cursor-pointer select-none rounded-r-xl
-            border-y border-r py-3 shrink-0
-            ${showSidebar
-              ? 'bg-slate-900/80 border-slate-800 text-slate-500 hover:text-purple-300 hover:bg-slate-800 hover:border-purple-500/40'
-              : 'bg-gradient-to-b from-purple-700 to-purple-900 border-purple-600/60 text-purple-200 hover:from-purple-600 hover:to-purple-800 shadow-[2px_0_12px_rgba(168,85,247,0.3)]'
-            }
-          `}
-        >
-          {showSidebar
-            ? <ChevronLeft className="w-3 h-3" />
-            : <>
-                <PanelLeft className="w-3 h-3" />
-                <span className="text-[8px] font-bold tracking-widest uppercase" style={{ writingMode: 'vertical-rl', letterSpacing: '0.15em' }}>DOM</span>
-              </>
-          }
-        </button>
+        {/* Left Sidebar 2 (Banco de Imagens & Uploads) */}
+        {activeLeftSidebar === 'media' && (
+          <MediaLibrarySidebar
+            onClose={() => setActiveLeftSidebar(null)}
+            onInsertImageToCanvas={(url, name) => {
+              const imgHtml = `<img src="${url}" alt="${name}" class="w-full h-auto max-w-full rounded-xl shadow-md my-4" />`;
+              handleInsertBlock(imgHtml);
+              notify.success(`Imagem "${name}" adicionada ao site!`, 'Mídia Inserida');
+            }}
+          />
+        )}
+
+        {/* ─── Alternância de Sidebars Esquerdas (DOM e Banco de Mídias) ─── */}
+        <div className="relative z-20 self-start mt-4 flex flex-col items-center gap-2 shrink-0">
+          {/* Botão DOM */}
+          <button
+            onClick={() => setActiveLeftSidebar(prev => prev === 'dom' ? null : 'dom')}
+            title={activeLeftSidebar === 'dom' ? 'Minimizar painel de páginas (DOM)' : 'Abrir painel de páginas (DOM)'}
+            className={`
+              flex flex-col items-center justify-center gap-1
+              w-6 transition-all duration-200 cursor-pointer select-none rounded-r-xl
+              border-y border-r py-3 shrink-0
+              ${activeLeftSidebar === 'dom'
+                ? 'bg-gradient-to-b from-purple-700 to-purple-900 border-purple-600/60 text-purple-200 shadow-[2px_0_12px_rgba(168,85,247,0.3)]'
+                : 'bg-slate-900/80 border-slate-800 text-slate-500 hover:text-purple-300 hover:bg-slate-800 hover:border-purple-500/40'
+              }
+            `}
+          >
+            <PanelLeft className="w-3 h-3" />
+            <span className="text-[8px] font-bold tracking-widest uppercase" style={{ writingMode: 'vertical-rl', letterSpacing: '0.15em' }}>DOM</span>
+          </button>
+
+          {/* Botão Mídia (Posicionado exatamente abaixo do ícone da DOM) */}
+          <button
+            onClick={() => setActiveLeftSidebar(prev => prev === 'media' ? null : 'media')}
+            title={activeLeftSidebar === 'media' ? 'Minimizar banco de imagens' : 'Abrir banco de imagens e upload'}
+            className={`
+              flex flex-col items-center justify-center gap-1
+              w-6 transition-all duration-200 cursor-pointer select-none rounded-r-xl
+              border-y border-r py-3 shrink-0
+              ${activeLeftSidebar === 'media'
+                ? 'bg-gradient-to-b from-cyan-600 to-indigo-700 border-cyan-500/60 text-cyan-200 shadow-[2px_0_12px_rgba(6,182,212,0.3)]'
+                : 'bg-slate-900/80 border-slate-800 text-slate-500 hover:text-cyan-300 hover:bg-slate-800 hover:border-cyan-500/40'
+              }
+            `}
+          >
+            <ImageIcon className="w-3 h-3" />
+            <span className="text-[8px] font-bold tracking-widest uppercase" style={{ writingMode: 'vertical-rl', letterSpacing: '0.15em' }}>MÍDIA</span>
+          </button>
+        </div>
         {/* Central Interactive Sandbox Canvas */}
         <main 
           className="flex-1 flex justify-center items-center overflow-auto bg-[#07020d] p-3 md:p-6 min-w-0"

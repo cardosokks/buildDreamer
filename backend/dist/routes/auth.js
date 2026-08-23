@@ -13,24 +13,28 @@ const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-key-change-in-prod';
 // Register User
 router.post('/signup', async (req, res) => {
     try {
+        await ensureUserSettingsColumns();
         const { email, password, name } = req.body;
         if (!email || !password) {
-            return res.status(400).json({ error: 'Email and password are required' });
+            return res.status(400).json({ error: 'Email e senha são obrigatórios' });
         }
         const existingUser = await db_1.prisma.user.findUnique({ where: { email } });
         if (existingUser) {
-            return res.status(400).json({ error: 'Email already registered' });
+            return res.status(400).json({ error: 'Este e-mail já está cadastrado' });
         }
+        const count = await db_1.prisma.user.count();
+        const role = count === 0 ? 'ADMIN' : 'USER';
         const hashedPassword = await bcryptjs_1.default.hash(password, 10);
         const user = await db_1.prisma.user.create({
             data: {
                 email,
                 password: hashedPassword,
-                name
+                name: name || email.split('@')[0]
             }
         });
-        const token = jsonwebtoken_1.default.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
-        return res.status(201).json({ token, user: { id: user.id, email: user.email, name: user.name } });
+        await db_1.prisma.$executeRawUnsafe(`UPDATE "User" SET "role" = $1 WHERE "id" = $2`, role, user.id);
+        const token = jsonwebtoken_1.default.sign({ userId: user.id, role }, JWT_SECRET, { expiresIn: '7d' });
+        return res.status(201).json({ token, user: { id: user.id, email: user.email, name: user.name, role } });
     }
     catch (error) {
         return res.status(500).json({ error: error.message });
@@ -39,20 +43,29 @@ router.post('/signup', async (req, res) => {
 // Login User
 router.post('/login', async (req, res) => {
     try {
+        await ensureUserSettingsColumns();
         const { email, password } = req.body;
         if (!email || !password) {
-            return res.status(400).json({ error: 'Email and password are required' });
+            return res.status(400).json({ error: 'Email e senha são obrigatórios' });
         }
         const user = await db_1.prisma.user.findUnique({ where: { email } });
         if (!user) {
-            return res.status(400).json({ error: 'Invalid email or password' });
+            return res.status(400).json({ error: 'E-mail ou senha incorretos' });
         }
         const isMatch = await bcryptjs_1.default.compare(password, user.password);
         if (!isMatch) {
-            return res.status(400).json({ error: 'Invalid email or password' });
+            return res.status(400).json({ error: 'E-mail ou senha incorretos' });
         }
-        const token = jsonwebtoken_1.default.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
-        return res.json({ token, user: { id: user.id, email: user.email, name: user.name } });
+        const rows = await db_1.prisma.$queryRawUnsafe(`SELECT "role" FROM "User" WHERE "id" = $1`, user.id);
+        let role = rows && rows[0] && rows[0].role ? rows[0].role : 'USER';
+        // Se houver apenas 1 usuário e estiver sem role, torna ADMIN
+        const totalUsers = await db_1.prisma.user.count();
+        if (totalUsers === 1 && role !== 'ADMIN') {
+            role = 'ADMIN';
+            await db_1.prisma.$executeRawUnsafe(`UPDATE "User" SET "role" = 'ADMIN' WHERE "id" = $1`, user.id);
+        }
+        const token = jsonwebtoken_1.default.sign({ userId: user.id, role }, JWT_SECRET, { expiresIn: '7d' });
+        return res.json({ token, user: { id: user.id, email: user.email, name: user.name, role } });
     }
     catch (error) {
         return res.status(500).json({ error: error.message });
@@ -67,6 +80,7 @@ async function ensureUserSettingsColumns() {
     try {
         await db_1.prisma.$executeRawUnsafe(`
       ALTER TABLE "User" 
+      ADD COLUMN IF NOT EXISTS "role" TEXT DEFAULT 'USER',
       ADD COLUMN IF NOT EXISTS "geminiApiKey" TEXT,
       ADD COLUMN IF NOT EXISTS "openaiApiKey" TEXT,
       ADD COLUMN IF NOT EXISTS "aiProxyUrl" TEXT,
@@ -76,17 +90,36 @@ async function ensureUserSettingsColumns() {
       ADD COLUMN IF NOT EXISTS "savedLeads" JSONB,
       ADD COLUMN IF NOT EXISTS "filterPresets" JSONB;
     `);
+        // Se existir usuários sem role definida, garante que o primeiro seja ADMIN e os demais USER
+        await db_1.prisma.$executeRawUnsafe(`
+      UPDATE "User" SET "role" = 'USER' WHERE "role" IS NULL;
+      UPDATE "User" SET "role" = 'ADMIN' WHERE "id" IN (SELECT "id" FROM "User" ORDER BY "id" ASC LIMIT 1);
+    `);
         columnsChecked = true;
     }
     catch (err) {
         console.error('Error ensuring User settings columns:', err);
     }
 }
+// Obter dados do usuário logado (Perfil & Role)
+router.get('/me', auth_1.authenticateToken, async (req, res) => {
+    try {
+        await ensureUserSettingsColumns();
+        const rows = await db_1.prisma.$queryRawUnsafe(`SELECT "id", "email", "name", "role" FROM "User" WHERE "id" = $1 LIMIT 1`, req.userId);
+        if (!rows || rows.length === 0) {
+            return res.status(404).json({ error: 'Usuário não encontrado' });
+        }
+        return res.json({ user: rows[0] });
+    }
+    catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
+});
 // Obter configurações do usuário logado (armazenadas no banco de dados)
 router.get('/settings', auth_1.authenticateToken, async (req, res) => {
     try {
         await ensureUserSettingsColumns();
-        const rows = await db_1.prisma.$queryRawUnsafe(`SELECT "id", "email", "name", "geminiApiKey", "openaiApiKey", "aiProxyUrl", "ngrokAuthToken", "customAiSkills", "customAiModels", "savedLeads", "filterPresets" FROM "User" WHERE "id" = $1 LIMIT 1`, req.userId);
+        const rows = await db_1.prisma.$queryRawUnsafe(`SELECT "id", "email", "name", "role", "geminiApiKey", "openaiApiKey", "aiProxyUrl", "ngrokAuthToken", "customAiSkills", "customAiModels", "savedLeads", "filterPresets" FROM "User" WHERE "id" = $1 LIMIT 1`, req.userId);
         if (!rows || rows.length === 0) {
             return res.status(404).json({ error: 'Usuário não encontrado' });
         }
