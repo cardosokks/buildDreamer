@@ -55,7 +55,9 @@ import {
   Link as LinkIcon,
   PanelLeftClose,
   PanelLeftOpen,
-  Bell
+  Bell,
+  UserPlus,
+  UserCheck
 } from 'lucide-react';
 
 import { useTheme } from '../context/ThemeContext';
@@ -572,6 +574,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
   });
 
   const [presetModalOpen, setPresetModalOpen] = useState(false);
+  const [showPresetListModal, setShowPresetListModal] = useState(false);
   const [editingPresetId, setEditingPresetId] = useState<string | null>(null);
   const [presetForm, setPresetForm] = useState<Omit<FilterPreset, 'id'>>({
     name: '',
@@ -620,6 +623,44 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
     setHasPhoneOnly(preset.hasPhoneOnly);
     setMinRating(preset.minRating.toString());
     setActiveTab('leads');
+    setShowPresetListModal(false);
+  };
+
+  // Cadastrar Lead Salvo no CRM no Funil de Vendas como "Novo Lead"
+  const handleCadastrarLeadNoCRM = async (lead: Lead) => {
+    try {
+      const res = await fetch(`${API_URL}/api/leads/crm`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          name: lead.name,
+          company: lead.category || 'Comércio Local',
+          phone: lead.phone || null,
+          website: lead.website || null,
+          address: lead.address || null,
+          dealValue: 1500,
+          status: 'PROSPECT',
+          notes: 'Cadastrado a partir dos Leads Salvos'
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.lead) {
+        notify.success(`"${lead.name}" foi cadastrado no CRM como Novo Lead!`, 'CRM Atualizado');
+        addBellNotification({
+          type: 'success',
+          emoji: '🤝',
+          title: 'Lead Adicionado ao CRM',
+          message: `"${lead.name}" foi inserido no funil de vendas na etapa Novo Lead.`
+        });
+      } else {
+        throw new Error(data.error || 'Erro ao cadastrar lead no CRM');
+      }
+    } catch (err: any) {
+      notify.error(err.message || 'Erro ao cadastrar lead no CRM', 'Erro');
+    }
   };
 
   // Settings modal state
@@ -1844,31 +1885,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                 )}
               </button>
 
-              <button
-                onClick={() => setActiveTab('presets')}
-                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2 py-2.5 relative' : 'gap-3 px-3.5 py-2.5'} rounded-xl text-xs font-semibold transition-all cursor-pointer ${activeTab === 'presets'
-                  ? theme === 'light'
-                    ? 'bg-indigo-50 text-indigo-700 font-bold'
-                    : 'bg-slate-800 text-white font-bold'
-                  : theme === 'light'
-                    ? 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                    : 'text-slate-400 hover:bg-slate-900/60 hover:text-slate-200'
-                  }`}
-                title={`Filtros Salvos (${filterPresets.length})`}
-              >
-                <SlidersHorizontal className="w-4 h-4 text-indigo-400 shrink-0" />
-                {!sidebarCollapsed ? (
-                  <>
-                    <span className="truncate flex-1 text-left">Filtros Salvos</span>
-                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${theme === 'light' ? 'bg-slate-200 text-slate-700' : 'bg-slate-800 text-slate-300 border border-slate-700'
-                      }`}>
-                      {filterPresets.length}
-                    </span>
-                  </>
-                ) : filterPresets.length > 0 && (
-                  <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-cyan-400" />
-                )}
-              </button>
+
 
               {/* Seção 4: Configurações & Conta */}
               {!sidebarCollapsed ? (
@@ -2376,9 +2393,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
 
                           {/* CRM Client Badge */}
                           {project.crmLead && (
-                            <div className="flex items-center gap-1.5 mb-2 px-2 py-1 bg-emerald-950/40 border border-emerald-500/20 rounded-lg">
-                              <User className="w-3 h-3 text-emerald-400 shrink-0" />
-                              <span className="text-[10px] font-semibold text-emerald-300 truncate">{project.crmLead.company || project.crmLead.name}</span>
+                            <div
+                              onClick={(e) => { e.stopPropagation(); setActiveTab('crm'); }}
+                              className="flex items-center gap-1.5 mb-2 px-2 py-1 bg-emerald-950/40 border border-emerald-500/20 hover:border-emerald-500/50 rounded-lg cursor-pointer transition-all group/crm"
+                              title="Clique para ver este cliente no CRM de Vendas"
+                            >
+                              <UserCheck className="w-3 h-3 text-emerald-400 shrink-0 group-hover/crm:scale-110 transition-transform" />
+                              <span className="text-[10px] font-semibold text-emerald-300 truncate group-hover/crm:underline">{project.crmLead.company || project.crmLead.name}</span>
                               {project.crmLead.status && (
                                 <span className="ml-auto text-[9px] text-emerald-500 font-mono shrink-0">{project.crmLead.status}</span>
                               )}
@@ -2405,6 +2426,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                           </div>
 
                           <div className="flex items-center gap-1">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setActiveTab('crm'); }}
+                              className="p-1.5 text-slate-500 hover:text-emerald-400 rounded-lg hover:bg-emerald-950/40 transition-all cursor-pointer"
+                              title={project.crmLead ? `Ver cliente "${project.crmLead.name}" no CRM` : "Ver Funil de Vendas no CRM"}
+                            >
+                              <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
+                            </button>
                             <button
                               onClick={(e) => { e.stopPropagation(); openProjectDetailsModal(project); }}
                               className="p-1.5 text-slate-500 hover:text-purple-300 rounded-lg hover:bg-purple-950/40 transition-all cursor-pointer"
@@ -2470,10 +2498,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                               {isGenerating ? '⚡ IA...' : project.status === 'development' ? 'Dev' : 'Live'}
                             </span>
                             {project.crmLead && (
-                              <span className="flex items-center gap-1 px-1.5 py-0.5 bg-emerald-950/40 border border-emerald-500/20 rounded text-[9px] text-emerald-400 font-semibold shrink-0">
-                                <User className="w-2.5 h-2.5" />
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setActiveTab('crm'); }}
+                                className="flex items-center gap-1 px-1.5 py-0.5 bg-emerald-950/40 border border-emerald-500/20 hover:border-emerald-500/50 rounded text-[9px] text-emerald-400 font-semibold shrink-0 cursor-pointer hover:underline"
+                                title="Ver cliente no CRM de Vendas"
+                              >
+                                <UserCheck className="w-2.5 h-2.5" />
                                 {project.crmLead.company || project.crmLead.name}
-                              </span>
+                              </button>
                             )}
                           </div>
                           {project.description && (
@@ -2494,7 +2526,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                         </div>
 
                         {/* Ações */}
-                        <div className="flex items-center gap-1 justify-end" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center gap-1 justify-end shrink-0 whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setActiveTab('crm'); }}
+                            className="p-1.5 text-slate-500 hover:text-emerald-400 rounded-lg hover:bg-emerald-950/40 transition-all cursor-pointer"
+                            title={project.crmLead ? `Ver cliente "${project.crmLead.name}" no CRM` : "Ver Funil de Vendas no CRM"}
+                          >
+                            <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
+                          </button>
                           <button
                             onClick={(e) => { e.stopPropagation(); openProjectDetailsModal(project); }}
                             className="p-1.5 text-slate-500 hover:text-purple-300 rounded-lg hover:bg-purple-950/40 transition-all cursor-pointer"
@@ -2615,7 +2654,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                               <th className="py-3.5 px-4">Endereço</th>
                               <th className="py-3.5 px-4">Contato & Presença</th>
                               <th className="py-3.5 px-4 text-center">Nota</th>
-                              <th className="py-3.5 px-4 text-right">Ações</th>
+                              <th className="py-3.5 px-4 text-right whitespace-nowrap shrink-0">Ações</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-850/60 text-xs">
@@ -2679,8 +2718,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                                       </span>
                                     </td>
 
-                                    <td className="py-3.5 px-4 text-right">
-                                      <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                                    <td className="py-3.5 px-4 text-right whitespace-nowrap shrink-0">
+                                      <div className="flex items-center justify-end gap-1 flex-nowrap shrink-0 whitespace-nowrap">
+                                        {/* Botão Cadastrar no CRM (Novo Lead) */}
+                                        <button
+                                          onClick={() => handleCadastrarLeadNoCRM(lead)}
+                                          className="p-1.5 bg-emerald-600/20 hover:bg-emerald-600/40 border border-emerald-500/40 text-emerald-400 rounded-lg transition-all cursor-pointer"
+                                          title="Cadastrar no CRM (Novo Lead / Prospect)"
+                                        >
+                                          <UserPlus className="w-3.5 h-3.5" />
+                                        </button>
+
                                         <a
                                           href={mapsSearchUrl}
                                           target="_blank"
@@ -2792,7 +2840,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
 
                             <div className="mt-4 pt-4 border-t border-slate-850/80 flex items-center justify-between gap-2 flex-wrap">
                               <span className="text-[10px] text-slate-500 font-mono">Salvo na Lista</span>
-                              <div className="flex items-center gap-1.5">
+                              <div className="flex items-center gap-1.5 flex-nowrap shrink-0 whitespace-nowrap">
+                                <button
+                                  onClick={() => handleCadastrarLeadNoCRM(lead)}
+                                  className="p-2 bg-emerald-600/20 hover:bg-emerald-600/40 border border-emerald-500/40 text-emerald-400 rounded-xl transition-all shadow-sm cursor-pointer"
+                                  title="Cadastrar no CRM (Novo Lead / Prospect)"
+                                >
+                                  <UserPlus className="w-4 h-4" />
+                                </button>
                                 <a
                                   href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${lead.name} ${lead.address || lead.city || ''}`)}`}
                                   target="_blank"
@@ -2881,117 +2936,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
               onOpenProject={(projId) => onSelectProject(projId)}
               projects={projects}
             />
-          ) : activeTab === 'presets' ? (
-            /* FILTROS PRÉ-PRONTOS (CRUD DE PRESETS) */
-            <div className="max-w-5xl mx-auto space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
-                    <SlidersHorizontal className="w-5 h-5 text-cyan-400" />
-                    Filtros Pré-Prontos
-                  </h2>
-                  <p className="text-xs text-slate-400">Configure modelos de busca para prospectar com 1 clique.</p>
-                </div>
-                <button
-                  onClick={() => {
-                    setEditingPresetId(null);
-                    setPresetForm({
-                      name: '',
-                      niche: '',
-                      city: '',
-                      state: '',
-                      country: 'Brasil',
-                      onlyWithoutWebsite: true,
-                      hasPhoneOnly: false,
-                      minRating: 0
-                    });
-                    setPresetModalOpen(true);
-                  }}
-                  className="px-3.5 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold rounded-xl text-xs transition-all flex items-center gap-1.5 cursor-pointer shadow-sm self-start sm:self-auto"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  Novo Filtro
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {filterPresets.map(preset => (
-                  <div
-                    key={preset.id}
-                    className="bg-[#0f0b18] border border-slate-850 hover:border-cyan-500/30 rounded-2xl p-5 flex flex-col justify-between transition-all shadow-md"
-                  >
-                    <div>
-                      <div className="flex items-start justify-between gap-3 mb-2">
-                        <h3 className="font-bold text-white text-base leading-tight">{preset.name}</h3>
-                        <span className="px-2 py-0.5 bg-cyan-950/40 text-cyan-400 border border-cyan-500/30 rounded-md text-[10px] font-mono">
-                          {preset.niche}
-                        </span>
-                      </div>
-
-                      <div className="space-y-1.5 text-xs text-slate-400 mt-3">
-                        <p className="flex items-center gap-1.5">
-                          <MapPin className="w-3.5 h-3.5 text-pink-400" />
-                          <span>Região: <strong>{preset.city}{preset.state ? ` - ${preset.state}` : ''} ({preset.country || 'Brasil'})</strong></span>
-                        </p>
-                        <p className="flex items-center gap-1.5">
-                          <Globe className="w-3.5 h-3.5 text-cyan-400" />
-                          <span>Apenas sem site: <strong>{preset.onlyWithoutWebsite ? 'Sim' : 'Não'}</strong></span>
-                        </p>
-                        <p className="flex items-center gap-1.5">
-                          <Phone className="w-3.5 h-3.5 text-indigo-400" />
-                          <span>Com telefone: <strong>{preset.hasPhoneOnly ? 'Sim' : 'Qualquer'}</strong></span>
-                        </p>
-                        {preset.minRating > 0 && (
-                          <p className="flex items-center gap-1.5">
-                            <Star className="w-3.5 h-3.5 text-yellow-400" />
-                            <span>Avaliação mínima: <strong>★ {preset.minRating}</strong></span>
-                          </p>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="mt-5 pt-4 border-t border-slate-850 flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => {
-                            setEditingPresetId(preset.id);
-                            setPresetForm({
-                              name: preset.name,
-                              niche: preset.niche,
-                              city: preset.city,
-                              state: preset.state,
-                              country: preset.country || 'Brasil',
-                              onlyWithoutWebsite: preset.onlyWithoutWebsite,
-                              hasPhoneOnly: preset.hasPhoneOnly,
-                              minRating: preset.minRating
-                            });
-                            setPresetModalOpen(true);
-                          }}
-                          className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-white rounded-lg transition-colors"
-                          title="Editar preset"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => handleDeletePreset(preset.id)}
-                          className="p-1.5 hover:bg-red-950/40 text-slate-400 hover:text-red-400 rounded-lg transition-colors"
-                          title="Excluir preset"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-
-                      <button
-                        onClick={() => handleApplyPreset(preset)}
-                        className="px-4 py-1.5 bg-cyan-600/20 hover:bg-cyan-600/40 border border-cyan-500/40 text-cyan-300 font-bold rounded-xl text-xs transition-all cursor-pointer"
-                      >
-                        Executar Busca
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
           ) : activeTab === 'leads' ? (
             /* BUSCAR CLIENTES */
             <div className="max-w-6xl mx-auto space-y-4">
@@ -3014,11 +2958,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                     Salvos ({savedLeads.length})
                   </button>
                   <button
-                    onClick={() => setActiveTab('presets')}
+                    onClick={() => setShowPresetListModal(true)}
                     className="px-3 py-1.5 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
                   >
                     <SlidersHorizontal className="w-3.5 h-3.5" />
-                    Filtros Prontos
+                    Filtros Prontos ({filterPresets.length})
                   </button>
                 </div>
               </div>
@@ -3642,6 +3586,148 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
           ) : null}
         </main>
       </div>
+
+      {/* Preset List / Manager Modal */}
+      {showPresetListModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-3xl bg-[#0f0b18] border border-cyan-500/30 rounded-2xl shadow-2xl p-6 overflow-hidden flex flex-col max-h-[85vh]">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+              <div>
+                <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                  <SlidersHorizontal className="text-cyan-400 w-5 h-5" />
+                  Filtros Pré-Prontos Salvos
+                </h2>
+                <p className="text-xs text-slate-400 mt-0.5">Selecione um modelo de busca para prospectar com 1 clique.</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    setEditingPresetId(null);
+                    setPresetForm({
+                      name: '',
+                      niche: '',
+                      city: '',
+                      state: '',
+                      country: 'Brasil',
+                      onlyWithoutWebsite: true,
+                      hasPhoneOnly: false,
+                      minRating: 0
+                    });
+                    setPresetModalOpen(true);
+                  }}
+                  className="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-xl text-xs transition-all flex items-center gap-1.5 cursor-pointer shadow-md"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Novo Filtro
+                </button>
+                <button onClick={() => setShowPresetListModal(false)} className="text-slate-400 hover:text-white p-1">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="overflow-y-auto py-4 space-y-3 pr-1 flex-1">
+              {filterPresets.length === 0 ? (
+                <div className="p-8 text-center border border-dashed border-slate-800 rounded-xl">
+                  <SlidersHorizontal className="w-8 h-8 text-slate-600 mx-auto mb-2" />
+                  <p className="text-sm text-slate-400">Nenhum filtro salvo ainda.</p>
+                  <button
+                    onClick={() => {
+                      setEditingPresetId(null);
+                      setPresetForm({
+                        name: '', niche: '', city: '', state: '', country: 'Brasil', onlyWithoutWebsite: true, hasPhoneOnly: false, minRating: 0
+                      });
+                      setPresetModalOpen(true);
+                    }}
+                    className="mt-3 text-xs text-cyan-400 hover:underline font-semibold"
+                  >
+                    Criar primeiro filtro
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {filterPresets.map(preset => (
+                    <div
+                      key={preset.id}
+                      className="bg-slate-950/70 border border-slate-850 hover:border-cyan-500/40 rounded-xl p-4 flex flex-col justify-between transition-all"
+                    >
+                      <div>
+                        <div className="flex items-start justify-between gap-2 mb-1.5">
+                          <h3 className="font-bold text-white text-sm line-clamp-1">{preset.name}</h3>
+                          <span className="px-2 py-0.5 bg-cyan-950/50 text-cyan-300 border border-cyan-500/30 rounded text-[10px] font-mono shrink-0">
+                            {preset.niche}
+                          </span>
+                        </div>
+
+                        <div className="space-y-1 text-[11px] text-slate-400 mt-2">
+                          <p className="flex items-center gap-1.5">
+                            <MapPin className="w-3 h-3 text-pink-400 shrink-0" />
+                            <span className="truncate">{preset.city}{preset.state ? ` - ${preset.state}` : ''} ({preset.country || 'Brasil'})</span>
+                          </p>
+                          <p className="flex items-center gap-1.5">
+                            <Globe className="w-3 h-3 text-cyan-400 shrink-0" />
+                            <span>Sem site: <strong>{preset.onlyWithoutWebsite ? 'Sim' : 'Não'}</strong></span>
+                          </p>
+                          <p className="flex items-center gap-1.5">
+                            <Phone className="w-3 h-3 text-indigo-400 shrink-0" />
+                            <span>Telefone: <strong>{preset.hasPhoneOnly ? 'Sim' : 'Qualquer'}</strong></span>
+                          </p>
+                          {preset.minRating > 0 && (
+                            <p className="flex items-center gap-1.5">
+                              <Star className="w-3 h-3 text-yellow-400 shrink-0" />
+                              <span>Nota mín: <strong>★ {preset.minRating}</strong></span>
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="mt-4 pt-3 border-t border-slate-850 flex items-center justify-between">
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => {
+                              setEditingPresetId(preset.id);
+                              setPresetForm({
+                                name: preset.name,
+                                niche: preset.niche,
+                                city: preset.city,
+                                state: preset.state,
+                                country: preset.country || 'Brasil',
+                                onlyWithoutWebsite: preset.onlyWithoutWebsite,
+                                hasPhoneOnly: preset.hasPhoneOnly,
+                                minRating: preset.minRating
+                              });
+                              setPresetModalOpen(true);
+                            }}
+                            className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-white rounded-lg transition-colors"
+                            title="Editar filtro"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleDeletePreset(preset.id)}
+                            className="p-1.5 hover:bg-red-950/40 text-slate-400 hover:text-red-400 rounded-lg transition-colors"
+                            title="Excluir filtro"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+
+                        <button
+                          onClick={() => handleApplyPreset(preset)}
+                          className="px-3 py-1.5 bg-cyan-600/30 hover:bg-cyan-600 border border-cyan-500/40 text-cyan-200 hover:text-white font-bold rounded-xl text-xs transition-all cursor-pointer flex items-center gap-1 shadow-sm"
+                        >
+                          <Play className="w-3 h-3 fill-current" />
+                          Buscar
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Preset Create / Edit Modal */}
       {presetModalOpen && (
