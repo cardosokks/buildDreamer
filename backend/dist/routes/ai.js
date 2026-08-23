@@ -40,6 +40,22 @@ const siteRemaster_1 = require("../services/siteRemaster");
 const projects_1 = require("./projects");
 const db_1 = require("../db");
 const router = (0, express_1.Router)();
+// Helper: decodifica headers que chegam em Base64 do frontend
+// O frontend envia: btoa(unescape(encodeURIComponent(value))) para evitar
+// o erro ISO-8859-1 em headers HTTP com caracteres pt-BR (acentos etc)
+const decodeHeader = (val) => {
+    if (!val)
+        return '';
+    const str = Array.isArray(val) ? val[0] : val;
+    if (!str)
+        return '';
+    try {
+        return decodeURIComponent(escape(Buffer.from(str, 'base64').toString('binary')));
+    }
+    catch {
+        return str; // fallback para valor plain-text (compatibilidade)
+    }
+};
 // In-memory queue system for AI chat modifications
 exports.aiChatJobsQueue = {};
 // Background worker for chat edits (suporta single-page, páginas selecionadas ou todas as páginas)
@@ -85,7 +101,8 @@ async function processAIChatJob(jobId, prompt, pageId, applyToAll, clientGeminiK
                 href: p.isHomepage ? 'index.html' : `${p.slug}.html`
             }));
             const routesGuide = allRoutes.map(r => `- "${r.name}" -> href="${r.href}"`).join('\n');
-            const updatedPages = await Promise.all(pagesToProcess.map(async (p) => {
+            const updatedPages = [];
+            for (const p of pagesToProcess) {
                 let specificDirective = '';
                 if (isNavbarStandardization) {
                     specificDirective = `
@@ -130,15 +147,15 @@ async function processAIChatJob(jobId, prompt, pageId, applyToAll, clientGeminiK
                         js: aiResponse.js || p.js
                     }
                 });
-                return {
+                updatedPages.push({
                     id: p.id,
                     name: p.name,
                     slug: p.slug,
                     html: aiResponse.html || p.html,
                     css: aiResponse.css || p.css,
                     js: aiResponse.js || p.js
-                };
-            }));
+                });
+            }
             // Localiza o resultado correspondente à página atualmente aberta no editor
             const currentActiveUpdated = updatedPages.find(p => p.id === pageId) || updatedPages[0];
             exports.aiChatJobsQueue[jobId] = {
@@ -226,18 +243,18 @@ router.post('/chat', async (req, res) => {
         const hasGlobalIntent = applyToAll === true ||
             (hasTargetPages && targetPageIds.length > 1) ||
             /todas as p[áa]ginas|em todo o site|globalmente|em todas|todas páginas|navbar de todas|navbar padrão/i.test(prompt);
-        const clientGeminiKey = (req.headers['x-gemini-key'] || req.headers['X-Gemini-Key']);
-        const clientProxyUrl = (req.headers['x-proxy-url'] || req.headers['X-Proxy-Url']) || process.env.AI_PROXY_URL;
+        const clientGeminiKey = decodeHeader(req.headers['x-gemini-key']);
+        const clientProxyUrl = decodeHeader(req.headers['x-proxy-url']) || process.env.AI_PROXY_URL;
         let registeredModels;
         try {
-            const rawModels = (req.headers['x-gemini-models'] || req.headers['X-Gemini-Models']);
+            const rawModels = decodeHeader(req.headers['x-gemini-models']);
             if (rawModels)
                 registeredModels = JSON.parse(rawModels);
         }
         catch { }
         let customSkills;
         try {
-            const rawSkills = (req.headers['x-ai-skills'] || req.headers['X-Ai-Skills'] || req.headers['X-AI-Skills']);
+            const rawSkills = decodeHeader((req.headers['x-ai-skills'] || req.headers['X-Ai-Skills'] || req.headers['X-AI-Skills']));
             if (rawSkills)
                 customSkills = JSON.parse(rawSkills);
         }
@@ -287,8 +304,8 @@ router.get('/jobs/:jobId/status', (req, res) => {
 // List available models from Google Gemini API with the given API key
 router.get('/models', async (req, res) => {
     try {
-        const clientGeminiKey = (req.headers['x-gemini-key'] || req.headers['X-Gemini-Key'] || process.env.GEMINI_API_KEY);
-        const clientProxyUrl = (req.headers['x-proxy-url'] || req.headers['X-Proxy-Url']) || process.env.AI_PROXY_URL;
+        const clientGeminiKey = decodeHeader(req.headers['x-gemini-key']) || process.env.GEMINI_API_KEY;
+        const clientProxyUrl = decodeHeader(req.headers['x-proxy-url']) || process.env.AI_PROXY_URL;
         if (!clientGeminiKey) {
             return res.status(400).json({ error: 'Chave do Gemini não configurada' });
         }

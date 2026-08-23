@@ -369,11 +369,12 @@ async function processCustomRemasterGenerationJob(projectId, projectName, global
         const globalJs = homeAiResponse.js || '';
         // Extrai os blocos de Navbar e Footer gerados na Home
         const { navbarHtml, footerHtml } = extractNavbarAndFooter(homeHtml);
-        // 2. GERAR TODAS AS SUBPÁGINAS EM PARALELO PARA VELOCIDADE MÁXIMA
+        // 2. GERAR TODAS AS SUBPÁGINAS SEQUENCIALMENTE PARA EVITAR RATE LIMIT DA API
         if (subPages.length > 0) {
             if (onProgress)
-                onProgress(`IA gerando ${subPages.length} subpáginas em paralelo...`, 2, subPages.length + 1);
-            await Promise.all(subPages.map(async (sub, idx) => {
+                onProgress(`IA gerando ${subPages.length} subpáginas sequencialmente...`, 2, subPages.length + 1);
+            for (let idx = 0; idx < subPages.length; idx++) {
+                const sub = subPages[idx];
                 const subPrompt = `
             Você é o Engenheiro Frontend do site "${projectName}".
             Estamos gerando a subpágina "${sub.name}" (arquivo: ${sub.slug}.html).
@@ -443,7 +444,7 @@ async function processCustomRemasterGenerationJob(projectId, projectName, global
                 catch (err) {
                     console.error(`Erro ao gerar subpágina "${sub.name}":`, err.message);
                 }
-            }));
+            }
         }
         if (onProgress)
             onProgress(`Site 100% gerado com sucesso!`, subPages.length + 1, subPages.length + 1);

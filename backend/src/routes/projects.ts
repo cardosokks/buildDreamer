@@ -6,6 +6,14 @@ import { generateAIResponse } from '../services/gemini';
 
 const router = Router();
 
+// Helper: decodifica headers que chegam em Base64 do frontend
+const decodeHeader = (val: string | string[] | undefined): string => {
+  if (!val) return '';
+  const str = Array.isArray(val) ? val[0] : val;
+  if (!str) return '';
+  try { return decodeURIComponent(escape(atob(str))); } catch { return str; }
+};
+
 export const projectJobsQueue: Record<string, { 
   status: 'pending' | 'processing' | 'completed' | 'failed'; 
   currentModel?: string;
@@ -191,17 +199,17 @@ router.post('/', async (req: AuthenticatedRequest, res: any) => {
       console.warn('Falha ao buscar configurações do usuário no banco:', e);
     }
 
-    const clientGeminiKey = (req.headers['x-gemini-key'] || req.headers['X-Gemini-Key']) as string || dbGeminiKey || process.env.GEMINI_API_KEY;
-    const clientProxyUrl = (req.headers['x-proxy-url'] || req.headers['X-Proxy-Url']) as string || dbProxyUrl || process.env.AI_PROXY_URL;
+    const clientGeminiKey = decodeHeader(req.headers['x-gemini-key'] || req.headers['X-Gemini-Key']) || dbGeminiKey || process.env.GEMINI_API_KEY;
+    const clientProxyUrl = decodeHeader(req.headers['x-proxy-url'] || req.headers['X-Proxy-Url']) || dbProxyUrl || process.env.AI_PROXY_URL;
     let registeredModels: string[] | undefined = dbCustomModels;
     try {
-      const rawModels = (req.headers['x-gemini-models'] || req.headers['X-Gemini-Models']) as string;
+      const rawModels = decodeHeader(req.headers['x-gemini-models'] || req.headers['X-Gemini-Models']);
       if (rawModels) registeredModels = JSON.parse(rawModels);
     } catch {}
 
     let customSkills: any[] | undefined = dbCustomSkills;
     try {
-      const rawSkills = (req.headers['x-ai-skills'] || req.headers['X-Ai-Skills'] || req.headers['X-AI-Skills']) as string;
+      const rawSkills = decodeHeader(req.headers['x-ai-skills'] || req.headers['X-Ai-Skills'] || req.headers['X-AI-Skills']);
       if (rawSkills) customSkills = JSON.parse(rawSkills);
     } catch {}
 

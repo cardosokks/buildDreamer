@@ -1016,15 +1016,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
         if (stored) registeredModelIds = JSON.parse(stored).map((m: any) => m.id);
       } catch { }
 
+      const safeHeader = (val: string) => {
+        try { return btoa(unescape(encodeURIComponent(val))); } catch { return ''; }
+      };
+
       const res = await fetch(`${API_URL}/api/ai/remaster/generate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Gemini-Key': localStorage.getItem('gemini_api_key') || '',
-          'X-Gemini-Models': JSON.stringify(registeredModelIds),
-          'X-Proxy-Url': localStorage.getItem('ai_proxy_url') || '',
-          'X-AI-Skills': localStorage.getItem('custom_ai_skills') || ''
+          'X-Gemini-Key': safeHeader(localStorage.getItem('gemini_api_key') || ''),
+          'X-Gemini-Models': safeHeader(JSON.stringify(registeredModelIds)),
+          'X-Proxy-Url': safeHeader(localStorage.getItem('ai_proxy_url') || ''),
+          'X-AI-Skills': safeHeader(localStorage.getItem('custom_ai_skills') || '')
         },
         body: JSON.stringify({
           projectName: remasterBusinessName,
@@ -1119,15 +1123,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
         if (stored) registeredModelIds = JSON.parse(stored).map((m: any) => m.id);
       } catch { }
 
+      const safeHeader = (val: string) => {
+        try { return btoa(unescape(encodeURIComponent(val))); } catch { return ''; }
+      };
+
       const res = await fetch(`${API_URL}/api/projects`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Gemini-Key': localStorage.getItem('gemini_api_key') || '',
-          'X-Gemini-Models': JSON.stringify(registeredModelIds),
-          'X-Proxy-Url': localStorage.getItem('ai_proxy_url') || '',
-          'X-AI-Skills': localStorage.getItem('custom_ai_skills') || ''
+          'X-Gemini-Key': safeHeader(localStorage.getItem('gemini_api_key') || ''),
+          'X-Gemini-Models': safeHeader(JSON.stringify(registeredModelIds)),
+          'X-Proxy-Url': safeHeader(localStorage.getItem('ai_proxy_url') || ''),
+          'X-AI-Skills': safeHeader(localStorage.getItem('custom_ai_skills') || '')
         },
         body: JSON.stringify({
           name: finalName,
@@ -1197,8 +1205,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
       }`}>
       {/* Top Navbar with Size and Minimized State Toggle */}
       <header className={`border-b sticky top-0 z-30 shrink-0 transition-all duration-300 backdrop-blur-md ${theme === 'light'
-          ? 'bg-white/95 border-slate-200 shadow-sm'
-          : 'bg-[#0f1117]/95 border-slate-800/80 shadow-[0_4px_20px_rgba(0,0,0,0.3)]'
+        ? 'bg-white/95 border-slate-200 shadow-sm'
+        : 'bg-[#0f1117]/95 border-slate-800/80 shadow-[0_4px_20px_rgba(0,0,0,0.3)]'
         } ${navbarMinimized ? 'h-9 py-0' : navbarSize === 'compact' ? 'h-11 py-1' : navbarSize === 'large' ? 'h-14 py-1.5' : 'h-12 py-1'
         }`}>
         <div className="w-full px-4 sm:px-6 h-full flex items-center justify-between gap-4">
@@ -1209,8 +1217,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               className={`p-2 rounded-xl border md:hidden transition-all cursor-pointer ${theme === 'light'
-                  ? 'bg-slate-100 border-slate-200 text-slate-600 hover:text-slate-900'
-                  : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
+                ? 'bg-slate-100 border-slate-200 text-slate-600 hover:text-slate-900'
+                : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
                 }`}
               title="Menu Lateral"
             >
@@ -1226,8 +1234,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                 <span className={`font-extrabold text-xs sm:text-sm tracking-wider ${theme === 'light' ? 'text-slate-900' : 'text-white'
                   }`}>REAL PREMISE</span>
                 <span className={`hidden sm:inline-block px-1.5 py-0.5 rounded-md border text-[8px] font-mono tracking-widest ${theme === 'light'
-                    ? 'border-slate-300 bg-slate-100 text-slate-600 font-semibold'
-                    : 'border-slate-700 bg-slate-800/80 text-slate-300'
+                  ? 'border-slate-300 bg-slate-100 text-slate-600 font-semibold'
+                  : 'border-slate-700 bg-slate-800/80 text-slate-300'
                   }`}>STUDIO</span>
               </div>
             )}
@@ -1242,12 +1250,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                 onClick={handleToggleNgrok}
                 disabled={ngrokLoading || ngrokStatus === 'starting'}
                 className={`h-9 px-3 rounded-xl border text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer shadow-sm ${ngrokOnline
-                    ? 'bg-emerald-950/60 border-emerald-500/50 text-emerald-300 hover:bg-emerald-900/60'
-                    : ngrokStatus === 'starting'
-                      ? 'bg-amber-950/60 border-amber-500/50 text-amber-300'
-                      : theme === 'light'
-                        ? 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-700'
-                        : 'bg-slate-900/80 hover:bg-slate-800 border-slate-800 text-slate-300'
+                  ? 'bg-emerald-950/60 border-emerald-500/50 text-emerald-300 hover:bg-emerald-900/60'
+                  : ngrokStatus === 'starting'
+                    ? 'bg-amber-950/60 border-amber-500/50 text-amber-300'
+                    : theme === 'light'
+                      ? 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-700'
+                      : 'bg-slate-900/80 hover:bg-slate-800 border-slate-800 text-slate-300'
                   }`}
                 title={
                   ngrokOnline
@@ -1294,8 +1302,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
             <button
               onClick={toggleTheme}
               className={`h-9 px-2.5 rounded-xl border transition-all cursor-pointer flex items-center gap-1.5 ${theme === 'light'
-                  ? 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-800 shadow-sm'
-                  : 'bg-slate-900/80 hover:bg-slate-800 border-slate-800 text-amber-300 shadow-sm'
+                ? 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-800 shadow-sm'
+                : 'bg-slate-900/80 hover:bg-slate-800 border-slate-800 text-amber-300 shadow-sm'
                 }`}
               title={theme === 'dark' ? 'Mudar para Modo Claro' : 'Mudar para Modo Escuro'}
             >
@@ -1324,8 +1332,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                   }
                 }}
                 className={`h-7 px-2 rounded-lg text-xs transition-all cursor-pointer flex items-center gap-1.5 ${sidebarCollapsed && !sidebarHidden
-                    ? 'bg-purple-600 text-white shadow-sm font-semibold'
-                    : 'text-slate-400 hover:text-white hover:bg-slate-850'
+                  ? 'bg-purple-600 text-white shadow-sm font-semibold'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-850'
                   }`}
                 title={sidebarCollapsed ? "Expandir Menu Lateral (Mostrar Textos)" : "Menu Lateral Compacto (Apenas Ícones)"}
               >
@@ -1338,8 +1346,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
               <button
                 onClick={() => setSidebarHidden(!sidebarHidden)}
                 className={`h-7 px-2 rounded-lg text-xs transition-all cursor-pointer flex items-center gap-1.5 ${sidebarHidden
-                    ? 'bg-amber-600 text-white shadow-sm font-semibold'
-                    : 'text-slate-400 hover:text-white hover:bg-slate-850'
+                  ? 'bg-amber-600 text-white shadow-sm font-semibold'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-850'
                   }`}
                 title={sidebarHidden ? "Mostrar Menu Lateral" : "Ocultar Menu Lateral Totalmente (Ganhar Espaço Máximo)"}
               >
@@ -1354,8 +1362,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
             <button
               onClick={() => setNavbarMinimized(!navbarMinimized)}
               className={`w-9 h-9 border rounded-xl flex items-center justify-center transition-all cursor-pointer shadow-sm ${theme === 'light'
-                  ? 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-600 hover:text-slate-900'
-                  : 'bg-slate-900/80 hover:bg-slate-800 border-slate-800 text-slate-400 hover:text-white'
+                ? 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-600 hover:text-slate-900'
+                : 'bg-slate-900/80 hover:bg-slate-800 border-slate-800 text-slate-400 hover:text-white'
                 }`}
               title={navbarMinimized ? "Expandir Barra Superior" : "Minimizar Barra Superior"}
             >
@@ -1367,8 +1375,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
               <button
                 onClick={() => setShowUserDropdown(!showUserDropdown)}
                 className={`h-9 flex items-center gap-2.5 p-1 pl-2.5 rounded-xl border transition-all cursor-pointer shadow-sm ${theme === 'light'
-                    ? 'bg-slate-100 hover:bg-slate-200 border-slate-200'
-                    : 'bg-slate-900/80 hover:bg-slate-800 border-slate-800'
+                  ? 'bg-slate-100 hover:bg-slate-200 border-slate-200'
+                  : 'bg-slate-900/80 hover:bg-slate-800 border-slate-800'
                   }`}
               >
                 {!navbarMinimized && (
@@ -1388,8 +1396,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
               {showUserDropdown && (
                 <div
                   className={`absolute right-0 mt-2 w-56 border rounded-2xl shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-150 backdrop-blur-xl ${theme === 'light'
-                      ? 'bg-white border-slate-200 text-slate-900'
-                      : 'bg-[#0f1117] border-slate-800 text-slate-100'
+                    ? 'bg-white border-slate-200 text-slate-900'
+                    : 'bg-[#0f1117] border-slate-800 text-slate-100'
                     }`}
                   onClick={() => setShowUserDropdown(false)}
                 >
@@ -1520,12 +1528,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
               <button
                 onClick={() => setActiveTab('general')}
                 className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2 py-2.5' : 'gap-3 px-3.5 py-2.5'} rounded-xl text-xs font-semibold transition-all cursor-pointer ${activeTab === 'general'
-                    ? theme === 'light'
-                      ? 'bg-indigo-50 text-indigo-700 font-bold'
-                      : 'bg-slate-800 text-white font-bold'
-                    : theme === 'light'
-                      ? 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                      : 'text-slate-400 hover:bg-slate-900/60 hover:text-slate-200'
+                  ? theme === 'light'
+                    ? 'bg-indigo-50 text-indigo-700 font-bold'
+                    : 'bg-slate-800 text-white font-bold'
+                  : theme === 'light'
+                    ? 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                    : 'text-slate-400 hover:bg-slate-900/60 hover:text-slate-200'
                   }`}
                 title="Visão Geral"
               >
@@ -1536,12 +1544,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
               <button
                 onClick={() => setActiveTab('projects')}
                 className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2 py-2.5' : 'gap-3 px-3.5 py-2.5'} rounded-xl text-xs font-semibold transition-all cursor-pointer ${activeTab === 'projects'
-                    ? theme === 'light'
-                      ? 'bg-indigo-50 text-indigo-700 font-bold'
-                      : 'bg-slate-800 text-white font-bold'
-                    : theme === 'light'
-                      ? 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                      : 'text-slate-400 hover:bg-slate-900/60 hover:text-slate-200'
+                  ? theme === 'light'
+                    ? 'bg-indigo-50 text-indigo-700 font-bold'
+                    : 'bg-slate-800 text-white font-bold'
+                  : theme === 'light'
+                    ? 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                    : 'text-slate-400 hover:bg-slate-900/60 hover:text-slate-200'
                   }`}
                 title="Meus Sites"
               >
@@ -1570,12 +1578,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
               <button
                 onClick={() => setActiveTab('crm')}
                 className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2 py-2.5' : 'gap-3 px-3.5 py-2.5'} rounded-xl text-xs font-semibold transition-all cursor-pointer ${activeTab === 'crm'
-                    ? theme === 'light'
-                      ? 'bg-emerald-50 text-emerald-700 font-bold shadow-sm'
-                      : 'bg-emerald-950/40 text-emerald-300 border border-emerald-500/30 font-bold shadow-sm'
-                    : theme === 'light'
-                      ? 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                      : 'text-slate-400 hover:bg-slate-900/60 hover:text-slate-200'
+                  ? theme === 'light'
+                    ? 'bg-emerald-50 text-emerald-700 font-bold shadow-sm'
+                    : 'bg-emerald-950/40 text-emerald-300 border border-emerald-500/30 font-bold shadow-sm'
+                  : theme === 'light'
+                    ? 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                    : 'text-slate-400 hover:bg-slate-900/60 hover:text-slate-200'
                   }`}
                 title="Funil de Vendas"
               >
@@ -1603,12 +1611,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
               <button
                 onClick={() => setActiveTab('leads')}
                 className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2 py-2.5' : 'gap-3 px-3.5 py-2.5'} rounded-xl text-xs font-semibold transition-all cursor-pointer ${activeTab === 'leads'
-                    ? theme === 'light'
-                      ? 'bg-indigo-50 text-indigo-700 font-bold'
-                      : 'bg-slate-800 text-white font-bold'
-                    : theme === 'light'
-                      ? 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                      : 'text-slate-400 hover:bg-slate-900/60 hover:text-slate-200'
+                  ? theme === 'light'
+                    ? 'bg-indigo-50 text-indigo-700 font-bold'
+                    : 'bg-slate-800 text-white font-bold'
+                  : theme === 'light'
+                    ? 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                    : 'text-slate-400 hover:bg-slate-900/60 hover:text-slate-200'
                   }`}
                 title="Buscador de Clientes"
               >
@@ -1619,12 +1627,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
               <button
                 onClick={() => setActiveTab('saved-leads')}
                 className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2 py-2.5 relative' : 'gap-3 px-3.5 py-2.5'} rounded-xl text-xs font-semibold transition-all cursor-pointer ${activeTab === 'saved-leads'
-                    ? theme === 'light'
-                      ? 'bg-amber-50 text-amber-800 font-bold'
-                      : 'bg-slate-800 text-amber-300 font-bold'
-                    : theme === 'light'
-                      ? 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                      : 'text-slate-400 hover:bg-slate-900/60 hover:text-slate-200'
+                  ? theme === 'light'
+                    ? 'bg-amber-50 text-amber-800 font-bold'
+                    : 'bg-slate-800 text-amber-300 font-bold'
+                  : theme === 'light'
+                    ? 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                    : 'text-slate-400 hover:bg-slate-900/60 hover:text-slate-200'
                   }`}
                 title={`Leads Salvos (${savedLeads.length})`}
               >
@@ -1645,12 +1653,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
               <button
                 onClick={() => setActiveTab('presets')}
                 className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2 py-2.5 relative' : 'gap-3 px-3.5 py-2.5'} rounded-xl text-xs font-semibold transition-all cursor-pointer ${activeTab === 'presets'
-                    ? theme === 'light'
-                      ? 'bg-indigo-50 text-indigo-700 font-bold'
-                      : 'bg-slate-800 text-white font-bold'
-                    : theme === 'light'
-                      ? 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                      : 'text-slate-400 hover:bg-slate-900/60 hover:text-slate-200'
+                  ? theme === 'light'
+                    ? 'bg-indigo-50 text-indigo-700 font-bold'
+                    : 'bg-slate-800 text-white font-bold'
+                  : theme === 'light'
+                    ? 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                    : 'text-slate-400 hover:bg-slate-900/60 hover:text-slate-200'
                   }`}
                 title={`Filtros Salvos (${filterPresets.length})`}
               >
@@ -1681,12 +1689,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
               <button
                 onClick={() => setActiveTab('settings')}
                 className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2 py-2.5' : 'gap-3 px-3.5 py-2.5'} rounded-xl text-xs font-semibold transition-all cursor-pointer ${activeTab === 'settings'
-                    ? theme === 'light'
-                      ? 'bg-purple-50 text-purple-700 font-bold'
-                      : 'bg-gradient-to-r from-purple-900/50 to-indigo-900/50 text-white font-bold border border-purple-500/40 shadow-sm'
-                    : theme === 'light'
-                      ? 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                      : 'text-slate-400 hover:bg-slate-900/60 hover:text-slate-200'
+                  ? theme === 'light'
+                    ? 'bg-purple-50 text-purple-700 font-bold'
+                    : 'bg-gradient-to-r from-purple-900/50 to-indigo-900/50 text-white font-bold border border-purple-500/40 shadow-sm'
+                  : theme === 'light'
+                    ? 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                    : 'text-slate-400 hover:bg-slate-900/60 hover:text-slate-200'
                   }`}
                 title="Configurações"
               >
@@ -2154,10 +2162,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                           onSelectProject(project.id);
                         }}
                         className={`border rounded-2xl p-5 transition-all group flex flex-col justify-between min-h-[200px] shadow-lg animate-in fade-in duration-200 relative ${isGenerating
-                            ? 'bg-[#0f0b18] border-amber-500/50 shadow-[0_0_25px_rgba(229,185,95,0.15)] cursor-not-allowed overflow-hidden'
-                            : theme === 'light'
-                              ? 'bg-white border-slate-200 hover:border-purple-400/60 cursor-pointer hover:shadow-purple-100'
-                              : 'bg-[#0f0b18] border-slate-800/80 hover:border-purple-500/40 hover:bg-[#130d1e] cursor-pointer hover:shadow-[0_0_20px_rgba(168,85,247,0.08)]'
+                          ? 'bg-[#0f0b18] border-amber-500/50 shadow-[0_0_25px_rgba(229,185,95,0.15)] cursor-not-allowed overflow-hidden'
+                          : theme === 'light'
+                            ? 'bg-white border-slate-200 hover:border-purple-400/60 cursor-pointer hover:shadow-purple-100'
+                            : 'bg-[#0f0b18] border-slate-800/80 hover:border-purple-500/40 hover:bg-[#130d1e] cursor-pointer hover:shadow-[0_0_20px_rgba(168,85,247,0.08)]'
                           }`}
                       >
                         {isGenerating && (
@@ -2177,10 +2185,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                             <h3 className={`font-bold text-base line-clamp-1 group-hover:text-purple-300 transition-colors ${theme === 'light' ? 'text-slate-900' : 'text-white'
                               }`}>{project.name}</h3>
                             <span className={`px-2 py-0.5 rounded-lg text-[10px] capitalize font-bold shrink-0 border ${isGenerating
-                                ? 'bg-amber-500/20 text-amber-300 border-amber-500/30 animate-pulse'
-                                : project.status === 'published'
-                                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                                  : theme === 'light' ? 'bg-slate-100 text-slate-600 border-slate-200' : 'bg-slate-800/60 text-slate-400 border-slate-700/60'
+                              ? 'bg-amber-500/20 text-amber-300 border-amber-500/30 animate-pulse'
+                              : project.status === 'published'
+                                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                                : theme === 'light' ? 'bg-slate-100 text-slate-600 border-slate-200' : 'bg-slate-800/60 text-slate-400 border-slate-700/60'
                               }`}>
                               {isGenerating ? 'Gerando...' : project.status === 'development' ? 'Dev' : 'Live'}
                             </span>
@@ -2263,8 +2271,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                           onSelectProject(project.id);
                         }}
                         className={`grid grid-cols-[2fr_1fr_auto_auto] gap-4 px-5 py-3.5 items-center transition-all cursor-pointer group ${idx !== filteredProjects.length - 1
-                            ? theme === 'light' ? 'border-b border-slate-100' : 'border-b border-slate-800/50'
-                            : ''
+                          ? theme === 'light' ? 'border-b border-slate-100' : 'border-b border-slate-800/50'
+                          : ''
                           } ${theme === 'light' ? 'hover:bg-purple-50/60' : 'hover:bg-purple-950/10'
                           }`}
                       >
@@ -2274,10 +2282,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                             <span className={`font-semibold text-sm truncate group-hover:text-purple-400 transition-colors ${theme === 'light' ? 'text-slate-900' : 'text-white'
                               }`}>{project.name}</span>
                             <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold border shrink-0 ${isGenerating
-                                ? 'bg-amber-500/20 text-amber-300 border-amber-500/30 animate-pulse'
-                                : project.status === 'published'
-                                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                                  : theme === 'light' ? 'bg-slate-100 text-slate-500 border-slate-200' : 'bg-slate-800 text-slate-400 border-slate-700'
+                              ? 'bg-amber-500/20 text-amber-300 border-amber-500/30 animate-pulse'
+                              : project.status === 'published'
+                                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                                : theme === 'light' ? 'bg-slate-100 text-slate-500 border-slate-200' : 'bg-slate-800 text-slate-400 border-slate-700'
                               }`}>
                               {isGenerating ? '⚡ IA...' : project.status === 'development' ? 'Dev' : 'Live'}
                             </span>
@@ -2665,8 +2673,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                             key={page}
                             onClick={() => setSavedCurrentPage(page)}
                             className={`w-8 h-8 rounded-xl text-xs font-bold transition-all ${savedCurrentPage === page
-                                ? 'bg-purple-700 text-white shadow-[0_0_10px_rgba(168,85,247,0.4)]'
-                                : 'bg-[#0f0b18] border border-slate-850 text-slate-400 hover:text-white'
+                              ? 'bg-purple-700 text-white shadow-[0_0_10px_rgba(168,85,247,0.4)]'
+                              : 'bg-[#0f0b18] border border-slate-850 text-slate-400 hover:text-white'
                               }`}
                           >
                             {page}
@@ -2916,8 +2924,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                       type="button"
                       onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
                       className={`px-2.5 py-1 rounded-lg border text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${showAdvancedFilters || minRating !== '0' || minReviews !== '0'
-                          ? 'bg-purple-950/40 border-purple-500/50 text-purple-300'
-                          : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
+                        ? 'bg-purple-950/40 border-purple-500/50 text-purple-300'
+                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
                         }`}
                     >
                       <SlidersHorizontal className="w-3.5 h-3.5" />
@@ -3212,8 +3220,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                                             <button
                                               onClick={() => handleToggleSaveLead(lead)}
                                               className={`p-2 rounded-xl border transition-all cursor-pointer shadow-sm ${isSaved
-                                                  ? 'bg-yellow-500/20 border-yellow-500/40 text-yellow-300'
-                                                  : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-yellow-400 hover:border-yellow-500/30'
+                                                ? 'bg-yellow-500/20 border-yellow-500/40 text-yellow-300'
+                                                : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-yellow-400 hover:border-yellow-500/30'
                                                 }`}
                                               title={isSaved ? 'Lead salvo nos favoritos (clique para remover)' : 'Salvar lead nos favoritos'}
                                             >
@@ -3272,8 +3280,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                                         <button
                                           onClick={() => handleToggleSaveLead(lead)}
                                           className={`p-1.5 rounded-lg border transition-all cursor-pointer ${isSaved
-                                              ? 'bg-yellow-500/20 border-yellow-500/40 text-yellow-300'
-                                              : 'bg-slate-900 border-slate-800 text-slate-500 hover:text-yellow-400'
+                                            ? 'bg-yellow-500/20 border-yellow-500/40 text-yellow-300'
+                                            : 'bg-slate-900 border-slate-800 text-slate-500 hover:text-yellow-400'
                                             }`}
                                           title={isSaved ? 'Salvo nos favoritos' : 'Salvar lead para depois'}
                                         >
@@ -3387,8 +3395,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                                     key={page}
                                     onClick={() => setCurrentPage(page)}
                                     className={`w-7 h-7 rounded-lg text-xs font-bold transition-all ${currentPage === page
-                                        ? 'bg-purple-700 text-white shadow-[0_0_10px_rgba(168,85,247,0.4)]'
-                                        : 'bg-[#0f0b18] border border-slate-850 text-slate-400 hover:text-white'
+                                      ? 'bg-purple-700 text-white shadow-[0_0_10px_rgba(168,85,247,0.4)]'
+                                      : 'bg-[#0f0b18] border border-slate-850 text-slate-400 hover:text-white'
                                       }`}
                                   >
                                     {page}
@@ -3868,10 +3876,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                     Etapa 1: Varredura e Download das Páginas Existentes
                   </span>
                   <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase font-mono ${remasterScrapingStatus === 'scraping'
-                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30 animate-pulse'
-                      : remasterScrapingStatus === 'completed'
-                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                        : 'bg-red-500/20 text-red-300 border border-red-500/30'
+                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30 animate-pulse'
+                    : remasterScrapingStatus === 'completed'
+                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                      : 'bg-red-500/20 text-red-300 border border-red-500/30'
                     }`}>
                     {remasterScrapingStatus === 'scraping' ? 'Extraindo...' : remasterScrapingStatus === 'completed' ? 'Concluído' : 'Atenção'}
                   </span>
@@ -3984,8 +3992,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                         <div
                           key={idx}
                           className={`p-3.5 border rounded-xl transition-all space-y-2.5 ${page.enabled
-                              ? 'bg-slate-950 border-purple-500/30 shadow-sm'
-                              : 'bg-slate-950/40 border-slate-850 opacity-60'
+                            ? 'bg-slate-950 border-purple-500/30 shadow-sm'
+                            : 'bg-slate-950/40 border-slate-850 opacity-60'
                             }`}
                         >
                           <div className="flex items-center justify-between gap-3">

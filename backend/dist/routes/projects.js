@@ -39,6 +39,20 @@ const db_1 = require("../db");
 const ftp_1 = require("../services/ftp");
 const gemini_1 = require("../services/gemini");
 const router = (0, express_1.Router)();
+// Helper: decodifica headers que chegam em Base64 do frontend
+const decodeHeader = (val) => {
+    if (!val)
+        return '';
+    const str = Array.isArray(val) ? val[0] : val;
+    if (!str)
+        return '';
+    try {
+        return decodeURIComponent(escape(atob(str)));
+    }
+    catch {
+        return str;
+    }
+};
 exports.projectJobsQueue = {};
 // Background task worker method
 async function processAIProjectGeneration(projectId, prompt, customApiKey, customModel, registeredModels, customProxyUrl, customSkills) {
@@ -190,18 +204,18 @@ router.post('/', async (req, res) => {
         catch (e) {
             console.warn('Falha ao buscar configurações do usuário no banco:', e);
         }
-        const clientGeminiKey = (req.headers['x-gemini-key'] || req.headers['X-Gemini-Key']) || dbGeminiKey || process.env.GEMINI_API_KEY;
-        const clientProxyUrl = (req.headers['x-proxy-url'] || req.headers['X-Proxy-Url']) || dbProxyUrl || process.env.AI_PROXY_URL;
+        const clientGeminiKey = decodeHeader(req.headers['x-gemini-key'] || req.headers['X-Gemini-Key']) || dbGeminiKey || process.env.GEMINI_API_KEY;
+        const clientProxyUrl = decodeHeader(req.headers['x-proxy-url'] || req.headers['X-Proxy-Url']) || dbProxyUrl || process.env.AI_PROXY_URL;
         let registeredModels = dbCustomModels;
         try {
-            const rawModels = (req.headers['x-gemini-models'] || req.headers['X-Gemini-Models']);
+            const rawModels = decodeHeader(req.headers['x-gemini-models'] || req.headers['X-Gemini-Models']);
             if (rawModels)
                 registeredModels = JSON.parse(rawModels);
         }
         catch { }
         let customSkills = dbCustomSkills;
         try {
-            const rawSkills = (req.headers['x-ai-skills'] || req.headers['X-Ai-Skills'] || req.headers['X-AI-Skills']);
+            const rawSkills = decodeHeader(req.headers['x-ai-skills'] || req.headers['X-Ai-Skills'] || req.headers['X-AI-Skills']);
             if (rawSkills)
                 customSkills = JSON.parse(rawSkills);
         }
