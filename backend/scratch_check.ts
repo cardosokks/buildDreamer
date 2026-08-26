@@ -1,16 +1,17 @@
 import { prisma } from './src/db';
 
 async function main() {
-  const projects = await prisma.project.findMany({
-    include: {
-      pages: true,
-      members: true
-    },
-    orderBy: { createdAt: 'desc' },
-    take: 5
+  const users = await prisma.user.findMany({
+    select: {
+      id: true,
+      email: true,
+      geminiApiKey: true,
+      aiProxyUrl: true,
+      customAiModels: true
+    }
   });
-  console.log("PROJECTS STATUS:");
-  console.log(JSON.stringify(projects, null, 2));
+  console.log("USER SETTINGS:");
+  console.log(JSON.stringify(users, null, 2));
 }
 
 main().catch(console.error);

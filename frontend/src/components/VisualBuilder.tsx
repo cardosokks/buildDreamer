@@ -664,8 +664,17 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
     const srcEl = getElementByPath(root, sourcePath);
     const tgtEl = getElementByPath(root, targetPath);
     if (srcEl && tgtEl && srcEl.parentElement) {
+      // Impede de arrastar ou mover os wrappers principais em si
+      const isSrcWrapper = srcEl.id === 'studio-global-navbar' || srcEl.id === 'studio-global-content' || srcEl.id === 'studio-global-footer';
+      if (isSrcWrapper) return;
+
       srcEl.parentElement.removeChild(srcEl);
-      if (position === 'before' && tgtEl.parentElement) {
+
+      const isTgtWrapper = tgtEl.id === 'studio-global-navbar' || tgtEl.id === 'studio-global-content' || tgtEl.id === 'studio-global-footer';
+      if (isTgtWrapper) {
+        // Se o alvo for um wrapper, move para dentro dele
+        tgtEl.appendChild(srcEl);
+      } else if (position === 'before' && tgtEl.parentElement) {
         tgtEl.parentElement.insertBefore(srcEl, tgtEl);
       } else if (position === 'after' && tgtEl.parentElement) {
         tgtEl.parentElement.insertBefore(srcEl, tgtEl.nextSibling);
@@ -689,6 +698,8 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
     if (!activePage) return;
     const doc = parseDocFromHtml(getComposedHtml());
     const root = doc.getElementById('canvas-root') || doc.body;
+    const contentWrapper = root.querySelector('#studio-global-content');
+    const targetRoot = contentWrapper || root;
 
     // Criar nós a partir do bloco HTML
     const tempContainer = doc.createElement('div');
@@ -700,7 +711,10 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
     if (targetPath && position !== 'append') {
       const tgtEl = getElementByPath(root, targetPath);
       if (tgtEl) {
-        if (position === 'before' && tgtEl.parentElement) {
+        const isWrapper = tgtEl.id === 'studio-global-navbar' || tgtEl.id === 'studio-global-content' || tgtEl.id === 'studio-global-footer';
+        if (isWrapper) {
+          newElements.forEach(el => tgtEl.appendChild(el));
+        } else if (position === 'before' && tgtEl.parentElement) {
           newElements.forEach(el => tgtEl.parentElement!.insertBefore(el, tgtEl));
         } else if (position === 'after' && tgtEl.parentElement) {
           newElements.forEach(el => tgtEl.parentElement!.insertBefore(el, tgtEl.nextSibling));
@@ -708,18 +722,22 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
           newElements.forEach(el => tgtEl.appendChild(el));
         }
       } else {
-        newElements.forEach(el => root.appendChild(el));
+        newElements.forEach(el => targetRoot.appendChild(el));
       }
     } else {
-      newElements.forEach(el => root.appendChild(el));
+      newElements.forEach(el => targetRoot.appendChild(el));
+    }
+
+    // CSS adicional do template
+    let newCss = activePage.css || '';
+    if (cssBlock && cssBlock.trim()) {
+      if (!newCss.includes(cssBlock.trim())) {
+        newCss = newCss ? `${newCss}\n${cssBlock.trim()}` : cssBlock.trim();
+      }
     }
 
     const newHtml = serializeBodyContent(doc);
-    const updates: { html: string; css?: string } = { html: newHtml };
-    if (cssBlock) {
-      updates.css = `${activePage.css || ''}\n${cssBlock}`;
-    }
-    handlePageFieldsChange(updates, 'Inserir bloco de template');
+    handlePageFieldsChange({ html: newHtml, css: newCss }, 'Inserir bloco de template');
   };
 
   // Save selected element as a custom template
@@ -833,11 +851,27 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
           const parsedChild = nodeToElementNode(node.children[i]);
           if (parsedChild) childNodes.push(parsedChild);
         }
+
+        let textPreview = '';
+        const tagName = node.tagName.toLowerCase();
+        if (childNodes.length === 0 && node.textContent) {
+          textPreview = node.textContent.trim();
+        } else if (['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'a', 'button'].includes(tagName)) {
+          textPreview = Array.from(node.childNodes)
+            .filter(n => n.nodeType === 3) // Node.TEXT_NODE
+            .map(n => n.textContent?.trim())
+            .filter(Boolean)
+            .join(' ');
+          if (!textPreview && node.textContent) {
+            textPreview = node.textContent.trim();
+          }
+        }
         
         return {
-          tag: node.tagName.toLowerCase(),
+          tag: tagName,
           id: node.id || undefined,
           className: (typeof node.className === 'string' ? node.className : node.getAttribute('class')) || undefined,
+          text: textPreview ? textPreview.slice(0, 30) : undefined,
           children: childNodes.length > 0 ? childNodes : undefined
         };
       }

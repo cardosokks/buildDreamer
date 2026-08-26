@@ -621,7 +621,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                 }
                 if (el && el !== canvasRoot) {
                   currentSelected = el;
-                  updateOverlayPosition();
+                  setTimeout(updateOverlayPosition, 50);
                 } else {
                   removeSelection();
                 }

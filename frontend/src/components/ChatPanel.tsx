@@ -348,10 +348,12 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
         attachedFiles: currentFiles.length > 0 ? currentFiles : undefined
       } as Message
     ];
+    const modelToSend = selectedModel || (availableModels.length > 0 ? availableModels[0].id : 'gemini-2.0-flash');
+
     setMessages(updatedMessages);
     localStorage.setItem(chatStorageKey, JSON.stringify(updatedMessages));
     setLoading(true);
-    setActiveJobModel(selectedModel);
+    setActiveJobModel(modelToSend);
     setAttachedFiles([]);
 
     const localGeminiKey = localStorage.getItem('gemini_api_key') || '';
@@ -384,7 +386,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
         body: JSON.stringify({ 
           prompt: messageText, 
           pageId: currentRequestPageId, 
-          model: selectedModel,
+          model: modelToSend,
           applyToAll: isMultiTarget,
           targetPageIds: targetPageIds,
           attachedFiles: currentFiles.length > 0 ? currentFiles : undefined
