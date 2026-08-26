@@ -336,7 +336,7 @@ export const generateAIResponse = async (
     const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
     try {
-      const isGemini25 = modelToTry.includes('2.5') || modelToTry.includes('2.0');
+      const isThinkingModel = modelToTry.includes('thinking');
       
       const generationConfig: any = {
         responseMimeType: 'application/json',
@@ -345,10 +345,9 @@ export const generateAIResponse = async (
         maxOutputTokens: 8192
       };
 
-      if (isGemini25) {
-        // Desativa 'thinking' para respostas instantâneas sem latência de raciocínio desnecessária
+      if (isThinkingModel) {
         generationConfig.thinkingConfig = {
-          thinkingBudget: 0
+          thinkingBudget: 1024
         };
       }
 
