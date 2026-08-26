@@ -381,16 +381,23 @@ router.get('/models', async (req: AuthenticatedRequest, res: any) => {
       return res.status(400).json({ error: 'Chave do Gemini não configurada' });
     }
 
+    let fetchFn = fetch;
     const fetchOptions: any = {};
     if (clientProxyUrl && clientProxyUrl.startsWith('http')) {
-      const { ProxyAgent } = await import('undici');
+      const { ProxyAgent, fetch: undiciFetch } = await import('undici');
       fetchOptions.dispatcher = new ProxyAgent(clientProxyUrl);
+      fetchFn = undiciFetch as any;
     }
 
-    const resApi = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${clientGeminiKey}`, fetchOptions);
+    const resApi = await fetchFn(`https://generativelanguage.googleapis.com/v1beta/models?key=${clientGeminiKey}`, fetchOptions);
     if (!resApi.ok) {
       const errTxt = await resApi.text();
-      return res.status(resApi.status).json({ error: errTxt });
+      let parsedError = errTxt;
+      try {
+        const jsErr = JSON.parse(errTxt);
+        parsedError = jsErr.error?.message || (typeof jsErr.error === 'string' ? jsErr.error : null) || errTxt;
+      } catch {}
+      return res.status(resApi.status).json({ error: parsedError });
     }
 
     const data: any = await resApi.json();
