@@ -389,25 +389,33 @@ router.get('/models', async (req: AuthenticatedRequest, res: any) => {
       fetchFn = undiciFetch as any;
     }
 
-    const resApi = await fetchFn(`https://generativelanguage.googleapis.com/v1beta/models?key=${clientGeminiKey}`, fetchOptions);
-    if (!resApi.ok) {
-      const errTxt = await resApi.text();
-      let parsedError = errTxt;
-      try {
-        const jsErr = JSON.parse(errTxt);
-        parsedError = jsErr.error?.message || (typeof jsErr.error === 'string' ? jsErr.error : null) || errTxt;
-      } catch {}
-      return res.status(resApi.status).json({ error: parsedError });
+    let models = [];
+    try {
+      const resApi = await fetchFn(`https://generativelanguage.googleapis.com/v1beta/models?key=${clientGeminiKey}`, fetchOptions);
+      if (resApi.ok) {
+        const data: any = await resApi.json();
+        models = (data.models || [])
+          .filter((m: any) => m.supportedGenerationMethods?.includes('generateContent'))
+          .map((m: any) => ({
+            id: m.name.replace('models/', ''),
+            name: m.displayName || m.name.replace('models/', ''),
+            description: m.description
+          }));
+      } else {
+        const errTxt = await resApi.text();
+        console.warn(`[AI Engine] API de modelos retornou status ${resApi.status}: ${errTxt}`);
+      }
+    } catch (err: any) {
+      console.warn(`[AI Engine] Falha ao listar modelos do Gemini, aplicando fallback:`, err.message);
     }
 
-    const data: any = await resApi.json();
-    const models = (data.models || [])
-      .filter((m: any) => m.supportedGenerationMethods?.includes('generateContent'))
-      .map((m: any) => ({
-        id: m.name.replace('models/', ''),
-        name: m.displayName || m.name.replace('models/', ''),
-        description: m.description
-      }));
+    if (!models || models.length === 0) {
+      models = [
+        { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', description: 'Modelo rápido padrão recomendado' },
+        { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash', description: 'Modelo leve com boa janela de contexto' },
+        { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', description: 'Modelo avançado para tarefas complexas' }
+      ];
+    }
 
     return res.json({ models });
   } catch (error: any) {

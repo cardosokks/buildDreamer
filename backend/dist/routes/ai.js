@@ -337,25 +337,34 @@ router.get('/models', async (req, res) => {
             fetchOptions.dispatcher = new ProxyAgent(clientProxyUrl);
             fetchFn = undiciFetch;
         }
-        const resApi = await fetchFn(`https://generativelanguage.googleapis.com/v1beta/models?key=${clientGeminiKey}`, fetchOptions);
-        if (!resApi.ok) {
-            const errTxt = await resApi.text();
-            let parsedError = errTxt;
-            try {
-                const jsErr = JSON.parse(errTxt);
-                parsedError = jsErr.error?.message || (typeof jsErr.error === 'string' ? jsErr.error : null) || errTxt;
+        let models = [];
+        try {
+            const resApi = await fetchFn(`https://generativelanguage.googleapis.com/v1beta/models?key=${clientGeminiKey}`, fetchOptions);
+            if (resApi.ok) {
+                const data = await resApi.json();
+                models = (data.models || [])
+                    .filter((m) => m.supportedGenerationMethods?.includes('generateContent'))
+                    .map((m) => ({
+                    id: m.name.replace('models/', ''),
+                    name: m.displayName || m.name.replace('models/', ''),
+                    description: m.description
+                }));
             }
-            catch { }
-            return res.status(resApi.status).json({ error: parsedError });
+            else {
+                const errTxt = await resApi.text();
+                console.warn(`[AI Engine] API de modelos retornou status ${resApi.status}: ${errTxt}`);
+            }
         }
-        const data = await resApi.json();
-        const models = (data.models || [])
-            .filter((m) => m.supportedGenerationMethods?.includes('generateContent'))
-            .map((m) => ({
-            id: m.name.replace('models/', ''),
-            name: m.displayName || m.name.replace('models/', ''),
-            description: m.description
-        }));
+        catch (err) {
+            console.warn(`[AI Engine] Falha ao listar modelos do Gemini, aplicando fallback:`, err.message);
+        }
+        if (!models || models.length === 0) {
+            models = [
+                { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', description: 'Modelo rápido padrão recomendado' },
+                { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash', description: 'Modelo leve com boa janela de contexto' },
+                { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', description: 'Modelo avançado para tarefas complexas' }
+            ];
+        }
         return res.json({ models });
     }
     catch (error) {
