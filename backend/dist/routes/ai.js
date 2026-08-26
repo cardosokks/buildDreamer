@@ -327,6 +327,8 @@ router.get('/models', async (req, res) => {
     try {
         const clientGeminiKey = decodeHeader(req.headers['x-gemini-key']) || process.env.GEMINI_API_KEY;
         const clientProxyUrl = decodeHeader(req.headers['x-proxy-url']) || process.env.AI_PROXY_URL;
+        console.log(`[AI Models Sync] Key decoded: ${clientGeminiKey ? `${clientGeminiKey.substring(0, 6)}...${clientGeminiKey.substring(clientGeminiKey.length - 4)}` : 'none'}`);
+        console.log(`[AI Models Sync] Proxy: ${clientProxyUrl || 'none'}`);
         if (!clientGeminiKey) {
             return res.status(400).json({ error: 'Chave do Gemini não configurada' });
         }
