@@ -24,9 +24,13 @@ async function ensureMediaTable() {
         "size" INTEGER,
         "mimeType" TEXT,
         "userId" TEXT NOT NULL,
+        "projectId" TEXT,
         "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
     `);
+    await prisma.$executeRawUnsafe(`
+      ALTER TABLE "Media" ADD COLUMN IF NOT EXISTS "projectId" TEXT;
+    `).catch(() => {});
     mediaTableChecked = true;
   } catch (err) {
     console.error('Error ensuring Media table:', err);
@@ -37,10 +41,21 @@ async function ensureMediaTable() {
 router.get('/', authenticateToken, async (req: AuthenticatedRequest, res: any) => {
   try {
     await ensureMediaTable();
-    const rows: any[] = await prisma.$queryRawUnsafe(
-      `SELECT * FROM "Media" WHERE "userId" = $1 ORDER BY "createdAt" DESC LIMIT 100`,
-      req.userId
-    );
+    const projectId = req.query.projectId as string;
+    let rows: any[];
+    
+    if (projectId) {
+      rows = await prisma.$queryRawUnsafe(
+        `SELECT * FROM "Media" WHERE "userId" = $1 AND "projectId" = $2 ORDER BY "createdAt" DESC LIMIT 100`,
+        req.userId, projectId
+      );
+    } else {
+      rows = await prisma.$queryRawUnsafe(
+        `SELECT * FROM "Media" WHERE "userId" = $1 AND ("projectId" IS NULL OR "projectId" = '') ORDER BY "createdAt" DESC LIMIT 100`,
+        req.userId
+      );
+    }
+
     const baseUrl = `${req.protocol}://${req.get('host')}`;
     const formattedRows = (rows || []).map(item => ({
       ...item,
@@ -56,7 +71,7 @@ router.get('/', authenticateToken, async (req: AuthenticatedRequest, res: any) =
 router.post('/upload', authenticateToken, async (req: AuthenticatedRequest, res: any) => {
   try {
     await ensureMediaTable();
-    const { name, base64Data, mimeType } = req.body;
+    const { name, base64Data, mimeType, projectId } = req.body;
 
     if (!base64Data) {
       return res.status(400).json({ error: 'Dados da imagem (base64) são obrigatórios.' });
@@ -69,12 +84,19 @@ router.post('/upload', authenticateToken, async (req: AuthenticatedRequest, res:
     if (mimeType && mimeType.includes('/')) {
       ext = mimeType.split('/')[1].replace('+xml', '');
     }
+
+    const projectSubdir = projectId ? path.join('projects', projectId) : '';
+    const targetDir = path.join(uploadsDir, projectSubdir);
+    if (!fs.existsSync(targetDir)) {
+      fs.mkdirSync(targetDir, { recursive: true });
+    }
+
     const filename = `img_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${ext}`;
-    const filePath = path.join(uploadsDir, filename);
+    const filePath = path.join(targetDir, filename);
 
     fs.writeFileSync(filePath, buffer);
 
-    const publicUrl = `/uploads/${filename}`;
+    const publicUrl = projectId ? `/uploads/projects/${projectId}/${filename}` : `/uploads/${filename}`;
     const baseUrl = `${req.protocol}://${req.get('host')}`;
     const absoluteUrl = `${baseUrl}${publicUrl}`;
     const id = `media_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
@@ -82,8 +104,8 @@ router.post('/upload', authenticateToken, async (req: AuthenticatedRequest, res:
     const mediaName = name || filename;
 
     await prisma.$executeRawUnsafe(
-      `INSERT INTO "Media" ("id", "name", "url", "size", "mimeType", "userId", "createdAt") VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
-      id, mediaName, publicUrl, size, mimeType || 'image/png', req.userId
+      `INSERT INTO "Media" ("id", "name", "url", "size", "mimeType", "userId", "projectId", "createdAt") VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())`,
+      id, mediaName, publicUrl, size, mimeType || 'image/png', req.userId, projectId || null
     );
 
     return res.status(201).json({
@@ -117,8 +139,9 @@ router.delete('/:id', authenticateToken, async (req: AuthenticatedRequest, res: 
     }
 
     const item = rows[0];
-    if (item.url && (item.url.startsWith('/uploads/') || item.url.includes('/uploads/'))) {
-      const localFile = path.join(uploadsDir, path.basename(item.url));
+    if (item.url && item.url.includes('/uploads/')) {
+      const relativePart = item.url.split('/uploads/')[1];
+      const localFile = path.join(uploadsDir, relativePart);
       if (fs.existsSync(localFile)) {
         try { fs.unlinkSync(localFile); } catch {}
       }

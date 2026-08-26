@@ -3,6 +3,8 @@ import { prisma } from '../db';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { uploadProjectToFTP } from '../services/ftp';
 import { generateAIResponse } from '../services/gemini';
+import fs from 'fs';
+import path from 'path';
 
 const router = Router();
 
@@ -404,6 +406,23 @@ router.delete('/:id', async (req: AuthenticatedRequest, res: any) => {
     // Cancela jobs de IA ativos na fila para este projeto
     if (projectJobsQueue[id]) {
       delete projectJobsQueue[id];
+    }
+
+    // Deleta os arquivos locais e a pasta do projeto em public/uploads/projects/:id
+    const projectUploadsDir = path.join(process.cwd(), 'public', 'uploads', 'projects', id);
+    if (fs.existsSync(projectUploadsDir)) {
+      try {
+        fs.rmSync(projectUploadsDir, { recursive: true, force: true });
+      } catch (err) {
+        console.warn(`Erro ao excluir pasta de uploads do projeto ${id}:`, err);
+      }
+    }
+
+    // Deleta os registros na tabela Media associados ao projeto
+    try {
+      await prisma.$executeRawUnsafe(`DELETE FROM "Media" WHERE "projectId" = $1`, id);
+    } catch (dbErr) {
+      console.warn(`Erro ao deletar registros de mídias do projeto ${id}:`, dbErr);
     }
 
     await prisma.project.delete({ where: { id } });

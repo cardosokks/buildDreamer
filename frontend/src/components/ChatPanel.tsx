@@ -131,11 +131,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       } catch {}
     }
-    return [
-      { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash' },
-      { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash' },
-      { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro' }
-    ];
+    return [];
   });
 
   const [selectedModel, setSelectedModel] = useState<string>(() => {
@@ -151,7 +147,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
         if (parsed.length > 0) return parsed[0].id;
       } catch {}
     }
-    return 'gemini-2.0-flash';
+    return '';
   });
 
   // Salvar no localStorage sempre que o usuário alterar o modelo

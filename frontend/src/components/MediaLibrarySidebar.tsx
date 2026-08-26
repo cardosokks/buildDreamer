@@ -16,12 +16,14 @@ interface MediaLibrarySidebarProps {
   onClose: () => void;
   onSelectImage?: (url: string) => void;
   onInsertImageToCanvas?: (url: string, name: string) => void;
+  projectId?: string;
 }
 
 export const MediaLibrarySidebar: React.FC<MediaLibrarySidebarProps> = ({
   onClose,
   onSelectImage,
-  onInsertImageToCanvas
+  onInsertImageToCanvas,
+  projectId
 }) => {
   const { token } = useAuth();
   const [mediaList, setMediaList] = useState<MediaItem[]>([]);
@@ -33,8 +35,9 @@ export const MediaLibrarySidebar: React.FC<MediaLibrarySidebarProps> = ({
 
   const fetchMedia = async () => {
     setLoading(true);
+    const url = projectId ? `${API_URL}/api/media?projectId=${projectId}` : `${API_URL}/api/media`;
     try {
-      const res = await fetch(`${API_URL}/api/media`, {
+      const res = await fetch(url, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -75,7 +78,8 @@ export const MediaLibrarySidebar: React.FC<MediaLibrarySidebarProps> = ({
           body: JSON.stringify({
             name: file.name,
             mimeType: file.type,
-            base64Data
+            base64Data,
+            projectId
           })
         });
 

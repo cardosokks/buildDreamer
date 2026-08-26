@@ -221,8 +221,10 @@ export const generateAIResponse = async (
     }
   } else if (customModel) {
     candidateModels = [customModel];
-  } else {
-    candidateModels = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'];
+  }
+
+  if (candidateModels.length === 0) {
+    throw new Error("Nenhum modelo Gemini cadastrado ou selecionado. Por favor, adicione pelo menos um modelo nas configurações.");
   }
 
   // Se customSkills for omitido ou vazio, usa DEFAULT_AI_SKILLS como fallback ativo

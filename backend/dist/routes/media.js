@@ -27,9 +27,13 @@ async function ensureMediaTable() {
         "size" INTEGER,
         "mimeType" TEXT,
         "userId" TEXT NOT NULL,
+        "projectId" TEXT,
         "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
     `);
+        await db_1.prisma.$executeRawUnsafe(`
+      ALTER TABLE "Media" ADD COLUMN IF NOT EXISTS "projectId" TEXT;
+    `).catch(() => { });
         mediaTableChecked = true;
     }
     catch (err) {
@@ -40,7 +44,14 @@ async function ensureMediaTable() {
 router.get('/', auth_1.authenticateToken, async (req, res) => {
     try {
         await ensureMediaTable();
-        const rows = await db_1.prisma.$queryRawUnsafe(`SELECT * FROM "Media" WHERE "userId" = $1 ORDER BY "createdAt" DESC LIMIT 100`, req.userId);
+        const projectId = req.query.projectId;
+        let rows;
+        if (projectId) {
+            rows = await db_1.prisma.$queryRawUnsafe(`SELECT * FROM "Media" WHERE "userId" = $1 AND "projectId" = $2 ORDER BY "createdAt" DESC LIMIT 100`, req.userId, projectId);
+        }
+        else {
+            rows = await db_1.prisma.$queryRawUnsafe(`SELECT * FROM "Media" WHERE "userId" = $1 AND ("projectId" IS NULL OR "projectId" = '') ORDER BY "createdAt" DESC LIMIT 100`, req.userId);
+        }
         const baseUrl = `${req.protocol}://${req.get('host')}`;
         const formattedRows = (rows || []).map(item => ({
             ...item,
@@ -56,7 +67,7 @@ router.get('/', auth_1.authenticateToken, async (req, res) => {
 router.post('/upload', auth_1.authenticateToken, async (req, res) => {
     try {
         await ensureMediaTable();
-        const { name, base64Data, mimeType } = req.body;
+        const { name, base64Data, mimeType, projectId } = req.body;
         if (!base64Data) {
             return res.status(400).json({ error: 'Dados da imagem (base64) são obrigatórios.' });
         }
@@ -66,16 +77,21 @@ router.post('/upload', auth_1.authenticateToken, async (req, res) => {
         if (mimeType && mimeType.includes('/')) {
             ext = mimeType.split('/')[1].replace('+xml', '');
         }
+        const projectSubdir = projectId ? path_1.default.join('projects', projectId) : '';
+        const targetDir = path_1.default.join(uploadsDir, projectSubdir);
+        if (!fs_1.default.existsSync(targetDir)) {
+            fs_1.default.mkdirSync(targetDir, { recursive: true });
+        }
         const filename = `img_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${ext}`;
-        const filePath = path_1.default.join(uploadsDir, filename);
+        const filePath = path_1.default.join(targetDir, filename);
         fs_1.default.writeFileSync(filePath, buffer);
-        const publicUrl = `/uploads/${filename}`;
+        const publicUrl = projectId ? `/uploads/projects/${projectId}/${filename}` : `/uploads/${filename}`;
         const baseUrl = `${req.protocol}://${req.get('host')}`;
         const absoluteUrl = `${baseUrl}${publicUrl}`;
         const id = `media_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
         const size = buffer.length;
         const mediaName = name || filename;
-        await db_1.prisma.$executeRawUnsafe(`INSERT INTO "Media" ("id", "name", "url", "size", "mimeType", "userId", "createdAt") VALUES ($1, $2, $3, $4, $5, $6, NOW())`, id, mediaName, publicUrl, size, mimeType || 'image/png', req.userId);
+        await db_1.prisma.$executeRawUnsafe(`INSERT INTO "Media" ("id", "name", "url", "size", "mimeType", "userId", "projectId", "createdAt") VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())`, id, mediaName, publicUrl, size, mimeType || 'image/png', req.userId, projectId || null);
         return res.status(201).json({
             media: {
                 id,
@@ -101,8 +117,9 @@ router.delete('/:id', auth_1.authenticateToken, async (req, res) => {
             return res.status(404).json({ error: 'Imagem não encontrada ou sem permissão.' });
         }
         const item = rows[0];
-        if (item.url && (item.url.startsWith('/uploads/') || item.url.includes('/uploads/'))) {
-            const localFile = path_1.default.join(uploadsDir, path_1.default.basename(item.url));
+        if (item.url && item.url.includes('/uploads/')) {
+            const relativePart = item.url.split('/uploads/')[1];
+            const localFile = path_1.default.join(uploadsDir, relativePart);
             if (fs_1.default.existsSync(localFile)) {
                 try {
                     fs_1.default.unlinkSync(localFile);

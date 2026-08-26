@@ -94,11 +94,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       } catch {}
     }
-    return [
-      { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash (Recomendado)' },
-      { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash' },
-      { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro' }
-    ];
+    return [];
   };
 
   const [models, setModels] = useState<Array<{ id: string; name: string }>>(getStoredModels());

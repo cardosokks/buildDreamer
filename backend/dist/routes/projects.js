@@ -32,12 +32,17 @@ var __importStar = (this && this.__importStar) || (function () {
         return result;
     };
 })();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.projectRouter = exports.projectJobsQueue = void 0;
 const express_1 = require("express");
 const db_1 = require("../db");
 const ftp_1 = require("../services/ftp");
 const gemini_1 = require("../services/gemini");
+const fs_1 = __importDefault(require("fs"));
+const path_1 = __importDefault(require("path"));
 const router = (0, express_1.Router)();
 // Helper: decodifica headers que chegam em Base64 do frontend
 const decodeHeader = (val) => {
@@ -387,6 +392,23 @@ router.delete('/:id', async (req, res) => {
         // Cancela jobs de IA ativos na fila para este projeto
         if (exports.projectJobsQueue[id]) {
             delete exports.projectJobsQueue[id];
+        }
+        // Deleta os arquivos locais e a pasta do projeto em public/uploads/projects/:id
+        const projectUploadsDir = path_1.default.join(process.cwd(), 'public', 'uploads', 'projects', id);
+        if (fs_1.default.existsSync(projectUploadsDir)) {
+            try {
+                fs_1.default.rmSync(projectUploadsDir, { recursive: true, force: true });
+            }
+            catch (err) {
+                console.warn(`Erro ao excluir pasta de uploads do projeto ${id}:`, err);
+            }
+        }
+        // Deleta os registros na tabela Media associados ao projeto
+        try {
+            await db_1.prisma.$executeRawUnsafe(`DELETE FROM "Media" WHERE "projectId" = $1`, id);
+        }
+        catch (dbErr) {
+            console.warn(`Erro ao deletar registros de mídias do projeto ${id}:`, dbErr);
         }
         await db_1.prisma.project.delete({ where: { id } });
         return res.json({ message: 'Project deleted successfully' });

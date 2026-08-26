@@ -1430,6 +1430,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
         {/* Left Sidebar 2 (Banco de Imagens & Uploads) */}
         {activeLeftSidebar === 'media' && (
           <MediaLibrarySidebar
+            projectId={projectId}
             onClose={() => setActiveLeftSidebar(null)}
             onInsertImageToCanvas={(url, name) => {
               if (!activePage) return;
