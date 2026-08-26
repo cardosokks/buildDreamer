@@ -41,7 +41,12 @@ router.get('/', authenticateToken, async (req: AuthenticatedRequest, res: any) =
       `SELECT * FROM "Media" WHERE "userId" = $1 ORDER BY "createdAt" DESC LIMIT 100`,
       req.userId
     );
-    return res.json({ media: rows || [] });
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const formattedRows = (rows || []).map(item => ({
+      ...item,
+      url: item.url && item.url.startsWith('/') ? `${baseUrl}${item.url}` : item.url
+    }));
+    return res.json({ media: formattedRows });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
   }
@@ -70,6 +75,8 @@ router.post('/upload', authenticateToken, async (req: AuthenticatedRequest, res:
     fs.writeFileSync(filePath, buffer);
 
     const publicUrl = `/uploads/${filename}`;
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const absoluteUrl = `${baseUrl}${publicUrl}`;
     const id = `media_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const size = buffer.length;
     const mediaName = name || filename;
@@ -83,7 +90,7 @@ router.post('/upload', authenticateToken, async (req: AuthenticatedRequest, res:
       media: {
         id,
         name: mediaName,
-        url: publicUrl,
+        url: absoluteUrl,
         size,
         mimeType: mimeType || 'image/png',
         userId: req.userId
@@ -110,7 +117,7 @@ router.delete('/:id', authenticateToken, async (req: AuthenticatedRequest, res: 
     }
 
     const item = rows[0];
-    if (item.url && item.url.startsWith('/uploads/')) {
+    if (item.url && (item.url.startsWith('/uploads/') || item.url.includes('/uploads/'))) {
       const localFile = path.join(uploadsDir, path.basename(item.url));
       if (fs.existsSync(localFile)) {
         try { fs.unlinkSync(localFile); } catch {}

@@ -67,6 +67,8 @@ async function uploadSinglePageToFTP(projectName, pageSlug, html, css, js, isHom
         await client.ensureDir(`${baseDir}/js`);
         // Determine correct relative prefix based on folder nesting
         const relativePrefix = isHomepage ? "." : "..";
+        // Compose final body content
+        const composedBody = `${navbarHtml}\n${html}\n${footerHtml}`;
         // HTML boilerplate to bind CSS and JS
         const htmlContent = `<!DOCTYPE html>
 <html lang="pt-br">
@@ -77,9 +79,7 @@ async function uploadSinglePageToFTP(projectName, pageSlug, html, css, js, isHom
   <link rel="stylesheet" href="${relativePrefix}/css/${pageSlug}.css">
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen">
-  ${navbarHtml || ''}
-  ${html || ''}
-  ${footerHtml || ''}
+  ${composedBody}
   <script src="${relativePrefix}/js/${pageSlug}.js"></script>
 </body>
 </html>`;
