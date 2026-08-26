@@ -187,7 +187,7 @@ const generateAIResponse = async (prompt, context, customApiKey, customModel, re
         candidateModels = [customModel];
     }
     else {
-        candidateModels = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-2.5-pro'];
+        candidateModels = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'];
     }
     // Se customSkills for omitido ou vazio, usa DEFAULT_AI_SKILLS como fallback ativo
     const skillsToUse = (customSkills && Array.isArray(customSkills) && customSkills.length > 0)

@@ -95,9 +95,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
       } catch {}
     }
     return [
-      { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash (Recomendado)' },
-      { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash' },
-      { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro' }
+      { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash (Recomendado)' },
+      { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash' },
+      { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro' }
     ];
   };
 
@@ -617,7 +617,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                     <input 
                       type="text"
                       required
-                      placeholder="gemini-2.5-flash"
+                      placeholder="gemini-2.0-flash"
                       value={newModelId}
                       onChange={(e) => setNewModelId(e.target.value)}
                       className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-xs text-white"

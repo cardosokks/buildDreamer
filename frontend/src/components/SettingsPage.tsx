@@ -118,9 +118,9 @@ export const SettingsPage: React.FC = () => {
       } catch {}
     }
     return [
-      { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash (Recomendado)' },
-      { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash' },
-      { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro' }
+      { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash (Recomendado)' },
+      { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash' },
+      { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro' }
     ];
   };
 
@@ -759,7 +759,7 @@ export const SettingsPage: React.FC = () => {
                   <input
                     type="text"
                     required
-                    placeholder="ID do Modelo (ex: gemini-2.5-flash)"
+                    placeholder="ID do Modelo (ex: gemini-2.0-flash)"
                     value={newModelId}
                     onChange={(e) => setNewModelId(e.target.value)}
                     className="w-full px-3.5 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white font-mono focus:border-purple-500 focus:outline-none"

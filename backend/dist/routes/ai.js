@@ -85,8 +85,8 @@ async function processAIChatJob(jobId, prompt, pageId, applyToAll, clientGeminiK
         exports.aiChatJobsQueue[jobId] = {
             status: 'processing',
             currentModel: isMultiPage
-                ? `${model || 'gemini-2.5-flash'} (Processando ${pagesToProcess.length} páginas selecionadas em paralelo...)`
-                : model || 'gemini-2.5-flash',
+                ? `${model || 'gemini-2.0-flash'} (Processando ${pagesToProcess.length} páginas selecionadas em paralelo...)`
+                : model || 'gemini-2.0-flash',
             scope: isMultiPage ? 'all' : 'single',
             pageId,
             projectId: page.projectId
@@ -283,7 +283,7 @@ router.post('/chat', async (req, res) => {
         const jobId = `chat-job-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
         exports.aiChatJobsQueue[jobId] = {
             status: 'pending',
-            currentModel: model || 'gemini-2.5-flash',
+            currentModel: model || 'gemini-2.0-flash',
             scope: hasGlobalIntent ? 'all' : 'single',
             pageId,
             projectId: page.projectId
