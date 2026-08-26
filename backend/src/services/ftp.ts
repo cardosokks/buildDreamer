@@ -11,7 +11,9 @@ export async function uploadSinglePageToFTP(
   html: string,
   css: string,
   js: string,
-  isHomepage = false
+  isHomepage = false,
+  navbarHtml = "",
+  footerHtml = ""
 ) {
   const safeName = getSafeProjectName(projectName);
   const client = new ftp.Client();
@@ -43,6 +45,9 @@ export async function uploadSinglePageToFTP(
     // Determine correct relative prefix based on folder nesting
     const relativePrefix = isHomepage ? "." : "..";
 
+    // Compose final body content
+    const composedBody = `${navbarHtml}\n${html}\n${footerHtml}`;
+
     // HTML boilerplate to bind CSS and JS
     const htmlContent = `<!DOCTYPE html>
 <html lang="pt-br">
@@ -53,7 +58,7 @@ export async function uploadSinglePageToFTP(
   <link rel="stylesheet" href="${relativePrefix}/css/${pageSlug}.css">
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen">
-  ${html}
+  ${composedBody}
   <script src="${relativePrefix}/js/${pageSlug}.js"></script>
 </body>
 </html>`;
@@ -74,9 +79,11 @@ export async function uploadSinglePageToFTP(
 
 export async function uploadProjectToFTP(
   projectName: string,
-  pages: Array<{ slug: string; html: string; css: string; js: string; isHomepage: boolean }>
+  pages: Array<{ slug: string; html: string; css: string; js: string; isHomepage: boolean }>,
+  navbarHtml = "",
+  footerHtml = ""
 ) {
   for (const page of pages) {
-    await uploadSinglePageToFTP(projectName, page.slug, page.html, page.css, page.js, page.isHomepage);
+    await uploadSinglePageToFTP(projectName, page.slug, page.html, page.css, page.js, page.isHomepage, navbarHtml, footerHtml);
   }
 }

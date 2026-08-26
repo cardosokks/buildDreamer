@@ -40,7 +40,7 @@ const stream_1 = require("stream");
 function getSafeProjectName(name) {
     return name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
 }
-async function uploadSinglePageToFTP(projectName, pageSlug, html, css, js, isHomepage = false) {
+async function uploadSinglePageToFTP(projectName, pageSlug, html, css, js, isHomepage = false, navbarHtml = "", footerHtml = "") {
     const safeName = getSafeProjectName(projectName);
     const client = new ftp.Client();
     client.ftp.verbose = false;
@@ -77,7 +77,9 @@ async function uploadSinglePageToFTP(projectName, pageSlug, html, css, js, isHom
   <link rel="stylesheet" href="${relativePrefix}/css/${pageSlug}.css">
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen">
-  ${html}
+  ${navbarHtml || ''}
+  ${html || ''}
+  ${footerHtml || ''}
   <script src="${relativePrefix}/js/${pageSlug}.js"></script>
 </body>
 </html>`;
@@ -95,8 +97,8 @@ async function uploadSinglePageToFTP(projectName, pageSlug, html, css, js, isHom
         client.close();
     }
 }
-async function uploadProjectToFTP(projectName, pages) {
+async function uploadProjectToFTP(projectName, pages, navbarHtml = "", footerHtml = "") {
     for (const page of pages) {
-        await uploadSinglePageToFTP(projectName, page.slug, page.html, page.css, page.js, page.isHomepage);
+        await uploadSinglePageToFTP(projectName, page.slug, page.html, page.css, page.js, page.isHomepage, navbarHtml, footerHtml);
     }
 }

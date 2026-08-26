@@ -363,7 +363,7 @@ router.post('/remaster/scrape', async (req, res) => {
         if (!websiteUrl) {
             return res.status(400).json({ error: 'A URL do website é obrigatória.' });
         }
-        const clientProxyUrl = (req.headers['x-proxy-url'] || req.headers['X-Proxy-Url']) || process.env.AI_PROXY_URL;
+        const clientProxyUrl = decodeHeader(req.headers['x-proxy-url']) || process.env.AI_PROXY_URL;
         const jobId = `scrape-${Date.now()}-${Math.random().toString(36).substr(2, 7)}`;
         (0, siteRemaster_1.startWebsiteScrapeJob)(jobId, websiteUrl, businessName || 'Empresa', clientProxyUrl);
         return res.status(202).json({
@@ -438,18 +438,18 @@ router.post('/remaster/generate', async (req, res) => {
                 console.warn('Erro ao vincular lead ao remaster:', err);
             }
         }
-        const clientGeminiKey = (req.headers['x-gemini-key'] || req.headers['X-Gemini-Key']) || process.env.GEMINI_API_KEY;
-        const clientProxyUrl = (req.headers['x-proxy-url'] || req.headers['X-Proxy-Url']) || process.env.AI_PROXY_URL;
+        const clientGeminiKey = decodeHeader(req.headers['x-gemini-key']) || process.env.GEMINI_API_KEY;
+        const clientProxyUrl = decodeHeader(req.headers['x-proxy-url']) || process.env.AI_PROXY_URL;
         let registeredModels;
         try {
-            const rawModels = (req.headers['x-gemini-models'] || req.headers['X-Gemini-Models']);
+            const rawModels = decodeHeader(req.headers['x-gemini-models']);
             if (rawModels)
                 registeredModels = JSON.parse(rawModels);
         }
         catch { }
         let customSkills;
         try {
-            const rawSkills = (req.headers['x-ai-skills'] || req.headers['X-Ai-Skills'] || req.headers['X-AI-Skills']);
+            const rawSkills = decodeHeader((req.headers['x-ai-skills'] || req.headers['X-Ai-Skills'] || req.headers['X-AI-Skills']));
             if (rawSkills)
                 customSkills = JSON.parse(rawSkills);
         }

@@ -60,6 +60,8 @@ interface ProjectData {
   id: string;
   name: string;
   pages: Page[];
+  navbarHtml?: string;
+  footerHtml?: string;
 }
 
 interface VisualBuilderProps {
@@ -320,6 +322,27 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
   }, [handleUndo, handleRedo, selectedPath, activePage]);
 
   // Helpers to parse and serialize DOM trees safely
+  const getComposedHtml = () => {
+    const navbar = project?.navbarHtml || '';
+    const content = activePage?.html || '';
+    const footer = project?.footerHtml || '';
+    return `<div data-global="navbar" id="studio-global-navbar">${navbar}</div><div data-global="content" id="studio-global-content">${content}</div><div data-global="footer" id="studio-global-footer">${footer}</div>`;
+  };
+
+  const splitComposedHtml = (composedHtml: string) => {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(`<div>${composedHtml}</div>`, 'text/html');
+    const navbarDiv = doc.querySelector('[data-global="navbar"]');
+    const contentDiv = doc.querySelector('[data-global="content"]');
+    const footerDiv = doc.querySelector('[data-global="footer"]');
+
+    return {
+      navbarHtml: navbarDiv ? navbarDiv.innerHTML : '',
+      contentHtml: contentDiv ? contentDiv.innerHTML : composedHtml,
+      footerHtml: footerDiv ? footerDiv.innerHTML : ''
+    };
+  };
+
   const parseDocFromHtml = (htmlStr: string) => {
     const parser = new DOMParser();
     const cleanStr = String(htmlStr || '').trim();
@@ -356,28 +379,71 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
 
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error'>('saved');
 
-  // Update Page Code with Database & FTP Sync
-  const handleCodeChange = async (type: 'html' | 'css' | 'js', value: string) => {
+  // Update Page Fields with Database & FTP Sync in a single batch update
+  const handlePageFieldsChange = async (updates: { html?: string; css?: string; js?: string }, description: string) => {
     if (!activePage) return;
-    pushHistorySnapshot(`Edição de ${type.toUpperCase()}`);
+    pushHistorySnapshot(description);
     setSaveStatus('saving');
 
+    let finalHtml = updates.html;
+    let navbarHtml = project?.navbarHtml || '';
+    let footerHtml = project?.footerHtml || '';
+    let isHtmlUpdated = updates.html !== undefined;
+
+    if (isHtmlUpdated && updates.html !== undefined) {
+      const split = splitComposedHtml(updates.html);
+      finalHtml = split.contentHtml;
+      navbarHtml = split.navbarHtml;
+      footerHtml = split.footerHtml;
+    }
+
     const updatedPages = project?.pages.map(p => {
-      if (p.id === activePage.id) return { ...p, [type]: value };
+      if (p.id === activePage.id) {
+        return {
+          ...p,
+          ...(finalHtml !== undefined && { html: finalHtml }),
+          ...(updates.css !== undefined && { css: updates.css }),
+          ...(updates.js !== undefined && { js: updates.js })
+        };
+      }
       return p;
     });
-    setProject(prev => prev ? { ...prev, pages: updatedPages || [] } : null);
+
+    setProject(prev => prev ? {
+      ...prev,
+      pages: updatedPages || [],
+      ...(isHtmlUpdated ? { navbarHtml, footerHtml } : {})
+    } : null);
 
     try {
-      const res = await fetch(`${API_URL}/api/pages/${activePage.id}`, {
+      const pageBody: Record<string, string> = {};
+      if (finalHtml !== undefined) pageBody.html = finalHtml;
+      if (updates.css !== undefined) pageBody.css = updates.css;
+      if (updates.js !== undefined) pageBody.js = updates.js;
+
+      const pagePromise = fetch(`${API_URL}/api/pages/${activePage.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ [type]: value })
+        body: JSON.stringify(pageBody)
       });
-      if (res.ok) {
+
+      let globalsPromise = Promise.resolve({ ok: true } as Response);
+      if (isHtmlUpdated) {
+        globalsPromise = fetch(`${API_URL}/api/projects/${project?.id}/globals`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ navbarHtml, footerHtml })
+        });
+      }
+
+      const [pageRes, globalsRes] = await Promise.all([pagePromise, globalsPromise]);
+      if (pageRes.ok && globalsRes.ok) {
         setSaveStatus('saved');
       } else {
         setSaveStatus('error');
@@ -386,6 +452,11 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
       console.error("Erro ao sincronizar com banco e FTP:", e);
       setSaveStatus('error');
     }
+  };
+
+  // Update Page Code with Database & FTP Sync
+  const handleCodeChange = async (type: 'html' | 'css' | 'js', value: string) => {
+    await handlePageFieldsChange({ [type]: value }, `Edição de ${type.toUpperCase()}`);
   };
 
   // Explicit Save Trigger
@@ -421,14 +492,71 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
     }
   };
 
+  const handleExtractGlobalsFromActivePage = async () => {
+    if (!activePage || !project) return;
+    
+    const doc = parseDocFromHtml(activePage.html);
+    const root = doc.getElementById('canvas-root') || doc.body;
+    
+    const header = root.querySelector('header, nav');
+    const footer = root.querySelector('footer');
+    
+    let navbarHtml = project.navbarHtml || '';
+    let footerHtml = project.footerHtml || '';
+    
+    if (header) {
+      navbarHtml = header.outerHTML;
+      header.remove();
+    }
+    if (footer) {
+      footerHtml = footer.outerHTML;
+      footer.remove();
+    }
+    
+    if (!header && !footer) {
+      notify.error('Nenhum elemento <header>, <nav> ou <footer> encontrado nesta página para extrair.', 'Extração');
+      return;
+    }
+    
+    const remainingHtml = serializeBodyContent(doc);
+    pushHistorySnapshot('Extrair Navbar/Footer para Globais');
+    setSaveStatus('saving');
+    
+    try {
+      const pagePromise = fetch(`${API_URL}/api/pages/${activePage.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ html: remainingHtml })
+      });
+      
+      const globalsPromise = fetch(`${API_URL}/api/projects/${project.id}/globals`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ navbarHtml, footerHtml })
+      });
+      
+      const [pageRes, globalsRes] = await Promise.all([pagePromise, globalsPromise]);
+      if (pageRes.ok && globalsRes.ok) {
+        setSaveStatus('saved');
+        setProject(prev => prev ? { ...prev, navbarHtml, footerHtml, pages: prev.pages.map(p => p.id === activePage.id ? { ...p, html: remainingHtml } : p) } : null);
+        notify.success('Navbar e Footer extraídos com sucesso para o projeto!', 'Extraído');
+      } else {
+        setSaveStatus('error');
+      }
+    } catch (err) {
+      console.error(err);
+      setSaveStatus('error');
+    }
+  };
+
   // Inline content editable change handler
   const handleInlineTextChange = (path: string, newText: string) => {
     if (!activePage) return;
-    const doc = parseDocFromHtml(activePage.html);
+    const doc = parseDocFromHtml(getComposedHtml());
     const root = doc.getElementById('canvas-root') || doc.body;
     const el = getElementByPath(root, path);
     if (el) {
-      el.textContent = newText;
+      el.innerHTML = newText;
       const newHtml = serializeBodyContent(doc);
       handleCodeChange('html', newHtml);
     }
@@ -439,14 +567,15 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
     if (!activePage || !selectedPath) return;
     setSelectedStyles(prev => ({ ...prev, [prop]: value }));
 
-    const doc = parseDocFromHtml(activePage.html);
+    const doc = parseDocFromHtml(getComposedHtml());
     const root = doc.getElementById('canvas-root') || doc.body;
     const el = getElementByPath(root, selectedPath);
-    if (el instanceof HTMLElement) {
+    if (el && 'style' in el) {
+      const inlineStyle = (el as any).style;
       if (value) {
-        el.style.setProperty(prop, value);
+        inlineStyle.setProperty(prop, value);
       } else {
-        el.style.removeProperty(prop);
+        inlineStyle.removeProperty(prop);
       }
       const newHtml = serializeBodyContent(doc);
       handleCodeChange('html', newHtml);
@@ -458,7 +587,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
     if (!activePage || !selectedPath) return;
     setSelectedAttrs(prev => ({ ...prev, [attr]: value }));
 
-    const doc = parseDocFromHtml(activePage.html);
+    const doc = parseDocFromHtml(getComposedHtml());
     const root = doc.getElementById('canvas-root') || doc.body;
     const el = getElementByPath(root, selectedPath);
     if (el) {
@@ -476,7 +605,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
   // Move element up or down among siblings
   const handleMoveElementDirection = (path: string, direction: 'up' | 'down') => {
     if (!activePage || !path) return;
-    const doc = parseDocFromHtml(activePage.html);
+    const doc = parseDocFromHtml(getComposedHtml());
     const root = doc.getElementById('canvas-root') || doc.body;
     const el = getElementByPath(root, path);
     if (!el || !el.parentElement) return;
@@ -500,7 +629,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
   // Element Delete
   const handleDeleteElement = (path: string) => {
     if (!activePage) return;
-    const doc = parseDocFromHtml(activePage.html);
+    const doc = parseDocFromHtml(getComposedHtml());
     const root = doc.getElementById('canvas-root') || doc.body;
     const el = getElementByPath(root, path);
     if (el && el.parentElement) {
@@ -515,7 +644,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
   // Element Duplicate
   const handleDuplicateElement = (path: string) => {
     if (!activePage) return;
-    const doc = parseDocFromHtml(activePage.html);
+    const doc = parseDocFromHtml(getComposedHtml());
     const root = doc.getElementById('canvas-root') || doc.body;
     const el = getElementByPath(root, path);
     if (el && el.parentElement) {
@@ -530,7 +659,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
   const handleMoveElement = (sourcePath: string, targetPath: string, position: 'before' | 'after' | 'inside' = 'inside') => {
     if (!activePage || sourcePath === targetPath) return;
     if (targetPath.startsWith(sourcePath + '.')) return;
-    const doc = parseDocFromHtml(activePage.html);
+    const doc = parseDocFromHtml(getComposedHtml());
     const root = doc.getElementById('canvas-root') || doc.body;
     const srcEl = getElementByPath(root, sourcePath);
     const tgtEl = getElementByPath(root, targetPath);
@@ -558,7 +687,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
     position: 'before' | 'after' | 'inside' | 'append' = 'append'
   ) => {
     if (!activePage) return;
-    const doc = parseDocFromHtml(activePage.html);
+    const doc = parseDocFromHtml(getComposedHtml());
     const root = doc.getElementById('canvas-root') || doc.body;
 
     // Criar nós a partir do bloco HTML
@@ -586,15 +715,17 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
     }
 
     const newHtml = serializeBodyContent(doc);
-    const newCss = cssBlock ? `${activePage.css || ''}\n${cssBlock}` : activePage.css;
-    handleCodeChange('html', newHtml);
-    if (cssBlock) handleCodeChange('css', newCss);
+    const updates: { html: string; css?: string } = { html: newHtml };
+    if (cssBlock) {
+      updates.css = `${activePage.css || ''}\n${cssBlock}`;
+    }
+    handlePageFieldsChange(updates, 'Inserir bloco de template');
   };
 
   // Save selected element as a custom template
   const handleSaveSelectionAsTemplate = (title: string, category: string) => {
     if (!activePage || !selectedPath) return;
-    const doc = parseDocFromHtml(activePage.html);
+    const doc = parseDocFromHtml(getComposedHtml());
     const root = doc.getElementById('canvas-root') || doc.body;
     const el = getElementByPath(root, selectedPath);
     if (!el) {
@@ -649,21 +780,36 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
   };
 
   // AI Copilot Change Application
-  const handleApplyAIChanges = (newHtml: string, newCss: string, newJs: string) => {
-    if (!activePage) return;
+  const handleApplyAIChanges = (newHtml: string, newCss: string, newJs: string, targetPageId?: string) => {
+    const targetId = targetPageId || activePage?.id;
+    if (!targetId) return;
     pushHistorySnapshot("Alterações aplicadas pelo AI Copilot");
+    
+    const { navbarHtml, contentHtml, footerHtml } = splitComposedHtml(newHtml);
+
     setProject(prev => prev ? {
       ...prev,
-      pages: prev.pages.map(p => p.id === activePage.id ? { ...p, html: newHtml, css: newCss, js: newJs } : p)
+      pages: prev.pages.map(p => p.id === targetId ? { ...p, html: contentHtml, css: newCss, js: newJs } : p),
+      navbarHtml,
+      footerHtml
     } : null);
 
-    fetch(`${API_URL}/api/pages/${activePage.id}`, {
+    fetch(`${API_URL}/api/pages/${targetId}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`
       },
-      body: JSON.stringify({ html: newHtml, css: newCss, js: newJs })
+      body: JSON.stringify({ html: contentHtml, css: newCss, js: newJs })
+    }).catch(console.error);
+
+    fetch(`${API_URL}/api/projects/${project?.id}/globals`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ navbarHtml, footerHtml })
     }).catch(console.error);
   };
 
@@ -707,7 +853,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
     }
   };
 
-  const layers = activePage ? parseHtmlToLayers(activePage.html) : [];
+  const layers = activePage ? parseHtmlToLayers(getComposedHtml()) : [];
 
   // Download Project as complete ZIP package (including Dockerfile, docker-compose, pages, css, js)
   const [exportOptions, setExportOptions] = useState({
@@ -935,6 +1081,13 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
             <span className="font-bold text-white tracking-wide text-xs sm:text-sm truncate">{project?.name || 'Studio'}</span>
             <span className="text-xs text-slate-600">/</span>
             <span className="text-xs text-purple-400 font-medium font-mono truncate">{activePage?.name}</span>
+            <button
+              onClick={handleExtractGlobalsFromActivePage}
+              className="ml-2 px-2 py-0.5 bg-purple-950/40 hover:bg-purple-900/60 border border-purple-500/30 rounded text-[10px] font-semibold text-purple-300 transition-all cursor-pointer"
+              title="Extrai elementos <header>/<nav> e <footer> desta página para torná-los globais compartilhados"
+            >
+              Extrair Globais
+            </button>
           </div>
         </div>
 
@@ -1397,7 +1550,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
             {activePage && (
               <Canvas
                 key={activePage.id}
-                html={activePage.html}
+                html={getComposedHtml()}
                 css={activePage.css}
                 js={activePage.js}
                 highlightPath={selectedPath}

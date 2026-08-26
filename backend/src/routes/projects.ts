@@ -341,6 +341,48 @@ router.put('/:id', async (req: AuthenticatedRequest, res: any) => {
   }
 });
 
+// Update Project Globals (Navbar, Footer HTML)
+router.put('/:id/globals', async (req: AuthenticatedRequest, res: any) => {
+  try {
+    const id = req.params.id as string;
+    const userId = req.userId as string;
+    const { navbarHtml, footerHtml } = req.body;
+
+    const membership = await prisma.projectMember.findFirst({
+      where: {
+        projectId: id,
+        userId: userId
+      }
+    });
+
+    if (!membership) {
+      return res.status(403).json({ error: 'Você não tem permissão para editar este projeto' });
+    }
+
+    const updated = await prisma.project.update({
+      where: { id },
+      data: {
+        ...(navbarHtml !== undefined && { navbarHtml }),
+        ...(footerHtml !== undefined && { footerHtml })
+      },
+      include: {
+        pages: true
+      }
+    });
+
+    // FTP Upload on Save
+    try {
+      await uploadProjectToFTP(updated.name, updated.pages, updated.navbarHtml, updated.footerHtml);
+    } catch (ftpErr) {
+      console.error("Failed to upload project pages to FTP on globals update:", ftpErr);
+    }
+
+    return res.json(updated);
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
 // Delete Project
 router.delete('/:id', async (req: AuthenticatedRequest, res: any) => {
   try {

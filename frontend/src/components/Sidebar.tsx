@@ -366,6 +366,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
               <div className="flex items-center gap-1.5 min-w-0 flex-1">
                 <span className="font-sans text-xs text-white font-medium truncate">{name}</span>
+                {path.startsWith('0') && (
+                  <span className="text-[8px] font-bold text-pink-400 bg-pink-950/40 border border-pink-500/25 px-1 py-0.2 rounded uppercase shrink-0">
+                    Global
+                  </span>
+                )}
+                {path.startsWith('2') && (
+                  <span className="text-[8px] font-bold text-rose-400 bg-rose-950/40 border border-rose-500/25 px-1 py-0.2 rounded uppercase shrink-0">
+                    Global
+                  </span>
+                )}
                 {node.id && (
                   <span className="text-[10px] text-cyan-400 font-mono bg-cyan-950/60 px-1.5 py-0.5 rounded border border-cyan-500/20 shrink-0">
                     #{node.id}

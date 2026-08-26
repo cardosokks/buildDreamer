@@ -74,6 +74,8 @@ router.get('/:projectId', async (req, res) => {
             const jsFilename = `${page.slug}.js`;
             // Normaliza os links no HTML desta página
             const normalizedPageHtml = normalizeHtmlLinks(page.html, isHome, project.pages);
+            const normalizedNavbarHtml = normalizeHtmlLinks(project.navbarHtml || '', isHome, project.pages);
+            const normalizedFooterHtml = normalizeHtmlLinks(project.footerHtml || '', isHome, project.pages);
             // Static index.html boilerplate to bind page files
             const htmlContent = `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -90,7 +92,9 @@ router.get('/:projectId', async (req, res) => {
   ${includeCss ? `<link rel="stylesheet" href="css/${cssFilename}">` : ''}
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen">
+  ${normalizedNavbarHtml}
   ${normalizedPageHtml}
+  ${normalizedFooterHtml}
   ${includeJs ? `<script src="js/${jsFilename}"></script>` : ''}
 </body>
 </html>`;
