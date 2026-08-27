@@ -475,6 +475,18 @@ export const Canvas: React.FC<CanvasProps> = ({
             selectElement(e.target, false);
           });
 
+          // Forward shortcuts to parent
+          document.addEventListener('keydown', (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+              e.preventDefault();
+              // Force blur on the active element to trigger INLINE_TEXT_CHANGED if editing
+              if (document.activeElement && document.activeElement !== document.body) {
+                document.activeElement.blur();
+              }
+              window.parent.postMessage({ type: 'ACTION_SAVE' }, '*');
+            }
+          });
+
           // Double Click Inline Edit
           document.body.addEventListener('dblclick', (e) => {
             if (e.target.closest('#studio-quick-toolbar')) return;
