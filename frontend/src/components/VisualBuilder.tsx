@@ -367,9 +367,9 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
     let current: Element | null = root;
     for (const idx of parts) {
       if (!current) return null;
-      const children = Array.from(current.children);
-      if (idx < 0 || idx >= children.length) return null;
-      current = children[idx];
+      const childList: Element[] = Array.from(current.children);
+      if (idx < 0 || idx >= childList.length) return null;
+      current = childList[idx];
     }
     return current;
   };
