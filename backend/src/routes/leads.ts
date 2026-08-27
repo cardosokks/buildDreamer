@@ -520,13 +520,13 @@ router.get('/search', async (req: AuthenticatedRequest, res: any) => {
       state: (state as string) || '',
       country: (country as string) || 'Brasil',
       location: (location as string) || '',
-      onlyWithoutWebsite: onlyWithoutWebsite === 'true' || onlyWithoutWebsite === true,
-      hasPhoneOnly: hasPhone === 'true' || hasPhoneOnly === 'true' || hasPhone === true || hasPhoneOnly === true,
-      minRating: parseFloat((minRating as string) || '0'),
-      minReviews: parseInt((minReviews as string) || '0', 10),
+      onlyWithoutWebsite: String(onlyWithoutWebsite) === 'true',
+      hasPhoneOnly: String(hasPhone || hasPhoneOnly) === 'true',
+      minRating: parseFloat(String(minRating || '0')),
+      minReviews: parseInt(String(minReviews || '0'), 10),
       sortBy: (sortBy as any) || 'rating',
-      limit: parseInt((limit as string) || '40', 10),
-      page: parseInt((page as string) || '1', 10)
+      limit: parseInt(String(limit || '40'), 10),
+      page: parseInt(String(page || '1'), 10)
     });
 
     return res.json({
