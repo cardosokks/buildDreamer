@@ -22,7 +22,15 @@ import {
   Tag,
   Trash2,
   Copy,
-  Edit3
+  Edit3,
+  Navigation,
+  Layout,
+  Image,
+  Link,
+  FormInput,
+  List,
+  Video,
+  GripVertical
 } from 'lucide-react';
 
 const rgbToHex = (color: string): string => {
@@ -344,7 +352,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               paddingTop: '6px', 
               paddingBottom: '6px' 
             }}
-            onClick={() => onSelectLayer(selector, path)}
+            onClick={() => onSelectLayer && onSelectLayer(selector, path)}
             onContextMenu={(e) => isLockedRoot ? null : handleContextMenu(e, 'layer', path)}
             onMouseEnter={() => onHoverLayer && onHoverLayer(path)}
             onMouseLeave={() => onHoverLayer && onHoverLayer(null)}
@@ -400,7 +408,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               }
 
               if (dragSource && dragSource !== path && !isDescendant(dragSource, path)) {
-                onMoveElement(dragSource, path, pos);
+                if (onMoveElement) onMoveElement(dragSource, path, pos);
               }
             }}
           >

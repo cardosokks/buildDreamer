@@ -424,66 +424,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         )}
       </div>
 
-      {/* ─── Tabs Navigation: Camadas vs Biblioteca ─── */}
-      <div className="flex border-b border-slate-900 bg-slate-950/20 shrink-0">
-        <button
-          onClick={() => setActiveTab('layers')}
-          className={`flex-1 py-2 text-center text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
-            activeTab === 'layers'
-              ? 'text-purple-400 border-b-2 border-purple-500 bg-purple-500/5'
-              : 'text-slate-500 hover:text-slate-350'
-          }`}
-        >
-          Camadas (DOM)
-        </button>
-        <button
-          onClick={() => setActiveTab('blocks')}
-          className={`flex-1 py-2 text-center text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
-            activeTab === 'blocks'
-              ? 'text-purple-400 border-b-2 border-purple-500 bg-purple-500/5'
-              : 'text-slate-500 hover:text-slate-350'
-          }`}
-        >
-          Biblioteca (Blocos)
-        </button>
-      </div>
-
-      {activeTab === 'layers' ? (
-        /* ─── DOM Tree Layers Navigator Panel ─── */
-        <div className="flex-1 flex flex-col min-h-0 bg-slate-950/10">
-          <div className="px-3.5 py-2.5 border-b border-slate-900 flex items-center justify-between gap-1.5 bg-slate-950/40 shrink-0">
-            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-              Navegador de Elementos
-            </span>
-            <div className="flex items-center gap-1">
-              <button
-                onClick={expandAll}
-                className="px-2 py-0.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-[9px] text-slate-300 rounded font-semibold transition-colors cursor-pointer"
-                title="Expandir todas as ramificações"
-              >
-                Expandir
-              </button>
-              <button
-                onClick={collapseAll}
-                className="px-2 py-0.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-[9px] text-slate-300 rounded font-semibold transition-colors cursor-pointer"
-                title="Recolher todas as ramificações"
-              >
-                Recolher
-              </button>
-            </div>
-          </div>
-          <div className="flex-1 overflow-y-auto p-2 space-y-1 min-h-0 relative select-none">
-            {layers && layers.length > 0 ? (
-              renderLayers(layers)
-            ) : (
-              <div className="p-4 text-center text-slate-500 text-xs italic">
-                Nenhum elemento no DOM para exibir.
-              </div>
-            )}
-          </div>
-        </div>
-      ) : (
-        /* ─── Drag & Drop Template Blocks Library Panel ─── */
+      {/* ─── Drag & Drop Template Blocks Library Panel ─── */}
         <div className="flex-1 flex flex-col min-h-0">
           <div className="p-2.5 border-b border-slate-900 bg-slate-950/40 space-y-2 shrink-0">
             <div className="flex items-center justify-between gap-1.5">
