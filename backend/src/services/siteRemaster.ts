@@ -58,6 +58,50 @@ function cleanHtmlToText(html: string): string {
     .slice(0, 4000);
 }
 
+function cleanHtmlForAi(html: string): string {
+  if (!html) return '';
+  let cleaned = html;
+  
+  // 1. Remove base64 data URIs from src attributes (replace with placeholder)
+  cleaned = cleaned.replace(/src="data:image\/[^;]+;base64,[^"]+"/g, 'src="data:image/png;base64,[BASE64_IMAGE_DATA_TRUNCATED_FOR_AI]"');
+  cleaned = cleaned.replace(/src='data:image\/[^;]+;base64,[^']+'/g, "src='data:image/png;base64,[BASE64_IMAGE_DATA_TRUNCATED_FOR_AI]'");
+  
+  // 2. Remove base64 in background-image styles
+  cleaned = cleaned.replace(/url\(['"]?data:image\/[^;]+;base64,[^'")]+['"]?\)/g, 'url("data:image/png;base64,[BASE64_IMAGE_DATA_TRUNCATED_FOR_AI]")');
+
+  // 3. Truncate long inline SVG paths
+  cleaned = cleaned.replace(/<path\s+[^>]*d="[^"]{200,}"/g, (match) => {
+    const dMatch = match.match(/d="([^"]+)"/);
+    if (dMatch) {
+      return match.replace(dMatch[1], dMatch[1].slice(0, 50) + '...[SVG_PATH_TRUNCATED_FOR_AI]');
+    }
+    return match;
+  });
+
+  // 4. Truncate overall HTML if still extraordinarily large (e.g. > 120KB) to fit token limits comfortably
+  if (cleaned.length > 120000) {
+    cleaned = cleaned.slice(0, 120000) + '\n\n...[HTML_TRUNCATED_FOR_AI_LIMIT_EXCEEDED]';
+  }
+  
+  return cleaned;
+}
+
+function cleanCssForAi(css: string): string {
+  if (!css) return '';
+  if (css.length > 30000) {
+    return css.slice(0, 30000) + '\n\n/* CSS TRUNCATED FOR AI */';
+  }
+  return css;
+}
+
+function cleanJsForAi(js: string): string {
+  if (!js) return '';
+  if (js.length > 20000) {
+    return js.slice(0, 20000) + '\n\n/* JS TRUNCATED FOR AI */';
+  }
+  return js;
+}
+
 /**
  * Fetch resiliente com fallback SSL e suporte a HTTP/HTTPS nativo
  */
@@ -688,7 +732,7 @@ export async function processCustomRemasterGenerationJob(
       ESTRUTURA E CÓDIGO DO SITE ANTIGO (USE COMO BASE PARA ENTENDER A DISTRIBUIÇÃO DAS SEÇÕES, COMPONENTES E MELHORAR):
       """
       HTML ORIGINAL COMPLETO:
-      ${homePage.html}
+      ${cleanHtmlForAi(homePage.html)}
       """
       ` : ''}
 
@@ -696,7 +740,7 @@ export async function processCustomRemasterGenerationJob(
       CSS / ESTILOS ORIGINAIS (Referência de cores/elementos da marca):
       """
       CSS ORIGINAL COMPLETO:
-      ${homePage.css}
+      ${cleanCssForAi(homePage.css)}
       """
       ` : ''}
 
@@ -704,7 +748,7 @@ export async function processCustomRemasterGenerationJob(
       JS / COMPORTAMENTOS ORIGINAIS:
       """
       JS ORIGINAL COMPLETO:
-      ${homePage.js}
+      ${cleanJsForAi(homePage.js)}
       """
       ` : ''}
 
@@ -809,7 +853,7 @@ export async function processCustomRemasterGenerationJob(
             ESTRUTURA E CÓDIGO DA SUBPÁGINA ANTIGA (USE COMO BASE PARA MELHORAR E REORGANIZAR O CONTEÚDO):
             """
             HTML ORIGINAL COMPLETO:
-            ${sub.html}
+            ${cleanHtmlForAi(sub.html)}
             """
             ` : ''}
 
@@ -817,7 +861,7 @@ export async function processCustomRemasterGenerationJob(
             CSS ORIGINAL DA SUBPÁGINA:
             """
             CSS ORIGINAL COMPLETO:
-            ${sub.css}
+            ${cleanCssForAi(sub.css)}
             """
             ` : ''}
 
@@ -825,7 +869,7 @@ export async function processCustomRemasterGenerationJob(
             JS ORIGINAL DA SUBPÁGINA:
             """
             JS ORIGINAL COMPLETO:
-            ${sub.js}
+            ${cleanJsForAi(sub.js)}
             """
             ` : ''}
 
