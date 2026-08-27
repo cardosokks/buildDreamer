@@ -17,14 +17,18 @@ async function ensureLeadPresetTable() {
         "city" TEXT NOT NULL,
         "state" TEXT,
         "country" TEXT DEFAULT 'Brasil',
-        "onlyWithoutWebsite" BOOLEAN DEFAULT true,
+        "onlyWithoutWebsite" BOOLEAN DEFAULT false,
+        "onlyWithWebsite" BOOLEAN DEFAULT false,
         "hasPhoneOnly" BOOLEAN DEFAULT false,
+        "hasWhatsappOnly" BOOLEAN DEFAULT false,
         "minRating" DOUBLE PRECISION DEFAULT 0,
         "userId" TEXT NOT NULL,
         "createdAt" TIMESTAMP DEFAULT NOW(),
         "updatedAt" TIMESTAMP DEFAULT NOW()
       );
     `);
+    await prisma.$executeRawUnsafe(`ALTER TABLE "LeadPreset" ADD COLUMN IF NOT EXISTS "onlyWithWebsite" BOOLEAN DEFAULT false;`).catch(() => {});
+    await prisma.$executeRawUnsafe(`ALTER TABLE "LeadPreset" ADD COLUMN IF NOT EXISTS "hasWhatsappOnly" BOOLEAN DEFAULT false;`).catch(() => {});
   } catch (e) {
     console.warn('[CRM DB] Aviso ao verificar tabela LeadPreset:', e);
   }
@@ -500,8 +504,11 @@ router.get('/search', async (req: AuthenticatedRequest, res: any) => {
       location, 
       query, 
       onlyWithoutWebsite, 
+      onlyWithWebsite,
       hasPhone, 
       hasPhoneOnly, 
+      hasWhatsapp,
+      hasWhatsappOnly,
       minRating, 
       minReviews, 
       sortBy, 
@@ -521,7 +528,9 @@ router.get('/search', async (req: AuthenticatedRequest, res: any) => {
       country: (country as string) || 'Brasil',
       location: (location as string) || '',
       onlyWithoutWebsite: String(onlyWithoutWebsite) === 'true',
+      onlyWithWebsite: String(onlyWithWebsite) === 'true',
       hasPhoneOnly: String(hasPhone || hasPhoneOnly) === 'true',
+      hasWhatsappOnly: String(hasWhatsapp || hasWhatsappOnly) === 'true',
       minRating: parseFloat(String(minRating || '0')),
       minReviews: parseInt(String(minReviews || '0'), 10),
       sortBy: (sortBy as any) || 'rating',
@@ -538,7 +547,7 @@ router.get('/search', async (req: AuthenticatedRequest, res: any) => {
     });
   } catch (error: any) {
     console.error('Erro na rota GET /api/leads/search:', error);
-    return res.status(500).json({ error: error.message || 'Erro ao executar crawler de leads' });
+    return res.status(500).json({ error: error.message });
   }
 });
 
@@ -566,16 +575,16 @@ router.post('/presets', async (req: AuthenticatedRequest, res: any) => {
     const userId = req.userId;
     if (!userId) return res.status(401).json({ error: 'Não autorizado' });
 
-    const { name, niche, city, state, country, onlyWithoutWebsite, hasPhoneOnly, minRating } = req.body;
+    const { name, niche, city, state, country, onlyWithoutWebsite, onlyWithWebsite, hasPhoneOnly, hasWhatsappOnly, minRating } = req.body;
     if (!name || !niche || !city) {
       return res.status(400).json({ error: 'Nome, nicho e cidade são obrigatórios' });
     }
 
     const presetId = `preset-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     await prisma.$executeRawUnsafe(`
-      INSERT INTO "LeadPreset" ("id", "name", "niche", "city", "state", "country", "onlyWithoutWebsite", "hasPhoneOnly", "minRating", "userId", "createdAt", "updatedAt")
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW());
-    `, presetId, name, niche, city, state || '', country || 'Brasil', !!onlyWithoutWebsite, !!hasPhoneOnly, parseFloat(minRating || '0'), userId);
+      INSERT INTO "LeadPreset" ("id", "name", "niche", "city", "state", "country", "onlyWithoutWebsite", "onlyWithWebsite", "hasPhoneOnly", "hasWhatsappOnly", "minRating", "userId", "createdAt", "updatedAt")
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW());
+    `, presetId, name, niche, city, state || '', country || 'Brasil', !!onlyWithoutWebsite, !!onlyWithWebsite, !!hasPhoneOnly, !!hasWhatsappOnly, parseFloat(minRating || '0'), userId);
 
     return res.status(201).json({ success: true, id: presetId });
   } catch (error: any) {
@@ -589,14 +598,14 @@ router.put('/presets/:id', async (req: AuthenticatedRequest, res: any) => {
     await ensureLeadPresetTable();
     const userId = req.userId;
     const { id } = req.params;
-    const { name, niche, city, state, country, onlyWithoutWebsite, hasPhoneOnly, minRating } = req.body;
+    const { name, niche, city, state, country, onlyWithoutWebsite, onlyWithWebsite, hasPhoneOnly, hasWhatsappOnly, minRating } = req.body;
 
     await prisma.$executeRawUnsafe(`
       UPDATE "LeadPreset"
       SET "name" = $1, "niche" = $2, "city" = $3, "state" = $4, "country" = $5,
-          "onlyWithoutWebsite" = $6, "hasPhoneOnly" = $7, "minRating" = $8, "updatedAt" = NOW()
-      WHERE "id" = $9 AND "userId" = $10;
-    `, name, niche, city, state || '', country || 'Brasil', !!onlyWithoutWebsite, !!hasPhoneOnly, parseFloat(minRating || '0'), id, userId);
+          "onlyWithoutWebsite" = $6, "onlyWithWebsite" = $7, "hasPhoneOnly" = $8, "hasWhatsappOnly" = $9, "minRating" = $10, "updatedAt" = NOW()
+      WHERE "id" = $11 AND "userId" = $12;
+    `, name, niche, city, state || '', country || 'Brasil', !!onlyWithoutWebsite, !!onlyWithWebsite, !!hasPhoneOnly, !!hasWhatsappOnly, parseFloat(minRating || '0'), id, userId);
 
     return res.json({ success: true });
   } catch (error: any) {

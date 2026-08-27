@@ -361,7 +361,9 @@ export class LeadCrawlerEngine {
     country?: string;
     location?: string;
     onlyWithoutWebsite?: boolean;
+    onlyWithWebsite?: boolean;
     hasPhoneOnly?: boolean;
+    hasWhatsappOnly?: boolean;
     minRating?: number;
     minReviews?: number;
     sortBy?: 'rating' | 'reviews' | 'name';
@@ -375,7 +377,9 @@ export class LeadCrawlerEngine {
       country = 'Brasil', 
       location = '', 
       onlyWithoutWebsite = false, 
+      onlyWithWebsite = false,
       hasPhoneOnly = false, 
+      hasWhatsappOnly = false,
       minRating = 0, 
       minReviews = 0,
       sortBy = 'rating',
@@ -410,8 +414,14 @@ export class LeadCrawlerEngine {
       if (normalizedName.length > 2 && !seenNames.has(normalizedName)) {
         seenNames.add(normalizedName);
 
+        // Filtro de site: Apenas SEM site ou Apenas COM site
         if (onlyWithoutWebsite && lead.hasWebsite) continue;
+        if (onlyWithWebsite && !lead.hasWebsite) continue;
+
+        // Filtro de telefone / WhatsApp
         if (hasPhoneOnly && (!lead.phone || lead.phone === 'Não informado')) continue;
+        if (hasWhatsappOnly && !lead.whatsappUrl) continue;
+
         if (minRating > 0 && parseFloat(lead.rating) < minRating) continue;
         if (minReviews > 0 && (lead.totalReviews || 0) < minReviews) continue;
 

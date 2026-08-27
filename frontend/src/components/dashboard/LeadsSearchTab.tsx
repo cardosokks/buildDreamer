@@ -53,7 +53,9 @@ interface FilterPreset {
   state: string;
   country: string;
   onlyWithoutWebsite: boolean;
+  onlyWithWebsite?: boolean;
   hasPhoneOnly: boolean;
+  hasWhatsappOnly?: boolean;
   minRating: number;
 }
 
@@ -80,7 +82,9 @@ export const LeadsSearchTab: React.FC<LeadsSearchTabProps> = ({
   const [leadState, setLeadState] = useState('');
   const [leadCountry, setLeadCountry] = useState('Brasil');
   const [onlyWithoutWebsite, setOnlyWithoutWebsite] = useState(false);
+  const [onlyWithWebsite, setOnlyWithWebsite] = useState(false);
   const [hasPhoneOnly, setHasPhoneOnly] = useState(false);
+  const [hasWhatsappOnly, setHasWhatsappOnly] = useState(false);
   const [minRating, setMinRating] = useState('0');
   const [minReviews, setMinReviews] = useState('0');
   const [sortBy, setSortBy] = useState<'rating' | 'reviews' | 'name'>('rating');
@@ -112,8 +116,10 @@ export const LeadsSearchTab: React.FC<LeadsSearchTabProps> = ({
     city: '',
     state: '',
     country: 'Brasil',
-    onlyWithoutWebsite: true,
+    onlyWithoutWebsite: false,
+    onlyWithWebsite: false,
     hasPhoneOnly: false,
+    hasWhatsappOnly: false,
     minRating: 0
   });
 
@@ -159,7 +165,9 @@ export const LeadsSearchTab: React.FC<LeadsSearchTabProps> = ({
         state: leadState,
         country: leadCountry,
         onlyWithoutWebsite: onlyWithoutWebsite.toString(),
+        onlyWithWebsite: onlyWithWebsite.toString(),
         hasPhone: hasPhoneOnly.toString(),
+        hasWhatsapp: hasWhatsappOnly.toString(),
         minRating: minRating,
         minReviews: minReviews,
         sortBy: sortBy
@@ -191,9 +199,11 @@ export const LeadsSearchTab: React.FC<LeadsSearchTabProps> = ({
     setLeadCity(preset.city);
     setLeadState(preset.state || '');
     setLeadCountry(preset.country || 'Brasil');
-    setOnlyWithoutWebsite(preset.onlyWithoutWebsite);
-    setHasPhoneOnly(preset.hasPhoneOnly);
-    setMinRating(preset.minRating.toString());
+    setOnlyWithoutWebsite(!!preset.onlyWithoutWebsite);
+    setOnlyWithWebsite(!!preset.onlyWithWebsite);
+    setHasPhoneOnly(!!preset.hasPhoneOnly);
+    setHasWhatsappOnly(!!preset.hasWhatsappOnly);
+    setMinRating(preset.minRating ? preset.minRating.toString() : '0');
     setShowPresetListModal(false);
     notify.success(`Filtro "${preset.name}" aplicado! Clique em buscar.`, 'Filtro');
   };
@@ -338,10 +348,26 @@ export const LeadsSearchTab: React.FC<LeadsSearchTabProps> = ({
               <input
                 type="checkbox"
                 checked={onlyWithoutWebsite}
-                onChange={(e) => setOnlyWithoutWebsite(e.target.checked)}
-                className="w-4 h-4 rounded border-slate-800 bg-slate-950 text-indigo-600 focus:ring-indigo-500"
+                onChange={(e) => {
+                  setOnlyWithoutWebsite(e.target.checked);
+                  if (e.target.checked) setOnlyWithWebsite(false);
+                }}
+                className="w-4 h-4 rounded border-slate-800 bg-slate-950 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
               />
-              Filtrar: Apenas empresas <strong>SEM Site</strong>
+              Apenas <strong>SEM Site</strong>
+            </label>
+
+            <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={onlyWithWebsite}
+                onChange={(e) => {
+                  setOnlyWithWebsite(e.target.checked);
+                  if (e.target.checked) setOnlyWithoutWebsite(false);
+                }}
+                className="w-4 h-4 rounded border-slate-800 bg-slate-950 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+              />
+              Apenas <strong>COM Site</strong>
             </label>
 
             <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
@@ -349,9 +375,19 @@ export const LeadsSearchTab: React.FC<LeadsSearchTabProps> = ({
                 type="checkbox"
                 checked={hasPhoneOnly}
                 onChange={(e) => setHasPhoneOnly(e.target.checked)}
-                className="w-4 h-4 rounded border-slate-800 bg-slate-950 text-indigo-600 focus:ring-indigo-500"
+                className="w-4 h-4 rounded border-slate-800 bg-slate-950 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
               />
-              Filtrar: Apenas empresas <strong>COM Telefone</strong>
+              Apenas <strong>COM Telefone</strong>
+            </label>
+
+            <label className="flex items-center gap-2 text-xs text-emerald-300 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={hasWhatsappOnly}
+                onChange={(e) => setHasWhatsappOnly(e.target.checked)}
+                className="w-4 h-4 rounded border-slate-800 bg-slate-950 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+              />
+              Apenas <strong>COM WhatsApp</strong>
             </label>
           </div>
 
@@ -419,7 +455,9 @@ export const LeadsSearchTab: React.FC<LeadsSearchTabProps> = ({
                     state: leadState,
                     country: leadCountry,
                     onlyWithoutWebsite,
+                    onlyWithWebsite,
                     hasPhoneOnly,
+                    hasWhatsappOnly,
                     minRating: Number(minRating) || 0
                   });
                   setPresetModalOpen(true);
@@ -642,7 +680,16 @@ export const LeadsSearchTab: React.FC<LeadsSearchTabProps> = ({
                   onClick={() => {
                     setEditingPresetId(null);
                     setPresetForm({
-                      name: '', niche: leadQuery, city: leadCity, state: leadState, country: leadCountry, onlyWithoutWebsite, hasPhoneOnly, minRating: 0
+                      name: '',
+                      niche: leadQuery,
+                      city: leadCity,
+                      state: leadState,
+                      country: leadCountry,
+                      onlyWithoutWebsite,
+                      onlyWithWebsite,
+                      hasPhoneOnly,
+                      hasWhatsappOnly,
+                      minRating: 0
                     });
                     setPresetModalOpen(true);
                   }}
@@ -697,11 +744,20 @@ export const LeadsSearchTab: React.FC<LeadsSearchTabProps> = ({
                             onClick={() => {
                               setEditingPresetId(preset.id);
                               setPresetForm({
-                                name: preset.name, niche: preset.niche, city: preset.city, state: preset.state, country: preset.country || 'Brasil', onlyWithoutWebsite: preset.onlyWithoutWebsite, hasPhoneOnly: preset.hasPhoneOnly, minRating: preset.minRating
+                                name: preset.name,
+                                niche: preset.niche,
+                                city: preset.city,
+                                state: preset.state || '',
+                                country: preset.country || 'Brasil',
+                                onlyWithoutWebsite: !!preset.onlyWithoutWebsite,
+                                onlyWithWebsite: !!preset.onlyWithWebsite,
+                                hasPhoneOnly: !!preset.hasPhoneOnly,
+                                hasWhatsappOnly: !!preset.hasWhatsappOnly,
+                                minRating: preset.minRating || 0
                               });
                               setPresetModalOpen(true);
                             }}
-                            className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-white rounded-lg transition-colors"
+                            className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-white rounded-lg transition-colors cursor-pointer"
                           >
                             <Edit2 className="w-3.5 h-3.5" />
                           </button>
@@ -756,6 +812,7 @@ export const LeadsSearchTab: React.FC<LeadsSearchTabProps> = ({
                   <input
                     type="text"
                     required
+                    placeholder="Ex: Pizzaria, Dentista"
                     value={presetForm.niche}
                     onChange={(e) => setPresetForm({ ...presetForm, niche: e.target.value })}
                     className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white"
@@ -766,6 +823,7 @@ export const LeadsSearchTab: React.FC<LeadsSearchTabProps> = ({
                   <input
                     type="text"
                     required
+                    placeholder="Ex: Formosa, Brasília"
                     value={presetForm.city}
                     onChange={(e) => setPresetForm({ ...presetForm, city: e.target.value })}
                     className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white"
@@ -773,17 +831,112 @@ export const LeadsSearchTab: React.FC<LeadsSearchTabProps> = ({
                 </div>
               </div>
 
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-400 mb-1">Estado (UF)</label>
+                  <input
+                    type="text"
+                    placeholder="Ex: GO, DF, SP"
+                    value={presetForm.state}
+                    onChange={(e) => setPresetForm({ ...presetForm, state: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-400 mb-1">País</label>
+                  <input
+                    type="text"
+                    placeholder="Brasil"
+                    value={presetForm.country}
+                    onChange={(e) => setPresetForm({ ...presetForm, country: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white"
+                  />
+                </div>
+              </div>
+
+              {/* Filtros em Checkbox no Modal */}
+              <div className="space-y-2 pt-1 border-t border-slate-800/80">
+                <label className="block text-[11px] font-bold text-slate-400">Condições do Filtro</label>
+                <div className="grid grid-cols-2 gap-2 text-xs text-slate-300">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={presetForm.onlyWithoutWebsite}
+                      onChange={(e) => {
+                        setPresetForm({
+                          ...presetForm,
+                          onlyWithoutWebsite: e.target.checked,
+                          onlyWithWebsite: e.target.checked ? false : presetForm.onlyWithWebsite
+                        });
+                      }}
+                      className="w-4 h-4 rounded border-slate-800 bg-slate-950 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                    />
+                    Apenas <strong>SEM Site</strong>
+                  </label>
+
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={presetForm.onlyWithWebsite}
+                      onChange={(e) => {
+                        setPresetForm({
+                          ...presetForm,
+                          onlyWithWebsite: e.target.checked,
+                          onlyWithoutWebsite: e.target.checked ? false : presetForm.onlyWithoutWebsite
+                        });
+                      }}
+                      className="w-4 h-4 rounded border-slate-800 bg-slate-950 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                    />
+                    Apenas <strong>COM Site</strong>
+                  </label>
+
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={presetForm.hasPhoneOnly}
+                      onChange={(e) => setPresetForm({ ...presetForm, hasPhoneOnly: e.target.checked })}
+                      className="w-4 h-4 rounded border-slate-800 bg-slate-950 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                    />
+                    Apenas <strong>COM Telefone</strong>
+                  </label>
+
+                  <label className="flex items-center gap-2 text-emerald-300 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={presetForm.hasWhatsappOnly}
+                      onChange={(e) => setPresetForm({ ...presetForm, hasWhatsappOnly: e.target.checked })}
+                      className="w-4 h-4 rounded border-slate-800 bg-slate-950 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                    />
+                    Apenas <strong>COM WhatsApp</strong>
+                  </label>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-400 mb-1">Nota Mínima</label>
+                <select
+                  value={presetForm.minRating}
+                  onChange={(e) => setPresetForm({ ...presetForm, minRating: parseFloat(e.target.value) })}
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white"
+                >
+                  <option value={0}>Qualquer Nota</option>
+                  <option value={3}>★ 3.0 ou mais</option>
+                  <option value={4}>★ 4.0 ou mais</option>
+                  <option value={4.5}>★ 4.5 ou mais</option>
+                </select>
+              </div>
+
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
                   onClick={() => setPresetModalOpen(false)}
-                  className="px-4 py-2 border border-slate-800 text-xs font-bold text-slate-400 rounded-xl hover:text-white"
+                  className="px-4 py-2 border border-slate-800 text-xs font-bold text-slate-400 rounded-xl hover:text-white cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-xl text-xs"
+                  className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-xl text-xs cursor-pointer shadow-lg shadow-cyan-600/30"
                 >
                   Salvar Filtro
                 </button>
