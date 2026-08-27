@@ -894,6 +894,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
     pages: true,
     css: true,
     js: true,
+    media: true,
     docker: true,
     readme: true
   });
@@ -907,6 +908,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
         pages: String(exportOptions.pages),
         css: String(exportOptions.css),
         js: String(exportOptions.js),
+        media: String(exportOptions.media),
         docker: String(exportOptions.docker),
         readme: String(exportOptions.readme)
       }).toString();
@@ -1796,6 +1798,15 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
                       className="rounded bg-slate-900 border-slate-700 text-purple-600 focus:ring-0 cursor-pointer"
                     />
                     Scripts (js/)
+                  </label>
+                  <label className="flex items-center gap-2 text-purple-300 font-bold cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={exportOptions.media}
+                      onChange={e => setExportOptions({ ...exportOptions, media: e.target.checked })}
+                      className="rounded bg-slate-900 border-slate-700 text-purple-600 focus:ring-0 cursor-pointer"
+                    />
+                    Mídias e Fotos (media/)
                   </label>
                   <label className="flex items-center gap-2 text-slate-300 cursor-pointer">
                     <input
