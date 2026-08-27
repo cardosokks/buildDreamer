@@ -11,6 +11,7 @@ import {
   BookmarkCheck,
   Play,
   Zap,
+  Sparkles,
   Loader2,
   Trash2,
   Edit2,
@@ -537,10 +538,19 @@ export const LeadsSearchTab: React.FC<LeadsSearchTabProps> = ({
                           </div>
                         </td>
                         <td className="px-5 py-3.5 text-center">
-                          {lead.hasWebsite ? (
-                            <span className="px-2 py-0.5 bg-green-950/50 text-green-400 border border-green-500/20 rounded-full font-semibold text-[10px]">
-                              Possui Site
-                            </span>
+                          {lead.hasWebsite || lead.website ? (
+                            <div className="flex flex-col items-center gap-1">
+                              <a
+                                href={lead.website?.startsWith('http') ? lead.website : `https://${lead.website}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="px-2 py-0.5 bg-cyan-950/60 hover:bg-cyan-900/80 text-cyan-300 border border-cyan-500/30 rounded-full font-semibold text-[10px] flex items-center gap-1 transition-all"
+                                title="Abrir site original em nova aba"
+                              >
+                                <Globe className="w-3 h-3 text-cyan-400" />
+                                <span className="max-w-[120px] truncate">{lead.website ? lead.website.replace(/^https?:\/\/(www\.)?/, '') : 'Ver Site'}</span>
+                              </a>
+                            </div>
                           ) : (
                             <span className="px-2 py-0.5 bg-red-950/50 text-red-400 border border-red-500/20 rounded-full font-semibold text-[10px]">
                               Sem Site
@@ -556,14 +566,26 @@ export const LeadsSearchTab: React.FC<LeadsSearchTabProps> = ({
                             >
                               {isSaved ? <BookmarkCheck className="w-4 h-4" /> : <Bookmark className="w-4 h-4" />}
                             </button>
-                            <button
-                              onClick={() => onStartRemasterFlow(lead)}
-                              className="px-2.5 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-lg font-bold text-[11px] transition-colors flex items-center gap-1 cursor-pointer"
-                              title="Construir proposta de site para esta empresa"
-                            >
-                              <Zap className="w-3 h-3 fill-current" />
-                              Criar Site
-                            </button>
+
+                            {lead.hasWebsite || lead.website ? (
+                              <button
+                                onClick={() => onStartRemasterFlow(lead)}
+                                className="px-2.5 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-lg font-bold text-[11px] transition-all flex items-center gap-1 cursor-pointer shadow-sm shadow-purple-600/30"
+                                title="Melhorar e Remasterizar o site atual desta empresa com IA"
+                              >
+                                <Sparkles className="w-3 h-3 text-yellow-300 fill-current" />
+                                Melhorar Site
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => onStartRemasterFlow(lead)}
+                                className="px-2.5 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-lg font-bold text-[11px] transition-colors flex items-center gap-1 cursor-pointer"
+                                title="Construir proposta de novo site para esta empresa"
+                              >
+                                <Zap className="w-3 h-3 fill-current" />
+                                Criar Site
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -584,9 +606,22 @@ export const LeadsSearchTab: React.FC<LeadsSearchTabProps> = ({
                           <h3 className="font-bold text-white text-sm line-clamp-1">{lead.name}</h3>
                           <span className="text-[10px] text-slate-400">{lead.category}</span>
                         </div>
-                        <span className={`px-2 py-0.5 text-[9px] rounded-full shrink-0 font-bold ${lead.hasWebsite ? 'bg-green-950/40 text-green-400 border border-green-500/20' : 'bg-red-950/40 text-red-400 border border-red-500/20'}`}>
-                          {lead.hasWebsite ? 'Com Site' : 'Sem Site'}
-                        </span>
+                        {lead.hasWebsite || lead.website ? (
+                          <a
+                            href={lead.website?.startsWith('http') ? lead.website : `https://${lead.website}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="px-2 py-0.5 text-[9px] rounded-full shrink-0 font-bold bg-cyan-950/40 hover:bg-cyan-900/60 text-cyan-300 border border-cyan-500/30 flex items-center gap-1 transition-all"
+                            title="Abrir site original"
+                          >
+                            <Globe className="w-2.5 h-2.5 text-cyan-400" />
+                            Site
+                          </a>
+                        ) : (
+                          <span className="px-2 py-0.5 text-[9px] rounded-full shrink-0 font-bold bg-red-950/40 text-red-400 border border-red-500/20">
+                            Sem Site
+                          </span>
+                        )}
                       </div>
 
                       <div className="space-y-1 text-[11px] text-slate-400 mt-3.5">
@@ -624,13 +659,25 @@ export const LeadsSearchTab: React.FC<LeadsSearchTabProps> = ({
                       >
                         {isSaved ? <BookmarkCheck className="w-4.5 h-4.5" /> : <Bookmark className="w-4.5 h-4.5" />}
                       </button>
-                      <button
-                        onClick={() => onStartRemasterFlow(lead)}
-                        className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-xl font-bold text-xs transition-all flex items-center gap-1 cursor-pointer"
-                      >
-                        <Zap className="w-3 h-3 fill-current" />
-                        Criar Site Proposta
-                      </button>
+
+                      {lead.hasWebsite || lead.website ? (
+                        <button
+                          onClick={() => onStartRemasterFlow(lead)}
+                          className="px-3 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 cursor-pointer shadow-md shadow-purple-600/30"
+                          title="Melhorar e Remasterizar o site atual com IA"
+                        >
+                          <Sparkles className="w-3.5 h-3.5 text-yellow-300 fill-current" />
+                          Melhorar Site
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => onStartRemasterFlow(lead)}
+                          className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-xl font-bold text-xs transition-all flex items-center gap-1 cursor-pointer"
+                        >
+                          <Zap className="w-3 h-3 fill-current" />
+                          Criar Site
+                        </button>
+                      )}
                     </div>
                   </div>
                 );

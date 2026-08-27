@@ -262,6 +262,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
     isHomepage: boolean;
     enabled: boolean;
   }>>([]);
+  const [remasterPageTabs, setRemasterPageTabs] = useState<Record<number, 'prompt' | 'content'>>({});
   const [repeatNavbar, setRepeatNavbar] = useState(true);
   const [repeatFooter, setRepeatFooter] = useState(true);
   const [generatingRemaster, setGeneratingRemaster] = useState(false);
@@ -2793,28 +2794,66 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                             </div>
                           </div>
 
-                          {/* Campo de Prompt Específico para esta página */}
+                          {/* Abas de Prompt Específico vs Conteúdo Original Extraído */}
                           {page.enabled && (
-                            <div className="space-y-1">
-                              <label className="block text-[10px] text-slate-400 flex items-center justify-between">
-                                <span>Prompt Específico para a página "{page.name}":</span>
+                            <div className="space-y-2 pt-1 border-t border-slate-850/60">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-1 bg-slate-900/80 p-0.5 rounded-lg border border-slate-800">
+                                  <button
+                                    type="button"
+                                    onClick={() => setRemasterPageTabs(prev => ({ ...prev, [idx]: 'prompt' }))}
+                                    className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer ${(remasterPageTabs[idx] || 'prompt') === 'prompt' ? 'bg-purple-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
+                                  >
+                                    Prompt Específico
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setRemasterPageTabs(prev => ({ ...prev, [idx]: 'content' }))}
+                                    className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer ${(remasterPageTabs[idx] || 'prompt') === 'content' ? 'bg-purple-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
+                                  >
+                                    Conteúdo Baixado ({page.cleanText ? page.cleanText.length : 0} carac.)
+                                  </button>
+                                </div>
+
                                 {page.cleanText && (
-                                  <span className="text-[9px] text-emerald-400 font-mono">
-                                    ✓ Conteúdo original extraído ({page.cleanText.length} carac.)
+                                  <span className="text-[9px] text-emerald-400 font-mono hidden sm:inline">
+                                    ✓ Passado no prompt para melhoria da IA
                                   </span>
                                 )}
-                              </label>
-                              <textarea
-                                rows={2}
-                                value={page.customPrompt}
-                                onChange={(e) => {
-                                  const updated = [...remasterPages];
-                                  updated[idx].customPrompt = e.target.value;
-                                  setRemasterPages(updated);
-                                }}
-                                placeholder={`Descreva o que deseja que a IA implemente especificamente na página ${page.name}...`}
-                                className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-xs text-white font-sans focus:border-purple-500 focus:outline-none leading-relaxed"
-                              />
+                              </div>
+
+                              {(remasterPageTabs[idx] || 'prompt') === 'prompt' ? (
+                                <div>
+                                  <textarea
+                                    rows={2}
+                                    value={page.customPrompt}
+                                    onChange={(e) => {
+                                      const updated = [...remasterPages];
+                                      updated[idx].customPrompt = e.target.value;
+                                      setRemasterPages(updated);
+                                    }}
+                                    placeholder={`Descreva o que deseja que a IA implemente especificamente na página ${page.name}...`}
+                                    className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-xs text-white font-sans focus:border-purple-500 focus:outline-none leading-relaxed resize-none"
+                                  />
+                                </div>
+                              ) : (
+                                <div>
+                                  <textarea
+                                    rows={4}
+                                    value={page.cleanText || 'Nenhum texto extraído desta página.'}
+                                    onChange={(e) => {
+                                      const updated = [...remasterPages];
+                                      updated[idx].cleanText = e.target.value;
+                                      setRemasterPages(updated);
+                                    }}
+                                    placeholder="Texto e informações reais extraídos do site original que a IA usará como base..."
+                                    className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-xs text-emerald-300 font-mono focus:border-purple-500 focus:outline-none leading-relaxed"
+                                  />
+                                  <p className="text-[10px] text-slate-500 mt-0.5">
+                                    Você pode editar ou complementar as informações acima. A IA utilizará este conteúdo exato para construir a nova página.
+                                  </p>
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>
