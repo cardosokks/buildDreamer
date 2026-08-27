@@ -562,7 +562,8 @@ router.post('/remaster/generate', async (req: AuthenticatedRequest, res: any) =>
           total
         };
       },
-      customSkills
+      customSkills,
+      userId
     ).then(() => {
       projectJobsQueue[project.id] = { status: 'completed' };
     }).catch((err) => {

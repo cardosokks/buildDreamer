@@ -2,13 +2,24 @@ import { prisma } from '../db';
 import { generateAIResponse } from '../services/gemini';
 import https from 'https';
 import http from 'http';
+import fs from 'fs';
+import path from 'path';
 
-interface ScrapedPage {
+export interface ScrapedMedia {
+  url: string;
+  alt?: string;
+  type: 'image' | 'video' | 'logo' | 'icon';
+  role?: 'logo' | 'hero' | 'card' | 'gallery' | 'content' | 'video';
+  localUrl?: string;
+}
+
+export interface ScrapedPage {
   url: string;
   slug: string;
   name: string;
   html: string;
   cleanText: string;
+  media: ScrapedMedia[];
 }
 
 /**
@@ -154,12 +165,97 @@ export async function crawlEntireClientWebsite(
         }
       }
 
+      // Extração inteligente de Imagens e Vídeos da página
+      const pageMedia: ScrapedMedia[] = [];
+      const seenMediaUrls = new Set<string>();
+
+      const resolveMediaUrl = (src: string): string | null => {
+        if (!src || src.startsWith('data:') || src.startsWith('blob:')) return null;
+        try {
+          return new URL(src, currentUrl).href;
+        } catch {
+          return null;
+        }
+      };
+
+      // 1. Tags <img>
+      const imgRegex = /<img\b[^>]*?src=["']([^"']+)["'][^>]*>/gi;
+      let imgMatch: RegExpExecArray | null;
+      while ((imgMatch = imgRegex.exec(html)) !== null) {
+        const rawSrc = imgMatch[1];
+        const fullImgTag = imgMatch[0];
+        const resolved = resolveMediaUrl(rawSrc);
+        if (!resolved || seenMediaUrls.has(resolved)) continue;
+
+        // Ignora imagens insignificantes (trackers, 1x1 pixels)
+        if (resolved.includes('pixel') || resolved.includes('tracking') || resolved.includes('favicon.ico')) continue;
+
+        seenMediaUrls.add(resolved);
+        const altMatch = fullImgTag.match(/alt=["']([^"']*)["']/i);
+        const classMatch = fullImgTag.match(/class=["']([^"']*)["']/i);
+        const alt = altMatch ? altMatch[1].trim() : '';
+        const cls = classMatch ? classMatch[1].toLowerCase() : '';
+
+        let role: ScrapedMedia['role'] = 'content';
+        if (/logo|brand|marca/i.test(resolved) || /logo|brand|marca/i.test(alt) || /logo|brand|marca/i.test(cls)) {
+          role = 'logo';
+        } else if (/hero|banner|destaque|cover/i.test(resolved) || /hero|banner|destaque|cover/i.test(cls)) {
+          role = 'hero';
+        } else if (/card|servico|produto|item|service|product/i.test(resolved) || /card|item/i.test(cls)) {
+          role = 'card';
+        }
+
+        pageMedia.push({
+          url: resolved,
+          alt: alt || `${name} Imagem`,
+          type: role === 'logo' ? 'logo' : 'image',
+          role
+        });
+      }
+
+      // 2. background-image em tags inline
+      const bgRegex = /background(?:-image)?:\s*url\(['"]?([^'")]+)['"]?\)/gi;
+      let bgMatch: RegExpExecArray | null;
+      while ((bgMatch = bgRegex.exec(html)) !== null) {
+        const rawBg = bgMatch[1];
+        const resolved = resolveMediaUrl(rawBg);
+        if (resolved && !seenMediaUrls.has(resolved)) {
+          seenMediaUrls.add(resolved);
+          pageMedia.push({
+            url: resolved,
+            alt: `${name} Background`,
+            type: 'image',
+            role: 'hero'
+          });
+        }
+      }
+
+      // 3. Vídeos (iframe youtube/vimeo ou tag video)
+      const iframeRegex = /<iframe\b[^>]*?src=["']([^"']+)["'][^>]*>/gi;
+      let ifrMatch: RegExpExecArray | null;
+      while ((ifrMatch = iframeRegex.exec(html)) !== null) {
+        const rawIfr = ifrMatch[1];
+        if (/youtube\.com|youtu\.be|vimeo\.com/i.test(rawIfr)) {
+          const resolved = resolveMediaUrl(rawIfr) || rawIfr;
+          if (!seenMediaUrls.has(resolved)) {
+            seenMediaUrls.add(resolved);
+            pageMedia.push({
+              url: resolved,
+              alt: `${name} Vídeo Institucional`,
+              type: 'video',
+              role: 'video'
+            });
+          }
+        }
+      }
+
       pages.push({
         url: currentUrl,
         slug,
         name,
         html,
-        cleanText
+        cleanText,
+        media: pageMedia
       });
 
       const linkMatches = [...html.matchAll(/href=["']([^"'#?]+)["']/gi)];
@@ -241,6 +337,7 @@ export async function startWebsiteScrapeJob(
       cleanText: string;
       excerpt: string;
       isHomepage: boolean;
+      media: ScrapedMedia[];
     }> = [];
 
     if (scraped.length > 0) {
@@ -250,7 +347,8 @@ export async function startWebsiteScrapeJob(
         url: p.url,
         cleanText: p.cleanText,
         excerpt: p.cleanText.slice(0, 180) + '...',
-        isHomepage: p.slug === 'index'
+        isHomepage: p.slug === 'index',
+        media: p.media || []
       }));
 
       // Se a Home não estiver explícita, marca a primeira como Home
@@ -316,6 +414,95 @@ export async function startWebsiteScrapeJob(
 }
 
 /**
+ * Baixa e armazena mídias remotas na pasta de uploads do projeto e registra no Prisma
+ */
+export async function downloadAndStoreProjectMedia(
+  projectId: string,
+  mediaList: ScrapedMedia[],
+  userId?: string,
+  proxyUrl?: string
+): Promise<ScrapedMedia[]> {
+  const uploadsDir = path.join(process.cwd(), 'public', 'uploads', 'projects', projectId);
+  if (!fs.existsSync(uploadsDir)) {
+    try { fs.mkdirSync(uploadsDir, { recursive: true }); } catch {}
+  }
+
+  const processedMedia: ScrapedMedia[] = [];
+  const validExts: Record<string, string> = {
+    'image/jpeg': 'jpg',
+    'image/jpg': 'jpg',
+    'image/png': 'png',
+    'image/webp': 'webp',
+    'image/svg+xml': 'svg',
+    'image/gif': 'gif'
+  };
+
+  for (let i = 0; i < Math.min(mediaList.length, 25); i++) {
+    const item = mediaList[i];
+    if (item.type === 'video') {
+      processedMedia.push(item);
+      continue;
+    }
+
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 6000);
+      const res = await fetch(item.url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+        },
+        signal: controller.signal
+      });
+      clearTimeout(timeout);
+
+      if (!res.ok) {
+        processedMedia.push(item);
+        continue;
+      }
+
+      const contentType = res.headers.get('content-type') || 'image/jpeg';
+      const ext = validExts[contentType.toLowerCase().split(';')[0]] || 'jpg';
+      const buffer = Buffer.from(await res.arrayBuffer());
+
+      if (buffer.length < 500) {
+        // Imagem muito pequena/vazia, mantém url original
+        processedMedia.push(item);
+        continue;
+      }
+
+      const safeName = item.alt ? item.alt.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 30) : 'midia';
+      const filename = `${item.role || 'img'}_${Date.now()}_${i}_${safeName}.${ext}`;
+      const filePath = path.join(uploadsDir, filename);
+
+      fs.writeFileSync(filePath, buffer);
+
+      const localPublicUrl = `/uploads/projects/${projectId}/${filename}`;
+      const mediaId = `media_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+
+      if (userId) {
+        try {
+          await prisma.$executeRawUnsafe(
+            `INSERT INTO "Media" ("id", "name", "url", "size", "mimeType", "userId", "projectId", "createdAt") VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())`,
+            mediaId, item.alt || filename, localPublicUrl, buffer.length, contentType, userId, projectId
+          );
+        } catch (dbErr) {
+          console.warn('Aviso ao registrar mídia no banco:', dbErr);
+        }
+      }
+
+      processedMedia.push({
+        ...item,
+        localUrl: localPublicUrl
+      });
+    } catch (e) {
+      processedMedia.push(item);
+    }
+  }
+
+  return processedMedia;
+}
+
+/**
  * Worker assíncrono para Geração Completa Multi-Página Customizada
  */
 export async function processCustomRemasterGenerationJob(
@@ -330,6 +517,7 @@ export async function processCustomRemasterGenerationJob(
     cleanText?: string;
     isHomepage?: boolean;
     enabled?: boolean;
+    media?: ScrapedMedia[];
   }>,
   sharedComponents: {
     repeatNavbar: boolean;
@@ -339,7 +527,8 @@ export async function processCustomRemasterGenerationJob(
   registeredModels?: string[],
   customProxyUrl?: string,
   onProgress?: (status: string, attempt: number, total: number) => void,
-  customSkills?: any[]
+  customSkills?: any[],
+  userId?: string
 ) {
   try {
     const activePages = pages.filter(p => p.enabled !== false);
@@ -355,6 +544,38 @@ export async function processCustomRemasterGenerationJob(
     ];
     const navigationLinksText = allNavigationRoutes.map(r => `- "${r.name}" -> href="${r.href}"`).join('\n');
 
+    // 0. EXTRAIR E SALVAR MÍDIAS NA BIBLIOTECA DO PROJETO
+    if (onProgress) onProgress(`Importando e organizando mídias e logos reais do site...`, 1, subPages.length + 2);
+
+    const allDiscoveredMedia: ScrapedMedia[] = [];
+    pages.forEach(p => {
+      if (p.media && Array.isArray(p.media)) {
+        p.media.forEach(m => {
+          if (!allDiscoveredMedia.some(existing => existing.url === m.url)) {
+            allDiscoveredMedia.push(m);
+          }
+        });
+      }
+    });
+
+    const storedMediaList = await downloadAndStoreProjectMedia(projectId, allDiscoveredMedia, userId, customProxyUrl);
+
+    // Constrói sumário de imagens reais prontas para a IA utilizar
+    const logoMedia = storedMediaList.find(m => m.role === 'logo');
+    const heroMedia = storedMediaList.filter(m => m.role === 'hero');
+    const cardMedia = storedMediaList.filter(m => m.role === 'card');
+    const contentMedia = storedMediaList.filter(m => m.role === 'content');
+    const videoMedia = storedMediaList.filter(m => m.type === 'video');
+
+    const availableMediaCatalog = `
+      MÍDIAS REAIS DA EMPRESA DISPONÍVEIS NO SERVIDOR DO PROJETO (UTILIZE ESTAS TAGS/URLS DIRETAMENTE NO HTML):
+      ${logoMedia ? `- LOGO DA EMPRESA: <img src="${logoMedia.localUrl || logoMedia.url}" alt="${projectName} Logo" class="h-10 w-auto object-contain" />` : ''}
+      ${heroMedia.map((m, i) => `- IMAGEM DE DESTAQUE ${i + 1}: <img src="${m.localUrl || m.url}" alt="${m.alt || projectName}" class="w-full h-auto rounded-2xl object-cover shadow-2xl" />`).join('\n')}
+      ${cardMedia.map((m, i) => `- IMAGEM DE SERVIÇO/CARD ${i + 1}: <img src="${m.localUrl || m.url}" alt="${m.alt || 'Serviço'}" class="w-full h-48 object-cover rounded-xl" />`).join('\n')}
+      ${contentMedia.slice(0, 6).map((m, i) => `- IMAGEM DE CONTEÚDO/TUTORIAL ${i + 1}: <img src="${m.localUrl || m.url}" alt="${m.alt || 'Tutorial'}" class="w-full rounded-xl" />`).join('\n')}
+      ${videoMedia.map((m, i) => `- VÍDEO INSTITUCIONAL ${i + 1}: <iframe src="${m.url}" class="w-full aspect-video rounded-2xl" frameborder="0" allowfullscreen></iframe>`).join('\n')}
+    `;
+
     // 1. GERAR A HOME E CRIAR OS COMPONENTES UNIVERSAIS (Navbar e Footer)
     if (onProgress) onProgress(`IA criando arquitetura da Home e Design System Universal...`, 1, subPages.length + 1);
 
@@ -366,6 +587,8 @@ export async function processCustomRemasterGenerationJob(
       """
       ${globalPrompt || 'Design de altíssimo luxo, moderna paleta, tipografia impecável, foco em conversão e interações fluidas.'}
       """
+
+      ${availableMediaCatalog}
 
       PROMPT ESPECÍFICO DA HOME:
       """
@@ -381,9 +604,10 @@ export async function processCustomRemasterGenerationJob(
       ${navigationLinksText}
 
       REGRAS CRÍTICAS DE COMPONENTES REUTILIZÁVEIS:
-      1. Crie uma <header class="sticky top-0 z-50 ..."> com uma NAVBAR rica, responsiva, com a logo "${projectName}" e os links acima.
+      1. Crie uma <header class="sticky top-0 z-50 ..."> com uma NAVBAR rica, responsiva, com a logo "${projectName}" (use a tag da logo se disponível) e os links acima.
       2. Crie um <footer class="border-t ..."> elegante no final da página com os mesmos links de navegação e copyright.
-      3. SEPARAÇÃO ESTRITA: Retorne HTML sem <style> nem <script>. Todo CSS no campo "css" e JS no campo "js".
+      3. REUTILIZAÇÃO DE MÍDIAS: Empregue as URLs e tags de imagens reais listadas acima para dar realismo à página.
+      4. SEPARAÇÃO ESTRITA: Retorne HTML sem <style> nem <script>. Todo CSS no campo "css" e JS no campo "js".
     `;
 
     const homeAiResponse = await generateAIResponse(
@@ -447,6 +671,8 @@ export async function processCustomRemasterGenerationJob(
             ${globalPrompt}
             """
 
+            ${availableMediaCatalog}
+
             PROMPT ESPECÍFICO DESTA SUBPÁGINA ("${sub.name}"):
             """
             ${sub.customPrompt || `Apresente detalhadamente as informações, benefícios e recursos de ${sub.name}.`}
@@ -472,7 +698,8 @@ export async function processCustomRemasterGenerationJob(
             REGRAS MANDATÓRIAS:
             1. CONSISTÊNCIA DE TEMA: Mantenha a mesma paleta de cores, tipografia, bordas e cards da Home.
             2. ENCAIXE DE COMPONENTES: Não recrie nem altere o visual da Navbar/Footer compartilhados, apenas utilize-os no topo e base da página.
-            3. SEPARAÇÃO TOTAL: Retorne APENAS HTML limpo no campo "html" (sem tags <style> nem <script>).
+            3. IMAGENS REAIS: Se houver imagens ou vídeos acima referentes a ${sub.name}, insira-os no conteúdo de forma elegante.
+            4. SEPARAÇÃO TOTAL: Retorne APENAS HTML limpo no campo "html" (sem tags <style> nem <script>).
           `;
 
           try {
@@ -538,15 +765,16 @@ export async function processWebsiteRemasterJob(
   registeredModels?: string[],
   customProxyUrl?: string,
   onProgress?: (status: string, attempt: number, total: number) => void,
-  customSkills?: any[]
+  customSkills?: any[],
+  userId?: string
 ) {
   try {
-    if (onProgress) onProgress(`Analisando estrutura e páginas do site (${websiteUrl})...`, 1, 4);
+    if (onProgress) onProgress(`Analisando estrutura, imagens e páginas do site (${websiteUrl})...`, 1, 4);
 
     const scrapedPages = await crawlEntireClientWebsite(websiteUrl, 6, customProxyUrl);
     
     let homeText = '';
-    let targetPagesList: Array<{ name: string; slug: string; customPrompt?: string; cleanText?: string }> = [];
+    let targetPagesList: Array<{ name: string; slug: string; customPrompt?: string; cleanText?: string; media?: ScrapedMedia[] }> = [];
 
     if (scrapedPages.length > 1) {
       const homeScraped = scrapedPages.find(p => p.slug === 'index') || scrapedPages[0];
@@ -558,7 +786,8 @@ export async function processWebsiteRemasterJob(
           name: sub.name,
           slug: sub.slug,
           customPrompt: `Subpágina original: ${sub.url}`,
-          cleanText: sub.cleanText
+          cleanText: sub.cleanText,
+          media: sub.media
         });
       }
     } else {
@@ -573,12 +802,14 @@ export async function processWebsiteRemasterJob(
       ];
     }
 
+    const homeMedia = scrapedPages.length > 0 ? scrapedPages[0].media : [];
+
     await processCustomRemasterGenerationJob(
       projectId,
       businessName,
       `Site moderno, responsivo e elegante para a empresa ${businessName}`,
       [
-        { name: 'Home', slug: 'index', isHomepage: true, cleanText: homeText },
+        { name: 'Home', slug: 'index', isHomepage: true, cleanText: homeText, media: homeMedia },
         ...targetPagesList
       ],
       { repeatNavbar: true, repeatFooter: true },
@@ -586,7 +817,8 @@ export async function processWebsiteRemasterJob(
       registeredModels,
       customProxyUrl,
       onProgress,
-      customSkills
+      customSkills,
+      userId
     );
   } catch (err: any) {
     console.error("Erro no processWebsiteRemasterJob:", err);

@@ -1053,7 +1053,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
               : `Apresentação detalhada com tópicos visuais, benefícios claros, cards ilustrativos e chamadas para ação focadas em ${p.name}.`,
             cleanText: p.cleanText || '',
             isHomepage: !!p.isHomepage,
-            enabled: true
+            enabled: true,
+            media: p.media || []
           }));
 
           setRemasterPages(mappedPages);
@@ -2767,6 +2768,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                               {page.isHomepage && (
                                 <span className="text-[9px] px-1.5 py-0.2 rounded bg-pink-950 text-pink-300 border border-pink-500/30 font-mono uppercase">
                                   Home Principal
+                                </span>
+                              )}
+                              {(page as any).media && (page as any).media.length > 0 && (
+                                <span className="text-[9px] px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-300 border border-emerald-500/30 font-mono">
+                                  {(page as any).media.length} mídias
                                 </span>
                               )}
                             </div>
