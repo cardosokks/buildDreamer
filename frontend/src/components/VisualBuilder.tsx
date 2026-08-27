@@ -984,18 +984,21 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
     }
   };
 
-  const getFullHtmlDocument = (targetPage = activePage) => {
+  const getFullHtmlDocument = (targetPage = activePage, isPreview = false) => {
     if (!targetPage) return '';
     const navbar = project?.navbarHtml || '';
     const footer = project?.footerHtml || '';
     const bodyContent = targetPage.html || '';
+
+    const baseHref = isPreview ? (API_URL || window.location.origin) : API_URL;
+    const baseTag = baseHref ? `<base href="${baseHref}/">` : '';
 
     return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <base href="${API_URL}">
+  ${baseTag}
   <title>${targetPage.seoTitle || targetPage.name}</title>
   <meta name="description" content="${targetPage.seoDescription || ''}">
   <script src="https://cdn.tailwindcss.com"></script>
@@ -1096,7 +1099,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
   }, [checkSystemNgrokStatus]);
 
   const handleOpenLivePreview = () => {
-    const content = getFullHtmlDocument();
+    const content = getFullHtmlDocument(activePage, true);
     const blob = new Blob([content], { type: 'text/html;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     window.open(url, '_blank');

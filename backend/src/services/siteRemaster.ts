@@ -666,8 +666,9 @@ export async function processCustomRemasterGenerationJob(
       ${globalPrompt || 'Design de altíssimo luxo, moderna paleta, tipografia impecável, foco em conversão e interações fluidas.'}
       """
 
-      FILOSOFIA DE REMASTERIZAÇÃO:
-      - NÃO É APENAS REFAZER DO ZERO COM TEMPLATE GENÉRICO: É MELHORAR, PRESERVAR A ESSÊNCIA DA MARCA E PROFISSIONALIZAR O CONTEÚDO REAL.
+      FILOSOFIA DE REMASTERIZAÇÃO E PRESERVAÇÃO DE ESTRUTURA:
+      - NÃO CRIE A PÁGINA DO ZERO COM UM TEMPLATE ALEATÓRIO. Mantenha fielmente o esqueleto, a estrutura de seções, cabeçalhos, formulários, grids e disposição de elementos do HTML original fornecido abaixo.
+      - Preserve toda a distribuição, hierarquia e fluxo de seções originais do site. O seu objetivo é melhorar e modernizar visualmente a página antiga: estilizando com Tailwind CSS, adicionando cores modernas e refinadas, tipografia profissional, espaçamentos adequados, sombras premium, bordas suaves, efeitos de hover dinâmicos e micro-animações, bem como comportamentos interativos avançados em JS.
       - Respeite a identidade visual do nicho da empresa (${projectName}), aplicando paletas de cores, contraste e estilo visual característicos e autênticos para esse segmento de mercado.
       - Utilize os textos reais, propostas de valor, nomes dos serviços/produtos e informações de contato extraídos do site original.
 
@@ -785,6 +786,10 @@ export async function processCustomRemasterGenerationJob(
             """
             ${globalPrompt}
             """
+
+            FILOSOFIA DE REMASTERIZAÇÃO E PRESERVAÇÃO DE ESTRUTURA:
+            - NÃO CRIE A SUBPÁGINA DO ZERO COM UM TEMPLATE ALEATÓRIO. Mantenha fielmente o esqueleto, a estrutura de seções, cabeçalhos, formulários, grids e disposição de elementos do HTML original fornecido abaixo.
+            - Preserve toda a distribuição, hierarquia e fluxo de seções originais do site. O seu objetivo é melhorar e modernizar visualmente a subpágina antiga: estilizando com Tailwind CSS, adicionando cores modernas e refinadas, tipografia profissional, espaçamentos adequados, sombras premium, bordas suaves, efeitos de hover dinâmicos e micro-animações, bem como comportamentos interativos avançados em JS.
 
             ${availableMediaCatalog}
 
