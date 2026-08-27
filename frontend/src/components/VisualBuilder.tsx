@@ -982,30 +982,40 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
     }
   };
 
-  const getFullHtmlDocument = () => {
-    if (!activePage) return '';
+  const getFullHtmlDocument = (targetPage = activePage) => {
+    if (!targetPage) return '';
+    const navbar = project?.navbarHtml || '';
+    const footer = project?.footerHtml || '';
+    const bodyContent = targetPage.html || '';
+
     return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${activePage.seoTitle || activePage.name}</title>
-  <meta name="description" content="${activePage.seoDescription || ''}">
+  <title>${targetPage.seoTitle || targetPage.name}</title>
+  <meta name="description" content="${targetPage.seoDescription || ''}">
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <style>
     body { font-family: 'Inter', sans-serif; }
     h1,h2,h3,h4,h5,h6 { font-family: 'Outfit', sans-serif; }
-    ${activePage.css || ''}
+    ${targetPage.css || ''}
   </style>
 </head>
-<body class="bg-slate-950 text-slate-100 min-h-screen">
-  ${activePage.html || ''}
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col">
+  ${navbar}
+  <main class="flex-grow">
+    ${bodyContent}
+  </main>
+  ${footer}
   <script>
-    ${activePage.js || ''}
+    ${targetPage.js || ''}
   </script>
   <script>
     // Interceptor de navegação para Preview local multi-páginas
+    window.__PROJECT_NAVBAR__ = ${JSON.stringify(navbar)};
+    window.__PROJECT_FOOTER__ = ${JSON.stringify(footer)};
     window.__PROJECT_PAGES__ = ${JSON.stringify((project?.pages || []).map(p => ({
       name: p.name,
       slug: p.slug,
@@ -1030,7 +1040,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
 
       if (page) {
         document.title = page.title || page.name;
-        document.body.innerHTML = page.html || '';
+        document.body.innerHTML = (window.__PROJECT_NAVBAR__ || '') + '<main class="flex-grow">' + (page.html || '') + '</main>' + (window.__PROJECT_FOOTER__ || '');
         window.scrollTo({ top: 0, behavior: 'smooth' });
         if (page.js) {
           try { eval(page.js); } catch(err) { console.error(err); }
