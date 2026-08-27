@@ -264,6 +264,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
     js?: string;
     isHomepage: boolean;
     enabled: boolean;
+    media?: Array<{
+      url: string;
+      alt?: string;
+      type: 'image' | 'video' | 'logo' | 'icon';
+      role?: 'logo' | 'hero' | 'card' | 'gallery' | 'content' | 'video';
+      localUrl?: string;
+    }>;
   }>>([]);
   const [remasterPageTabs, setRemasterPageTabs] = useState<Record<number, 'prompt' | 'content' | 'html' | 'css' | 'js'>>({});
   const [repeatNavbar, setRepeatNavbar] = useState(true);
@@ -2819,6 +2826,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                                   </button>
                                   <button
                                     type="button"
+                                    onClick={() => setRemasterPageTabs(prev => ({ ...prev, [idx]: 'media' as any }))}
+                                    className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer ${(remasterPageTabs[idx] as any) === 'media' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
+                                  >
+                                    Mídias ({(page as any).media ? (page as any).media.length : 0})
+                                  </button>
+                                  <button
+                                    type="button"
                                     onClick={() => setRemasterPageTabs(prev => ({ ...prev, [idx]: 'html' }))}
                                     className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer ${(remasterPageTabs[idx] || 'prompt') === 'html' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
                                   >
@@ -2912,6 +2926,44 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                                     placeholder="Estilos CSS originais capturados..."
                                     className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-xs text-cyan-300 font-mono focus:border-cyan-500 focus:outline-none leading-relaxed"
                                   />
+                                  {(remasterPageTabs[idx] as any) === 'media' && (
+                                <div className="space-y-2">
+                                  {page.media && page.media.length > 0 ? (
+                                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-48 overflow-y-auto p-1 bg-slate-900/60 rounded-lg border border-slate-800">
+                                      {page.media.map((m, mIdx) => (
+                                        <div key={mIdx} className="relative group bg-slate-950 border border-slate-800 rounded-lg overflow-hidden flex flex-col items-center">
+                                          {m.type === 'video' ? (
+                                            <div className="w-full h-16 bg-purple-950/40 flex items-center justify-center text-[10px] text-purple-300 font-bold">
+                                              🎬 Vídeo
+                                            </div>
+                                          ) : (
+                                            <img
+                                              src={m.url}
+                                              alt={m.alt || 'Mídia do site'}
+                                              className="w-full h-16 object-cover bg-slate-900"
+                                              onError={(e) => {
+                                                (e.target as HTMLElement).style.display = 'none';
+                                              }}
+                                            />
+                                          )}
+                                          <div className="p-1 w-full text-center">
+                                            <span className="text-[9px] text-slate-400 font-mono block truncate">
+                                              {m.role ? `[${m.role}]` : m.type}
+                                            </span>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <div className="p-3 bg-slate-900/40 rounded-lg border border-slate-800 text-xs text-slate-500 text-center">
+                                      Nenhuma imagem ou vídeo identificado nesta subpágina.
+                                    </div>
+                                  )}
+                                  <p className="text-[10px] text-slate-500">
+                                    Mídias reais encontradas pelo crawler nesta página. A IA usará estas fotos nos blocos, cards e hero sections.
+                                  </p>
+                                </div>
+                              )}
                                   <p className="text-[10px] text-slate-500 mt-0.5">
                                     Estilos CSS antigos que ajudam a IA a captar paleta de cores e identidades originais da marca.
                                   </p>

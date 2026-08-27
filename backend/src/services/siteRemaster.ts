@@ -180,8 +180,8 @@ export async function crawlEntireClientWebsite(
         }
       };
 
-      // 1. Tags <img>
-      const imgRegex = /<img\b[^>]*?src=["']([^"']+)["'][^>]*>/gi;
+      // 1. Tags <img> (com suporte a src, data-src, data-lazy-src e srcset)
+      const imgRegex = /<img\b[^>]*?(?:src|data-src|data-lazy-src)=["']([^"']+)["'][^>]*>/gi;
       let imgMatch: RegExpExecArray | null;
       while ((imgMatch = imgRegex.exec(html)) !== null) {
         const rawSrc = imgMatch[1];
@@ -215,13 +215,13 @@ export async function crawlEntireClientWebsite(
         });
       }
 
-      // 2. background-image em tags inline
-      const bgRegex = /background(?:-image)?:\s*url\(['"]?([^'")]+)['"]?\)/gi;
+      // 2. background-image em tags inline ou classes
+      const bgRegex = /url\(['"]?([^'")\s]+\.(?:png|jpe?g|webp|svg|gif)(?:\?[^'")\s]*)?)['"]?\)/gi;
       let bgMatch: RegExpExecArray | null;
       while ((bgMatch = bgRegex.exec(html)) !== null) {
         const rawBg = bgMatch[1];
         const resolved = resolveMediaUrl(rawBg);
-        if (resolved && !seenMediaUrls.has(resolved)) {
+        if (resolved && !seenMediaUrls.has(resolved) && !resolved.includes('pixel')) {
           seenMediaUrls.add(resolved);
           pageMedia.push({
             url: resolved,
