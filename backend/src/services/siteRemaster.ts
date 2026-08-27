@@ -405,7 +405,8 @@ export async function startWebsiteScrapeJob(
           url: websiteUrl,
           cleanText: `Página principal de ${businessName}. Apresentação da empresa, proposta de valor e diferenciais.`,
           excerpt: `Apresentação institucional e serviços principais de ${businessName}...`,
-          isHomepage: true
+          isHomepage: true,
+          media: []
         },
         {
           name: 'Serviços',
@@ -413,7 +414,8 @@ export async function startWebsiteScrapeJob(
           url: `${websiteUrl}/servicos`,
           cleanText: `Catálogo completo de soluções e serviços prestados por ${businessName}.`,
           excerpt: `Produtos e soluções com especificações e benefícios...`,
-          isHomepage: false
+          isHomepage: false,
+          media: []
         },
         {
           name: 'Sobre Nós',
@@ -421,7 +423,8 @@ export async function startWebsiteScrapeJob(
           url: `${websiteUrl}/sobre`,
           cleanText: `História, missão, visão e autoridade de ${businessName} no mercado.`,
           excerpt: `História e autoridade no mercado...`,
-          isHomepage: false
+          isHomepage: false,
+          media: []
         },
         {
           name: 'Contato',
@@ -429,7 +432,8 @@ export async function startWebsiteScrapeJob(
           url: `${websiteUrl}/contato`,
           cleanText: `Formulário de atendimento, WhatsApp, localização e telefones de ${businessName}.`,
           excerpt: `Canais de atendimento direto e localização...`,
-          isHomepage: false
+          isHomepage: false,
+          media: []
         }
       ];
     }
@@ -579,8 +583,8 @@ export async function processCustomRemasterGenerationJob(
 
     // Mapeamento dos Links Universais de Navegação
     const allNavigationRoutes = [
-      { name: homePage.name || 'Home', href: 'index.html' },
-      ...subPages.map(p => ({ name: p.name, href: `${p.slug}.html` }))
+      { name: homePage.name || 'Home', slug: 'index', href: 'index.html' },
+      ...subPages.map(p => ({ name: p.name, slug: p.slug, href: `${p.slug}.html` }))
     ];
     const navigationLinksText = allNavigationRoutes.map(r => `- "${r.name}" -> href="${r.href}"`).join('\n');
 
