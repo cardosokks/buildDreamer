@@ -3,6 +3,7 @@ import { prisma } from '../db';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { uploadProjectToFTP } from '../services/ftp';
 import { generateAIResponse } from '../services/gemini';
+import { extractNavbarAndFooter } from '../services/siteRemaster';
 import fs from 'fs';
 import path from 'path';
 
@@ -62,14 +63,27 @@ async function processAIProjectGeneration(
     );
 
     // Save final generated code to database
+    const finalHtml = response.html || page.html;
     await prisma.page.update({
       where: { id: page.id },
       data: {
-        html: response.html || page.html,
+        html: finalHtml,
         css: response.css || page.css,
         js: response.js || page.js
       }
     });
+
+    // Extrai e persiste globals no projeto
+    const { navbarHtml, footerHtml } = extractNavbarAndFooter(finalHtml);
+    if (navbarHtml || footerHtml) {
+      await prisma.project.update({
+        where: { id: projectId },
+        data: {
+          ...(navbarHtml ? { navbarHtml } : {}),
+          ...(footerHtml ? { footerHtml } : {})
+        }
+      }).catch(e => console.warn('Falha ao salvar globals no projeto:', e));
+    }
 
     // Mirror to version snapshot
     await prisma.version.create({

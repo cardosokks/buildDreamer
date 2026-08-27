@@ -363,6 +363,8 @@ export class LeadCrawlerEngine {
     onlyWithoutWebsite?: boolean;
     hasPhoneOnly?: boolean;
     minRating?: number;
+    minReviews?: number;
+    sortBy?: 'rating' | 'reviews' | 'name';
     limit?: number;
     page?: number;
   }): Promise<{ leads: CrawledLead[]; page: number; hasMore: boolean }> {
@@ -375,6 +377,8 @@ export class LeadCrawlerEngine {
       onlyWithoutWebsite = false, 
       hasPhoneOnly = false, 
       minRating = 0, 
+      minReviews = 0,
+      sortBy = 'rating',
       limit = 40,
       page = 1
     } = params;
@@ -409,9 +413,19 @@ export class LeadCrawlerEngine {
         if (onlyWithoutWebsite && lead.hasWebsite) continue;
         if (hasPhoneOnly && (!lead.phone || lead.phone === 'Não informado')) continue;
         if (minRating > 0 && parseFloat(lead.rating) < minRating) continue;
+        if (minReviews > 0 && (lead.totalReviews || 0) < minReviews) continue;
 
         uniqueLeads.push(lead);
       }
+    }
+
+    // Ordenação personalizada
+    if (sortBy === 'rating') {
+      uniqueLeads.sort((a, b) => parseFloat(b.rating || '0') - parseFloat(a.rating || '0'));
+    } else if (sortBy === 'reviews') {
+      uniqueLeads.sort((a, b) => (b.totalReviews || 0) - (a.totalReviews || 0));
+    } else if (sortBy === 'name') {
+      uniqueLeads.sort((a, b) => a.name.localeCompare(b.name));
     }
 
     const filteredLeads = uniqueLeads.slice(0, limit);

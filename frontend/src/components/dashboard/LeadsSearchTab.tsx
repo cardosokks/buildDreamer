@@ -481,9 +481,9 @@ export const LeadsSearchTab: React.FC<LeadsSearchTabProps> = ({
                         </td>
                         <td className="px-5 py-3.5">
                           <div className="text-slate-300 font-mono">{lead.phone || 'Sem Telefone'}</div>
-                          {lead.phone && (
+                          {lead.phone && lead.phone !== 'Sem Telefone' && lead.phone !== 'Não informado' && (
                             <a
-                              href={`https://wa.me/${lead.phone.replace(/[^0-9]/g, '')}`}
+                              href={lead.whatsappUrl || `https://wa.me/55${lead.phone.replace(/[^0-9]/g, '')}`}
                               target="_blank"
                               rel="noreferrer"
                               className="text-[10px] text-green-400 hover:underline mt-0.5 block font-semibold"
@@ -556,9 +556,21 @@ export const LeadsSearchTab: React.FC<LeadsSearchTabProps> = ({
                           <MapPin className="w-3.5 h-3.5 text-slate-500" />
                           <span className="truncate">{lead.address}</span>
                         </p>
-                        <p className="flex items-center gap-1.5">
-                          <Phone className="w-3.5 h-3.5 text-slate-500" />
-                          <span className="font-mono">{lead.phone || 'Sem Telefone'}</span>
+                        <p className="flex items-center justify-between gap-1.5">
+                          <span className="flex items-center gap-1.5">
+                            <Phone className="w-3.5 h-3.5 text-slate-500" />
+                            <span className="font-mono">{lead.phone || 'Sem Telefone'}</span>
+                          </span>
+                          {lead.phone && lead.phone !== 'Sem Telefone' && lead.phone !== 'Não informado' && (
+                            <a
+                              href={lead.whatsappUrl || `https://wa.me/55${lead.phone.replace(/[^0-9]/g, '')}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-[10px] text-green-400 hover:underline font-semibold"
+                            >
+                              WhatsApp
+                            </a>
+                          )}
                         </p>
                         <p className="flex items-center gap-1.5">
                           <Star className="w-3.5 h-3.5 text-yellow-500" />

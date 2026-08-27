@@ -1,10 +1,34 @@
 import { Router } from 'express';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { prisma } from '../db';
+import { LeadCrawlerEngine } from '../services/leadCrawler';
 
 const router = Router();
 
-// ─── ENDPOINTS DO CRM DE VENDAS DE SITES ───
+// ─── ENDPOINTS DO CRM DE VENDAS DE SITES & CRAWLER ───
+
+async function ensureLeadPresetTable() {
+  try {
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "LeadPreset" (
+        "id" TEXT PRIMARY KEY,
+        "name" TEXT NOT NULL,
+        "niche" TEXT NOT NULL,
+        "city" TEXT NOT NULL,
+        "state" TEXT,
+        "country" TEXT DEFAULT 'Brasil',
+        "onlyWithoutWebsite" BOOLEAN DEFAULT true,
+        "hasPhoneOnly" BOOLEAN DEFAULT false,
+        "minRating" DOUBLE PRECISION DEFAULT 0,
+        "userId" TEXT NOT NULL,
+        "createdAt" TIMESTAMP DEFAULT NOW(),
+        "updatedAt" TIMESTAMP DEFAULT NOW()
+      );
+    `);
+  } catch (e) {
+    console.warn('[CRM DB] Aviso ao verificar tabela LeadPreset:', e);
+  }
+}
 
 // Garante que a tabela Lead existe com todas as colunas necessárias para o CRM
 async function ensureLeadTable() {
@@ -465,4 +489,138 @@ router.post('/search-leads', async (req: AuthenticatedRequest, res: any) => {
   }
 });
 
+// ─── ENDPOINT UNIFICADO DO CRAWLER DE LEADS (GET & POST /search) ───
+router.get('/search', async (req: AuthenticatedRequest, res: any) => {
+  try {
+    const { 
+      niche, 
+      city, 
+      state, 
+      country, 
+      location, 
+      query, 
+      onlyWithoutWebsite, 
+      hasPhone, 
+      hasPhoneOnly, 
+      minRating, 
+      minReviews, 
+      sortBy, 
+      limit, 
+      page 
+    } = req.query;
+
+    const finalNiche = (niche || query) as string;
+    if (!finalNiche) {
+      return res.status(400).json({ error: 'Nicho ou termo de busca é obrigatório (ex: Pizzaria, Dentista)' });
+    }
+
+    const result = await LeadCrawlerEngine.executeSearch({
+      niche: finalNiche,
+      city: (city as string) || '',
+      state: (state as string) || '',
+      country: (country as string) || 'Brasil',
+      location: (location as string) || '',
+      onlyWithoutWebsite: onlyWithoutWebsite === 'true' || onlyWithoutWebsite === true,
+      hasPhoneOnly: hasPhone === 'true' || hasPhoneOnly === 'true' || hasPhone === true || hasPhoneOnly === true,
+      minRating: parseFloat((minRating as string) || '0'),
+      minReviews: parseInt((minReviews as string) || '0', 10),
+      sortBy: (sortBy as any) || 'rating',
+      limit: parseInt((limit as string) || '40', 10),
+      page: parseInt((page as string) || '1', 10)
+    });
+
+    return res.json({
+      success: true,
+      total: result.leads.length,
+      page: result.page,
+      hasMore: result.hasMore,
+      leads: result.leads
+    });
+  } catch (error: any) {
+    console.error('Erro na rota GET /api/leads/search:', error);
+    return res.status(500).json({ error: error.message || 'Erro ao executar crawler de leads' });
+  }
+});
+
+// ─── PRESETS DE FILTROS SALVOS PELO USUÁRIO ───
+router.get('/presets', async (req: AuthenticatedRequest, res: any) => {
+  try {
+    await ensureLeadPresetTable();
+    const userId = req.userId;
+    if (!userId) return res.json({ presets: [] });
+
+    const rows: any[] = await prisma.$queryRawUnsafe(`
+      SELECT * FROM "LeadPreset" WHERE "userId" = $1 ORDER BY "createdAt" DESC;
+    `, userId);
+
+    return res.json({ presets: rows || [] });
+  } catch (error: any) {
+    console.error('Erro ao buscar presets de leads:', error);
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/presets', async (req: AuthenticatedRequest, res: any) => {
+  try {
+    await ensureLeadPresetTable();
+    const userId = req.userId;
+    if (!userId) return res.status(401).json({ error: 'Não autorizado' });
+
+    const { name, niche, city, state, country, onlyWithoutWebsite, hasPhoneOnly, minRating } = req.body;
+    if (!name || !niche || !city) {
+      return res.status(400).json({ error: 'Nome, nicho e cidade são obrigatórios' });
+    }
+
+    const presetId = `preset-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    await prisma.$executeRawUnsafe(`
+      INSERT INTO "LeadPreset" ("id", "name", "niche", "city", "state", "country", "onlyWithoutWebsite", "hasPhoneOnly", "minRating", "userId", "createdAt", "updatedAt")
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW());
+    `, presetId, name, niche, city, state || '', country || 'Brasil', !!onlyWithoutWebsite, !!hasPhoneOnly, parseFloat(minRating || '0'), userId);
+
+    return res.status(201).json({ success: true, id: presetId });
+  } catch (error: any) {
+    console.error('Erro ao criar preset de leads:', error);
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+router.put('/presets/:id', async (req: AuthenticatedRequest, res: any) => {
+  try {
+    await ensureLeadPresetTable();
+    const userId = req.userId;
+    const { id } = req.params;
+    const { name, niche, city, state, country, onlyWithoutWebsite, hasPhoneOnly, minRating } = req.body;
+
+    await prisma.$executeRawUnsafe(`
+      UPDATE "LeadPreset"
+      SET "name" = $1, "niche" = $2, "city" = $3, "state" = $4, "country" = $5,
+          "onlyWithoutWebsite" = $6, "hasPhoneOnly" = $7, "minRating" = $8, "updatedAt" = NOW()
+      WHERE "id" = $9 AND "userId" = $10;
+    `, name, niche, city, state || '', country || 'Brasil', !!onlyWithoutWebsite, !!hasPhoneOnly, parseFloat(minRating || '0'), id, userId);
+
+    return res.json({ success: true });
+  } catch (error: any) {
+    console.error('Erro ao atualizar preset de leads:', error);
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete('/presets/:id', async (req: AuthenticatedRequest, res: any) => {
+  try {
+    await ensureLeadPresetTable();
+    const userId = req.userId;
+    const { id } = req.params;
+
+    await prisma.$executeRawUnsafe(`
+      DELETE FROM "LeadPreset" WHERE "id" = $1 AND "userId" = $2;
+    `, id, userId);
+
+    return res.json({ success: true });
+  } catch (error: any) {
+    console.error('Erro ao excluir preset de leads:', error);
+    return res.status(500).json({ error: error.message });
+  }
+});
+
 export const leadsRouter = router;
+

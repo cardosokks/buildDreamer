@@ -332,21 +332,20 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
   const splitComposedHtml = (composedHtml: string) => {
     const parser = new DOMParser();
     const doc = parser.parseFromString(`<div>${composedHtml}</div>`, 'text/html');
-    const navbarDiv = doc.querySelector('[data-global="navbar"]');
-    const contentDiv = doc.querySelector('[data-global="content"]');
-    const footerDiv = doc.querySelector('[data-global="footer"]');
+    const navbarDiv = doc.querySelector('#studio-global-navbar, [data-global="navbar"]');
+    const contentDiv = doc.querySelector('#studio-global-content, [data-global="content"]');
+    const footerDiv = doc.querySelector('#studio-global-footer, [data-global="footer"]');
 
     return {
-      navbarHtml: navbarDiv ? navbarDiv.innerHTML : '',
+      navbarHtml: navbarDiv ? navbarDiv.innerHTML : (project?.navbarHtml || ''),
       contentHtml: contentDiv ? contentDiv.innerHTML : composedHtml,
-      footerHtml: footerDiv ? footerDiv.innerHTML : ''
+      footerHtml: footerDiv ? footerDiv.innerHTML : (project?.footerHtml || '')
     };
   };
 
   const parseDocFromHtml = (htmlStr: string) => {
     const parser = new DOMParser();
     const cleanStr = String(htmlStr || '').trim();
-    // Se o HTML não tiver wrapper <div id="canvas-root">, envolve para manter a árvore normalizada
     if (cleanStr.includes('id="canvas-root"')) {
       return parser.parseFromString(cleanStr, 'text/html');
     } else {
@@ -368,11 +367,9 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
     let current: Element | null = root;
     for (const idx of parts) {
       if (!current) return null;
-      const validChildren: Element[] = Array.from(current.children).filter(
-        (c: Element) => !c.id.startsWith('studio-') && !c.classList.contains('studio-tool-btn')
-      );
-      if (idx < 0 || idx >= validChildren.length) return null;
-      current = validChildren[idx];
+      const children = Array.from(current.children);
+      if (idx < 0 || idx >= children.length) return null;
+      current = children[idx];
     }
     return current;
   };

@@ -420,8 +420,17 @@ export async function processCustomRemasterGenerationJob(
     const globalCss = homeAiResponse.css || '';
     const globalJs = homeAiResponse.js || '';
     
-    // Extrai os blocos de Navbar e Footer gerados na Home
+    // Extrai os blocos de Navbar e Footer gerados na Home e persiste no Projeto
     const { navbarHtml, footerHtml } = extractNavbarAndFooter(homeHtml);
+    if (navbarHtml || footerHtml) {
+      await prisma.project.update({
+        where: { id: projectId },
+        data: {
+          ...(navbarHtml ? { navbarHtml } : {}),
+          ...(footerHtml ? { footerHtml } : {})
+        }
+      }).catch((e) => console.warn('Aviso ao salvar navbar/footer no projeto:', e));
+    }
 
     // 2. GERAR TODAS AS SUBPÁGINAS SEQUENCIALMENTE PARA EVITAR RATE LIMIT DA API
     if (subPages.length > 0) {
