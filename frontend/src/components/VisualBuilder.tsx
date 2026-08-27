@@ -993,6 +993,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <base href="${API_URL}">
   <title>${targetPage.seoTitle || targetPage.name}</title>
   <meta name="description" content="${targetPage.seoDescription || ''}">
   <script src="https://cdn.tailwindcss.com"></script>

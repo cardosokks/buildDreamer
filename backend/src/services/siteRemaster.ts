@@ -625,12 +625,17 @@ export async function processCustomRemasterGenerationJob(
 
     const homeAiPrompt = `
       Você é o Arquiteto Frontend Líder e Designer Master do Visual Builder.
-      Estamos remasterizando o site da empresa "${projectName}".
+      Estamos remasterizando e elevando para o estado da arte o site da empresa "${projectName}".
 
-      DIRETRIZ VISUAL GLOBAL (APLICA-SE A TODO O SITE):
+      DIRETRIZ VISUAL E IDENTIDADE ÚNICA DO TEMA:
       """
       ${globalPrompt || 'Design de altíssimo luxo, moderna paleta, tipografia impecável, foco em conversão e interações fluidas.'}
       """
+
+      FILOSOFIA DE REMASTERIZAÇÃO:
+      - NÃO É APENAS REFAZER DO ZERO COM TEMPLATE GENÉRICO: É MELHORAR, PRESERVAR A ESSÊNCIA DA MARCA E PROFISSIONALIZAR O CONTEÚDO REAL.
+      - Respeite a identidade visual do nicho da empresa (${projectName}), aplicando paletas de cores, contraste e estilo visual característicos e autênticos para esse segmento de mercado.
+      - Utilize os textos reais, propostas de valor, nomes dos serviços/produtos e informações de contato extraídos do site original.
 
       ${availableMediaCatalog}
 
