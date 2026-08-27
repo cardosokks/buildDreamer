@@ -274,23 +274,63 @@ export async function crawlEntireClientWebsite(
 }
 
 /**
- * Extrai o bloco exato de Header/Navbar e Footer gerado na Home para reutilização idêntica em todas as subpáginas
+ * Extrai o bloco exato de Header/Navbar e Footer gerado na Home,
+ * consolida os links de navegação de todas as páginas e garante
+ * que não fiquem blocos duplicados no corpo da página.
  */
-export function extractNavbarAndFooter(homeHtml: string): { navbarHtml: string; footerHtml: string } {
+export function extractNavbarAndFooter(
+  homeHtml: string, 
+  allPages?: Array<{ name: string; slug: string }>
+): { navbarHtml: string; footerHtml: string; cleanHomeContentHtml: string } {
   let navbarHtml = '';
   let footerHtml = '';
+  let cleanHomeContentHtml = homeHtml;
 
   const navMatch = homeHtml.match(/<header\b[^>]*>[\s\S]*?<\/header>|<nav\b[^>]*>[\s\S]*?<\/nav>/i);
   if (navMatch) {
     navbarHtml = navMatch[0];
+    cleanHomeContentHtml = cleanHomeContentHtml.replace(navMatch[0], '').trim();
   }
 
-  const footMatch = homeHtml.match(/<footer\b[^>]*>[\s\S]*?<\/footer>/i);
+  const footMatch = cleanHomeContentHtml.match(/<footer\b[^>]*>[\s\S]*?<\/footer>/i);
   if (footMatch) {
     footerHtml = footMatch[0];
+    cleanHomeContentHtml = cleanHomeContentHtml.replace(footMatch[0], '').trim();
   }
 
-  return { navbarHtml, footerHtml };
+  // Se foram fornecidas as páginas do site, atualiza/garante que os links estejam completos na Navbar
+  if (allPages && allPages.length > 0 && navbarHtml) {
+    const missingLinks: string[] = [];
+    allPages.forEach(p => {
+      const targetHref = p.slug === 'index' ? 'index.html' : `${p.slug}.html`;
+      if (!navbarHtml.includes(targetHref) && !navbarHtml.includes(`/${p.slug}`)) {
+        missingLinks.push(`<a href="${targetHref}" class="text-sm font-medium hover:text-purple-400 transition-colors">${p.name}</a>`);
+      }
+    });
+
+    if (missingLinks.length > 0) {
+      // Injeta links adicionais dentro do <nav> existente
+      const navTagMatch = navbarHtml.match(/<nav\b[^>]*>([\s\S]*?)<\/nav>/i);
+      if (navTagMatch) {
+        const updatedNav = `<nav ${navTagMatch[0].split('>')[0].replace('<nav', '')}>${navTagMatch[1]}\n  ${missingLinks.join('\n  ')}</nav>`;
+        navbarHtml = navbarHtml.replace(navTagMatch[0], updatedNav);
+      }
+    }
+  }
+
+  return { navbarHtml, footerHtml, cleanHomeContentHtml };
+}
+
+/**
+ * Remove qualquer tag <header>, <nav> ou <footer> duplicada do HTML de subpáginas
+ */
+export function stripDuplicateGlobals(html: string): string {
+  if (!html) return '';
+  return html
+    .replace(/<header\b[^>]*>[\s\S]*?<\/header>/gi, '')
+    .replace(/<nav\b[^>]*>[\s\S]*?<\/nav>/gi, '')
+    .replace(/<footer\b[^>]*>[\s\S]*?<\/footer>/gi, '')
+    .trim();
 }
 
 // In-memory queue para Scrape Jobs
@@ -644,8 +684,8 @@ export async function processCustomRemasterGenerationJob(
     const globalCss = homeAiResponse.css || '';
     const globalJs = homeAiResponse.js || '';
     
-    // Extrai os blocos de Navbar e Footer gerados na Home e persiste no Projeto
-    const { navbarHtml, footerHtml } = extractNavbarAndFooter(homeHtml);
+    // Extrai os blocos de Navbar e Footer gerados na Home e consolida links de navegação
+    const { navbarHtml, footerHtml, cleanHomeContentHtml } = extractNavbarAndFooter(homeHtml, allNavigationRoutes);
     if (navbarHtml || footerHtml) {
       await prisma.project.update({
         where: { id: projectId },
@@ -654,6 +694,16 @@ export async function processCustomRemasterGenerationJob(
           ...(footerHtml ? { footerHtml } : {})
         }
       }).catch((e) => console.warn('Aviso ao salvar navbar/footer no projeto:', e));
+
+      // Atualiza a Home com o conteúdo limpo (sem navbar/footer embutido duplicado)
+      if (existingHome && cleanHomeContentHtml) {
+        await prisma.page.update({
+          where: { id: existingHome.id },
+          data: {
+            html: cleanHomeContentHtml
+          }
+        }).catch(() => {});
+      }
     }
 
     // 2. GERAR TODAS AS SUBPÁGINAS SEQUENCIALMENTE PARA EVITAR RATE LIMIT DA API
@@ -683,23 +733,12 @@ export async function processCustomRemasterGenerationJob(
             ${sub.cleanText || `Conteúdo institucional e serviços de ${sub.name}.`}
             """
 
-            ${sharedComponents.repeatNavbar ? `
-            NAVBAR UNIVERSAL PRONTA DA HOME (INCORPORE EXATAMENTE ESTE BLOCO NO TOPO, APENAS MARCANDO A PÁGINA "${sub.name}" COMO ATIVA):
-            """
-            ${navbarHtml || `<header class="p-4 border-b border-slate-800 flex justify-between items-center"><div class="font-bold">${projectName}</div><nav>${navigationLinksText}</nav></header>`}
-            """` : ''}
-
-            ${sharedComponents.repeatFooter ? `
-            FOOTER UNIVERSAL PRONTO DA HOME (INCORPORE EXATAMENTE ESTE BLOCO NA BASE):
-            """
-            ${footerHtml || `<footer class="p-8 border-t border-slate-800 text-center text-slate-400">© ${projectName}</footer>`}
-            """` : ''}
-
-            REGRAS MANDATÓRIAS:
-            1. CONSISTÊNCIA DE TEMA: Mantenha a mesma paleta de cores, tipografia, bordas e cards da Home.
-            2. ENCAIXE DE COMPONENTES: Não recrie nem altere o visual da Navbar/Footer compartilhados, apenas utilize-os no topo e base da página.
-            3. IMAGENS REAIS: Se houver imagens ou vídeos acima referentes a ${sub.name}, insira-os no conteúdo de forma elegante.
-            4. SEPARAÇÃO TOTAL: Retorne APENAS HTML limpo no campo "html" (sem tags <style> nem <script>).
+            REGRAS MANDATÓRIAS (MODELO WORDPRESS GLOBAL BLOCKS):
+            1. NÃO GERE HEADER, NAVBAR NEM FOOTER: A Navbar e o Footer já são gerenciados como Blocos Globais do projeto e são acoplados automaticamente no topo e rodapé.
+            2. GERE APENAS O CONTEÚDO DO CORPO (<main> ou seções da página "${sub.name}").
+            3. CONSISTÊNCIA DE TEMA: Mantenha a mesma paleta de cores, tipografia, bordas e cards da Home.
+            4. IMAGENS REAIS: Se houver imagens ou vídeos acima referentes a ${sub.name}, insira-os no conteúdo de forma elegante.
+            5. SEPARAÇÃO TOTAL: Retorne APENAS HTML limpo no campo "html" (sem tags <style> nem <script>).
           `;
 
           try {
@@ -714,6 +753,9 @@ export async function processCustomRemasterGenerationJob(
               customSkills
             );
 
+            const rawSubHtml = subAiResponse.html || '<div>Subpágina</div>';
+            const cleanSubHtml = stripDuplicateGlobals(rawSubHtml);
+
             const existingSub = await prisma.page.findFirst({
               where: { projectId, slug: sub.slug }
             });
@@ -723,7 +765,7 @@ export async function processCustomRemasterGenerationJob(
                 where: { id: existingSub.id },
                 data: {
                   name: sub.name,
-                  html: subAiResponse.html || existingSub.html,
+                  html: cleanSubHtml || existingSub.html,
                   css: subAiResponse.css || globalCss,
                   js: subAiResponse.js || globalJs
                 }
@@ -734,7 +776,7 @@ export async function processCustomRemasterGenerationJob(
                   projectId,
                   name: sub.name,
                   slug: sub.slug,
-                  html: subAiResponse.html || '<div>Subpágina</div>',
+                  html: cleanSubHtml || '<div>Subpágina</div>',
                   css: subAiResponse.css || globalCss,
                   js: subAiResponse.js || globalJs,
                   isHomepage: false

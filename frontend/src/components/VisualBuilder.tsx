@@ -41,6 +41,7 @@ import { PropertiesPanel } from './PropertiesPanel';
 import { CodeEditor } from './CodeEditor';
 import { MediaLibrarySidebar } from './MediaLibrarySidebar';
 import { ChatPanel } from './ChatPanel';
+import { GlobalsManagerModal } from './GlobalsManagerModal';
 import { API_URL } from '../config';
 import { useNotification } from '../context/NotificationContext';
 
@@ -112,6 +113,8 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
   }, [activeLeftSidebar]);
 
   const [showSidebar, setShowSidebar] = useState<boolean>(true);
+
+  const [showGlobalsModal, setShowGlobalsModal] = useState<boolean>(false);
 
   const [showStylesPanel, setShowStylesPanel] = useState<boolean>(() => {
     try {
@@ -1113,11 +1116,12 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
             <span className="text-xs text-slate-600">/</span>
             <span className="text-xs text-purple-400 font-medium font-mono truncate">{activePage?.name}</span>
             <button
-              onClick={handleExtractGlobalsFromActivePage}
-              className="ml-2 px-2 py-0.5 bg-purple-950/40 hover:bg-purple-900/60 border border-purple-500/30 rounded text-[10px] font-semibold text-purple-300 transition-all cursor-pointer"
-              title="Extrai elementos <header>/<nav> e <footer> desta página para torná-los globais compartilhados"
+              onClick={() => setShowGlobalsModal(true)}
+              className="ml-2 px-2.5 py-1 bg-purple-950/50 hover:bg-purple-900/70 border border-purple-500/30 hover:border-purple-400/50 rounded-lg text-[11px] font-bold text-purple-300 transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+              title="Gerenciador de Blocos Globais (Navbar e Footer compartilhados em todas as páginas)"
             >
-              Extrair Globais
+              <Globe className="w-3 h-3 text-purple-400" />
+              Blocos Globais
             </button>
           </div>
         </div>
@@ -1864,6 +1868,22 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
             </div>
           </div>
         </div>
+      )}
+
+      {/* Gerenciador de Blocos Globais (Template Parts - Navbar e Footer) */}
+      {project && (
+        <GlobalsManagerModal
+          isOpen={showGlobalsModal}
+          onClose={() => setShowGlobalsModal(false)}
+          projectId={project.id}
+          projectName={project.name}
+          initialNavbarHtml={project.navbarHtml || ''}
+          initialFooterHtml={project.footerHtml || ''}
+          onSaveGlobals={(navHtml, footHtml) => {
+            setProject(prev => prev ? { ...prev, navbarHtml: navHtml, footerHtml: footHtml } : null);
+            notify.success('Blocos globais atualizados em todas as páginas!', 'Globais');
+          }}
+        />
       )}
     </div>
   );

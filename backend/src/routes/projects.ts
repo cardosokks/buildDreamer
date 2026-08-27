@@ -73,8 +73,10 @@ async function processAIProjectGeneration(
       }
     });
 
-    // Extrai e persiste globals no projeto
-    const { navbarHtml, footerHtml } = extractNavbarAndFooter(finalHtml);
+    // Extrai e persiste globals no projeto, limpando do corpo da página
+    const { navbarHtml, footerHtml, cleanHomeContentHtml } = extractNavbarAndFooter(finalHtml, [
+      { name: page.name || 'Home', slug: page.slug || 'index' }
+    ]);
     if (navbarHtml || footerHtml) {
       await prisma.project.update({
         where: { id: projectId },
@@ -83,6 +85,13 @@ async function processAIProjectGeneration(
           ...(footerHtml ? { footerHtml } : {})
         }
       }).catch(e => console.warn('Falha ao salvar globals no projeto:', e));
+
+      if (cleanHomeContentHtml) {
+        await prisma.page.update({
+          where: { id: page.id },
+          data: { html: cleanHomeContentHtml }
+        }).catch(() => {});
+      }
     }
 
     // Mirror to version snapshot
