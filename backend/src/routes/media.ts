@@ -56,10 +56,9 @@ router.get('/', authenticateToken, async (req: AuthenticatedRequest, res: any) =
       );
     }
 
-    const baseUrl = `${req.protocol}://${req.get('host')}`;
     const formattedRows = (rows || []).map(item => ({
       ...item,
-      url: item.url && item.url.startsWith('/') ? `${baseUrl}${item.url}` : item.url
+      url: item.url
     }));
     return res.json({ media: formattedRows });
   } catch (error: any) {
@@ -112,7 +111,7 @@ router.post('/upload', authenticateToken, async (req: AuthenticatedRequest, res:
       media: {
         id,
         name: mediaName,
-        url: absoluteUrl,
+        url: publicUrl,
         size,
         mimeType: mimeType || 'image/png',
         userId: req.userId

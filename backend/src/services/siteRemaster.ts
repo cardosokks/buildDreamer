@@ -687,22 +687,24 @@ export async function processCustomRemasterGenerationJob(
       ${homePage.html ? `
       ESTRUTURA E CÓDIGO DO SITE ANTIGO (USE COMO BASE PARA ENTENDER A DISTRIBUIÇÃO DAS SEÇÕES, COMPONENTES E MELHORAR):
       """
-      HTML ORIGINAL (Trecho representativo):
-      ${homePage.html.slice(0, 3000)}
+      HTML ORIGINAL COMPLETO:
+      ${homePage.html}
       """
       ` : ''}
 
       ${homePage.css ? `
       CSS / ESTILOS ORIGINAIS (Referência de cores/elementos da marca):
       """
-      ${homePage.css.slice(0, 1500)}
+      CSS ORIGINAL COMPLETO:
+      ${homePage.css}
       """
       ` : ''}
 
       ${homePage.js ? `
       JS / COMPORTAMENTOS ORIGINAIS:
       """
-      ${homePage.js.slice(0, 1000)}
+      JS ORIGINAL COMPLETO:
+      ${homePage.js}
       """
       ` : ''}
 
@@ -806,22 +808,24 @@ export async function processCustomRemasterGenerationJob(
             ${sub.html ? `
             ESTRUTURA E CÓDIGO DA SUBPÁGINA ANTIGA (USE COMO BASE PARA MELHORAR E REORGANIZAR O CONTEÚDO):
             """
-            HTML ORIGINAL (Trecho):
-            ${sub.html.slice(0, 2500)}
+            HTML ORIGINAL COMPLETO:
+            ${sub.html}
             """
             ` : ''}
 
             ${sub.css ? `
             CSS ORIGINAL DA SUBPÁGINA:
             """
-            ${sub.css.slice(0, 1000)}
+            CSS ORIGINAL COMPLETO:
+            ${sub.css}
             """
             ` : ''}
 
             ${sub.js ? `
             JS ORIGINAL DA SUBPÁGINA:
             """
-            ${sub.js.slice(0, 800)}
+            JS ORIGINAL COMPLETO:
+            ${sub.js}
             """
             ` : ''}
 
