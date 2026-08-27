@@ -259,15 +259,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
     url?: string;
     customPrompt: string;
     cleanText: string;
+    html?: string;
+    css?: string;
+    js?: string;
     isHomepage: boolean;
     enabled: boolean;
   }>>([]);
-  const [remasterPageTabs, setRemasterPageTabs] = useState<Record<number, 'prompt' | 'content'>>({});
+  const [remasterPageTabs, setRemasterPageTabs] = useState<Record<number, 'prompt' | 'content' | 'html' | 'css' | 'js'>>({});
   const [repeatNavbar, setRepeatNavbar] = useState(true);
   const [repeatFooter, setRepeatFooter] = useState(true);
   const [generatingRemaster, setGeneratingRemaster] = useState(false);
-
-  // Manual Lead Creation Modal States
   const [showManualLeadModal, setShowManualLeadModal] = useState(false);
 
   // Project Details & Edit Modal State
@@ -1053,6 +1054,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
               ? 'Hero impactante com CTA duplo, apresentação dos diferenciais, estatísticas da empresa, depoimentos e formulário de contato/WhatsApp.'
               : `Apresentação detalhada com tópicos visuais, benefícios claros, cards ilustrativos e chamadas para ação focadas em ${p.name}.`,
             cleanText: p.cleanText || '',
+            html: p.html || '',
+            css: p.css || '',
+            js: p.js || '',
             isHomepage: !!p.isHomepage,
             enabled: true,
             media: p.media || []
@@ -2794,35 +2798,54 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                             </div>
                           </div>
 
-                          {/* Abas de Prompt Específico vs Conteúdo Original Extraído */}
+                          {/* Abas de Prompt Específico, Texto e Código Original Extraído (HTML, CSS, JS) */}
                           {page.enabled && (
                             <div className="space-y-2 pt-1 border-t border-slate-850/60">
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-1 bg-slate-900/80 p-0.5 rounded-lg border border-slate-800">
+                              <div className="flex items-center justify-between flex-wrap gap-1">
+                                <div className="flex items-center gap-1 bg-slate-900/90 p-0.5 rounded-lg border border-slate-800 flex-wrap">
                                   <button
                                     type="button"
                                     onClick={() => setRemasterPageTabs(prev => ({ ...prev, [idx]: 'prompt' }))}
                                     className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer ${(remasterPageTabs[idx] || 'prompt') === 'prompt' ? 'bg-purple-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
                                   >
-                                    Prompt Específico
+                                    Prompt
                                   </button>
                                   <button
                                     type="button"
                                     onClick={() => setRemasterPageTabs(prev => ({ ...prev, [idx]: 'content' }))}
                                     className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer ${(remasterPageTabs[idx] || 'prompt') === 'content' ? 'bg-purple-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
                                   >
-                                    Conteúdo Baixado ({page.cleanText ? page.cleanText.length : 0} carac.)
+                                    Texto ({page.cleanText ? page.cleanText.length : 0})
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setRemasterPageTabs(prev => ({ ...prev, [idx]: 'html' }))}
+                                    className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer ${(remasterPageTabs[idx] || 'prompt') === 'html' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
+                                  >
+                                    HTML ({page.html ? page.html.length : 0})
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setRemasterPageTabs(prev => ({ ...prev, [idx]: 'css' }))}
+                                    className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer ${(remasterPageTabs[idx] || 'prompt') === 'css' ? 'bg-cyan-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
+                                  >
+                                    CSS ({page.css ? page.css.length : 0})
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setRemasterPageTabs(prev => ({ ...prev, [idx]: 'js' }))}
+                                    className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer ${(remasterPageTabs[idx] || 'prompt') === 'js' ? 'bg-amber-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
+                                  >
+                                    JS ({page.js ? page.js.length : 0})
                                   </button>
                                 </div>
 
-                                {page.cleanText && (
-                                  <span className="text-[9px] text-emerald-400 font-mono hidden sm:inline">
-                                    ✓ Passado no prompt para melhoria da IA
-                                  </span>
-                                )}
+                                <span className="text-[9px] text-emerald-400 font-mono hidden sm:inline">
+                                  ✓ Passado para a IA analisar a estrutura antiga
+                                </span>
                               </div>
 
-                              {(remasterPageTabs[idx] || 'prompt') === 'prompt' ? (
+                              {(remasterPageTabs[idx] || 'prompt') === 'prompt' && (
                                 <div>
                                   <textarea
                                     rows={2}
@@ -2836,7 +2859,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                                     className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-xs text-white font-sans focus:border-purple-500 focus:outline-none leading-relaxed resize-none"
                                   />
                                 </div>
-                              ) : (
+                              )}
+
+                              {(remasterPageTabs[idx] || 'prompt') === 'content' && (
                                 <div>
                                   <textarea
                                     rows={4}
@@ -2846,16 +2871,74 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                                       updated[idx].cleanText = e.target.value;
                                       setRemasterPages(updated);
                                     }}
-                                    placeholder="Texto e informações reais extraídos do site original que a IA usará como base..."
+                                    placeholder="Texto e informações reais extraídos do site original..."
                                     className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-xs text-emerald-300 font-mono focus:border-purple-500 focus:outline-none leading-relaxed"
                                   />
                                   <p className="text-[10px] text-slate-500 mt-0.5">
-                                    Você pode editar ou complementar as informações acima. A IA utilizará este conteúdo exato para construir a nova página.
+                                    Conteúdo textual original que a IA usará como base para melhorar o site.
+                                  </p>
+                                </div>
+                              )}
+
+                              {(remasterPageTabs[idx] || 'prompt') === 'html' && (
+                                <div>
+                                  <textarea
+                                    rows={5}
+                                    value={page.html || 'Nenhum HTML bruto capturado.'}
+                                    onChange={(e) => {
+                                      const updated = [...remasterPages];
+                                      updated[idx].html = e.target.value;
+                                      setRemasterPages(updated);
+                                    }}
+                                    placeholder="HTML original da página raspada..."
+                                    className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-xs text-indigo-300 font-mono focus:border-indigo-500 focus:outline-none leading-relaxed"
+                                  />
+                                  <p className="text-[10px] text-slate-500 mt-0.5">
+                                    Código HTML da página antiga. A IA analisa as tags, distribuição e seções para reconstruir uma versão muito superior.
+                                  </p>
+                                </div>
+                              )}
+
+                              {(remasterPageTabs[idx] || 'prompt') === 'css' && (
+                                <div>
+                                  <textarea
+                                    rows={4}
+                                    value={page.css || 'Nenhum CSS inline capturado.'}
+                                    onChange={(e) => {
+                                      const updated = [...remasterPages];
+                                      updated[idx].css = e.target.value;
+                                      setRemasterPages(updated);
+                                    }}
+                                    placeholder="Estilos CSS originais capturados..."
+                                    className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-xs text-cyan-300 font-mono focus:border-cyan-500 focus:outline-none leading-relaxed"
+                                  />
+                                  <p className="text-[10px] text-slate-500 mt-0.5">
+                                    Estilos CSS antigos que ajudam a IA a captar paleta de cores e identidades originais da marca.
+                                  </p>
+                                </div>
+                              )}
+
+                              {(remasterPageTabs[idx] || 'prompt') === 'js' && (
+                                <div>
+                                  <textarea
+                                    rows={4}
+                                    value={page.js || 'Nenhum JavaScript inline capturado.'}
+                                    onChange={(e) => {
+                                      const updated = [...remasterPages];
+                                      updated[idx].js = e.target.value;
+                                      setRemasterPages(updated);
+                                    }}
+                                    placeholder="Scripts JS originais capturados..."
+                                    className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-xs text-amber-300 font-mono focus:border-amber-500 focus:outline-none leading-relaxed"
+                                  />
+                                  <p className="text-[10px] text-slate-500 mt-0.5">
+                                    Comportamentos e scripts interativos originais de referência.
                                   </p>
                                 </div>
                               )}
                             </div>
                           )}
+
                         </div>
                       ))}
                     </div>

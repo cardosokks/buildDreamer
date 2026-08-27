@@ -19,6 +19,8 @@ export interface ScrapedPage {
   name: string;
   html: string;
   cleanText: string;
+  css?: string;
+  js?: string;
   media: ScrapedMedia[];
 }
 
@@ -249,12 +251,31 @@ export async function crawlEntireClientWebsite(
         }
       }
 
+      // Extrai estilos inline e scripts da página original para referência da IA
+      let pageCss = '';
+      const styleMatches = [...html.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)];
+      styleMatches.forEach(sm => {
+        if (sm[1] && sm[1].trim()) pageCss += sm[1].trim() + '\n';
+      });
+
+      let pageJs = '';
+      const scriptMatches = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)];
+      scriptMatches.forEach(sm => {
+        const scriptCode = sm[1]?.trim() || '';
+        // Ignora trackers (analytics, pixel)
+        if (scriptCode && !/gtag|google-analytics|facebook|fbevents|clarity|hotjar/i.test(scriptCode)) {
+          pageJs += scriptCode.slice(0, 1500) + '\n';
+        }
+      });
+
       pages.push({
         url: currentUrl,
         slug,
         name,
         html,
         cleanText,
+        css: pageCss,
+        js: pageJs,
         media: pageMedia
       });
 
@@ -342,9 +363,13 @@ export const scrapeJobsQueue: Record<string, {
     name: string;
     slug: string;
     url: string;
+    html?: string;
+    css?: string;
+    js?: string;
     cleanText: string;
     excerpt: string;
     isHomepage: boolean;
+    media: ScrapedMedia[];
   }>;
   progressMessage?: string;
   error?: string;
@@ -374,6 +399,9 @@ export async function startWebsiteScrapeJob(
       name: string;
       slug: string;
       url: string;
+      html?: string;
+      css?: string;
+      js?: string;
       cleanText: string;
       excerpt: string;
       isHomepage: boolean;
@@ -385,6 +413,9 @@ export async function startWebsiteScrapeJob(
         name: p.name,
         slug: p.slug,
         url: p.url,
+        html: p.html,
+        css: p.css || '',
+        js: p.js || '',
         cleanText: p.cleanText,
         excerpt: p.cleanText.slice(0, 180) + '...',
         isHomepage: p.slug === 'index',
@@ -559,6 +590,9 @@ export async function processCustomRemasterGenerationJob(
     originalUrl?: string;
     customPrompt?: string;
     cleanText?: string;
+    html?: string;
+    css?: string;
+    js?: string;
     isHomepage?: boolean;
     enabled?: boolean;
     media?: ScrapedMedia[];
@@ -644,10 +678,32 @@ export async function processCustomRemasterGenerationJob(
       ${homePage.customPrompt || 'Hero Section impactante com CTA duplo, estatísticas, seção de serviços em destaque, depoimentos e formulário.'}
       """
 
-      CONTEÚDO EXTRAÍDO DO SITE ORIGINAL:
+      CONTEÚDO TEXTUAL EXTRAÍDO DO SITE ORIGINAL:
       """
       ${homePage.cleanText || `Empresa ${projectName}: soluções completas e autoridade.`}
       """
+
+      ${homePage.html ? `
+      ESTRUTURA E CÓDIGO DO SITE ANTIGO (USE COMO BASE PARA ENTENDER A DISTRIBUIÇÃO DAS SEÇÕES, COMPONENTES E MELHORAR):
+      """
+      HTML ORIGINAL (Trecho representativo):
+      ${homePage.html.slice(0, 3000)}
+      """
+      ` : ''}
+
+      ${homePage.css ? `
+      CSS / ESTILOS ORIGINAIS (Referência de cores/elementos da marca):
+      """
+      ${homePage.css.slice(0, 1500)}
+      """
+      ` : ''}
+
+      ${homePage.js ? `
+      JS / COMPORTAMENTOS ORIGINAIS:
+      """
+      ${homePage.js.slice(0, 1000)}
+      """
+      ` : ''}
 
       MAPA DE NAVEGAÇÃO OBRIGATÓRIO PARA A NAVBAR (LINKS PARA TODAS AS PÁGINAS DO SITE):
       ${navigationLinksText}
@@ -737,10 +793,32 @@ export async function processCustomRemasterGenerationJob(
             ${sub.customPrompt || `Apresente detalhadamente as informações, benefícios e recursos de ${sub.name}.`}
             """
 
-            CONTEÚDO EXTRAÍDO DA SUBPÁGINA ORIGINAL:
+            CONTEÚDO TEXTUAL EXTRAÍDO DA SUBPÁGINA ORIGINAL:
             """
             ${sub.cleanText || `Conteúdo institucional e serviços de ${sub.name}.`}
             """
+
+            ${sub.html ? `
+            ESTRUTURA E CÓDIGO DA SUBPÁGINA ANTIGA (USE COMO BASE PARA MELHORAR E REORGANIZAR O CONTEÚDO):
+            """
+            HTML ORIGINAL (Trecho):
+            ${sub.html.slice(0, 2500)}
+            """
+            ` : ''}
+
+            ${sub.css ? `
+            CSS ORIGINAL DA SUBPÁGINA:
+            """
+            ${sub.css.slice(0, 1000)}
+            """
+            ` : ''}
+
+            ${sub.js ? `
+            JS ORIGINAL DA SUBPÁGINA:
+            """
+            ${sub.js.slice(0, 800)}
+            """
+            ` : ''}
 
             REGRAS MANDATÓRIAS (MODELO WORDPRESS GLOBAL BLOCKS):
             1. NÃO GERE HEADER, NAVBAR NEM FOOTER: A Navbar e o Footer já são gerenciados como Blocos Globais do projeto e são acoplados automaticamente no topo e rodapé.
