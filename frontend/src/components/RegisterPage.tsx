@@ -62,7 +62,7 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({ onSwitchToLogin }) =
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-tr from-indigo-600 to-purple-600 shadow-[0_0_25px_rgba(99,102,241,0.4)] mb-4">
             <Sparkles className="w-7 h-7 text-white animate-pulse" />
           </div>
-          <h1 className="text-2xl font-extrabold tracking-tight text-white mb-1">Criar Conta no BuildDreamer</h1>
+          <h1 className="text-2xl font-extrabold tracking-tight text-white mb-1">Criar Conta no Real Premise Editor</h1>
           <p className="text-xs text-slate-400">Cadastre-se para gerar sites com Inteligência Artificial</p>
         </div>
 

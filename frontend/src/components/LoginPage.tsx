@@ -49,7 +49,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSwitchToRegister }) => {
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-600 shadow-[0_0_25px_rgba(168,85,247,0.4)] mb-4">
             <Sparkles className="w-7 h-7 text-white animate-pulse" />
           </div>
-          <h1 className="text-2xl font-extrabold tracking-tight text-white mb-1">BuildDreamer AI</h1>
+          <h1 className="text-2xl font-extrabold tracking-tight text-white mb-1">Real Premise Editor</h1>
           <p className="text-xs text-slate-400">Entre na sua conta para acessar o sistema</p>
         </div>
 

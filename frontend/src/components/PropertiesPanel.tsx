@@ -75,6 +75,7 @@ interface PropertiesPanelProps {
   onSelectLayer?: (selector: string, path: string) => void;
   onHoverLayer?: (path: string | null) => void;
   onSaveSelectionAsTemplate?: (title: string, category: string) => void;
+  onInsertBlock?: (htmlBlock: string, cssBlock?: string, targetPath?: string, position?: 'before' | 'after' | 'inside') => void;
   pageSeo?: {
     title?: string;
     description?: string;
@@ -194,6 +195,48 @@ const ColorInput: React.FC<{
   );
 };
 
+function getTagDetails(tag: string) {
+  const cls = 'w-3.5 h-3.5 shrink-0';
+  const t = tag.toLowerCase();
+  switch (t) {
+    case 'header':
+      return { icon: <Navigation className={`${cls} text-pink-400`} />, name: 'Header / Topo' };
+    case 'nav':
+      return { icon: <Navigation className={`${cls} text-pink-400`} />, name: 'Navegação' };
+    case 'footer':
+      return { icon: <Navigation className={`${cls} text-rose-400`} />, name: 'Footer / Rodapé' };
+    case 'section':
+      return { icon: <Layout className={`${cls} text-purple-400`} />, name: 'Seção' };
+    case 'article': case 'main': case 'aside':
+      return { icon: <Layout className={`${cls} text-purple-400`} />, name: t.toUpperCase() };
+    case 'div':
+      return { icon: <Layers className={`${cls} text-indigo-400`} />, name: 'Container' };
+    case 'h1': case 'h2': case 'h3': case 'h4': case 'h5': case 'h6':
+      return { icon: <Type className={`${cls} text-yellow-400`} />, name: `Título (${t.toUpperCase()})` };
+    case 'p':
+      return { icon: <AlignLeft className={`${cls} text-blue-400`} />, name: 'Parágrafo' };
+    case 'span': case 'strong': case 'em':
+      return { icon: <AlignLeft className={`${cls} text-cyan-400`} />, name: 'Texto Inline' };
+    case 'a':
+      return { icon: <Link className={`${cls} text-emerald-400`} />, name: 'Link / Botão' };
+    case 'img':
+      return { icon: <Image className={`${cls} text-teal-400`} />, name: 'Imagem' };
+    case 'button':
+      return { icon: <FormInput className={`${cls} text-orange-400`} />, name: 'Botão' };
+    case 'input': case 'textarea': case 'select': case 'form':
+      return { icon: <FormInput className={`${cls} text-amber-400`} />, name: 'Formulário' };
+    case 'ul': case 'ol':
+      return { icon: <List className={`${cls} text-slate-400`} />, name: 'Lista' };
+    case 'li':
+      return { icon: <List className={`${cls} text-slate-400`} />, name: 'Item da Lista' };
+    case 'video': case 'iframe':
+      return { icon: <Video className={`${cls} text-red-400`} />, name: 'Vídeo / Iframe' };
+    default:
+      return { icon: <Square className={`${cls} text-slate-500`} />, name: tag.toLowerCase() };
+  }
+}
+
+
 export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   selectedSelector,
   selectedPath,
@@ -209,6 +252,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   onSelectLayer,
   onHoverLayer,
   onSaveSelectionAsTemplate,
+  onInsertBlock,
   pageSeo,
   onPageSeoChange,
 }) => {
@@ -218,6 +262,34 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const [dragSource, setDragSource] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState<string | null>(null);
   const [dragOverPosition, setDragOverPosition] = useState<'before' | 'after' | 'inside' | null>(null);
+
+  // Context Menu State
+  const [contextMenu, setContextMenu] = useState<{
+    visible: boolean;
+    x: number;
+    y: number;
+    type: 'layer';
+    idOrPath: string;
+  }>({ visible: false, x: 0, y: 0, type: 'layer', idOrPath: '' });
+
+  const handleContextMenu = (e: React.MouseEvent, type: 'layer', idOrPath: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({
+      visible: true,
+      x: e.clientX,
+      y: e.clientY,
+      type,
+      idOrPath
+    });
+  };
+
+  const closeContextMenu = () => {
+    if (contextMenu.visible) {
+      setContextMenu(prev => ({ ...prev, visible: false }));
+    }
+  };
+
 
   // Troca automática para estilos se um elemento for selecionado enquanto na aba layers se desejado
   useEffect(() => {
@@ -235,16 +307,22 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     });
   };
 
-  const renderLayers = (nodes: ElementNode[], depth = 0, parentPath = '') => {
+  const isDescendant = (parentPath: string, childPath: string) => {
+    return childPath === parentPath || childPath.startsWith(parentPath + '.');
+  };
+
+  const renderLayers = (nodes: ElementNode[], depth = 0, parentPath = ''): React.ReactNode[] => {
     return nodes.map((node, index) => {
       const path = parentPath ? `${parentPath}.${index}` : `${index}`;
       const className = typeof node.className === 'string' ? node.className : '';
       const cleanClass = className ? className.split(' ').filter(c => !c.startsWith('studio-'))[0] : '';
+      const { icon, name } = getTagDetails(node.tag);
       const selector = node.tag + (cleanClass ? '.' + cleanClass : '');
       const hasChildren = node.children && node.children.length > 0;
       const isExpanded = expandedPaths.has(path);
       const isSelected = selectedPath === path;
       const isDragOver = dragOver === path;
+      const isLockedRoot = path === '0' || path === '1' || path === '2';
 
       return (
         <div key={path} role="treeitem" aria-expanded={hasChildren ? isExpanded : undefined} aria-selected={isSelected} className="relative">
@@ -253,7 +331,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           )}
 
           <div
-            className={`group relative flex items-center justify-between gap-1.5 rounded-lg text-xs transition-all duration-100 cursor-pointer select-none ${
+            className={`group relative flex items-center justify-between gap-2 rounded-lg text-xs transition-all duration-100 cursor-pointer select-none ${
               isSelected
                 ? 'bg-purple-600/35 text-white border border-purple-500/60 shadow-sm font-semibold'
                 : isDragOver && dragOverPosition === 'inside'
@@ -261,16 +339,21 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                 : 'hover:bg-slate-900/90 text-slate-300 hover:text-white border border-transparent'
             }`}
             style={{ 
-              paddingLeft: `${Math.max(6, depth * 12 + 6)}px`, 
-              paddingRight: '6px', 
-              paddingTop: '5px', 
-              paddingBottom: '5px' 
+              paddingLeft: `${Math.max(6, depth * 14 + 6)}px`, 
+              paddingRight: '8px', 
+              paddingTop: '6px', 
+              paddingBottom: '6px' 
             }}
-            onClick={() => onSelectLayer && onSelectLayer(selector, path)}
+            onClick={() => onSelectLayer(selector, path)}
+            onContextMenu={(e) => isLockedRoot ? null : handleContextMenu(e, 'layer', path)}
             onMouseEnter={() => onHoverLayer && onHoverLayer(path)}
             onMouseLeave={() => onHoverLayer && onHoverLayer(null)}
-            draggable
+            draggable={!isLockedRoot}
             onDragStart={(e) => {
+              if (isLockedRoot) {
+                e.preventDefault();
+                return;
+              }
               e.stopPropagation();
               setDragSource(path);
               e.dataTransfer.setData('text/plain', `layer:${path}`);
@@ -279,11 +362,13 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             onDragOver={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              if (dragSource !== path) {
+              if (dragSource && dragSource !== path && !isDescendant(dragSource, path)) {
                 setDragOver(path);
                 const rect = e.currentTarget.getBoundingClientRect();
                 const offsetY = e.clientY - rect.top;
-                if (offsetY < rect.height * 0.25) {
+                if (isLockedRoot) {
+                  setDragOverPosition('inside');
+                } else if (offsetY < rect.height * 0.25) {
                   setDragOverPosition('before');
                 } else if (offsetY > rect.height * 0.75) {
                   setDragOverPosition('after');
@@ -299,15 +384,31 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             onDrop={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              const pos = dragOverPosition || 'inside';
+              let pos = dragOverPosition || 'inside';
+              if (isLockedRoot) {
+                pos = 'inside';
+              }
               setDragOver(null);
               setDragOverPosition(null);
-              if (dragSource && dragSource !== path && onMoveElement) {
+
+              const templateHtml = e.dataTransfer.getData('application/x-template-html');
+              const templateCss = e.dataTransfer.getData('application/x-template-css');
+
+              if (templateHtml && onInsertBlock) {
+                onInsertBlock(templateHtml, templateCss || undefined, path, pos);
+                return;
+              }
+
+              if (dragSource && dragSource !== path && !isDescendant(dragSource, path)) {
                 onMoveElement(dragSource, path, pos);
               }
             }}
           >
-            <div className="flex items-center gap-1.5 min-w-0 flex-1">
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+              {!isLockedRoot && (
+                <GripVertical className="w-3 h-3 text-slate-600 group-hover:text-slate-400 cursor-grab shrink-0 opacity-40 group-hover:opacity-100 transition-opacity" />
+              )}
+              
               {hasChildren ? (
                 <button
                   onClick={(e) => toggleExpanded(path, e)}
@@ -316,43 +417,45 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                   {isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
                 </button>
               ) : (
-                <span className="w-3 h-3 shrink-0 inline-block" />
+                <span className="w-3.5 h-3.5 shrink-0 inline-block" />
               )}
 
-              <Layers className="w-3 h-3 text-purple-400 shrink-0" />
+              {icon}
 
-              <div className="flex items-center gap-1 min-w-0 flex-1">
-                <span className="font-mono text-[11px] text-white font-medium truncate">{node.tag}</span>
+              <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                <span className="font-sans text-xs text-white font-medium truncate">{name}</span>
+                {path === '0' && (
+                  <span className="text-[8px] font-bold text-pink-400 bg-pink-950/40 border border-pink-500/25 px-1 py-0.2 rounded uppercase shrink-0">
+                    Header
+                  </span>
+                )}
+                {path === '2' && (
+                  <span className="text-[8px] font-bold text-rose-400 bg-rose-950/40 border border-rose-500/25 px-1 py-0.2 rounded uppercase shrink-0">
+                    Footer
+                  </span>
+                )}
                 {node.id && (
-                  <span className="text-[9px] text-cyan-400 font-mono bg-cyan-950/60 px-1 py-0.2 rounded border border-cyan-500/20 shrink-0">
+                  <span className="text-[10px] text-cyan-400 font-mono bg-cyan-950/60 px-1.5 py-0.5 rounded border border-cyan-500/20 shrink-0">
                     #{node.id}
                   </span>
                 )}
                 {cleanClass && !node.id && (
-                  <span className="text-[9px] text-purple-400 font-mono truncate max-w-[80px] shrink-0">
+                  <span className="text-[10px] text-purple-400/90 font-mono truncate max-w-[80px] shrink-0">
                     .{cleanClass}
+                  </span>
+                )}
+                {node.text && (
+                  <span className="text-[10px] text-slate-500 font-normal italic truncate max-w-[80px] shrink-0">
+                    "{node.text}"
                   </span>
                 )}
               </div>
             </div>
 
-            {isSelected && onMoveElementDirection && (
-              <div className="flex items-center gap-0.5 opacity-80 group-hover:opacity-100">
-                <button
-                  onClick={(e) => { e.stopPropagation(); onMoveElementDirection(path, 'up'); }}
-                  className="p-0.5 hover:bg-slate-800 rounded text-slate-400 hover:text-white"
-                  title="Subir"
-                >
-                  ▲
-                </button>
-                <button
-                  onClick={(e) => { e.stopPropagation(); onMoveElementDirection(path, 'down'); }}
-                  className="p-0.5 hover:bg-slate-800 rounded text-slate-400 hover:text-white"
-                  title="Descer"
-                >
-                  ▼
-                </button>
-              </div>
+            {!isLockedRoot && (
+              <span className="text-[10px] text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity font-mono shrink-0">
+                Menu
+              </span>
             )}
           </div>
 
@@ -361,7 +464,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           )}
 
           {hasChildren && isExpanded && (
-            <div role="group" className="border-l border-slate-800/80 ml-2.5 pl-0.5">
+            <div role="group" className="border-l border-slate-800/80 ml-3 pl-0.5">
               {renderLayers(node.children!, depth + 1, path)}
             </div>
           )}
@@ -427,7 +530,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const isInput = ['input', 'textarea', 'select'].includes(tag);
 
   return (
-    <aside className="w-80 border-l border-slate-900 bg-[var(--bg-app)] flex flex-col h-full shrink-0 select-none shadow-2xl z-20">
+    <aside className="w-80 border-l border-slate-900 bg-[var(--bg-app)] flex flex-col h-full shrink-0 select-none shadow-2xl z-20" onClick={closeContextMenu}>
       {/* Panel Top Tabs: Árvore DOM unificada com Estilos, Atributos e SEO */}
       <div className="flex border-b border-slate-900 bg-slate-950/80 p-1 gap-1">
         <button
@@ -844,6 +947,35 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           </Section>
         </div>
       )}
+    
+      {/* Context Menu */}
+      {contextMenu.visible && (
+        <div
+          className="fixed z-50 bg-slate-900 border border-slate-700 shadow-xl rounded-md w-48 py-1 overflow-hidden"
+          style={{ top: contextMenu.y, left: contextMenu.x }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            onClick={() => {
+              if (onDuplicateElement) onDuplicateElement(contextMenu.idOrPath);
+              closeContextMenu();
+            }}
+            className="w-full text-left px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800 hover:text-white flex items-center gap-2"
+          >
+            <Copy className="w-3.5 h-3.5" /> Duplicar Elemento
+          </button>
+          <button
+            onClick={() => {
+              if (onDeleteElement) onDeleteElement(contextMenu.idOrPath);
+              closeContextMenu();
+            }}
+            className="w-full text-left px-3 py-1.5 text-xs text-rose-400 hover:bg-rose-500/20 flex items-center gap-2"
+          >
+            <Trash2 className="w-3.5 h-3.5" /> Excluir Elemento
+          </button>
+        </div>
+      )}
+
     </aside>
   );
 };

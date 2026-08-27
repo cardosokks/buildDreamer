@@ -377,11 +377,8 @@ export const generateAIResponse = async (
         signal: controller.signal
       };
 
-      if (proxyUrl) {
-        fetchOptions.dispatcher = new ProxyAgent(proxyUrl);
-      }
-
-      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelToTry}:generateContent?key=${activeKey}`;
+      const baseUrl = proxyUrl ? proxyUrl : 'https://generativelanguage.googleapis.com';
+      const apiUrl = `${baseUrl}/v1beta/models/${modelToTry}:generateContent?key=${activeKey}`;
 
       const response = await undiciFetch(apiUrl, fetchOptions);
       clearTimeout(timeoutId);

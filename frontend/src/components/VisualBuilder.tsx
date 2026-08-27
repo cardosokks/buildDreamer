@@ -172,7 +172,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
       const data = await res.json();
       setProject(data);
       if (data.name) {
-        document.title = `${data.name} | Editor Visual BuildDreamer`;
+        document.title = `${data.name} | Editor Visual Real Premise Editor`;
       }
       if (data.pages && data.pages.length > 0 && !activePageId) {
         const home = data.pages.find((p: Page) => p.isHomepage) || data.pages[0];
@@ -1652,6 +1652,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
             }}
             onHoverLayer={(path) => setHoverPath(path)}
             onSaveSelectionAsTemplate={handleSaveSelectionAsTemplate}
+            onInsertBlock={handleInsertBlock}
             pageSeo={{
               title: activePage?.seoTitle || activePage?.name || '',
               description: activePage?.seoDescription || '',

@@ -386,15 +386,11 @@ router.get('/models', async (req: AuthenticatedRequest, res: any) => {
 
     let fetchFn = fetch;
     const fetchOptions: any = {};
-    if (clientProxyUrl && clientProxyUrl.startsWith('http')) {
-      const { ProxyAgent, fetch: undiciFetch } = await import('undici');
-      fetchOptions.dispatcher = new ProxyAgent(clientProxyUrl);
-      fetchFn = undiciFetch as any;
-    }
+    const baseUrl = (clientProxyUrl && clientProxyUrl.startsWith('http')) ? clientProxyUrl : 'https://generativelanguage.googleapis.com';
 
     let models = [];
     try {
-      const resApi = await fetchFn(`https://generativelanguage.googleapis.com/v1beta/models?key=${clientGeminiKey}`, fetchOptions);
+      const resApi = await fetchFn(`${baseUrl}/v1beta/models?key=${clientGeminiKey}`, fetchOptions);
       if (resApi.ok) {
         const data: any = await resApi.json();
         models = (data.models || [])
