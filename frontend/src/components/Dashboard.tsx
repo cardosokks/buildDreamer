@@ -2926,29 +2926,38 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                                     placeholder="Estilos CSS originais capturados..."
                                     className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-xs text-cyan-300 font-mono focus:border-cyan-500 focus:outline-none leading-relaxed"
                                   />
-                                  {(remasterPageTabs[idx] as any) === 'media' && (
+                                  <p className="text-[10px] text-slate-500 mt-0.5">
+                                    Estilos CSS antigos que ajudam a IA a captar paleta de cores e identidades originais da marca.
+                                  </p>
+                                </div>
+                              )}
+
+                              {(remasterPageTabs[idx] as any) === 'media' && (
                                 <div className="space-y-2">
                                   {page.media && page.media.length > 0 ? (
-                                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-48 overflow-y-auto p-1 bg-slate-900/60 rounded-lg border border-slate-800">
+                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 max-h-56 overflow-y-auto p-2 bg-slate-900/60 rounded-lg border border-slate-800">
                                       {page.media.map((m, mIdx) => (
                                         <div key={mIdx} className="relative group bg-slate-950 border border-slate-800 rounded-lg overflow-hidden flex flex-col items-center">
                                           {m.type === 'video' ? (
-                                            <div className="w-full h-16 bg-purple-950/40 flex items-center justify-center text-[10px] text-purple-300 font-bold">
+                                            <div className="w-full h-20 bg-purple-950/40 flex items-center justify-center text-[10px] text-purple-300 font-bold">
                                               🎬 Vídeo
                                             </div>
                                           ) : (
                                             <img
                                               src={m.url}
                                               alt={m.alt || 'Mídia do site'}
-                                              className="w-full h-16 object-cover bg-slate-900"
+                                              className="w-full h-20 object-cover bg-slate-900"
                                               onError={(e) => {
-                                                (e.target as HTMLElement).style.display = 'none';
+                                                (e.target as HTMLElement).style.opacity = '0.3';
                                               }}
                                             />
                                           )}
-                                          <div className="p-1 w-full text-center">
-                                            <span className="text-[9px] text-slate-400 font-mono block truncate">
-                                              {m.role ? `[${m.role}]` : m.type}
+                                          <div className="p-1.5 w-full bg-slate-900/90 text-center border-t border-slate-800/80">
+                                            <span className="text-[9px] text-purple-300 font-bold font-mono block truncate">
+                                              {m.role ? `[${m.role.toUpperCase()}]` : m.type}
+                                            </span>
+                                            <span className="text-[8px] text-slate-500 block truncate" title={m.alt || m.url}>
+                                              {m.alt || m.url.split('/').pop()}
                                             </span>
                                           </div>
                                         </div>
@@ -2961,11 +2970,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                                   )}
                                   <p className="text-[10px] text-slate-500">
                                     Mídias reais encontradas pelo crawler nesta página. A IA usará estas fotos nos blocos, cards e hero sections.
-                                  </p>
-                                </div>
-                              )}
-                                  <p className="text-[10px] text-slate-500 mt-0.5">
-                                    Estilos CSS antigos que ajudam a IA a captar paleta de cores e identidades originais da marca.
                                   </p>
                                 </div>
                               )}
