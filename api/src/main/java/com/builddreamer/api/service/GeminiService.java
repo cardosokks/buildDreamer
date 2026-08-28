@@ -65,7 +65,7 @@ public class GeminiService {
         } else if (customModel != null) {
             candidateModels.add(customModel);
         } else {
-            candidateModels.addAll(Arrays.asList("gemini-3.6-flash", "gemini-2.5-flash", "gemini-2.5-pro"));
+            candidateModels.addAll(Arrays.asList("gemini-3.6-flash", "gemini-3.1-pro-preview"));
         }
 
         String systemPrompt = "Você é um Arquiteto de Software Frontend de Elite e Designer Visual Sênior.\n" +
@@ -164,7 +164,7 @@ public class GeminiService {
                 Map<String, Object> generationConfig = new HashMap<>();
                 generationConfig.put("responseMimeType", "application/json");
                 generationConfig.put("temperature", 0.35);
-                generationConfig.put("maxOutputTokens", 4096);
+                generationConfig.put("maxOutputTokens", 8192);
                 payload.put("generationConfig", generationConfig);
 
                 String directRequestBody = objectMapper.writeValueAsString(payload);
@@ -194,8 +194,9 @@ public class GeminiService {
                 System.err.println("[AI Engine] Tentativa com o modelo " + modelToTry + " falhou: " + error.getMessage());
                 lastError = error;
 
-                boolean is429 = error.getMessage().contains("429");
-                boolean is503 = error.getMessage().contains("503");
+                String errMsg = (error != null && error.getMessage() != null) ? error.getMessage() : "";
+                boolean is429 = errMsg.contains("429");
+                boolean is503 = errMsg.contains("503");
                 if ((is429 || is503) && modelRetries < 3) {
                     modelRetries++;
                     long waitTime = is429 ? 45000 : 15000;
