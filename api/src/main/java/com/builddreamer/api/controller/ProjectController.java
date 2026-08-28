@@ -376,6 +376,13 @@ public class ProjectController {
             status = remasterService.getJobStatus(projectId);
         }
         if (status == null || status.isEmpty()) {
+            Optional<Project> projOpt = projectRepository.findById(projectId);
+            if (projOpt.isPresent()) {
+                Project p = projOpt.get();
+                if ("generating".equalsIgnoreCase(p.getStatus()) || "pending".equalsIgnoreCase(p.getStatus())) {
+                    return ResponseEntity.ok(Map.of("status", "generating", "projectId", projectId));
+                }
+            }
             return ResponseEntity.ok(Map.of("status", "completed", "projectId", projectId));
         }
         return ResponseEntity.ok(status);

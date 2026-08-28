@@ -776,6 +776,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
       });
       if (!res.ok) throw new Error('Falha ao buscar projetos');
       const data = await res.json();
+      let finalProjects = data;
       // Busca dados de CRM vinculados a cada projeto
       try {
         const crmRes = await fetch(`${API_URL}/api/leads/crm`, {
@@ -784,15 +785,24 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
         if (crmRes.ok) {
           const crmData = await crmRes.json();
           const crmLeads: any[] = crmData.leads || [];
-          const enriched = data.map((p: Project) => {
+          finalProjects = data.map((p: Project) => {
             const linked = crmLeads.find((l: any) => l.projectId === p.id);
             return { ...p, crmLead: linked ? { id: linked.id, name: linked.name, company: linked.company, status: linked.status, phone: linked.phone, email: linked.email } : null };
           });
-          setProjects(enriched);
-          return;
         }
       } catch { }
-      setProjects(data);
+      setProjects(finalProjects);
+
+      // Auto-discover generating projects and add to generatingProjectJobs
+      const activeJobsMap: Record<string, { status: string }> = {};
+      finalProjects.forEach((p: Project) => {
+        if (p.status === 'generating' || p.status === 'pending') {
+          activeJobsMap[p.id] = { status: 'generating' };
+        }
+      });
+      if (Object.keys(activeJobsMap).length > 0) {
+        setGeneratingProjectJobs(prev => ({ ...activeJobsMap, ...prev }));
+      }
     } catch (err: any) {
       setError(err.message);
     } finally {
