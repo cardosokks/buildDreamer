@@ -990,9 +990,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
 
   // Iniciar fluxo em 2 etapas de Melhorar com IA
   const handleStartRemasterFlow = async (leadOrUrl: { name: string; website: string } | Lead) => {
-    const targetUrl = leadOrUrl.website;
-    if (!targetUrl) {
-      alert('Nenhum website cadastrado para este estabelecimento.');
+    let targetUrl = (leadOrUrl.website || '').trim();
+    if (!targetUrl || targetUrl === 'null' || targetUrl === 'undefined' || targetUrl.length < 4) {
+      alert('Este estabelecimento não possui um website válido cadastrado para ser remasterizado/melhorado. Use a opção de Criar Projeto para gerar um site novo!');
       return;
     }
 

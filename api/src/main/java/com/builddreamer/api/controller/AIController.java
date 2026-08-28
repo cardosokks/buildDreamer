@@ -94,8 +94,8 @@ public class AIController {
         String url = body.containsKey("websiteUrl") ? (String) body.get("websiteUrl") : (String) body.get("url");
         Number maxPages = (Number) body.getOrDefault("maxPages", 6);
 
-        if (url == null) {
-            return ResponseEntity.badRequest().body(Map.of("error", "URL é obrigatória"));
+        if (url == null || url.trim().isEmpty() || "null".equalsIgnoreCase(url.trim())) {
+            return ResponseEntity.badRequest().body(Map.of("error", "URL é obrigatória e deve ser um endereço de site válido."));
         }
         
         String jobId = "scrape-" + System.currentTimeMillis() + "-" + new Random().nextInt(10000);
