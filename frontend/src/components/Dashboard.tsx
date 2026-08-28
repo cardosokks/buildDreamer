@@ -808,6 +808,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
         const res = await fetch(`${API_URL}/api/auth/settings`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
+        if (res.status === 401) {
+          // Token inválido ou expirado (ex: token do backend antigo Node.js) → fazer logout
+          logout();
+          return;
+        }
         if (res.ok) {
           const data = await res.json();
           const s = data.settings;

@@ -36,16 +36,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try { setUser(JSON.parse(storedUser)); } catch {}
       }
 
-      // Validar token e atualizar role/perfil
+      // Validar token com o servidor
       const API_URL = import.meta.env.VITE_API_URL || '';
       fetch(`${API_URL}/api/auth/me`, {
         headers: { 'Authorization': `Bearer ${storedToken}` }
       })
-        .then(res => res.ok ? res.json() : null)
+        .then(res => {
+          if (res.status === 401) {
+            // Token inválido ou expirado → logout automático
+            localStorage.removeItem('auth_token');
+            localStorage.removeItem('auth_user');
+            setToken(null);
+            setUser(null);
+            return null;
+          }
+          return res.ok ? res.json() : null;
+        })
         .then(data => {
-          if (data && data.user) {
-            setUser(data.user);
-            localStorage.setItem('auth_user', JSON.stringify(data.user));
+          if (!data) return;
+          // O Spring retorna os campos diretamente (não dentro de data.user)
+          const userData = data.user || data;
+          if (userData && userData.id) {
+            setUser({
+              id: userData.id,
+              email: userData.email,
+              name: userData.name,
+              role: userData.role
+            });
+            localStorage.setItem('auth_user', JSON.stringify(userData));
           }
         })
         .catch(() => {})
