@@ -226,12 +226,14 @@ public class SiteRemasterService {
 
     @Async
     public void runRemasterGenerationJob(
+            String jobId,
             String projectId,
             List<Map<String, Object>> pages,
             boolean repeatNavbar,
             boolean repeatFooter,
             String apiKey,
-            List<String> models
+            List<String> models,
+            Map<String, Map<String, Object>> aiChatJobsQueue
     ) {
         Map<String, Object> progress = new ConcurrentHashMap<>();
         progress.put("status", "starting");
@@ -244,6 +246,12 @@ public class SiteRemasterService {
         if (projectOpt.isEmpty()) {
             progress.put("status", "error");
             progress.put("error", "Projeto não encontrado");
+            if (jobId != null && aiChatJobsQueue != null) {
+                Map<String, Object> jState = new ConcurrentHashMap<>();
+                jState.put("status", "failed");
+                jState.put("error", "Projeto não encontrado");
+                aiChatJobsQueue.put(jobId, jState);
+            }
             return;
         }
 
@@ -282,12 +290,22 @@ public class SiteRemasterService {
                         context,
                         apiKey,
                         null,
-                        models
+                        models,
+                        (model, attempt, total) -> {
+                            if (jobId != null && aiChatJobsQueue != null) {
+                                Map<String, Object> jState = aiChatJobsQueue.computeIfAbsent(jobId, k -> new ConcurrentHashMap<>());
+                                jState.put("status", "processing");
+                                jState.put("currentModel", model);
+                                jState.put("attempt", attempt);
+                                jState.put("total", total);
+                            }
+                        }
                 );
 
                 String html = (String) aiResult.getOrDefault("html", "<div></div>");
                 String css = (String) aiResult.getOrDefault("css", "");
                 String js = (String) aiResult.getOrDefault("js", "");
+                String usedModel = (String) aiResult.getOrDefault("_usedModel", "gemini-3.6-flash");
 
                 // Exclude navbar/footer global components if desired
                 if (i == 0) {
@@ -323,6 +341,21 @@ public class SiteRemasterService {
                 try {
                     storageService.uploadSinglePage(project.getName(), page.getSlug(), page.getHtml(), page.getCss(), page.getJs(), page.isHomepage(), project.getNavbarHtml(), project.getFooterHtml());
                 } catch (Exception ignored) {}
+
+                // Push job completion result to aiChatJobsQueue for Chat tracking
+                if (jobId != null && aiChatJobsQueue != null) {
+                    Map<String, Object> jState = aiChatJobsQueue.computeIfAbsent(jobId, k -> new ConcurrentHashMap<>());
+                    jState.put("status", "completed");
+                    jState.put("currentModel", usedModel);
+                    jState.put("scope", pages.size() > 1 ? "all" : "single");
+                    jState.put("result", Map.of(
+                        "explanation", "Página '" + pageName + "' remasterizada com IA com sucesso.",
+                        "html", html,
+                        "css", css,
+                        "js", js,
+                        "_usedModel", usedModel
+                    ));
+                }
             }
 
             project.setStatus("ready");
@@ -336,6 +369,11 @@ public class SiteRemasterService {
             progress.put("error", "Erro ao executar worker de geração: " + ex.getMessage());
             if (progress.get("logs") != null) {
                 ((List<String>) progress.get("logs")).add("Erro: " + ex.getMessage());
+            }
+            if (jobId != null && aiChatJobsQueue != null) {
+                Map<String, Object> jState = aiChatJobsQueue.computeIfAbsent(jobId, k -> new ConcurrentHashMap<>());
+                jState.put("status", "failed");
+                jState.put("error", ex.getMessage());
             }
         }
     }

@@ -1198,6 +1198,23 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
         [newProject.id]: { status: 'processing', currentModel: 'Gerando Design System e Páginas...' }
       }));
 
+      // Registra a solicitação no Histórico do Chat de IA para acompanhar o progresso e log de erros
+      if (newProject.jobId) {
+        const promptText = `Remasterização IA de "${remasterBusinessName}": Recriar estrutura visual com HTML5 e Tailwind.`;
+        const initialMsg = { role: 'user', text: promptText };
+        
+        localStorage.setItem(`chat_history_proj_${newProject.id}`, JSON.stringify([initialMsg]));
+        
+        if (newProject.pages && newProject.pages.length > 0) {
+          const firstPageId = newProject.pages[0].id;
+          localStorage.setItem(`chat_history_${firstPageId}`, JSON.stringify([initialMsg]));
+          localStorage.setItem(`active_ai_job_${firstPageId}`, JSON.stringify({
+            jobId: newProject.jobId,
+            currentModel: 'gemini-3.6-flash'
+          }));
+        }
+      }
+
       setShowRemasterModal(false);
       setActiveTab('projects');
       fetchProjects();

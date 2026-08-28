@@ -400,17 +400,38 @@ public class AIController {
                 } catch (Exception ignored) {}
             }
 
-            // 4. Start async generation worker
+            // 4. Start async generation worker with jobId tracking for AI Chat
+            String jobId = "job-" + System.currentTimeMillis() + "-" + (int)(Math.random() * 10000);
+            Map<String, Object> initialJob = new ConcurrentHashMap<>();
+            initialJob.put("jobId", jobId);
+            initialJob.put("status", "processing");
+            initialJob.put("progress", 0);
+            initialJob.put("total", pages.size());
+            initialJob.put("scope", pages.size() > 1 ? "all" : "single");
+            initialJob.put("currentModel", models != null && !models.isEmpty() ? models.get(0) : "gemini-3.6-flash");
+            aiChatJobsQueue.put(jobId, initialJob);
+
             remasterService.runRemasterGenerationJob(
+                    jobId,
                     project.getId(),
                     pages,
                     repeatNavbar,
                     repeatFooter,
                     clientGeminiKey,
-                    models
+                    models,
+                    aiChatJobsQueue
             );
 
-            return ResponseEntity.ok(project);
+            Map<String, Object> resMap = new LinkedHashMap<>();
+            resMap.put("id", project.getId());
+            resMap.put("name", project.getName());
+            resMap.put("description", project.getDescription());
+            resMap.put("status", project.getStatus());
+            resMap.put("domain", project.getDomain());
+            resMap.put("jobId", jobId);
+            resMap.put("pages", pageRepository.findByProjectId(project.getId()));
+
+            return ResponseEntity.ok(resMap);
         } catch (Exception ex) {
             return ResponseEntity.status(500).body(Map.of("error", ex.getMessage()));
         }
