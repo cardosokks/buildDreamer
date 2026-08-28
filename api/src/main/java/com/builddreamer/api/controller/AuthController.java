@@ -8,9 +8,11 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -67,6 +69,7 @@ public class AuthController {
 
         User user = userOpt.get();
         Map<String, Object> response = new HashMap<>();
+        ObjectMapper mapper = new ObjectMapper();
         response.put("id", user.getId());
         response.put("email", user.getEmail());
         response.put("name", user.getName());
@@ -74,10 +77,28 @@ public class AuthController {
         response.put("openaiApiKey", user.getOpenaiApiKey());
         response.put("aiProxyUrl", user.getAiProxyUrl());
         response.put("ngrokAuthToken", user.getNgrokAuthToken());
-        response.put("customAiSkills", user.getCustomAiSkills());
-        response.put("customAiModels", user.getCustomAiModels());
-        response.put("savedLeads", user.getSavedLeads());
-        response.put("filterPresets", user.getFilterPresets());
+
+        // Parse JSON strings to objects so the frontend receives them as JSON arrays/objects
+        try {
+            response.put("customAiSkills", user.getCustomAiSkills() != null ? mapper.readTree(user.getCustomAiSkills()) : mapper.createArrayNode());
+        } catch (Exception ex) {
+            response.put("customAiSkills", Collections.emptyList());
+        }
+        try {
+            response.put("customAiModels", user.getCustomAiModels() != null ? mapper.readTree(user.getCustomAiModels()) : mapper.createArrayNode());
+        } catch (Exception ex) {
+            response.put("customAiModels", Collections.emptyList());
+        }
+        try {
+            response.put("savedLeads", user.getSavedLeads() != null ? mapper.readTree(user.getSavedLeads()) : mapper.createArrayNode());
+        } catch (Exception ex) {
+            response.put("savedLeads", Collections.emptyList());
+        }
+        try {
+            response.put("filterPresets", user.getFilterPresets() != null ? mapper.readTree(user.getFilterPresets()) : mapper.createArrayNode());
+        } catch (Exception ex) {
+            response.put("filterPresets", Collections.emptyList());
+        }
 
         return ResponseEntity.ok(response);
     }
@@ -90,15 +111,46 @@ public class AuthController {
         }
 
         User user = userOpt.get();
+        ObjectMapper mapper = new ObjectMapper();
+
         if (settings.containsKey("name")) user.setName((String) settings.get("name"));
         if (settings.containsKey("geminiApiKey")) user.setGeminiApiKey((String) settings.get("geminiApiKey"));
         if (settings.containsKey("openaiApiKey")) user.setOpenaiApiKey((String) settings.get("openaiApiKey"));
         if (settings.containsKey("aiProxyUrl")) user.setAiProxyUrl((String) settings.get("aiProxyUrl"));
         if (settings.containsKey("ngrokAuthToken")) user.setNgrokAuthToken((String) settings.get("ngrokAuthToken"));
-        if (settings.containsKey("customAiSkills")) user.setCustomAiSkills((String) settings.get("customAiSkills"));
-        if (settings.containsKey("customAiModels")) user.setCustomAiModels((String) settings.get("customAiModels"));
-        if (settings.containsKey("savedLeads")) user.setSavedLeads((String) settings.get("savedLeads"));
-        if (settings.containsKey("filterPresets")) user.setFilterPresets((String) settings.get("filterPresets"));
+
+        if (settings.containsKey("customAiSkills")) {
+            Object val = settings.get("customAiSkills");
+            if (val instanceof String) {
+                user.setCustomAiSkills((String) val);
+            } else {
+                try { user.setCustomAiSkills(mapper.writeValueAsString(val)); } catch (Exception ignored) {}
+            }
+        }
+        if (settings.containsKey("customAiModels")) {
+            Object val = settings.get("customAiModels");
+            if (val instanceof String) {
+                user.setCustomAiModels((String) val);
+            } else {
+                try { user.setCustomAiModels(mapper.writeValueAsString(val)); } catch (Exception ignored) {}
+            }
+        }
+        if (settings.containsKey("savedLeads")) {
+            Object val = settings.get("savedLeads");
+            if (val instanceof String) {
+                user.setSavedLeads((String) val);
+            } else {
+                try { user.setSavedLeads(mapper.writeValueAsString(val)); } catch (Exception ignored) {}
+            }
+        }
+        if (settings.containsKey("filterPresets")) {
+            Object val = settings.get("filterPresets");
+            if (val instanceof String) {
+                user.setFilterPresets((String) val);
+            } else {
+                try { user.setFilterPresets(mapper.writeValueAsString(val)); } catch (Exception ignored) {}
+            }
+        }
 
         userRepository.save(user);
         return ResponseEntity.ok(Map.of("message", "Configurações atualizadas com sucesso"));
