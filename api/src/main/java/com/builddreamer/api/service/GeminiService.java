@@ -41,6 +41,14 @@ public class GeminiService {
         return generateAIResponse(prompt, context, customApiKey, customModel, registeredModels, null);
     }
 
+    private String sanitizeModelName(String rawModel) {
+        if (rawModel == null || rawModel.trim().isEmpty()) return "gemini-3.6-flash";
+        String m = rawModel.trim();
+        if ("gemini-2.5-flash".equalsIgnoreCase(m) || "gemini-2.0-flash-exp".equalsIgnoreCase(m)) return "gemini-3.6-flash";
+        if ("gemini-2.5-pro".equalsIgnoreCase(m) || "gemini-1.0-pro".equalsIgnoreCase(m)) return "gemini-3.1-pro-preview";
+        return m;
+    }
+
     public Map<String, Object> generateAIResponse(
             String prompt,
             Map<String, String> context,
@@ -57,19 +65,21 @@ public class GeminiService {
             throw new IllegalArgumentException("Chave da API do Gemini não fornecida.");
         }
 
-        List<String> candidateModels = new ArrayList<>();
+        List<String> rawList = new ArrayList<>();
+        if (customModel != null && !customModel.trim().isEmpty()) {
+            rawList.add(customModel.trim());
+        }
         if (registeredModels != null && !registeredModels.isEmpty()) {
-            for (String m : registeredModels) {
-                if (m != null && !m.trim().isEmpty() && !candidateModels.contains(m.trim())) {
-                    candidateModels.add(m.trim());
-                }
+            rawList.addAll(registeredModels);
+        }
+        rawList.addAll(Arrays.asList("gemini-3.6-flash", "gemini-3.1-pro-preview", "gemini-1.5-flash", "gemini-1.5-pro"));
+
+        List<String> candidateModels = new ArrayList<>();
+        for (String m : rawList) {
+            String sanitized = sanitizeModelName(m);
+            if (!candidateModels.contains(sanitized)) {
+                candidateModels.add(sanitized);
             }
-        }
-        if (customModel != null && !customModel.trim().isEmpty() && !candidateModels.contains(customModel.trim())) {
-            candidateModels.add(0, customModel.trim());
-        }
-        if (candidateModels.isEmpty()) {
-            candidateModels.addAll(Arrays.asList("gemini-2.5-flash", "gemini-2.5-pro", "gemini-3.6-flash", "gemini-3.1-pro-preview"));
         }
 
         String systemPrompt = "Você é um Arquiteto de Software Frontend de Elite e Designer Visual Sênior.\n" +
@@ -103,8 +113,8 @@ public class GeminiService {
         String safeUserPrompt = (userPrompt != null && !userPrompt.trim().isEmpty()) ? userPrompt : "Gere o site solicitado";
         String safeSystemPrompt = (systemPrompt != null && !systemPrompt.trim().isEmpty()) ? systemPrompt : "Você é um mestre em desenvolvimento web HTML CSS e JS.";
 
-        // FASE 1: Tentar a requisição no n8n percorrendo CADA modelo cadastrado em sequência
-        System.out.println("[AI Engine] Iniciando tentativa via n8n real-premise-agent com os modelos cadastrados: " + candidateModels);
+        // FASE 1: Tentar a requisição no n8n percorrendo CADA modelo em sequência se houver erro
+        System.out.println("[AI Engine] Iniciando tentativas via n8n com a fila de modelos: " + candidateModels);
         for (int i = 0; i < candidateModels.size(); i++) {
             String modelToTry = candidateModels.get(i);
 
@@ -115,7 +125,7 @@ public class GeminiService {
             }
 
             try {
-                System.out.println("[AI Engine] n8n (" + (i + 1) + "/" + candidateModels.size() + ") - Testando modelo cadastrado: " + modelToTry);
+                System.out.println("[AI Engine] n8n (" + (i + 1) + "/" + candidateModels.size() + ") - Testando modelo: " + modelToTry);
 
                 Map<String, Object> n8nPayload = new HashMap<>();
                 n8nPayload.put("userPrompt", safeUserPrompt);
@@ -140,17 +150,24 @@ public class GeminiService {
                 if (response.statusCode() == 200) {
                     String respBody = response.body();
 
-                    // Se a resposta do n8n contiver chaves de erro da API de IA, tratar como falha do modelo e tentar o próximo
-                    if (respBody == null || respBody.contains("\"error\"") || respBody.contains("INVALID_ARGUMENT") || respBody.contains("\"code\": 4") || respBody.contains("\"code\": 5")) {
-                        System.err.println("[AI Engine] n8n respondeu HTTP 200 com erro da API de IA para o modelo " + modelToTry + ": " + respBody);
-                        throw new RuntimeException("Erro da API de IA no n8n: " + respBody);
+                    boolean hasErrorPhrase = respBody == null ||
+                            respBody.contains("\"error\"") ||
+                            respBody.contains("INVALID_ARGUMENT") ||
+                            respBody.contains("no longer available") ||
+                            respBody.contains("Bad request") ||
+                            respBody.contains("not found") ||
+                            respBody.contains("API key not valid");
+
+                    if (hasErrorPhrase) {
+                        System.err.println("[AI Engine] n8n respondeu erro no modelo " + modelToTry + ": " + respBody);
+                        throw new RuntimeException("Erro retornado pelo n8n no modelo " + modelToTry + ": " + respBody);
                     }
 
                     String rawText = respBody;
                     try {
                         JsonNode rootNode = objectMapper.readTree(respBody);
                         if (rootNode.has("error")) {
-                            throw new RuntimeException("Erro retornado pelo n8n: " + rootNode.get("error").toString());
+                            throw new RuntimeException("Erro no JSON do n8n: " + rootNode.get("error").toString());
                         }
                         if (rootNode.has("response")) {
                             rawText = rootNode.get("response").asText();
@@ -178,17 +195,18 @@ public class GeminiService {
                     Map<String, Object> parsed = resilientJsonParse(rawText);
                     String html = (String) parsed.get("html");
                     if (html == null || html.trim().isEmpty()) {
+                        System.err.println("[AI Engine] Modelo " + modelToTry + " via n8n não gerou HTML. Tentando próximo modelo...");
                         throw new RuntimeException("n8n não retornou estrutura HTML válida para o modelo " + modelToTry);
                     }
 
                     parsed.put("_usedModel", modelToTry + " (via n8n real-premise-agent)");
-                    System.out.println("[AI Engine] Sucesso total na geração via n8n com o modelo cadastrado: " + modelToTry);
+                    System.out.println("[AI Engine] Sucesso total na geração via n8n com o modelo: " + modelToTry);
                     return parsed;
                 } else {
-                    System.err.println("[AI Engine] n8n retornou erro HTTP " + response.statusCode() + " para o modelo " + modelToTry + ". Tentando próximo modelo cadastrado...");
+                    System.err.println("[AI Engine] n8n retornou erro HTTP " + response.statusCode() + " para o modelo " + modelToTry + ". Tentando próximo modelo...");
                 }
             } catch (Exception n8nEx) {
-                System.err.println("[AI Engine] Falha/timeout no n8n para o modelo " + modelToTry + ": " + n8nEx.getMessage() + ". Tentando próximo modelo cadastrado...");
+                System.err.println("[AI Engine] Falha no n8n para modelo " + modelToTry + ": " + n8nEx.getMessage() + ". Mudando para o próximo modelo...");
             }
         }
 
