@@ -120,6 +120,9 @@ public class GeminiService {
                     Map<String, Object> n8nPayload = new HashMap<>();
                     n8nPayload.put("userPrompt", userPrompt);
                     n8nPayload.put("systemPrompt", systemPrompt);
+                    n8nPayload.put("prompt", userPrompt);
+                    n8nPayload.put("chatInput", userPrompt);
+                    n8nPayload.put("input", userPrompt);
                     n8nPayload.put("model", modelToTry);
                     n8nPayload.put("apiKey", activeKey);
 
