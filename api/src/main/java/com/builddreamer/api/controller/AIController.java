@@ -462,6 +462,14 @@ public class AIController {
                     models = objectMapper.readValue(decodedModels, new TypeReference<List<String>>() {});
                 } catch (Exception ignored) {}
             }
+            if (models.isEmpty()) {
+                Optional<User> userOpt = userRepository.findById(userId);
+                if (userOpt.isPresent() && userOpt.get().getCustomAiModels() != null) {
+                    try {
+                        models = objectMapper.readValue(userOpt.get().getCustomAiModels(), new TypeReference<List<String>>() {});
+                    } catch (Exception ignored) {}
+                }
+            }
 
             // 4. Start async generation worker with jobId tracking for AI Chat & polling
             String jobId = "job-" + System.currentTimeMillis() + "-" + (int)(Math.random() * 10000);

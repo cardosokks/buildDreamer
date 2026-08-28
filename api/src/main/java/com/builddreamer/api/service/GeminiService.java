@@ -139,9 +139,19 @@ public class GeminiService {
 
                 if (response.statusCode() == 200) {
                     String respBody = response.body();
+
+                    // Se a resposta do n8n contiver chaves de erro da API de IA, tratar como falha do modelo e tentar o próximo
+                    if (respBody == null || respBody.contains("\"error\"") || respBody.contains("INVALID_ARGUMENT") || respBody.contains("\"code\": 4") || respBody.contains("\"code\": 5")) {
+                        System.err.println("[AI Engine] n8n respondeu HTTP 200 com erro da API de IA para o modelo " + modelToTry + ": " + respBody);
+                        throw new RuntimeException("Erro da API de IA no n8n: " + respBody);
+                    }
+
                     String rawText = respBody;
                     try {
                         JsonNode rootNode = objectMapper.readTree(respBody);
+                        if (rootNode.has("error")) {
+                            throw new RuntimeException("Erro retornado pelo n8n: " + rootNode.get("error").toString());
+                        }
                         if (rootNode.has("response")) {
                             rawText = rootNode.get("response").asText();
                         } else if (rootNode.has("output")) {
@@ -152,13 +162,25 @@ public class GeminiService {
                             rawText = rootNode.path("candidates").get(0).path("content").path("parts").get(0).path("text").asText(respBody);
                         } else if (rootNode.isArray() && rootNode.size() > 0) {
                             JsonNode firstItem = rootNode.get(0);
+                            if (firstItem.has("error")) {
+                                throw new RuntimeException("Item 0 do n8n contém erro: " + firstItem.get("error").toString());
+                            }
                             if (firstItem.has("output")) rawText = firstItem.get("output").asText();
                             else if (firstItem.has("response")) rawText = firstItem.get("response").asText();
                             else if (firstItem.has("text")) rawText = firstItem.get("text").asText();
                         }
-                    } catch (Exception ignored) {}
+                    } catch (Exception parseEx) {
+                        if (parseEx.getMessage() != null && parseEx.getMessage().contains("Erro")) {
+                            throw parseEx;
+                        }
+                    }
 
                     Map<String, Object> parsed = resilientJsonParse(rawText);
+                    String html = (String) parsed.get("html");
+                    if (html == null || html.trim().isEmpty()) {
+                        throw new RuntimeException("n8n não retornou estrutura HTML válida para o modelo " + modelToTry);
+                    }
+
                     parsed.put("_usedModel", modelToTry + " (via n8n real-premise-agent)");
                     System.out.println("[AI Engine] Sucesso total na geração via n8n com o modelo cadastrado: " + modelToTry);
                     return parsed;
