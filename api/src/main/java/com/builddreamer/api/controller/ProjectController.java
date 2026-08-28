@@ -26,6 +26,13 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
+import com.builddreamer.api.model.Media;
+import com.builddreamer.api.repository.MediaRepository;
+import com.builddreamer.api.service.StorageService;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+
 @RestController
 @RequestMapping("/api/projects")
 public class ProjectController {
@@ -35,6 +42,8 @@ public class ProjectController {
     private final UserRepository userRepository;
     private final PageRepository pageRepository;
     private final VersionRepository versionRepository;
+    private final MediaRepository mediaRepository;
+    private final StorageService storageService;
     private final GeminiService geminiService;
     private final SiteRemasterService remasterService;
     private final com.builddreamer.api.service.FtpService ftpService;
@@ -49,6 +58,8 @@ public class ProjectController {
             UserRepository userRepository,
             PageRepository pageRepository,
             VersionRepository versionRepository,
+            MediaRepository mediaRepository,
+            StorageService storageService,
             GeminiService geminiService,
             SiteRemasterService remasterService,
             com.builddreamer.api.service.FtpService ftpService) {
@@ -57,6 +68,8 @@ public class ProjectController {
         this.userRepository = userRepository;
         this.pageRepository = pageRepository;
         this.versionRepository = versionRepository;
+        this.mediaRepository = mediaRepository;
+        this.storageService = storageService;
         this.geminiService = geminiService;
         this.remasterService = remasterService;
         this.ftpService = ftpService;
@@ -342,8 +355,32 @@ public class ProjectController {
             return ResponseEntity.notFound().build();
         }
 
-        projectRepository.delete(projectOpt.get());
-        return ResponseEntity.ok(Map.of("message", "Projeto excluído com sucesso"));
+        Project project = projectOpt.get();
+
+        // 1. Delete all associated Media files from disk & MinIO Object Storage
+        List<Media> mediaList = mediaRepository.findByProjectId(id);
+        for (Media media : mediaList) {
+            try {
+                if (media.getUrl() != null && media.getUrl().startsWith("/uploads/")) {
+                    String filename = media.getUrl().replace("/uploads/", "");
+                    Path filePath = Paths.get("uploads", filename);
+                    Files.deleteIfExists(filePath);
+                    storageService.deleteObject("media/" + filename);
+                }
+            } catch (Exception ignored) {}
+        }
+        if (!mediaList.isEmpty()) {
+            mediaRepository.deleteAll(mediaList);
+        }
+
+        // 2. Delete project files from MinIO Storage
+        try {
+            String safeName = project.getName().toLowerCase().replaceAll("[^a-z0-9]+", "-");
+            storageService.deleteObject("projects/" + safeName + "/index.html");
+        } catch (Exception ignored) {}
+
+        projectRepository.delete(project);
+        return ResponseEntity.ok(Map.of("message", "Projeto e mídias associadas excluídos com sucesso"));
     }
 
     @PutMapping("/{id}/globals")

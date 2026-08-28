@@ -53,7 +53,7 @@ export const MediaLibrarySidebar: React.FC<MediaLibrarySidebarProps> = ({
 
   useEffect(() => {
     fetchMedia();
-  }, [token]);
+  }, [token, projectId]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

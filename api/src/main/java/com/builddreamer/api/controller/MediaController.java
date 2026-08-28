@@ -36,11 +36,8 @@ public class MediaController {
             @AuthenticationPrincipal String userId,
             @RequestParam(required = false) String projectId) {
         List<Media> list;
-        if (projectId != null && !projectId.isEmpty()) {
-            list = mediaRepository.findByUserIdAndProjectId(userId, projectId);
-            if (list.isEmpty()) {
-                list = mediaRepository.findByUserId(userId);
-            }
+        if (projectId != null && !projectId.trim().isEmpty()) {
+            list = mediaRepository.findByProjectId(projectId.trim());
         } else {
             list = mediaRepository.findByUserId(userId);
         }
