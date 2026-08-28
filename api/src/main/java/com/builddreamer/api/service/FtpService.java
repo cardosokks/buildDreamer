@@ -10,6 +10,12 @@ import java.io.IOException;
 @Service
 public class FtpService {
 
+    private final StorageService storageService;
+
+    public FtpService(StorageService storageService) {
+        this.storageService = storageService;
+    }
+
     public boolean testConnection(String host, int port, String user, String password) {
         FTPClient ftpClient = new FTPClient();
         try {
@@ -78,8 +84,20 @@ public class FtpService {
             String navbarHtml,
             String footerHtml
     ) {
+        // 1. Publish to MinIO Object Storage
+        try {
+            storageService.uploadSinglePage(projectName, pageSlug, html, css, js, isHomepage, navbarHtml, footerHtml);
+        } catch (Exception ex) {
+            System.err.println("[MinIO Sync Error] " + ex.getMessage());
+        }
+
+        // 2. Publish to FTP if configured
+        String host = System.getenv("FTP_HOST");
+        if (host == null || host.trim().isEmpty() || "ftp".equalsIgnoreCase(host.trim()) || "localhost".equalsIgnoreCase(host.trim())) {
+            return;
+        }
+
         String safeName = projectName.toLowerCase().replaceAll("[^a-z0-9]+", "-");
-        String host = (System.getenv("FTP_HOST") != null && !System.getenv("FTP_HOST").trim().isEmpty()) ? System.getenv("FTP_HOST") : "ftp";
         int port = 21;
         try {
             if (System.getenv("FTP_PORT") != null && !System.getenv("FTP_PORT").trim().isEmpty()) port = Integer.parseInt(System.getenv("FTP_PORT"));
@@ -91,7 +109,6 @@ public class FtpService {
         try {
             ftpClient.connect(host, port);
             if (!ftpClient.login(user, password)) {
-                System.err.println("FTP Login failed for host: " + host);
                 return;
             }
             ftpClient.enterLocalPassiveMode();
@@ -136,9 +153,8 @@ public class FtpService {
             }
 
             ftpClient.logout();
-            System.out.println("FTP: Página " + pageSlug + " do projeto " + safeName + " enviada com sucesso para " + htmlDest);
         } catch (Exception ex) {
-            System.err.println("FTP: Erro ao enviar página " + pageSlug + " do projeto " + safeName + ": " + ex.getMessage());
+            System.err.println("FTP: " + ex.getMessage());
         } finally {
             if (ftpClient.isConnected()) {
                 try { ftpClient.disconnect(); } catch (IOException ignored) {}

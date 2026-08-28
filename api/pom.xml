@@ -70,6 +70,12 @@
             <artifactId>commons-net</artifactId>
             <version>3.10.0</version>
         </dependency>
+        <!-- MinIO S3 Object Storage -->
+        <dependency>
+            <groupId>io.minio</groupId>
+            <artifactId>minio</artifactId>
+            <version>8.5.10</version>
+        </dependency>
         <!-- Jsoup for HTML scraping/parsing -->
         <dependency>
             <groupId>org.jsoup</groupId>

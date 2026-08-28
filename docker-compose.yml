@@ -28,13 +28,13 @@ services:
       - DATABASE_PASSWORD=builder_password
       - JWT_SECRET=${JWT_SECRET}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
-      - FTP_HOST=${FTP_HOST:-ftp}
-      - FTP_PORT=${FTP_PORT:-21}
-      - FTP_USER=${FTP_USER:-ftpuser}
-      - FTP_PASSWORD=${FTP_PASSWORD:-ftppassword123}
+      - MINIO_ENDPOINT=${MINIO_ENDPOINT:-http://minio:9000}
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:-admin}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:-minioadmin123}
+      - MINIO_BUCKET=${MINIO_BUCKET:-builddreamer}
     depends_on:
       - postgres
-      - ftp
+      - minio
 
   frontend:
     build:
@@ -48,21 +48,19 @@ services:
     depends_on:
       - backend
 
-  ftp:
-    image: delfer/alpine-ftp-server:latest
+  minio:
+    image: minio/minio:latest
     restart: always
+    command: server /data --console-address ":9001"
     ports:
-      - "${FTP_PORT:-21}:21"
-      - "21000-21010:21000-21010"
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
     environment:
-      - USERS=${FTP_USER:-ftpuser}|${FTP_PASSWORD:-ftppassword123}
-      - FTP_USER=${FTP_USER:-ftpuser}
-      - FTP_PASS=${FTP_PASSWORD:-ftppassword123}
-      - MIN_PORT=21000
-      - MAX_PORT=21010
+      - MINIO_ROOT_USER=${MINIO_ACCESS_KEY:-admin}
+      - MINIO_ROOT_PASSWORD=${MINIO_SECRET_KEY:-minioadmin123}
     volumes:
-      - ftp_data:/ftp/ftpuser
+      - minio_data:/data
 
 volumes:
   postgres_data:
-  ftp_data:
+  minio_data:
