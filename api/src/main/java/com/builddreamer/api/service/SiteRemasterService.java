@@ -272,7 +272,21 @@ public class SiteRemasterService {
 
                 String rawHtml = (String) pMap.get("rawHtml");
                 if (rawHtml == null || rawHtml.isEmpty()) {
+                    rawHtml = (String) pMap.get("html");
+                }
+                if (rawHtml == null || rawHtml.isEmpty()) {
                     rawHtml = (String) pMap.getOrDefault("cleanText", "Conteúdo original da página: " + pageName);
+                }
+
+                // Truncate overly long raw HTML to avoid Gemini API token/context limit errors
+                if (rawHtml != null && rawHtml.length() > 12000) {
+                    rawHtml = rawHtml.substring(0, 12000) + "... [Conteúdo truncado para otimização da IA]";
+                }
+
+                String customPrompt = (String) pMap.get("customPrompt");
+                String prompt = "Remasterizar a página " + pageName + " mantendo todo o conteúdo, textos e imagens originais, mas recriando o design completo com HTML5 moderno e Tailwind CSS elegante e responsivo.";
+                if (customPrompt != null && !customPrompt.trim().isEmpty()) {
+                    prompt += "\nDiretrizes personalizadas solicitadas pelo usuário para esta página: " + customPrompt.trim();
                 }
 
                 logs.add("IA gerando página: " + pageName + " (Slug: " + targetSlug + ")...");
@@ -283,78 +297,104 @@ public class SiteRemasterService {
                 context.put("css", "");
                 context.put("js", "");
 
-                String prompt = "Remasterizar a página " + pageName + " mantendo todo o conteúdo, textos e imagens originais, mas recriando o design completo com HTML5 moderno e Tailwind CSS elegante e responsivo.";
-
-                Map<String, Object> aiResult = geminiService.generateAIResponse(
-                        prompt,
-                        context,
-                        apiKey,
-                        null,
-                        models,
-                        (model, attempt, total) -> {
-                            if (jobId != null && aiChatJobsQueue != null) {
-                                Map<String, Object> jState = aiChatJobsQueue.computeIfAbsent(jobId, k -> new ConcurrentHashMap<>());
-                                jState.put("status", "processing");
-                                jState.put("currentModel", model);
-                                jState.put("attempt", attempt);
-                                jState.put("total", total);
-                            }
-                        }
-                );
-
-                String html = (String) aiResult.getOrDefault("html", "<div></div>");
-                String css = (String) aiResult.getOrDefault("css", "");
-                String js = (String) aiResult.getOrDefault("js", "");
-                String usedModel = (String) aiResult.getOrDefault("_usedModel", "gemini-3.6-flash");
-
-                // Exclude navbar/footer global components if desired
-                if (i == 0) {
-                    if (repeatNavbar) {
-                        project.setNavbarHtml("<header class=\"bg-slate-950 p-4\"><nav class=\"max-w-7xl mx-auto flex justify-between\"><a href=\"index.html\" class=\"text-xl font-bold\">" + project.getName() + "</a></nav></header>");
-                    }
-                    if (repeatFooter) {
-                        project.setFooterHtml("<footer class=\"bg-slate-950 p-8 text-center text-slate-500\">&copy; " + project.getName() + "</footer>");
-                    }
-                }
-
-                // Check if page already exists by slug or is homepage, otherwise create new
-                Optional<Page> existingPage = pageRepository.findByProjectIdAndSlug(project.getId(), targetSlug);
-                if (existingPage.isEmpty() && ("index".equals(targetSlug) || "home".equals(targetSlug))) {
-                    List<Page> projectPages = pageRepository.findByProjectId(project.getId());
-                    existingPage = projectPages.stream().filter(Page::isHomepage).findFirst();
-                }
-
-                Page page = existingPage.orElseGet(() -> Page.builder()
-                        .project(project)
-                        .slug(targetSlug)
-                        .build());
-
-                page.setName(pageName);
-                page.setHtml(html);
-                page.setCss(css);
-                page.setJs(js);
-                page.setHomepage("index".equals(targetSlug) || i == 0);
-
-                pageRepository.save(page);
-
-                // Sync page to MinIO storage
                 try {
-                    storageService.uploadSinglePage(project.getName(), page.getSlug(), page.getHtml(), page.getCss(), page.getJs(), page.isHomepage(), project.getNavbarHtml(), project.getFooterHtml());
-                } catch (Exception ignored) {}
+                    Map<String, Object> aiResult = geminiService.generateAIResponse(
+                            prompt,
+                            context,
+                            apiKey,
+                            null,
+                            models,
+                            (model, attempt, total) -> {
+                                if (jobId != null && aiChatJobsQueue != null) {
+                                    Map<String, Object> jState = aiChatJobsQueue.computeIfAbsent(jobId, k -> new ConcurrentHashMap<>());
+                                    jState.put("status", "processing");
+                                    jState.put("currentModel", model);
+                                    jState.put("attempt", attempt);
+                                    jState.put("total", total);
+                                }
+                            }
+                    );
 
-                // Push job completion result to aiChatJobsQueue for Chat tracking
-                if (jobId != null && aiChatJobsQueue != null) {
-                    Map<String, Object> jState = aiChatJobsQueue.computeIfAbsent(jobId, k -> new ConcurrentHashMap<>());
-                    jState.put("status", "completed");
-                    jState.put("currentModel", usedModel);
-                    jState.put("scope", pages.size() > 1 ? "all" : "single");
-                    jState.put("result", Map.of(
-                        "explanation", "Página '" + pageName + "' remasterizada com IA com sucesso.",
-                        "html", html,
-                        "css", css,
-                        "js", js,
-                        "_usedModel", usedModel
-                    ));
+                    String html = (String) aiResult.getOrDefault("html", "<div></div>");
+                    String css = (String) aiResult.getOrDefault("css", "");
+                    String js = (String) aiResult.getOrDefault("js", "");
+                    String usedModel = (String) aiResult.getOrDefault("_usedModel", "gemini-3.6-flash");
+
+                    // Exclude navbar/footer global components if desired
+                    if (i == 0) {
+                        if (repeatNavbar) {
+                            project.setNavbarHtml("<header class=\"bg-slate-950 p-4\"><nav class=\"max-w-7xl mx-auto flex justify-between\"><a href=\"index.html\" class=\"text-xl font-bold\">" + project.getName() + "</a></nav></header>");
+                        }
+                        if (repeatFooter) {
+                            project.setFooterHtml("<footer class=\"bg-slate-950 p-8 text-center text-slate-500\">&copy; " + project.getName() + "</footer>");
+                        }
+                    }
+
+                    // Check if page already exists by slug or is homepage, otherwise create new
+                    Optional<Page> existingPage = pageRepository.findByProjectIdAndSlug(project.getId(), targetSlug);
+                    if (existingPage.isEmpty() && ("index".equals(targetSlug) || "home".equals(targetSlug))) {
+                        List<Page> projectPages = pageRepository.findByProjectId(project.getId());
+                        existingPage = projectPages.stream().filter(Page::isHomepage).findFirst();
+                    }
+
+                    Page page = existingPage.orElseGet(() -> Page.builder()
+                            .project(project)
+                            .slug(targetSlug)
+                            .build());
+
+                    page.setName(pageName);
+                    page.setHtml(html);
+                    page.setCss(css);
+                    page.setJs(js);
+                    page.setHomepage("index".equals(targetSlug) || i == 0);
+
+                    pageRepository.save(page);
+
+                    // Sync page to MinIO storage
+                    try {
+                        storageService.uploadSinglePage(project.getName(), page.getSlug(), page.getHtml(), page.getCss(), page.getJs(), page.isHomepage(), project.getNavbarHtml(), project.getFooterHtml());
+                    } catch (Exception ignored) {}
+
+                    // Push job completion result to aiChatJobsQueue for Chat tracking
+                    if (jobId != null && aiChatJobsQueue != null) {
+                        Map<String, Object> jState = aiChatJobsQueue.computeIfAbsent(jobId, k -> new ConcurrentHashMap<>());
+                        jState.put("status", "completed");
+                        jState.put("currentModel", usedModel);
+                        jState.put("scope", pages.size() > 1 ? "all" : "single");
+                        jState.put("result", Map.of(
+                            "explanation", "Página '" + pageName + "' remasterizada com IA com sucesso.",
+                            "html", html,
+                            "css", css,
+                            "js", js,
+                            "_usedModel", usedModel
+                        ));
+                    }
+                } catch (Exception pageEx) {
+                    pageEx.printStackTrace();
+                    logs.add("Erro na geração da página '" + pageName + "': " + pageEx.getMessage());
+
+                    // Save structured fallback page so project generation continues
+                    Optional<Page> existingPage = pageRepository.findByProjectIdAndSlug(project.getId(), targetSlug);
+                    Page page = existingPage.orElseGet(() -> Page.builder()
+                            .project(project)
+                            .slug(targetSlug)
+                            .build());
+
+                    page.setName(pageName);
+                    page.setHomepage("index".equals(targetSlug) || i == 0);
+                    if (page.getHtml() == null || page.getHtml().isEmpty() || page.getHtml().contains("Reconstruindo")) {
+                        page.setHtml("<section class=\"min-h-screen bg-slate-900 text-white flex flex-col items-center justify-center p-8 text-center\">\n" +
+                                "  <h1 class=\"text-3xl font-bold mb-4\">" + pageName + "</h1>\n" +
+                                "  <p class=\"text-slate-400 max-w-lg mb-6\">A IA encontrou uma instabilidade ao gerar esta página automaticamente (" + pageEx.getMessage() + "). Você pode gerar ou ajustar esta página a qualquer momento no Chat de IA ao lado.</p>\n" +
+                                "</section>");
+                    }
+                    pageRepository.save(page);
+
+                    if (jobId != null && aiChatJobsQueue != null) {
+                        Map<String, Object> jState = aiChatJobsQueue.computeIfAbsent(jobId, k -> new ConcurrentHashMap<>());
+                        jState.put("status", "failed");
+                        jState.put("error", "Erro ao gerar página '" + pageName + "': " + pageEx.getMessage());
+                    }
                 }
             }
 

@@ -1076,6 +1076,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
               ? 'Hero impactante com CTA duplo, apresentação dos diferenciais, estatísticas da empresa, depoimentos e formulário de contato/WhatsApp.'
               : `Apresentação detalhada com tópicos visuais, benefícios claros, cards ilustrativos e chamadas para ação focadas em ${p.name}.`,
             cleanText: p.cleanText || '',
+            rawHtml: p.html || '',
             html: p.html || '',
             css: p.css || '',
             js: p.js || '',
