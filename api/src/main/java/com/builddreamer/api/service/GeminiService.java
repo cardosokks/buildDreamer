@@ -238,8 +238,18 @@ public class GeminiService {
                 fallback.put("js", extractRegexGroup(text, "\"js\"\\s*:\\s*\"([^\"]*)\""));
                 
                 String extractedHtml = (String) fallback.get("html");
-                if (extractedHtml != null && !extractedHtml.isEmpty()) {
+                if (extractedHtml != null && !extractedHtml.trim().isEmpty()) {
                     return fallback;
+                }
+                
+                // Se a IA retornou HTML bruto diretamente sem a estrutura JSON solicitada
+                if (text.contains("<") && text.contains(">")) {
+                    Map<String, Object> htmlFallback = new HashMap<>();
+                    htmlFallback.put("html", text);
+                    htmlFallback.put("css", "");
+                    htmlFallback.put("js", "");
+                    htmlFallback.put("explanation", "HTML retornado e processado diretamente.");
+                    return htmlFallback;
                 }
                 
                 System.err.println("[AI Engine] Erro ao analisar JSON da IA. String bruta: " + rawString);
