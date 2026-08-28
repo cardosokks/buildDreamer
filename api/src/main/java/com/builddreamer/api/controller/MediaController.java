@@ -2,12 +2,12 @@ package com.builddreamer.api.controller;
 
 import com.builddreamer.api.model.Media;
 import com.builddreamer.api.repository.MediaRepository;
+import com.builddreamer.api.service.StorageService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -19,11 +19,12 @@ import java.util.*;
 public class MediaController {
 
     private final MediaRepository mediaRepository;
+    private final StorageService storageService;
     private final String uploadDir = "uploads";
 
-    public MediaController(MediaRepository mediaRepository) {
+    public MediaController(MediaRepository mediaRepository, StorageService storageService) {
         this.mediaRepository = mediaRepository;
-        // Make sure uploads directory exists
+        this.storageService = storageService;
         File dir = new File(uploadDir);
         if (!dir.exists()) {
             dir.mkdirs();
@@ -95,11 +96,16 @@ public class MediaController {
                 return ResponseEntity.badRequest().body(Map.of("error", "Payload de arquivo inválido ou ausente"));
             }
 
-            // Save to disk
+            // 1. Save to local disk
             String fileId = UUID.randomUUID().toString();
             String savedFilename = fileId + "_" + name;
             Path filePath = Paths.get(uploadDir, savedFilename);
             Files.write(filePath, fileBytes);
+
+            // 2. Upload to MinIO S3 Storage
+            try {
+                storageService.uploadFile("media/" + savedFilename, fileBytes, contentType);
+            } catch (Exception ignored) {}
 
             String url = "/uploads/" + savedFilename;
 
@@ -134,7 +140,10 @@ public class MediaController {
             String filename = media.getUrl().replace("/uploads/", "");
             Path filePath = Paths.get(uploadDir, filename);
             Files.deleteIfExists(filePath);
-        } catch (IOException ignored) {}
+            
+            // Delete from MinIO
+            storageService.deleteObject("media/" + filename);
+        } catch (Exception ignored) {}
 
         mediaRepository.delete(media);
         return ResponseEntity.ok(Map.of("message", "Media excluída com sucesso"));

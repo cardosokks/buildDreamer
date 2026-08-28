@@ -24,6 +24,7 @@ public class SiteRemasterService {
     private final GeminiService geminiService;
     private final ProjectRepository projectRepository;
     private final PageRepository pageRepository;
+    private final StorageService storageService;
 
     // Track active jobs in memory
     private final Map<String, Map<String, Object>> activeJobs = new ConcurrentHashMap<>();
@@ -31,10 +32,12 @@ public class SiteRemasterService {
     public SiteRemasterService(
             GeminiService geminiService,
             ProjectRepository projectRepository,
-            PageRepository pageRepository) {
+            PageRepository pageRepository,
+            StorageService storageService) {
         this.geminiService = geminiService;
         this.projectRepository = projectRepository;
         this.pageRepository = pageRepository;
+        this.storageService = storageService;
     }
 
     public List<Map<String, Object>> crawlEntireClientWebsite(String startUrl, int maxPages) {
@@ -315,6 +318,11 @@ public class SiteRemasterService {
                 page.setHomepage("index".equals(targetSlug) || i == 0);
 
                 pageRepository.save(page);
+
+                // Sync page to MinIO storage
+                try {
+                    storageService.uploadSinglePage(project.getName(), page.getSlug(), page.getHtml(), page.getCss(), page.getJs(), page.isHomepage(), project.getNavbarHtml(), project.getFooterHtml());
+                } catch (Exception ignored) {}
             }
 
             project.setStatus("ready");
