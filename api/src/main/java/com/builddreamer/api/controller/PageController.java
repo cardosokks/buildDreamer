@@ -124,7 +124,20 @@ public class PageController {
         if (body.containsKey("js")) page.setJs((String) body.get("js"));
         if (body.containsKey("seoTitle")) page.setSeoTitle((String) body.get("seoTitle"));
         if (body.containsKey("seoDescription")) page.setSeoDescription((String) body.get("seoDescription"));
-        if (body.containsKey("isHomepage")) page.setHomepage((Boolean) body.get("isHomepage"));
+
+        if (body.containsKey("isHomepage") && Boolean.TRUE.equals(body.get("isHomepage"))) {
+            // Unset previous homepage for all pages in this project
+            List<Page> projectPages = pageRepository.findByProjectId(projectId);
+            for (Page p : projectPages) {
+                if (p.isHomepage()) {
+                    p.setHomepage(false);
+                    pageRepository.save(p);
+                }
+            }
+            page.setHomepage(true);
+        } else if (body.containsKey("isHomepage")) {
+            page.setHomepage((Boolean) body.get("isHomepage"));
+        }
 
         pageRepository.save(page);
         return ResponseEntity.ok(page);
@@ -144,7 +157,13 @@ public class PageController {
             return ResponseEntity.notFound().build();
         }
 
-        pageRepository.delete(pageOpt.get());
+        Page page = pageOpt.get();
+        List<Page> projectPages = pageRepository.findByProjectId(projectId);
+        if (page.isHomepage() && projectPages.size() > 1) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Não é possível excluir a página inicial do projeto sem definir outra página como principal antes"));
+        }
+
+        pageRepository.delete(page);
         return ResponseEntity.ok(Map.of("message", "Página excluída com sucesso"));
     }
 }

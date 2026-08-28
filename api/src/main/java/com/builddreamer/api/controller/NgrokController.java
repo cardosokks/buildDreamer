@@ -21,9 +21,20 @@ public class NgrokController {
     }
 
     @PostMapping("/start")
-    public ResponseEntity<?> startTunnel(@RequestBody Map<String, Object> body) {
-        String token = (String) body.get("authtoken");
-        String target = (String) body.get("target");
+    public ResponseEntity<?> startTunnel(
+            @RequestHeader(name = "x-ngrok-token", required = false) String headerToken,
+            @RequestBody(required = false) Map<String, Object> body) {
+        String token = headerToken;
+        String target = null;
+        if (body != null) {
+            if (token == null || token.trim().isEmpty()) {
+                token = (String) body.get("authtoken");
+            }
+            if (token == null || token.trim().isEmpty()) {
+                token = (String) body.get("token");
+            }
+            target = (String) body.get("target");
+        }
         Map<String, Object> status = ngrokService.startTunnel(token, target);
         return ResponseEntity.ok(status);
     }
