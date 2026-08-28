@@ -49,7 +49,7 @@ public class GeminiService {
         } else if (customModel != null) {
             candidateModels.add(customModel);
         } else {
-            candidateModels.addAll(Arrays.asList("gemini-3.5-flash", "gemini-3.6-flash", "gemini-3.7-flash", "gemini-3.5-flash-lite"));
+            candidateModels.addAll(Arrays.asList("gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"));
         }
 
         String systemPrompt = "Você é um Arquiteto de Software Frontend de Elite e Designer Visual Sênior.\n" +

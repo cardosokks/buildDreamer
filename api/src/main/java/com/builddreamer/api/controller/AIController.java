@@ -59,11 +59,25 @@ public class AIController {
     @PostMapping("/chat")
     public ResponseEntity<?> editPageChat(
             @AuthenticationPrincipal String userId,
+            @RequestHeader(name = "x-gemini-key", required = false) String rawGeminiKey,
+            @RequestHeader(name = "x-gemini-models", required = false) String rawGeminiModels,
             @RequestBody Map<String, Object> body) {
         String prompt = (String) body.get("prompt");
         Map<String, String> context = (Map<String, String>) body.get("context");
         String apiKey = (String) body.get("apiKey");
         String model = (String) body.get("model");
+
+        if (apiKey == null || apiKey.trim().isEmpty()) {
+            apiKey = decodeHeader(rawGeminiKey);
+        }
+
+        List<String> registeredModels = null;
+        if (rawGeminiModels != null && !rawGeminiModels.isEmpty()) {
+            try {
+                String jsonStr = decodeHeader(rawGeminiModels);
+                registeredModels = objectMapper.readValue(jsonStr, new TypeReference<List<String>>() {});
+            } catch (Exception ignored) {}
+        }
 
         try {
             Map<String, Object> response = geminiService.generateAIResponse(
@@ -71,7 +85,7 @@ public class AIController {
                     context != null ? context : Collections.emptyMap(),
                     apiKey,
                     model,
-                    null
+                    registeredModels
             );
             return ResponseEntity.ok(response);
         } catch (Exception ex) {
