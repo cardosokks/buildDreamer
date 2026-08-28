@@ -233,7 +233,9 @@ public class SiteRemasterService {
             boolean repeatFooter,
             String apiKey,
             List<String> models,
-            Map<String, Map<String, Object>> aiChatJobsQueue
+            Map<String, Map<String, Object>> aiChatJobsQueue,
+            String customAiSkills,
+            List<String> projectMediaUrls
     ) {
         Map<String, Object> progress = new ConcurrentHashMap<>();
         progress.put("status", "starting");
@@ -278,24 +280,43 @@ public class SiteRemasterService {
                     rawHtml = (String) pMap.getOrDefault("cleanText", "Conteúdo original da página: " + pageName);
                 }
 
+                String downloadedCss = (String) pMap.getOrDefault("css", "");
+                String downloadedJs = (String) pMap.getOrDefault("js", "");
+
                 // Truncate overly long raw HTML to avoid Gemini API token/context limit errors
                 if (rawHtml != null && rawHtml.length() > 12000) {
                     rawHtml = rawHtml.substring(0, 12000) + "... [Conteúdo truncado para otimização da IA]";
                 }
 
                 String customPrompt = (String) pMap.get("customPrompt");
-                String prompt = "Remasterizar a página " + pageName + " mantendo todo o conteúdo, textos e imagens originais, mas recriando o design completo com HTML5 moderno e Tailwind CSS elegante e responsivo.";
+                StringBuilder promptBuilder = new StringBuilder();
+                promptBuilder.append("Remasterizar a página ").append(pageName)
+                        .append(" mantendo todo o conteúdo, textos e imagens originais, mas recriando o design completo com HTML5 moderno e Tailwind CSS elegante e responsivo.\n");
+
                 if (customPrompt != null && !customPrompt.trim().isEmpty()) {
-                    prompt += "\nDiretrizes personalizadas solicitadas pelo usuário para esta página: " + customPrompt.trim();
+                    promptBuilder.append("\nDIRETRIZES DO USUÁRIO PARA ESTA PÁGINA:\n").append(customPrompt.trim()).append("\n");
                 }
+
+                if (customAiSkills != null && !customAiSkills.trim().isEmpty()) {
+                    promptBuilder.append("\nHABILIDADES / SKILLS DE DESIGN APLICADAS:\n").append(customAiSkills.trim()).append("\n");
+                }
+
+                if (projectMediaUrls != null && !projectMediaUrls.isEmpty()) {
+                    promptBuilder.append("\nMÍDIAS CADASTRADAS NO PROJETO DISPONÍVEIS PARA INSERÇÃO NAS PÁGINAS:\n");
+                    for (String mediaUrl : projectMediaUrls) {
+                        promptBuilder.append("- ").append(mediaUrl).append("\n");
+                    }
+                }
+
+                String prompt = promptBuilder.toString();
 
                 logs.add("IA gerando página: " + pageName + " (Slug: " + targetSlug + ")...");
                 progress.put("progress", i + 1);
 
                 Map<String, String> context = new HashMap<>();
                 context.put("html", rawHtml);
-                context.put("css", "");
-                context.put("js", "");
+                context.put("css", downloadedCss);
+                context.put("js", downloadedJs);
 
                 try {
                     Map<String, Object> aiResult = geminiService.generateAIResponse(

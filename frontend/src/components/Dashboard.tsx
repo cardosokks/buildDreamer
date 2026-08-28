@@ -1102,6 +1102,50 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
     return () => clearInterval(interval);
   }, [remasterScrapeJobId, remasterScrapingStatus, token]);
 
+  // Polling para acompanhar o progresso dos projetos sendo remasterizados por IA
+  useEffect(() => {
+    const activeProjectIds = Object.keys(generatingProjectJobs).filter(id => generatingProjectJobs[id]?.status === 'processing');
+    if (activeProjectIds.length === 0) return;
+
+    const interval = setInterval(async () => {
+      for (const projectId of activeProjectIds) {
+        try {
+          const res = await fetch(`${API_URL}/api/ai/remaster/job/${projectId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (!res.ok) continue;
+          const data = await res.json();
+
+          if (data.status === 'completed') {
+            setGeneratingProjectJobs(prev => {
+              const next = { ...prev };
+              delete next[projectId];
+              return next;
+            });
+            fetchProjects();
+          } else if (data.status === 'error' || data.status === 'failed') {
+            setGeneratingProjectJobs(prev => {
+              const next = { ...prev };
+              delete next[projectId];
+              return next;
+            });
+            fetchProjects();
+          } else if (data.logs && data.logs.length > 0) {
+            const lastLog = data.logs[data.logs.length - 1];
+            setGeneratingProjectJobs(prev => ({
+              ...prev,
+              [projectId]: { status: 'processing', currentModel: lastLog }
+            }));
+          }
+        } catch (err) {
+          console.error('Erro no polling do job de remasterização:', err);
+        }
+      }
+    }, 2500);
+
+    return () => clearInterval(interval);
+  }, [generatingProjectJobs, token]);
+
   // Executar a Geração Multi-Página com os Prompts Customizados
   const handleExecuteCustomRemaster = async () => {
     let activePages = remasterPages.filter(p => p.enabled);

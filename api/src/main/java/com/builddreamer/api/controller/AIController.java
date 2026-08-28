@@ -30,6 +30,7 @@ public class AIController {
     private final UserRepository userRepository;
     private final LeadRepository leadRepository;
     private final StorageService storageService;
+    private final MediaRepository mediaRepository;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     // Track AI Chat background jobs in memory
@@ -43,7 +44,8 @@ public class AIController {
             PageRepository pageRepository,
             UserRepository userRepository,
             LeadRepository leadRepository,
-            StorageService storageService) {
+            StorageService storageService,
+            MediaRepository mediaRepository) {
         this.geminiService = geminiService;
         this.remasterService = remasterService;
         this.projectRepository = projectRepository;
@@ -52,6 +54,7 @@ public class AIController {
         this.userRepository = userRepository;
         this.leadRepository = leadRepository;
         this.storageService = storageService;
+        this.mediaRepository = mediaRepository;
     }
 
     private String decodeHeader(String header) {
@@ -329,6 +332,7 @@ public class AIController {
             @RequestHeader(value = "X-Gemini-Key", required = false) String clientGeminiKeyEncoded,
             @RequestHeader(value = "X-Proxy-Url", required = false) String clientProxyUrlEncoded,
             @RequestHeader(value = "X-Gemini-Models", required = false) String clientModelsEncoded,
+            @RequestHeader(value = "X-AI-Skills", required = false) String clientAiSkillsEncoded,
             @RequestBody Map<String, Object> body) {
 
         String projectName = (String) body.get("projectName");
@@ -362,6 +366,7 @@ public class AIController {
             // 1. Create Project in DB
             Project project = new Project();
             project.setName(projectName);
+            project.setStatus("generating");
             project.setDescription(globalPrompt != null && globalPrompt.length() > 120 
                     ? "Remasterização IA: " + globalPrompt.substring(0, 120) + "..." 
                     : "Site gerado com IA para " + projectName);
@@ -374,20 +379,67 @@ public class AIController {
             member.setRole("OWNER");
             projectMemberRepository.save(member);
 
-            // 3. Add default page placeholder
-            Page homePage = new Page();
-            homePage.setName("Home");
-            homePage.setSlug("index");
-            homePage.setTitle("Home | " + projectName);
-            homePage.setHomepage(true);
-            homePage.setHtml("<div class=\"min-h-screen bg-slate-900 text-white flex flex-col justify-center items-center\">\n" +
-                    "  <h1 class=\"text-3xl font-bold mb-3\">Reconstruindo " + projectName + "...</h1>\n" +
-                    "  <p class=\"text-slate-400\">Aguarde enquanto a IA arquiteta o Design System e gera todas as subpáginas.</p>\n" +
-                    "</div>");
-            homePage.setCss("body { margin: 0; font-family: sans-serif; }");
-            homePage.setJs("");
-            homePage.setProject(project);
-            pageRepository.save(homePage);
+            // 3. Register downloaded pages & media into Project DB immediately
+            Set<String> projectMediaUrls = new LinkedHashSet<>();
+
+            for (int i = 0; i < pages.size(); i++) {
+                Map<String, Object> pMap = pages.get(i);
+                String pageName = (String) pMap.getOrDefault("name", "Página " + (i + 1));
+                String rawSlug = (String) pMap.get("slug");
+                String slug = ("home".equalsIgnoreCase(rawSlug) || rawSlug == null || rawSlug.trim().isEmpty()) ? "index" : rawSlug.trim();
+
+                String rawHtml = (String) pMap.get("rawHtml");
+                if (rawHtml == null || rawHtml.isEmpty()) {
+                    rawHtml = (String) pMap.get("html");
+                }
+                if (rawHtml == null || rawHtml.isEmpty()) {
+                    rawHtml = (String) pMap.getOrDefault("cleanText", "<div class=\"p-8 text-center\">Página " + pageName + "</div>");
+                }
+
+                String css = (String) pMap.getOrDefault("css", "");
+                String js = (String) pMap.getOrDefault("js", "");
+                boolean isHomepage = "index".equals(slug) || i == 0;
+
+                Page page = new Page();
+                page.setName(pageName);
+                page.setSlug(slug);
+                page.setTitle(pageName + " | " + projectName);
+                page.setHomepage(isHomepage);
+                page.setHtml(rawHtml);
+                page.setCss(css);
+                page.setJs(js);
+                page.setProject(project);
+                pageRepository.save(page);
+
+                // Process and register media items
+                Object mediaObj = pMap.get("media");
+                if (mediaObj instanceof List) {
+                    List<?> mediaList = (List<?>) mediaObj;
+                    for (Object item : mediaList) {
+                        String mUrl = null;
+                        if (item instanceof Map) {
+                            mUrl = (String) ((Map<?, ?>) item).get("url");
+                        } else if (item instanceof String) {
+                            mUrl = (String) item;
+                        }
+
+                        if (mUrl != null && !mUrl.trim().isEmpty()) {
+                            String finalUrl = mUrl.trim();
+                            projectMediaUrls.add(finalUrl);
+                            try {
+                                Media media = Media.builder()
+                                        .name("Mídia da página " + pageName)
+                                        .url(finalUrl)
+                                        .userId(userId)
+                                        .projectId(project.getId())
+                                        .mimeType(finalUrl.endsWith(".svg") ? "image/svg+xml" : "image/jpeg")
+                                        .build();
+                                mediaRepository.save(media);
+                            } catch (Exception ignored) {}
+                        }
+                    }
+                }
+            }
 
             // Link CRM Lead if present
             if (leadId != null) {
@@ -401,6 +453,8 @@ public class AIController {
 
             // Decode headers
             String clientGeminiKey = decodeHeader(clientGeminiKeyEncoded);
+            String customAiSkills = decodeHeader(clientAiSkillsEncoded);
+
             List<String> models = new ArrayList<>();
             String decodedModels = decodeHeader(clientModelsEncoded);
             if (decodedModels != null) {
@@ -409,7 +463,7 @@ public class AIController {
                 } catch (Exception ignored) {}
             }
 
-            // 4. Start async generation worker with jobId tracking for AI Chat
+            // 4. Start async generation worker with jobId tracking for AI Chat & polling
             String jobId = "job-" + System.currentTimeMillis() + "-" + (int)(Math.random() * 10000);
             Map<String, Object> initialJob = new ConcurrentHashMap<>();
             initialJob.put("jobId", jobId);
@@ -428,7 +482,9 @@ public class AIController {
                     repeatFooter,
                     clientGeminiKey,
                     models,
-                    aiChatJobsQueue
+                    aiChatJobsQueue,
+                    customAiSkills,
+                    new ArrayList<>(projectMediaUrls)
             );
 
             Map<String, Object> resMap = new LinkedHashMap<>();
