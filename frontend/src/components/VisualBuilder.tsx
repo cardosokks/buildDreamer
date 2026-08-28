@@ -1688,18 +1688,44 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
               height: '100%'
             }}
           >
-            {/* Overlay de carregamento com IA */}
+            {/* Retorno Visual Flutuante de Geração com IA (não-bloqueante) */}
             {aiGenerating && (
-              <div className="absolute inset-0 z-40 bg-black/85 backdrop-blur-md rounded-2xl flex flex-col items-center justify-center p-6 text-center shadow-2xl border border-amber-500/30">
-                <div className="w-16 h-16 rounded-full border-2 border-amber-500/50 p-1 mb-4 animate-spin shadow-[0_0_25px_rgba(229,185,95,0.5)] flex items-center justify-center">
-                  <Sparkles className="w-8 h-8 text-amber-400 animate-pulse" />
+              <div className="absolute top-4 left-1/2 -translate-x-1/2 z-40 bg-[#0d0914]/90 border border-purple-500/50 backdrop-blur-md rounded-2xl px-4 py-2.5 shadow-[0_0_30px_rgba(168,85,247,0.35)] flex items-center gap-3 animate-in fade-in slide-in-from-top-4 duration-300">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-xl bg-purple-500/20 border border-purple-500/40 flex items-center justify-center">
+                    <Sparkles className="w-4 h-4 text-purple-400 animate-spin" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-white tracking-wide">IA Gerando em Tempo Real</span>
+                      <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+                    </div>
+                    <p className="text-[10px] text-purple-300/80 font-mono truncate max-w-[280px]">
+                      {aiJobStatus || 'Atualizando seções e estilos live no canvas...'}
+                    </p>
+                  </div>
                 </div>
-                <h3 className="text-lg font-bold text-white mb-2 tracking-wide">Construindo Site com Inteligência Artificial</h3>
-                <p className="text-xs text-amber-300/80 max-w-md font-mono mb-4 animate-pulse">
-                  {aiJobStatus || 'Gerando estrutura de alta conversão, paleta e seções sob medida...'}
-                </p>
-                <div className="w-48 h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                  <div className="w-full h-full bg-gradient-to-r from-amber-400 via-rose-400 to-amber-500 animate-pulse" />
+
+                <div className="h-6 w-px bg-slate-800" />
+
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => { setShowAiLogsModal(true); fetchAiJobLogs(); }}
+                    className="px-2.5 py-1 bg-purple-950/80 hover:bg-purple-900 border border-purple-500/40 text-purple-300 text-[11px] font-semibold rounded-xl transition-all cursor-pointer flex items-center gap-1"
+                    title="Ver Logs Detalhados da IA"
+                  >
+                    <Sparkles className="w-3 h-3 text-purple-400" />
+                    Logs
+                  </button>
+
+                  <button
+                    onClick={handleCancelAiJob}
+                    className="px-2.5 py-1 bg-red-950/80 hover:bg-red-900 border border-red-500/50 text-red-300 text-[11px] font-semibold rounded-xl transition-all cursor-pointer flex items-center gap-1"
+                    title="Cancelar Geração da IA"
+                  >
+                    <XCircle className="w-3 h-3 text-red-400" />
+                    Cancelar
+                  </button>
                 </div>
               </div>
             )}
