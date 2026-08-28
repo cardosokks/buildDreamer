@@ -118,12 +118,15 @@ public class GeminiService {
                         n8nWebhookUrl = "http://n8n.192.168.18.39.nip.io/webhook/real-premise-agent";
                     }
 
+                    String safeUserPrompt = (userPrompt != null && !userPrompt.trim().isEmpty()) ? userPrompt : "Gere o site solicitado";
+                    String safeSystemPrompt = (systemPrompt != null && !systemPrompt.trim().isEmpty()) ? systemPrompt : "Você é um mestre em desenvolvimento web HTML CSS e JS.";
+
                     Map<String, Object> n8nPayload = new HashMap<>();
-                    n8nPayload.put("userPrompt", userPrompt);
-                    n8nPayload.put("systemPrompt", systemPrompt);
-                    n8nPayload.put("prompt", userPrompt);
-                    n8nPayload.put("chatInput", userPrompt);
-                    n8nPayload.put("input", userPrompt);
+                    n8nPayload.put("userPrompt", safeUserPrompt);
+                    n8nPayload.put("systemPrompt", safeSystemPrompt);
+                    n8nPayload.put("prompt", safeUserPrompt);
+                    n8nPayload.put("chatInput", safeUserPrompt);
+                    n8nPayload.put("input", safeUserPrompt);
                     n8nPayload.put("model", modelToTry);
                     n8nPayload.put("apiKey", activeKey);
 
