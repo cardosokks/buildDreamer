@@ -65,7 +65,7 @@ public class GeminiService {
         } else if (customModel != null) {
             candidateModels.add(customModel);
         } else {
-            candidateModels.addAll(Arrays.asList("gemini-3.6-flash", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"));
+            candidateModels.addAll(Arrays.asList("gemini-3.6-flash", "gemini-2.5-flash", "gemini-2.5-pro"));
         }
 
         String systemPrompt = "Você é um Arquiteto de Software Frontend de Elite e Designer Visual Sênior.\n" +
@@ -210,15 +210,52 @@ public class GeminiService {
     }
 
     private Map<String, Object> resilientJsonParse(String rawString) throws Exception {
+        if (rawString == null || rawString.trim().isEmpty()) {
+            return new HashMap<>();
+        }
         String text = rawString.trim();
         if (text.startsWith("```")) {
             text = text.replaceAll("^```(?:json)?\\s*", "").replaceAll("```\\s*$", "").trim();
         }
         try {
             return objectMapper.readValue(text, new TypeReference<Map<String, Object>>() {});
-        } catch (Exception ex) {
-            System.err.println("Resilient JSON parse failed. Raw string was: " + rawString);
-            throw ex;
+        } catch (Exception primaryEx) {
+            try {
+                String repaired = text;
+                long openQuotes = repaired.chars().filter(ch -> ch == '"').count();
+                if (openQuotes % 2 != 0) {
+                    repaired = repaired + "\"";
+                }
+                if (!repaired.endsWith("}")) {
+                    repaired = repaired + "}";
+                }
+                return objectMapper.readValue(repaired, new TypeReference<Map<String, Object>>() {});
+            } catch (Exception repairEx) {
+                Map<String, Object> fallback = new HashMap<>();
+                fallback.put("explanation", extractRegexGroup(text, "\"explanation\"\\s*:\\s*\"([^\"]*)\""));
+                fallback.put("html", extractRegexGroup(text, "\"html\"\\s*:\\s*\"([^\"]*)\""));
+                fallback.put("css", extractRegexGroup(text, "\"css\"\\s*:\\s*\"([^\"]*)\""));
+                fallback.put("js", extractRegexGroup(text, "\"js\"\\s*:\\s*\"([^\"]*)\""));
+                
+                String extractedHtml = (String) fallback.get("html");
+                if (extractedHtml != null && !extractedHtml.isEmpty()) {
+                    return fallback;
+                }
+                
+                System.err.println("[AI Engine] Erro ao analisar JSON da IA. String bruta: " + rawString);
+                throw primaryEx;
+            }
         }
+    }
+
+    private String extractRegexGroup(String text, String regex) {
+        try {
+            java.util.regex.Pattern pattern = java.util.regex.Pattern.compile(regex, java.util.regex.Pattern.DOTALL);
+            java.util.regex.Matcher matcher = pattern.matcher(text);
+            if (matcher.find()) {
+                return matcher.group(1).replace("\\n", "\n").replace("\\\"", "\"");
+            }
+        } catch (Exception ignored) {}
+        return "";
     }
 }
