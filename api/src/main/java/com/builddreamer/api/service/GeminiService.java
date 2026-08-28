@@ -23,6 +23,11 @@ public class GeminiService {
             .connectTimeout(Duration.ofSeconds(120))
             .build();
 
+    @FunctionalInterface
+    public interface ProgressCallback {
+        void onProgress(String model, int attempt, int total);
+    }
+
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public Map<String, Object> generateAIResponse(
@@ -31,6 +36,17 @@ public class GeminiService {
             String customApiKey,
             String customModel,
             List<String> registeredModels
+    ) throws Exception {
+        return generateAIResponse(prompt, context, customApiKey, customModel, registeredModels, null);
+    }
+
+    public Map<String, Object> generateAIResponse(
+            String prompt,
+            Map<String, String> context,
+            String customApiKey,
+            String customModel,
+            List<String> registeredModels,
+            ProgressCallback progressCallback
     ) throws Exception {
         String activeKey = (customApiKey != null && !customApiKey.trim().isEmpty()) ? customApiKey : defaultApiKey;
         if (activeKey == null || activeKey.trim().isEmpty()) {
@@ -84,6 +100,12 @@ public class GeminiService {
             if (!modelToTry.equals(lastModelTried)) {
                 modelRetries = 0;
                 lastModelTried = modelToTry;
+            }
+
+            if (progressCallback != null) {
+                try {
+                    progressCallback.onProgress(modelToTry, i + 1, candidateModels.size());
+                } catch (Exception ignored) {}
             }
 
             try {

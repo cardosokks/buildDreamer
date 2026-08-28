@@ -4,16 +4,25 @@ import com.builddreamer.api.model.Page;
 import com.builddreamer.api.model.Project;
 import com.builddreamer.api.model.ProjectMember;
 import com.builddreamer.api.model.User;
+import com.builddreamer.api.model.Version;
 import com.builddreamer.api.repository.PageRepository;
 import com.builddreamer.api.repository.ProjectMemberRepository;
 import com.builddreamer.api.repository.ProjectRepository;
 import com.builddreamer.api.repository.UserRepository;
+import com.builddreamer.api.repository.VersionRepository;
+import com.builddreamer.api.service.GeminiService;
+import com.builddreamer.api.service.SiteRemasterService;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.http.ResponseEntity;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import java.io.ByteArrayInputStream;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
@@ -25,19 +34,134 @@ public class ProjectController {
     private final ProjectMemberRepository memberRepository;
     private final UserRepository userRepository;
     private final PageRepository pageRepository;
-    private final com.builddreamer.api.service.SiteRemasterService remasterService;
+    private final VersionRepository versionRepository;
+    private final GeminiService geminiService;
+    private final SiteRemasterService remasterService;
+    private final ObjectMapper objectMapper = new ObjectMapper();
+
+    // Background jobs queue for AI project generation
+    private final Map<String, Map<String, Object>> projectJobsQueue = new ConcurrentHashMap<>();
 
     public ProjectController(
             ProjectRepository projectRepository,
             ProjectMemberRepository memberRepository,
             UserRepository userRepository,
             PageRepository pageRepository,
-            com.builddreamer.api.service.SiteRemasterService remasterService) {
+            VersionRepository versionRepository,
+            GeminiService geminiService,
+            SiteRemasterService remasterService) {
         this.projectRepository = projectRepository;
         this.memberRepository = memberRepository;
         this.userRepository = userRepository;
         this.pageRepository = pageRepository;
+        this.versionRepository = versionRepository;
+        this.geminiService = geminiService;
         this.remasterService = remasterService;
+    }
+
+    private String decodeHeader(String header) {
+        if (header == null || header.trim().isEmpty()) return null;
+        try {
+            return new String(Base64.getDecoder().decode(header.trim()), StandardCharsets.UTF_8);
+        } catch (Exception ex) {
+            return header;
+        }
+    }
+
+    @Async
+    public void processAIProjectGeneration(
+            String projectId,
+            String prompt,
+            String customApiKey,
+            String customModel,
+            List<String> registeredModels
+    ) {
+        Map<String, Object> initialJob = new ConcurrentHashMap<>();
+        initialJob.put("status", "processing");
+        projectJobsQueue.put(projectId, initialJob);
+
+        try {
+            Optional<Page> pageOpt = pageRepository.findByProjectId(projectId).stream()
+                    .filter(Page::isHomepage)
+                    .findFirst();
+
+            if (pageOpt.isEmpty()) {
+                List<Page> pages = pageRepository.findByProjectId(projectId);
+                if (!pages.isEmpty()) pageOpt = Optional.of(pages.get(0));
+            }
+
+            if (pageOpt.isEmpty()) {
+                throw new IllegalStateException("Homepage not found for project " + projectId);
+            }
+
+            Page page = pageOpt.get();
+            Map<String, String> context = new HashMap<>();
+            context.put("html", page.getHtml());
+            context.put("css", page.getCss());
+            context.put("js", page.getJs());
+
+            Map<String, Object> response = geminiService.generateAIResponse(
+                    prompt,
+                    context,
+                    customApiKey,
+                    customModel,
+                    registeredModels,
+                    (model, attempt, total) -> {
+                        Map<String, Object> progress = new ConcurrentHashMap<>();
+                        progress.put("status", "processing");
+                        progress.put("currentModel", model);
+                        progress.put("attempt", attempt);
+                        progress.put("total", total);
+                        projectJobsQueue.put(projectId, progress);
+                    }
+            );
+
+            String finalHtml = (String) response.getOrDefault("html", page.getHtml());
+            String finalCss = (String) response.getOrDefault("css", page.getCss());
+            String finalJs = (String) response.getOrDefault("js", page.getJs());
+
+            page.setHtml(finalHtml);
+            page.setCss(finalCss);
+            page.setJs(finalJs);
+            pageRepository.save(page);
+
+            // Create Version Snapshot ("AI Initial Setup")
+            try {
+                Optional<Project> projectOpt = projectRepository.findById(projectId);
+                if (projectOpt.isPresent()) {
+                    Map<String, Object> snapshotData = Map.of(
+                        "pages", List.of(Map.of(
+                            "id", page.getId(),
+                            "name", page.getName(),
+                            "slug", page.getSlug(),
+                            "html", finalHtml,
+                            "css", finalCss,
+                            "js", finalJs
+                        ))
+                    );
+                    Version version = Version.builder()
+                            .name("AI Initial Setup")
+                            .description("mockup autogerado por IA: " + prompt)
+                            .project(projectOpt.get())
+                            .snapshot(objectMapper.writeValueAsString(snapshotData))
+                            .build();
+                    versionRepository.save(version);
+                }
+            } catch (Exception ex) {
+                System.err.println("Erro ao criar snapshot de versão: " + ex.getMessage());
+            }
+
+            Map<String, Object> completedJob = new ConcurrentHashMap<>();
+            completedJob.put("status", "completed");
+            projectJobsQueue.put(projectId, completedJob);
+
+        } catch (Exception ex) {
+            System.err.println("Erro no worker de geração IA do projeto " + projectId + ": " + ex.getMessage());
+            Map<String, Object> failedJob = new ConcurrentHashMap<>();
+            failedJob.put("status", "failed");
+            failedJob.put("error", ex.getMessage());
+            projectJobsQueue.put(projectId, failedJob);
+        }
     }
 
     @GetMapping
@@ -47,7 +171,11 @@ public class ProjectController {
     }
 
     @PostMapping
-    public ResponseEntity<?> createProject(@AuthenticationPrincipal String userId, @RequestBody Map<String, Object> body) {
+    public ResponseEntity<?> createProject(
+            @AuthenticationPrincipal String userId,
+            @RequestHeader(name = "x-gemini-key", required = false) String rawGeminiKey,
+            @RequestHeader(name = "x-gemini-models", required = false) String rawGeminiModels,
+            @RequestBody Map<String, Object> body) {
         try {
             String name = (String) body.get("name");
             String description = (String) body.get("description");
@@ -84,7 +212,7 @@ public class ProjectController {
             // Automatically create initial homepage for the project
             Page homePage = Page.builder()
                     .name("Página Inicial")
-                    .slug("home")
+                    .slug("index")
                     .title(project.getName())
                     .description("Página inicial do projeto " + project.getName())
                     .html("<section class=\"relative bg-slate-900 text-white py-24 px-6 md:px-12 rounded-3xl my-6 border border-slate-800 shadow-2xl overflow-hidden\">\n" +
@@ -111,19 +239,17 @@ public class ProjectController {
             // Trigger AI Generation if requested
             boolean isAIPrompt = body.containsKey("isAIPrompt") && Boolean.TRUE.equals(body.get("isAIPrompt"));
             if (isAIPrompt) {
-                Map<String, Object> pageData = new HashMap<>();
-                pageData.put("name", "Página Inicial");
-                pageData.put("slug", "home");
-                pageData.put("cleanText", description != null ? description : name);
+                String apiKey = decodeHeader(rawGeminiKey);
+                List<String> registeredModels = null;
+                if (rawGeminiModels != null && !rawGeminiModels.isEmpty()) {
+                    try {
+                        String jsonStr = decodeHeader(rawGeminiModels);
+                        registeredModels = objectMapper.readValue(jsonStr, new TypeReference<List<String>>() {});
+                    } catch (Exception ignored) {}
+                }
 
-                remasterService.runRemasterGenerationJob(
-                        project.getId(),
-                        List.of(pageData),
-                        true,
-                        true,
-                        null,
-                        null
-                );
+                String prompt = description != null && !description.isEmpty() ? description : "Criar site moderno para " + name;
+                processAIProjectGeneration(project.getId(), prompt, apiKey, null, registeredModels);
             }
 
             return ResponseEntity.ok(project);
@@ -230,9 +356,12 @@ public class ProjectController {
 
     @GetMapping("/jobs/{projectId}/status")
     public ResponseEntity<?> getJobStatus(@PathVariable String projectId) {
-        Map<String, Object> status = remasterService.getJobStatus(projectId);
-        if (status.isEmpty()) {
-            return ResponseEntity.ok(Map.of("status", "none", "projectId", projectId));
+        Map<String, Object> status = projectJobsQueue.get(projectId);
+        if (status == null || status.isEmpty()) {
+            status = remasterService.getJobStatus(projectId);
+        }
+        if (status == null || status.isEmpty()) {
+            return ResponseEntity.ok(Map.of("status", "completed", "projectId", projectId));
         }
         return ResponseEntity.ok(status);
     }
