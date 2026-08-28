@@ -1,5 +1,6 @@
 package com.builddreamer.api.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
@@ -39,6 +40,7 @@ public class Page {
     @Column(name = "is_homepage", nullable = false)
     private boolean isHomepage = false;
 
+    @JsonIgnore
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "project_id", nullable = false)
     private Project project;
