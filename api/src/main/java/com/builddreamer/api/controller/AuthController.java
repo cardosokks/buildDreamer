@@ -103,4 +103,12 @@ public class AuthController {
         userRepository.save(user);
         return ResponseEntity.ok(Map.of("message", "Configurações atualizadas com sucesso"));
     }
+
+    @GetMapping("/time")
+    public ResponseEntity<?> getTime() {
+        return ResponseEntity.ok(Map.of(
+            "time", java.time.Instant.now().toString(),
+            "timezone", java.util.TimeZone.getDefault().getID()
+        ));
+    }
 }
