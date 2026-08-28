@@ -1178,6 +1178,18 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
         try { return btoa(unescape(encodeURIComponent(val))); } catch { return ''; }
       };
 
+      const sanitizedPages = activePages.map(p => ({
+        name: p.name || 'Página',
+        slug: p.slug || 'page',
+        customPrompt: p.customPrompt || '',
+        rawHtml: ((p as any).rawHtml || p.html || p.cleanText || '').slice(0, 20000).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, ''),
+        html: (p.html || (p as any).rawHtml || p.cleanText || '').slice(0, 20000).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, ''),
+        css: (p.css || '').slice(0, 8000),
+        js: (p.js || '').slice(0, 8000),
+        isHomepage: !!p.isHomepage,
+        media: (p.media || []).slice(0, 15)
+      }));
+
       const res = await fetch(`${API_URL}/api/ai/remaster/generate`, {
         method: 'POST',
         headers: {
@@ -1191,7 +1203,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
         body: JSON.stringify({
           projectName: finalProjectName,
           globalPrompt: remasterGlobalPrompt,
-          pages: activePages,
+          pages: sanitizedPages,
           leadId: remasterTargetLead?.id || undefined,
           sharedComponents: {
             repeatNavbar,
