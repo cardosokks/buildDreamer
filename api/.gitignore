@@ -7,3 +7,5 @@
 .project
 .settings/
 *.log
+uploads/
+/uploads/
