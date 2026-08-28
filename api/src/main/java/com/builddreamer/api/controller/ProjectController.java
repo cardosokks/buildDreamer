@@ -19,14 +19,17 @@ public class ProjectController {
     private final ProjectRepository projectRepository;
     private final ProjectMemberRepository memberRepository;
     private final UserRepository userRepository;
+    private final com.builddreamer.api.service.SiteRemasterService remasterService;
 
     public ProjectController(
             ProjectRepository projectRepository,
             ProjectMemberRepository memberRepository,
-            UserRepository userRepository) {
+            UserRepository userRepository,
+            com.builddreamer.api.service.SiteRemasterService remasterService) {
         this.projectRepository = projectRepository;
         this.memberRepository = memberRepository;
         this.userRepository = userRepository;
+        this.remasterService = remasterService;
     }
 
     @GetMapping
@@ -148,5 +151,14 @@ public class ProjectController {
 
         projectRepository.save(project);
         return ResponseEntity.ok(project);
+    }
+
+    @GetMapping("/jobs/{projectId}/status")
+    public ResponseEntity<?> getJobStatus(@PathVariable String projectId) {
+        Map<String, Object> status = remasterService.getJobStatus(projectId);
+        if (status.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(status);
     }
 }

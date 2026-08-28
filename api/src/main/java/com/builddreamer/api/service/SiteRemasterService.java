@@ -208,4 +208,27 @@ public class SiteRemasterService {
             }
         }
     }
+    private final Map<String, Map<String, Object>> scrapeJobs = new ConcurrentHashMap<>();
+
+    public Map<String, Object> getScrapeJobStatus(String jobId) {
+        return scrapeJobs.getOrDefault(jobId, Collections.emptyMap());
+    }
+
+    @Async
+    public void runScrapeJob(String jobId, String url, int maxPages) {
+        Map<String, Object> jobData = new ConcurrentHashMap<>();
+        jobData.put("status", "scraping");
+        jobData.put("progressMessage", "Conectando e descobrindo subpáginas...");
+        scrapeJobs.put(jobId, jobData);
+
+        try {
+            List<Map<String, Object>> pages = crawlEntireClientWebsite(url, maxPages);
+            jobData.put("status", "completed");
+            jobData.put("progressMessage", "Extração finalizada com sucesso!");
+            jobData.put("discoveredPages", pages);
+        } catch (Exception ex) {
+            jobData.put("status", "failed");
+            jobData.put("error", ex.getMessage());
+        }
+    }
 }
