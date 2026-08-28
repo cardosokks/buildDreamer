@@ -1104,11 +1104,22 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
 
   // Executar a Geração Multi-Página com os Prompts Customizados
   const handleExecuteCustomRemaster = async () => {
-    const activePages = remasterPages.filter(p => p.enabled);
+    let activePages = remasterPages.filter(p => p.enabled);
     if (activePages.length === 0) {
-      alert('Selecione ao menos 1 página para ser gerada.');
-      return;
+      activePages = [{
+        name: 'Home',
+        slug: 'index',
+        customPrompt: remasterGlobalPrompt || 'Site moderno e responsivo com HTML5 e Tailwind CSS',
+        cleanText: remasterGlobalPrompt || '',
+        html: '',
+        css: '',
+        js: '',
+        isHomepage: true,
+        enabled: true
+      }];
     }
+
+    const finalProjectName = remasterBusinessName.trim() || remasterTargetLead?.name || 'Novo Site Remasterizado';
 
     setGeneratingRemaster(true);
 
@@ -1134,7 +1145,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
           'X-AI-Skills': safeHeader(localStorage.getItem('custom_ai_skills') || '')
         },
         body: JSON.stringify({
-          projectName: remasterBusinessName,
+          projectName: finalProjectName,
           globalPrompt: remasterGlobalPrompt,
           pages: activePages,
           leadId: remasterTargetLead?.id || undefined,

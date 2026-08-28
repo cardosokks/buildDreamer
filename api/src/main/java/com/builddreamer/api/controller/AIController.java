@@ -340,8 +340,17 @@ public class AIController {
         boolean repeatNavbar = sharedComponents.containsKey("repeatNavbar") ? (boolean) sharedComponents.get("repeatNavbar") : true;
         boolean repeatFooter = sharedComponents.containsKey("repeatFooter") ? (boolean) sharedComponents.get("repeatFooter") : true;
 
-        if (projectName == null || pages == null || pages.isEmpty()) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Nome do projeto e lista de páginas são obrigatórios."));
+        if (projectName == null || projectName.trim().isEmpty()) {
+            projectName = "Novo Projeto Remasterizado";
+        }
+
+        if (pages == null || pages.isEmpty()) {
+            pages = new ArrayList<>();
+            Map<String, Object> defaultPage = new HashMap<>();
+            defaultPage.put("name", "Home");
+            defaultPage.put("slug", "index");
+            defaultPage.put("customPrompt", globalPrompt != null ? globalPrompt : "Site moderno e responsivo com HTML5 e Tailwind CSS");
+            pages.add(defaultPage);
         }
 
         Optional<User> userOpt = userRepository.findById(userId);

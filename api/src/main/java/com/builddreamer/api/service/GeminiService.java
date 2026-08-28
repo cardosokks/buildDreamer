@@ -109,40 +109,44 @@ public class GeminiService {
             }
 
             try {
-                System.out.println("[AI Engine - n8n real-premise-agent] Enviando requisição via n8n para o modelo: " + modelToTry);
+                System.out.println("[AI Engine] Tentando gerar via n8n real-premise-agent com o modelo: " + modelToTry);
                 
-                String n8nWebhookUrl = System.getenv("N8N_WEBHOOK_URL");
-                if (n8nWebhookUrl == null || n8nWebhookUrl.trim().isEmpty()) {
-                    n8nWebhookUrl = "http://n8n.192.168.18.39.nip.io/webhook/real-premise-agent";
+                try {
+                    String n8nWebhookUrl = System.getenv("N8N_WEBHOOK_URL");
+                    if (n8nWebhookUrl == null || n8nWebhookUrl.trim().isEmpty()) {
+                        n8nWebhookUrl = "http://n8n.192.168.18.39.nip.io/webhook/real-premise-agent";
+                    }
+
+                    Map<String, Object> n8nPayload = new HashMap<>();
+                    n8nPayload.put("userPrompt", userPrompt);
+                    n8nPayload.put("systemPrompt", systemPrompt);
+                    n8nPayload.put("model", modelToTry);
+                    n8nPayload.put("apiKey", activeKey);
+
+                    String requestBody = objectMapper.writeValueAsString(n8nPayload);
+
+                    HttpRequest request = HttpRequest.newBuilder()
+                            .uri(URI.create(n8nWebhookUrl))
+                            .header("Content-Type", "application/json")
+                            .timeout(Duration.ofSeconds(30))
+                            .POST(HttpRequest.BodyPublishers.ofString(requestBody, StandardCharsets.UTF_8))
+                            .build();
+
+                    HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+                    
+                    if (response.statusCode() == 200) {
+                        JsonNode rootNode = objectMapper.readTree(response.body());
+                        String rawText = rootNode.path("candidates").get(0).path("content").path("parts").get(0).path("text").asText("{}");
+                        Map<String, Object> parsed = resilientJsonParse(rawText);
+                        parsed.put("_usedModel", modelToTry + " (via n8n real-premise-agent)");
+                        return parsed;
+                    }
+                } catch (Exception n8nEx) {
+                    System.err.println("[AI Engine] Falha/timeout no n8n real-premise-agent: " + n8nEx.getMessage() + ". Recorrendo ao endpoint direto do Gemini...");
                 }
 
-                Map<String, Object> n8nPayload = new HashMap<>();
-                n8nPayload.put("userPrompt", userPrompt);
-                n8nPayload.put("systemPrompt", systemPrompt);
-                n8nPayload.put("model", modelToTry);
-                n8nPayload.put("apiKey", activeKey);
-
-                String requestBody = objectMapper.writeValueAsString(n8nPayload);
-
-                HttpRequest request = HttpRequest.newBuilder()
-                        .uri(URI.create(n8nWebhookUrl))
-                        .header("Content-Type", "application/json")
-                        .timeout(Duration.ofSeconds(120))
-                        .POST(HttpRequest.BodyPublishers.ofString(requestBody, StandardCharsets.UTF_8))
-                        .build();
-
-                HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-                
-                if (response.statusCode() == 200) {
-                    JsonNode rootNode = objectMapper.readTree(response.body());
-                    String rawText = rootNode.path("candidates").get(0).path("content").path("parts").get(0).path("text").asText("{}");
-                    Map<String, Object> parsed = resilientJsonParse(rawText);
-                    parsed.put("_usedModel", modelToTry + " (via n8n real-premise-agent)");
-                    return parsed;
-                }
-
-                // Fallback to direct Gemini API if n8n returns non-200
-                System.out.println("[AI Engine] n8n retornou status " + response.statusCode() + ". Utilizando endpoint direto do Gemini...");
+                // Fallback to direct Gemini API
+                System.out.println("[AI Engine] Utilizando endpoint direto do Gemini para o modelo: " + modelToTry);
                 Map<String, Object> payload = new HashMap<>();
                 Map<String, Object> systemInstruction = new HashMap<>();
                 Map<String, Object> partsObj = new HashMap<>();
@@ -160,7 +164,7 @@ public class GeminiService {
                 Map<String, Object> generationConfig = new HashMap<>();
                 generationConfig.put("responseMimeType", "application/json");
                 generationConfig.put("temperature", 0.35);
-                generationConfig.put("maxOutputTokens", 8192);
+                generationConfig.put("maxOutputTokens", 4096);
                 payload.put("generationConfig", generationConfig);
 
                 String directRequestBody = objectMapper.writeValueAsString(payload);
