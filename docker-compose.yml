@@ -6,8 +6,8 @@ services:
       POSTGRES_USER: builder_user
       POSTGRES_PASSWORD: builder_password
       POSTGRES_DB: builder_db
-    ports:
-      - "5432:5432"
+    expose:
+      - "5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
@@ -16,8 +16,6 @@ services:
       context: ./api
       dockerfile: Dockerfile
     restart: always
-    ports:
-      - "5000:5000"
     expose:
       - "5000"
     environment:
