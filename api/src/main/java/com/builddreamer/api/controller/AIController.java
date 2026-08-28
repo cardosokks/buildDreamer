@@ -230,6 +230,7 @@ public class AIController {
             @RequestHeader(name = "x-proxy-url", required = false) String rawProxyUrl) {
         
         List<Map<String, String>> defaultModels = Arrays.asList(
+                Map.of("id", "gemini-3.6-flash", "name", "Gemini 3.6 Flash", "category", "flash"),
                 Map.of("id", "gemini-2.5-flash", "name", "Gemini 2.5 Flash", "category", "flash"),
                 Map.of("id", "gemini-2.0-flash", "name", "Gemini 2.0 Flash", "category", "flash"),
                 Map.of("id", "gemini-1.5-flash", "name", "Gemini 1.5 Flash", "category", "flash"),
