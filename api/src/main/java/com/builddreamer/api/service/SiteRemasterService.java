@@ -471,6 +471,8 @@ public class SiteRemasterService {
             jobData.put("status", "failed");
             jobData.put("error", ex.getMessage());
         }
+    }
+
     public boolean cancelJob(String projectId) {
         Map<String, Object> progress = activeJobs.get(projectId);
         if (progress != null) {
