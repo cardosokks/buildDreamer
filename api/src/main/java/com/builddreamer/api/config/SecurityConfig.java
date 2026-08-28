@@ -36,6 +36,7 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 .requestMatchers("/api/auth/login", "/api/auth/signup", "/api/auth/time").permitAll()
+                .requestMatchers("/uploads/**").permitAll() // Serve static uploaded media publicly
                 .requestMatchers("/ws/**", "/ws").permitAll() // WebSockets
                 .anyRequest().authenticated()
             )

@@ -165,7 +165,7 @@ public class ProjectController {
     public ResponseEntity<?> getJobStatus(@PathVariable String projectId) {
         Map<String, Object> status = remasterService.getJobStatus(projectId);
         if (status.isEmpty()) {
-            return ResponseEntity.notFound().build();
+            return ResponseEntity.ok(Map.of("status", "none", "projectId", projectId));
         }
         return ResponseEntity.ok(status);
     }
