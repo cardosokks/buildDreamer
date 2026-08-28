@@ -26,7 +26,7 @@ public class AuthController {
         this.tokenProvider = tokenProvider;
     }
 
-    @PostMapping("/register")
+    @PostMapping("/signup")
     public ResponseEntity<?> register(@RequestBody AuthDto.SignupRequest request) {
         if (userRepository.existsByEmail(request.getEmail())) {
             return ResponseEntity.badRequest().body(Map.of("error", "Email já cadastrado"));
@@ -41,12 +41,8 @@ public class AuthController {
         userRepository.save(user);
 
         String token = tokenProvider.generateToken(user.getId(), user.getEmail());
-        return ResponseEntity.ok(AuthDto.AuthResponse.builder()
-                .token(token)
-                .userId(user.getId())
-                .email(user.getEmail())
-                .name(user.getName())
-                .build());
+        AuthDto.UserResponse userResponse = new AuthDto.UserResponse(user);
+        return ResponseEntity.ok(new AuthDto.AuthResponse(token, userResponse));
     }
 
     @PostMapping("/login")
@@ -58,12 +54,8 @@ public class AuthController {
 
         User user = userOpt.get();
         String token = tokenProvider.generateToken(user.getId(), user.getEmail());
-        return ResponseEntity.ok(AuthDto.AuthResponse.builder()
-                .token(token)
-                .userId(user.getId())
-                .email(user.getEmail())
-                .name(user.getName())
-                .build());
+        AuthDto.UserResponse userResponse = new AuthDto.UserResponse(user);
+        return ResponseEntity.ok(new AuthDto.AuthResponse(token, userResponse));
     }
 
     @GetMapping("/me")
