@@ -1985,6 +1985,10 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
           onSaveGlobals={(navHtml, footHtml) => {
             setProject(prev => prev ? { ...prev, navbarHtml: navHtml, footerHtml: footHtml } : null);
             notify.success('Blocos globais atualizados em todas as páginas!', 'Globais');
+          }}
+        />
+      )}
+
       {/* ─── Modal de Logs e Erros da IA em Tempo Real ─── */}
       {showAiLogsModal && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
