@@ -14,6 +14,10 @@ import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.*;
 
+import com.builddreamer.api.service.StorageService;
+import org.springframework.scheduling.annotation.Async;
+import java.util.concurrent.ConcurrentHashMap;
+
 @RestController
 @RequestMapping("/api/ai")
 public class AIController {
@@ -25,7 +29,11 @@ public class AIController {
     private final PageRepository pageRepository;
     private final UserRepository userRepository;
     private final LeadRepository leadRepository;
+    private final StorageService storageService;
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    // Track AI Chat background jobs in memory
+    private final Map<String, Map<String, Object>> aiChatJobsQueue = new ConcurrentHashMap<>();
 
     public AIController(
             GeminiService geminiService, 
@@ -34,7 +42,8 @@ public class AIController {
             ProjectMemberRepository projectMemberRepository,
             PageRepository pageRepository,
             UserRepository userRepository,
-            LeadRepository leadRepository) {
+            LeadRepository leadRepository,
+            StorageService storageService) {
         this.geminiService = geminiService;
         this.remasterService = remasterService;
         this.projectRepository = projectRepository;
@@ -42,6 +51,7 @@ public class AIController {
         this.pageRepository = pageRepository;
         this.userRepository = userRepository;
         this.leadRepository = leadRepository;
+        this.storageService = storageService;
     }
 
     private String decodeHeader(String header) {
@@ -56,6 +66,77 @@ public class AIController {
         }
     }
 
+    @Async
+    public void processAiChatJob(
+            String jobId,
+            String pageId,
+            String projectId,
+            String prompt,
+            Map<String, String> context,
+            String apiKey,
+            String model,
+            List<String> registeredModels
+    ) {
+        Map<String, Object> jobState = aiChatJobsQueue.get(jobId);
+        if (jobState == null) {
+            jobState = new ConcurrentHashMap<>();
+            aiChatJobsQueue.put(jobId, jobState);
+        }
+        jobState.put("status", "processing");
+        if (pageId != null) jobState.put("pageId", pageId);
+        if (projectId != null) jobState.put("projectId", projectId);
+
+        final Map<String, Object> stateRef = jobState;
+
+        try {
+            Map<String, Object> response = geminiService.generateAIResponse(
+                    prompt,
+                    context != null ? context : Collections.emptyMap(),
+                    apiKey,
+                    model,
+                    registeredModels,
+                    (m, attempt, total) -> {
+                        stateRef.put("status", "processing");
+                        stateRef.put("currentModel", m);
+                        stateRef.put("attempt", attempt);
+                        stateRef.put("total", total);
+                    }
+            );
+
+            // Update Page in database & MinIO if pageId is present
+            if (pageId != null && !pageId.isEmpty()) {
+                Optional<Page> pageOpt = pageRepository.findById(pageId);
+                if (pageOpt.isPresent()) {
+                    Page page = pageOpt.get();
+                    if (response.containsKey("html")) page.setHtml((String) response.get("html"));
+                    if (response.containsKey("css")) page.setCss((String) response.get("css"));
+                    if (response.containsKey("js")) page.setJs((String) response.get("js"));
+                    pageRepository.save(page);
+
+                    // Sync to MinIO
+                    try {
+                        Project proj = page.getProject();
+                        if (proj != null) {
+                            storageService.uploadSinglePage(proj.getName(), page.getSlug(), page.getHtml(), page.getCss(), page.getJs(), page.isHomepage(), proj.getNavbarHtml(), proj.getFooterHtml());
+                        }
+                    } catch (Exception ignored) {}
+                }
+            }
+
+            stateRef.put("status", "completed");
+            stateRef.put("response", response);
+            if (response.containsKey("explanation")) stateRef.put("explanation", response.get("explanation"));
+            if (response.containsKey("html")) stateRef.put("html", response.get("html"));
+            if (response.containsKey("css")) stateRef.put("css", response.get("css"));
+            if (response.containsKey("js")) stateRef.put("js", response.get("js"));
+
+        } catch (Exception ex) {
+            System.err.println("Erro no worker do AI Chat (job " + jobId + "): " + ex.getMessage());
+            stateRef.put("status", "failed");
+            stateRef.put("error", ex.getMessage());
+        }
+    }
+
     @PostMapping("/chat")
     public ResponseEntity<?> editPageChat(
             @AuthenticationPrincipal String userId,
@@ -66,6 +147,8 @@ public class AIController {
         Map<String, String> context = (Map<String, String>) body.get("context");
         String apiKey = (String) body.get("apiKey");
         String model = (String) body.get("model");
+        String pageId = (String) body.get("pageId");
+        String projectId = (String) body.get("projectId");
 
         if (apiKey == null || apiKey.trim().isEmpty()) {
             apiKey = decodeHeader(rawGeminiKey);
@@ -79,18 +162,58 @@ public class AIController {
             } catch (Exception ignored) {}
         }
 
-        try {
-            Map<String, Object> response = geminiService.generateAIResponse(
-                    prompt,
-                    context != null ? context : Collections.emptyMap(),
-                    apiKey,
-                    model,
-                    registeredModels
-            );
-            return ResponseEntity.ok(response);
-        } catch (Exception ex) {
-            return ResponseEntity.status(500).body(Map.of("error", ex.getMessage()));
+        String jobId = "job-" + System.currentTimeMillis() + "-" + new Random().nextInt(10000);
+        String scope = (projectId != null && pageId == null) ? "all" : "single";
+
+        Map<String, Object> initialJob = new ConcurrentHashMap<>();
+        initialJob.put("status", "pending");
+        initialJob.put("scope", scope);
+        if (pageId != null) initialJob.put("pageId", pageId);
+        if (projectId != null) initialJob.put("projectId", projectId);
+
+        aiChatJobsQueue.put(jobId, initialJob);
+
+        processAiChatJob(jobId, pageId, projectId, prompt, context, apiKey, model, registeredModels);
+
+        return ResponseEntity.status(202).body(Map.of("jobId", jobId, "status", "pending", "scope", scope));
+    }
+
+    @GetMapping("/jobs/active")
+    public ResponseEntity<?> getActiveJob(
+            @RequestParam(required = false) String pageId,
+            @RequestParam(required = false) String projectId) {
+        
+        List<Map.Entry<String, Map<String, Object>>> entries = new ArrayList<>(aiChatJobsQueue.entrySet());
+        Collections.reverse(entries);
+
+        for (Map.Entry<String, Map<String, Object>> entry : entries) {
+            String jobId = entry.getKey();
+            Map<String, Object> job = entry.getValue();
+            String status = (String) job.get("status");
+
+            if ("processing".equals(status) || "pending".equals(status)) {
+                if (pageId != null && pageId.equals(job.get("pageId"))) {
+                    Map<String, Object> res = new HashMap<>(job);
+                    res.put("jobId", jobId);
+                    return ResponseEntity.ok(res);
+                }
+                if (projectId != null && projectId.equals(job.get("projectId")) && "all".equals(job.get("scope"))) {
+                    Map<String, Object> res = new HashMap<>(job);
+                    res.put("jobId", jobId);
+                    return ResponseEntity.ok(res);
+                }
+            }
         }
+        return ResponseEntity.ok(Map.of("active", false));
+    }
+
+    @GetMapping("/jobs/{jobId}/status")
+    public ResponseEntity<?> getJobStatus(@PathVariable String jobId) {
+        Map<String, Object> job = aiChatJobsQueue.get(jobId);
+        if (job == null) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(job);
     }
 
     @GetMapping("/models")
