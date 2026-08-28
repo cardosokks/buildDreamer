@@ -303,12 +303,12 @@ public class LeadController {
         String niche = (String) body.get("niche");
         String city = (String) body.get("city");
 
-        if (name == null || niche == null || city == null) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Nome, nicho e cidade são obrigatórios"));
+        Optional<User> userOpt = userRepository.findById(userId);
+        if (userOpt.isEmpty()) {
+            return ResponseEntity.status(401).body(Map.of("error", "Usuário não encontrado"));
         }
 
         LeadPreset preset = new LeadPreset();
-        preset.setId("preset-" + System.currentTimeMillis() + "-" + new Random().nextInt(1000));
         preset.setName(name);
         preset.setNiche(niche);
         preset.setCity(city);
@@ -320,6 +320,7 @@ public class LeadController {
         preset.setHasWhatsappOnly(body.containsKey("hasWhatsappOnly") && (boolean) body.get("hasWhatsappOnly"));
         preset.setMinRating(body.containsKey("minRating") ? Double.parseDouble(body.get("minRating").toString()) : 0.0);
         preset.setUserId(userId);
+        preset.setUser(userOpt.get());
 
         leadPresetRepository.save(preset);
         return ResponseEntity.status(201).body(Map.of("success", true, "id", preset.getId()));
