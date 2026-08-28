@@ -128,17 +128,36 @@ public class GeminiService {
                     HttpRequest request = HttpRequest.newBuilder()
                             .uri(URI.create(n8nWebhookUrl))
                             .header("Content-Type", "application/json")
-                            .timeout(Duration.ofSeconds(30))
+                            .timeout(Duration.ofSeconds(300))
                             .POST(HttpRequest.BodyPublishers.ofString(requestBody, StandardCharsets.UTF_8))
                             .build();
 
                     HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
                     
                     if (response.statusCode() == 200) {
-                        JsonNode rootNode = objectMapper.readTree(response.body());
-                        String rawText = rootNode.path("candidates").get(0).path("content").path("parts").get(0).path("text").asText("{}");
+                        String respBody = response.body();
+                        String rawText = respBody;
+                        try {
+                            JsonNode rootNode = objectMapper.readTree(respBody);
+                            if (rootNode.has("response")) {
+                                rawText = rootNode.get("response").asText();
+                            } else if (rootNode.has("output")) {
+                                rawText = rootNode.get("output").asText();
+                            } else if (rootNode.has("text")) {
+                                rawText = rootNode.get("text").asText();
+                            } else if (rootNode.has("candidates") && rootNode.path("candidates").isArray() && rootNode.path("candidates").size() > 0) {
+                                rawText = rootNode.path("candidates").get(0).path("content").path("parts").get(0).path("text").asText(respBody);
+                            } else if (rootNode.isArray() && rootNode.size() > 0) {
+                                JsonNode firstItem = rootNode.get(0);
+                                if (firstItem.has("output")) rawText = firstItem.get("output").asText();
+                                else if (firstItem.has("response")) rawText = firstItem.get("response").asText();
+                                else if (firstItem.has("text")) rawText = firstItem.get("text").asText();
+                            }
+                        } catch (Exception ignored) {}
+
                         Map<String, Object> parsed = resilientJsonParse(rawText);
                         parsed.put("_usedModel", modelToTry + " (via n8n real-premise-agent)");
+                        System.out.println("[AI Engine] Sucesso total na geração via n8n real-premise-agent com o modelo: " + modelToTry);
                         return parsed;
                     }
                 } catch (Exception n8nEx) {
