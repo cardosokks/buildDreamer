@@ -3,3 +3,6 @@
 /backend/.claude
 /backend/.windsurf
 /frontend/node_modules
+.env
+*.env
+api/target/

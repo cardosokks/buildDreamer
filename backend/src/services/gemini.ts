@@ -129,6 +129,7 @@ function resilientJsonParse(rawString: string): any {
     };
   }
 
+  console.warn('Resilient JSON parse failed. Raw string was:', rawString);
   throw new Error('Falha ao processar resposta JSON da IA.');
 }
 
@@ -305,8 +306,8 @@ export const generateAIResponse = async (
        - Preserve o container <div id="canvas-root"> como nó raiz do conteúdo.
     3. ARQUIVOS ANEXADOS & LOGOMARCAS:
        - Se o usuário enviou uma logomarca (imagem ou SVG), posicione-a com destaque e elegância na Navbar (<nav>/<header>), Rodapé (<footer>) ou seções hero.
-       - Se o usuário enviou um arquivo de código ou navbar de referência, replique a estrutura com perfeição mantendo o design responsivo.
-    4. Retorne SEMPRE um objeto JSON estrito no formato abaixo:
+     4. OTIMIZAÇÃO DE TOKENS E COMPACTAÇÃO: Escreva código HTML/CSS extremamente conciso, limpo e enxuto. Limite o HTML a no máximo 120-150 linhas. Evite seções repetitivas longas, SVGs complexos ou textos gigantescos. Isso é OBRIGATÓRIO para evitar cortes no JSON.
+     5. Retorne SEMPRE um objeto JSON estrito no formato abaixo:
 
     Formato da Resposta JSON OBRIGATÓRIO:
     {
@@ -323,11 +324,17 @@ export const generateAIResponse = async (
 
   let lastError: any = null;
 
-  // Timeout por requisição para evitar que a IA fique pendurada se o upstream demorar
-  const REQUEST_TIMEOUT_MS = 30000;
+  const REQUEST_TIMEOUT_MS = 120000;
+
+  let modelRetries = 0;
+  let lastModelTried = '';
 
   for (let i = 0; i < candidateModels.length; i++) {
     const modelToTry = candidateModels[i];
+    if (modelToTry !== lastModelTried) {
+      modelRetries = 0;
+      lastModelTried = modelToTry;
+    }
     if (onModelAttempt) {
       onModelAttempt(modelToTry, i + 1, candidateModels.length);
     }
@@ -398,6 +405,16 @@ export const generateAIResponse = async (
       clearTimeout(timeoutId);
       console.warn(`[AI Engine] Tentativa com o modelo ${modelToTry} (${i + 1}/${candidateModels.length}) falhou:`, error.message);
       lastError = error;
+
+      const is429 = error.message.includes('429');
+      const is503 = error.message.includes('503');
+      if ((is429 || is503) && modelRetries < 3) {
+        modelRetries++;
+        const waitTime = is429 ? 45000 : 15000;
+        console.log(`[AI Engine] Erro temporário (${is429 ? '429' : '503'}) detectado. Aguardando ${waitTime/1000} segundos antes de tentar novamente o modelo ${modelToTry}... (Tentativa ${modelRetries}/3)`);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+        i--; // Tenta o mesmo modelo de novo
+      }
     }
   }
 
