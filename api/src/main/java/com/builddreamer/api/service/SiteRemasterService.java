@@ -15,6 +15,9 @@ import java.net.URL;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
+import java.util.regex.Pattern;
+import java.util.regex.Matcher;
+
 @Service
 public class SiteRemasterService {
 
@@ -57,8 +60,8 @@ public class SiteRemasterService {
 
             try {
                 Document doc = Jsoup.connect(currentUrl)
-                        .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-                        .timeout(10000)
+                        .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+                        .timeout(12000)
                         .ignoreHttpErrors(true)
                         .get();
 
@@ -94,6 +97,94 @@ public class SiteRemasterService {
                     slug = "index";
                 }
 
+                // Extract page media (Images, Logos, Backgrounds, Videos)
+                List<Map<String, Object>> pageMedia = new ArrayList<>();
+                Set<String> seenMediaUrls = new HashSet<>();
+
+                // 1. <img> tags
+                for (Element img : doc.select("img")) {
+                    String srcAttr = img.hasAttr("data-src") ? "data-src" :
+                                    img.hasAttr("data-lazy-src") ? "data-lazy-src" :
+                                    img.hasAttr("src") ? "src" : null;
+                    if (srcAttr == null) continue;
+                    
+                    String rawSrc = img.attr(srcAttr);
+                    if (rawSrc.isEmpty() || rawSrc.startsWith("data:") || rawSrc.startsWith("blob:")) continue;
+
+                    String absUrl = img.absUrl(srcAttr);
+                    if (absUrl.isEmpty()) {
+                        try {
+                            absUrl = new URL(new URL(currentUrl), rawSrc).toString();
+                        } catch (Exception ignored) {}
+                    }
+
+                    if (absUrl.isEmpty() || seenMediaUrls.contains(absUrl) || absUrl.contains("pixel") || absUrl.contains("tracking") || absUrl.contains("favicon")) continue;
+
+                    seenMediaUrls.add(absUrl);
+                    String alt = img.attr("alt");
+                    String cls = img.attr("class").toLowerCase();
+                    String lowerUrl = absUrl.toLowerCase();
+
+                    String role = "content";
+                    if (lowerUrl.contains("logo") || alt.toLowerCase().contains("logo") || cls.contains("logo") || cls.contains("brand") || cls.contains("marca")) {
+                        role = "logo";
+                    } else if (lowerUrl.contains("hero") || lowerUrl.contains("banner") || lowerUrl.contains("destaque") || cls.contains("hero") || cls.contains("banner") || cls.contains("cover")) {
+                        role = "hero";
+                    } else if (lowerUrl.contains("card") || lowerUrl.contains("servico") || lowerUrl.contains("produto") || cls.contains("card") || cls.contains("item")) {
+                        role = "card";
+                    }
+
+                    Map<String, Object> mediaItem = new HashMap<>();
+                    mediaItem.put("url", absUrl);
+                    mediaItem.put("alt", alt.trim().isEmpty() ? (title.isEmpty() ? slug : title) + " Imagem" : alt.trim());
+                    mediaItem.put("type", "logo".equals(role) ? "logo" : "image");
+                    mediaItem.put("role", role);
+                    pageMedia.add(mediaItem);
+                }
+
+                // 2. Background images in inline styles or tags
+                Elements elementsWithStyle = doc.select("[style*='url']");
+                for (Element el : elementsWithStyle) {
+                    String styleAttr = el.attr("style");
+                    Matcher m = Pattern.compile("url\\(['\"]?([^'\")\\s]+\\.(?:png|jpe?g|webp|svg|gif)(?:\\?[^'\")\\s]*)?)['\"]?\\)", Pattern.CASE_INSENSITIVE).matcher(styleAttr);
+                    while (m.find()) {
+                        String bgSrc = m.group(1);
+                        String absUrl = "";
+                        try {
+                            absUrl = new URL(new URL(currentUrl), bgSrc).toString();
+                        } catch (Exception ignored) {}
+                        if (!absUrl.isEmpty() && !seenMediaUrls.contains(absUrl) && !absUrl.contains("pixel")) {
+                            seenMediaUrls.add(absUrl);
+                            Map<String, Object> mediaItem = new HashMap<>();
+                            mediaItem.put("url", absUrl);
+                            mediaItem.put("alt", (title.isEmpty() ? slug : title) + " Background");
+                            mediaItem.put("type", "image");
+                            mediaItem.put("role", "hero");
+                            pageMedia.add(mediaItem);
+                        }
+                    }
+                }
+
+                // 3. Videos
+                for (Element video : doc.select("video, iframe[src*='youtube'], iframe[src*='vimeo']")) {
+                    String vSrc = video.attr("src");
+                    String absUrl = video.absUrl("src");
+                    if (absUrl.isEmpty() && !vSrc.isEmpty()) {
+                        try {
+                            absUrl = new URL(new URL(currentUrl), vSrc).toString();
+                        } catch (Exception ignored) {}
+                    }
+                    if (!absUrl.isEmpty() && !seenMediaUrls.contains(absUrl)) {
+                        seenMediaUrls.add(absUrl);
+                        Map<String, Object> mediaItem = new HashMap<>();
+                        mediaItem.put("url", absUrl);
+                        mediaItem.put("alt", (title.isEmpty() ? slug : title) + " Vídeo");
+                        mediaItem.put("type", "video");
+                        mediaItem.put("role", "video");
+                        pageMedia.add(mediaItem);
+                    }
+                }
+
                 Map<String, Object> pageData = new HashMap<>();
                 pageData.put("name", title.isEmpty() ? slug : title);
                 pageData.put("slug", slug);
@@ -104,7 +195,7 @@ public class SiteRemasterService {
                 pageData.put("rawHtml", bodyHtml.length() > 20000 ? bodyHtml.substring(0, 20000) : bodyHtml);
                 pageData.put("cleanText", bodyText.length() > 5000 ? bodyText.substring(0, 5000) : bodyText);
                 pageData.put("isHomepage", "index".equals(slug) || pages.isEmpty());
-                pageData.put("media", new ArrayList<>());
+                pageData.put("media", pageMedia);
 
                 pages.add(pageData);
 
