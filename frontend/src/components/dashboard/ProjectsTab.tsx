@@ -191,7 +191,7 @@ export const ProjectsTab: React.FC<ProjectsTabProps> = ({
         /* Project Cards Grid */
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredProjects.map((project) => {
-            const isGenerating = !!generatingProjectJobs[project.id];
+            const isGenerating = !!generatingProjectJobs[project.id] || project.status === 'generating';
             const jobInfo = generatingProjectJobs[project.id];
 
             return (
@@ -199,38 +199,30 @@ export const ProjectsTab: React.FC<ProjectsTabProps> = ({
                 key={project.id}
                 onClick={() => onSelectProject(project.id)}
                 className={`border rounded-2xl p-5 transition-all group flex flex-col justify-between min-h-[200px] shadow-lg relative ${isGenerating
-                  ? 'bg-[#0f0b18] border-amber-500/50 shadow-[0_0_25px_rgba(229,185,95,0.15)] cursor-pointer overflow-hidden'
+                  ? 'bg-[#0f0b18] border-amber-500/50 shadow-[0_0_25px_rgba(229,185,95,0.15)] cursor-pointer'
                   : theme === 'light'
                     ? 'bg-white border-slate-200 hover:border-purple-400/60 cursor-pointer hover:shadow-purple-100'
                     : 'bg-[#0f0b18] border-slate-800/80 hover:border-purple-500/40 hover:bg-[#130d1e] cursor-pointer hover:shadow-[0_0_20px_rgba(168,85,247,0.08)]'
                   }`}
               >
+                {/* Banner de Geração com IA (não-bloqueante) */}
                 {isGenerating && (
-                  <div className="absolute inset-0 bg-black/80 backdrop-blur-[3px] z-10 flex flex-col items-center justify-center p-4 text-center rounded-2xl gap-2">
-                    <div className="flex items-center gap-2">
-                      <Sparkles className="w-5 h-5 text-amber-400 animate-spin" />
-                      <span className="text-xs font-bold text-amber-300">Construindo com IA...</span>
+                  <div className="mb-3 p-2.5 rounded-xl bg-amber-950/60 border border-amber-500/40 flex items-center justify-between gap-2 animate-pulse">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Sparkles className="w-4 h-4 text-amber-400 shrink-0 animate-spin" />
+                      <div className="min-w-0 text-left">
+                        <p className="text-[11px] font-bold text-amber-300 truncate">Construindo com IA...</p>
+                        <p className="text-[9px] text-amber-200/70 font-mono truncate">{jobInfo?.currentModel || 'Gerando seções do site'}</p>
+                      </div>
                     </div>
-                    <span className="text-[10px] text-slate-300 font-mono">
-                      {jobInfo?.currentModel ? `${jobInfo.currentModel}` : 'Estruturando HTML e CSS'}
-                    </span>
-                    <div className="flex items-center gap-2 mt-1">
-                      <button
-                        onClick={(e) => { e.stopPropagation(); onSelectProject(project.id); }}
-                        className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white font-bold text-[11px] rounded-xl transition-all shadow-md cursor-pointer flex items-center gap-1"
-                      >
-                        <ChevronRight className="w-3.5 h-3.5" />
-                        Entrar no Projeto
-                      </button>
-                      <button
-                        onClick={(e) => handleCancelJob(project.id, e)}
-                        className="px-2.5 py-1.5 bg-red-950/80 hover:bg-red-900 border border-red-500/50 text-red-300 font-bold text-[11px] rounded-xl transition-all cursor-pointer flex items-center gap-1"
-                        title="Cancelar Geração com IA"
-                      >
-                        <XCircle className="w-3.5 h-3.5 text-red-400" />
-                        Cancelar
-                      </button>
-                    </div>
+                    <button
+                      onClick={(e) => handleCancelJob(project.id, e)}
+                      className="px-2.5 py-1 bg-red-950 hover:bg-red-900 border border-red-500/60 text-red-300 text-[10px] font-bold rounded-lg transition-all flex items-center gap-1 shrink-0 cursor-pointer shadow-sm hover:scale-105"
+                      title="Cancelar Geração da IA"
+                    >
+                      <XCircle className="w-3.5 h-3.5 text-red-400" />
+                      Cancelar
+                    </button>
                   </div>
                 )}
 
@@ -325,14 +317,11 @@ export const ProjectsTab: React.FC<ProjectsTabProps> = ({
 
           {/* Table Rows */}
           {filteredProjects.map((project, idx) => {
-            const isGenerating = !!generatingProjectJobs[project.id];
+            const isGenerating = !!generatingProjectJobs[project.id] || project.status === 'generating';
             return (
               <div
                 key={project.id}
-                onClick={() => {
-                  if (isGenerating) return;
-                  onSelectProject(project.id);
-                }}
+                onClick={() => onSelectProject(project.id)}
                 className={`grid grid-cols-[2fr_1fr_auto_auto] gap-4 px-5 py-3.5 items-center transition-all cursor-pointer group ${idx !== filteredProjects.length - 1
                   ? theme === 'light' ? 'border-b border-slate-100' : 'border-b border-slate-800/50'
                   : ''
@@ -380,7 +369,17 @@ export const ProjectsTab: React.FC<ProjectsTabProps> = ({
                 </div>
 
                 {/* Ações */}
-                <div className="flex items-center gap-1 justify-end shrink-0 whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                <div className="flex items-center gap-1.5 justify-end shrink-0 whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                  {isGenerating && (
+                    <button
+                      onClick={(e) => handleCancelJob(project.id, e)}
+                      className="px-2 py-1 bg-red-950/80 hover:bg-red-900 border border-red-500/50 text-red-300 text-[10px] font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer shadow-sm hover:scale-105"
+                      title="Cancelar Geração da IA"
+                    >
+                      <XCircle className="w-3 h-3 text-red-400" />
+                      Cancelar IA
+                    </button>
+                  )}
                   <button
                     onClick={(e) => { e.stopPropagation(); setActiveTab('crm'); }}
                     className="p-1.5 text-slate-500 hover:text-emerald-400 rounded-lg hover:bg-emerald-950/40 transition-all cursor-pointer"
