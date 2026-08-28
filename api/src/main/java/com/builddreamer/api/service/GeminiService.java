@@ -59,14 +59,17 @@ public class GeminiService {
 
         List<String> candidateModels = new ArrayList<>();
         if (registeredModels != null && !registeredModels.isEmpty()) {
-            candidateModels.addAll(registeredModels);
-            if (customModel != null && !candidateModels.contains(customModel)) {
-                candidateModels.add(0, customModel);
+            for (String m : registeredModels) {
+                if (m != null && !m.trim().isEmpty() && !candidateModels.contains(m.trim())) {
+                    candidateModels.add(m.trim());
+                }
             }
-        } else if (customModel != null) {
-            candidateModels.add(customModel);
-        } else {
-            candidateModels.addAll(Arrays.asList("gemini-3.6-flash", "gemini-3.1-pro-preview"));
+        }
+        if (customModel != null && !customModel.trim().isEmpty() && !candidateModels.contains(customModel.trim())) {
+            candidateModels.add(0, customModel.trim());
+        }
+        if (candidateModels.isEmpty()) {
+            candidateModels.addAll(Arrays.asList("gemini-2.5-flash", "gemini-2.5-pro", "gemini-3.6-flash", "gemini-3.1-pro-preview"));
         }
 
         String systemPrompt = "Você é um Arquiteto de Software Frontend de Elite e Designer Visual Sênior.\n" +
@@ -92,16 +95,18 @@ public class GeminiService {
                 htmlContext, cssContext, jsContext, prompt
         );
 
-        Exception lastError = null;
-        int modelRetries = 0;
-        String lastModelTried = "";
+        String n8nWebhookUrl = System.getenv("N8N_WEBHOOK_URL");
+        if (n8nWebhookUrl == null || n8nWebhookUrl.trim().isEmpty()) {
+            n8nWebhookUrl = "http://n8n.192.168.18.39.nip.io/webhook/real-premise-agent";
+        }
 
+        String safeUserPrompt = (userPrompt != null && !userPrompt.trim().isEmpty()) ? userPrompt : "Gere o site solicitado";
+        String safeSystemPrompt = (systemPrompt != null && !systemPrompt.trim().isEmpty()) ? systemPrompt : "Você é um mestre em desenvolvimento web HTML CSS e JS.";
+
+        // FASE 1: Tentar a requisição no n8n percorrendo CADA modelo cadastrado em sequência
+        System.out.println("[AI Engine] Iniciando tentativa via n8n real-premise-agent com os modelos cadastrados: " + candidateModels);
         for (int i = 0; i < candidateModels.size(); i++) {
             String modelToTry = candidateModels.get(i);
-            if (!modelToTry.equals(lastModelTried)) {
-                modelRetries = 0;
-                lastModelTried = modelToTry;
-            }
 
             if (progressCallback != null) {
                 try {
@@ -110,74 +115,68 @@ public class GeminiService {
             }
 
             try {
-                System.out.println("[AI Engine] Tentando gerar via n8n real-premise-agent com o modelo: " + modelToTry);
-                
-                try {
-                    String n8nWebhookUrl = System.getenv("N8N_WEBHOOK_URL");
-                    if (n8nWebhookUrl == null || n8nWebhookUrl.trim().isEmpty()) {
-                        n8nWebhookUrl = "http://n8n.192.168.18.39.nip.io/webhook/real-premise-agent";
-                    }
+                System.out.println("[AI Engine] n8n (" + (i + 1) + "/" + candidateModels.size() + ") - Testando modelo cadastrado: " + modelToTry);
 
-                    String safeUserPrompt = (userPrompt != null && !userPrompt.trim().isEmpty()) ? userPrompt : "Gere o site solicitado";
-                    String safeSystemPrompt = (systemPrompt != null && !systemPrompt.trim().isEmpty()) ? systemPrompt : "Você é um mestre em desenvolvimento web HTML CSS e JS.";
+                Map<String, Object> n8nPayload = new HashMap<>();
+                n8nPayload.put("userPrompt", safeUserPrompt);
+                n8nPayload.put("systemPrompt", safeSystemPrompt);
+                n8nPayload.put("prompt", safeUserPrompt);
+                n8nPayload.put("chatInput", safeUserPrompt);
+                n8nPayload.put("input", safeUserPrompt);
+                n8nPayload.put("model", modelToTry);
+                n8nPayload.put("apiKey", activeKey);
 
-                    Map<String, Object> n8nPayload = new HashMap<>();
-                    n8nPayload.put("userPrompt", safeUserPrompt);
-                    n8nPayload.put("systemPrompt", safeSystemPrompt);
-                    n8nPayload.put("prompt", safeUserPrompt);
-                    n8nPayload.put("chatInput", safeUserPrompt);
-                    n8nPayload.put("input", safeUserPrompt);
-                    n8nPayload.put("model", modelToTry);
-                    n8nPayload.put("apiKey", activeKey);
+                String requestBody = objectMapper.writeValueAsString(n8nPayload);
 
-                    String requestBody = objectMapper.writeValueAsString(n8nPayload);
+                HttpRequest request = HttpRequest.newBuilder()
+                        .uri(URI.create(n8nWebhookUrl))
+                        .header("Content-Type", "application/json")
+                        .timeout(Duration.ofSeconds(300))
+                        .POST(HttpRequest.BodyPublishers.ofString(requestBody, StandardCharsets.UTF_8))
+                        .build();
 
-                    System.out.println("[AI Engine] Disparando HTTP POST para o n8n Webhook: " + n8nWebhookUrl);
-                    HttpRequest request = HttpRequest.newBuilder()
-                            .uri(URI.create(n8nWebhookUrl))
-                            .header("Content-Type", "application/json")
-                            .timeout(Duration.ofSeconds(300))
-                            .POST(HttpRequest.BodyPublishers.ofString(requestBody, StandardCharsets.UTF_8))
-                            .build();
+                HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
-                    HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-                    System.out.println("[AI Engine] Resposta HTTP do n8n recebida! Status Code: " + response.statusCode());
-                    
-                    if (response.statusCode() == 200) {
-                        String respBody = response.body();
-                        String rawText = respBody;
-                        try {
-                            JsonNode rootNode = objectMapper.readTree(respBody);
-                            if (rootNode.has("response")) {
-                                rawText = rootNode.get("response").asText();
-                            } else if (rootNode.has("output")) {
-                                rawText = rootNode.get("output").asText();
-                            } else if (rootNode.has("text")) {
-                                rawText = rootNode.get("text").asText();
-                            } else if (rootNode.has("candidates") && rootNode.path("candidates").isArray() && rootNode.path("candidates").size() > 0) {
-                                rawText = rootNode.path("candidates").get(0).path("content").path("parts").get(0).path("text").asText(respBody);
-                            } else if (rootNode.isArray() && rootNode.size() > 0) {
-                                JsonNode firstItem = rootNode.get(0);
-                                if (firstItem.has("output")) rawText = firstItem.get("output").asText();
-                                else if (firstItem.has("response")) rawText = firstItem.get("response").asText();
-                                else if (firstItem.has("text")) rawText = firstItem.get("text").asText();
-                            }
-                        } catch (Exception ignored) {}
+                if (response.statusCode() == 200) {
+                    String respBody = response.body();
+                    String rawText = respBody;
+                    try {
+                        JsonNode rootNode = objectMapper.readTree(respBody);
+                        if (rootNode.has("response")) {
+                            rawText = rootNode.get("response").asText();
+                        } else if (rootNode.has("output")) {
+                            rawText = rootNode.get("output").asText();
+                        } else if (rootNode.has("text")) {
+                            rawText = rootNode.get("text").asText();
+                        } else if (rootNode.has("candidates") && rootNode.path("candidates").isArray() && rootNode.path("candidates").size() > 0) {
+                            rawText = rootNode.path("candidates").get(0).path("content").path("parts").get(0).path("text").asText(respBody);
+                        } else if (rootNode.isArray() && rootNode.size() > 0) {
+                            JsonNode firstItem = rootNode.get(0);
+                            if (firstItem.has("output")) rawText = firstItem.get("output").asText();
+                            else if (firstItem.has("response")) rawText = firstItem.get("response").asText();
+                            else if (firstItem.has("text")) rawText = firstItem.get("text").asText();
+                        }
+                    } catch (Exception ignored) {}
 
-                        Map<String, Object> parsed = resilientJsonParse(rawText);
-                        parsed.put("_usedModel", modelToTry + " (via n8n real-premise-agent)");
-                        System.out.println("[AI Engine] Sucesso total na geração via n8n real-premise-agent com o modelo: " + modelToTry);
-                        return parsed;
-                    } else {
-                        System.err.println("[AI Engine] n8n retornou código de erro HTTP " + response.statusCode() + ": " + response.body());
-                    }
-                } catch (Exception n8nEx) {
-                    System.err.println("[AI Engine] Falha/timeout no n8n real-premise-agent: " + n8nEx.getMessage());
-                    n8nEx.printStackTrace();
+                    Map<String, Object> parsed = resilientJsonParse(rawText);
+                    parsed.put("_usedModel", modelToTry + " (via n8n real-premise-agent)");
+                    System.out.println("[AI Engine] Sucesso total na geração via n8n com o modelo cadastrado: " + modelToTry);
+                    return parsed;
+                } else {
+                    System.err.println("[AI Engine] n8n retornou erro HTTP " + response.statusCode() + " para o modelo " + modelToTry + ". Tentando próximo modelo cadastrado...");
                 }
+            } catch (Exception n8nEx) {
+                System.err.println("[AI Engine] Falha/timeout no n8n para o modelo " + modelToTry + ": " + n8nEx.getMessage() + ". Tentando próximo modelo cadastrado...");
+            }
+        }
 
-                // Fallback to direct Gemini API
-                System.out.println("[AI Engine] Utilizando endpoint direto do Gemini para o modelo: " + modelToTry);
+        // FASE 2: Se todos os modelos cadastrados falharam no n8n, tentar endpoint direto do Gemini como fallback
+        System.err.println("[AI Engine] Todos os modelos cadastrados falharam via n8n. Recorrendo ao endpoint direto do Gemini...");
+        Exception lastError = null;
+        for (int i = 0; i < candidateModels.size(); i++) {
+            String modelToTry = candidateModels.get(i);
+            try {
+                System.out.println("[AI Engine] Direct Gemini Fallback - Testando modelo: " + modelToTry);
                 Map<String, Object> payload = new HashMap<>();
                 Map<String, Object> systemInstruction = new HashMap<>();
                 Map<String, Object> partsObj = new HashMap<>();
@@ -209,36 +208,22 @@ public class GeminiService {
                         .build();
 
                 HttpResponse<String> directResponse = httpClient.send(directRequest, HttpResponse.BodyHandlers.ofString());
-                
-                if (directResponse.statusCode() != 200) {
-                    throw new RuntimeException("HTTP " + directResponse.statusCode() + ": " + directResponse.body());
+                if (directResponse.statusCode() == 200) {
+                    JsonNode rootNode = objectMapper.readTree(directResponse.body());
+                    String rawText = rootNode.path("candidates").get(0).path("content").path("parts").get(0).path("text").asText("{}");
+                    Map<String, Object> parsed = resilientJsonParse(rawText);
+                    parsed.put("_usedModel", modelToTry + " (direto)");
+                    return parsed;
+                } else {
+                    System.err.println("[AI Engine] Endpoint direto retornou erro HTTP " + directResponse.statusCode() + ": " + directResponse.body());
                 }
-
-                JsonNode rootNode = objectMapper.readTree(directResponse.body());
-                String rawText = rootNode.path("candidates").get(0).path("content").path("parts").get(0).path("text").asText("{}");
-                
-                Map<String, Object> parsed = resilientJsonParse(rawText);
-                parsed.put("_usedModel", modelToTry);
-                return parsed;
-
             } catch (Exception error) {
-                System.err.println("[AI Engine] Tentativa com o modelo " + modelToTry + " falhou: " + error.getMessage());
+                System.err.println("[AI Engine] Fallback direto para " + modelToTry + " falhou: " + error.getMessage());
                 lastError = error;
-
-                String errMsg = (error != null && error.getMessage() != null) ? error.getMessage() : "";
-                boolean is429 = errMsg.contains("429");
-                boolean is503 = errMsg.contains("503");
-                if ((is429 || is503) && modelRetries < 3) {
-                    modelRetries++;
-                    long waitTime = is429 ? 45000 : 15000;
-                    System.out.println("[AI Engine] Erro temporário (" + (is429 ? "429" : "503") + ") detectado. Aguardando " + (waitTime / 1000) + " segundos... (Tentativa " + modelRetries + "/3)");
-                    Thread.sleep(waitTime);
-                    i--; // Try same model again
-                }
             }
         }
 
-        throw new RuntimeException("Erro na API do Gemini em todos os modelos candidatos: " + (lastError != null ? lastError.getMessage() : "Desconhecido"));
+        throw new RuntimeException("Erro na geração com IA em todos os modelos cadastrados no n8n: " + (lastError != null ? lastError.getMessage() : "Sem resposta dos modelos"));
     }
 
     private Map<String, Object> resilientJsonParse(String rawString) throws Exception {
