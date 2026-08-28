@@ -1,5 +1,6 @@
 package com.builddreamer.api.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
@@ -157,7 +158,7 @@ public class GeminiService {
             text = text.replaceAll("^```(?:json)?\\s*", "").replaceAll("```\\s*$", "").trim();
         }
         try {
-            return objectMapper.readValue(text, Map.class);
+            return objectMapper.readValue(text, new TypeReference<Map<String, Object>>() {});
         } catch (Exception ex) {
             System.err.println("Resilient JSON parse failed. Raw string was: " + rawString);
             throw ex;

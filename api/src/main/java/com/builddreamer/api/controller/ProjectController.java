@@ -93,7 +93,23 @@ public class ProjectController {
             return ResponseEntity.notFound().build();
         }
 
-        return ResponseEntity.ok(projectOpt.get());
+        Project project = projectOpt.get();
+        List<Page> pages = pageRepository.findByProjectId(id);
+
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("id", project.getId());
+        response.put("name", project.getName());
+        response.put("description", project.getDescription());
+        response.put("status", project.getStatus());
+        response.put("domain", project.getDomain());
+        response.put("favicon", project.getFavicon());
+        response.put("navbarHtml", project.getNavbarHtml() != null ? project.getNavbarHtml() : "");
+        response.put("footerHtml", project.getFooterHtml() != null ? project.getFooterHtml() : "");
+        response.put("createdAt", project.getCreatedAt());
+        response.put("updatedAt", project.getUpdatedAt());
+        response.put("pages", pages);
+
+        return ResponseEntity.ok(response);
     }
 
     @PutMapping("/{id}")

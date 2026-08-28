@@ -172,17 +172,64 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!res.ok) throw new Error('Falha ao carregar projeto');
-      const data = await res.json();
+      let data = await res.json();
+      
+      // Se o projeto não possui páginas cadastradas, cria automaticamente a página inicial
+      if (!data.pages || data.pages.length === 0) {
+        const createHomeRes = await fetch(`${API_URL}/api/projects/${projectId}/pages`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            name: 'Página Inicial',
+            slug: 'home',
+            isHomepage: true,
+            title: data.name || 'Meu Site',
+            description: 'Página inicial criada com o BuildDreamer Studio',
+            html: `<section class="relative bg-slate-900 text-white py-24 px-6 md:px-12 rounded-3xl my-6 border border-slate-800 shadow-2xl overflow-hidden">
+  <div class="max-w-4xl mx-auto text-center space-y-6">
+    <span class="inline-block px-4 py-1.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 text-xs font-semibold uppercase tracking-wider">
+      Bem-vindo ao BuildDreamer
+    </span>
+    <h1 class="text-4xl md:text-6xl font-extrabold tracking-tight bg-gradient-to-r from-white via-slate-200 to-cyan-400 bg-clip-text text-transparent">
+      Crie Sites Extraordinários sem Limites
+    </h1>
+    <p class="text-lg md:text-xl text-slate-400 max-w-2xl mx-auto font-normal">
+      Edite elementos visualmente, adicione seções dinâmicas e publique em segundos com tecnologia de ponta.
+    </p>
+    <div class="flex flex-wrap justify-center gap-4 pt-4">
+      <button class="px-8 py-3.5 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-bold rounded-xl shadow-lg shadow-cyan-500/25 transition-all transform hover:-translate-y-0.5">
+        Começar Agora
+      </button>
+      <button class="px-8 py-3.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold rounded-xl border border-slate-700 transition-all">
+        Saiba Mais
+      </button>
+    </div>
+  </div>
+</section>`,
+            css: '/* Estilos personalizados do site */',
+            js: ''
+          })
+        });
+
+        if (createHomeRes.ok) {
+          const newPage = await createHomeRes.json();
+          data.pages = [newPage];
+        }
+      }
+
       setProject(data);
       if (data.name) {
         document.title = `${data.name} | Editor Visual Real Premise Editor`;
       }
-      if (data.pages && data.pages.length > 0 && !activePageId) {
+      if (data.pages && data.pages.length > 0) {
         const home = data.pages.find((p: Page) => p.isHomepage) || data.pages[0];
-        setActivePageId(home.id);
+        setActivePageId(prev => prev || home.id);
       }
     } catch (err: any) {
-      console.error(err);
+      console.error('Erro ao carregar projeto:', err);
     }
   };
 
@@ -421,7 +468,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
       if (updates.css !== undefined) pageBody.css = updates.css;
       if (updates.js !== undefined) pageBody.js = updates.js;
 
-      const pagePromise = fetch(`${API_URL}/api/pages/${activePage.id}`, {
+      const pagePromise = fetch(`${API_URL}/api/projects/${projectId}/pages/${activePage.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -464,7 +511,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
     if (!activePage) return;
     setSaveStatus('saving');
     try {
-      const res = await fetch(`${API_URL}/api/pages/${activePage.id}`, {
+      const res = await fetch(`${API_URL}/api/projects/${projectId}/pages/${activePage.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -523,7 +570,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
     setSaveStatus('saving');
     
     try {
-      const pagePromise = fetch(`${API_URL}/api/pages/${activePage.id}`, {
+      const pagePromise = fetch(`${API_URL}/api/projects/${projectId}/pages/${activePage.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ html: remainingHtml })
@@ -779,7 +826,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
       if (key === 'title') updateData.seoTitle = value;
       if (key === 'description') updateData.seoDescription = value;
 
-      await fetch(`${API_URL}/api/pages/${activePage.id}`, {
+      await fetch(`${API_URL}/api/projects/${projectId}/pages/${activePage.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -812,7 +859,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
       footerHtml
     } : null);
 
-    fetch(`${API_URL}/api/pages/${targetId}`, {
+    fetch(`${API_URL}/api/projects/${projectId}/pages/${targetId}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -1386,10 +1433,10 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
               const name = prompt('Nome da nova página:');
               if (!name) return;
               const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-              const res = await fetch(`${API_URL}/api/pages`, {
+              const res = await fetch(`${API_URL}/api/projects/${projectId}/pages`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                body: JSON.stringify({ name, slug, projectId })
+                body: JSON.stringify({ name, slug })
               });
               if (res.ok) {
                 const newP = await res.json();
@@ -1401,7 +1448,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
               if (!newName) return;
               const newSlug = newName.toLowerCase().replace(/[^a-z0-9]+/g, '-');
               try {
-                const res = await fetch(`${API_URL}/api/pages/${id}`, {
+                const res = await fetch(`${API_URL}/api/projects/${projectId}/pages/${id}`, {
                   method: 'PUT',
                   headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                   body: JSON.stringify({ name: newName, slug: newSlug })
@@ -1419,7 +1466,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
             onDuplicatePage={async (id) => {
               const pToDup = project.pages.find(p => p.id === id);
               if (!pToDup) return;
-              const res = await fetch(`${API_URL}/api/pages`, {
+              const res = await fetch(`${API_URL}/api/projects/${projectId}/pages`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                 body: JSON.stringify({
@@ -1427,8 +1474,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
                   slug: `${pToDup.slug}-copia`,
                   html: pToDup.html,
                   css: pToDup.css,
-                  js: pToDup.js,
-                  projectId
+                  js: pToDup.js
                 })
               });
               if (res.ok) {
@@ -1439,7 +1485,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
             }}
             onDeletePage={async (id) => {
               if (!confirm('Deseja excluir esta página permanentemente?')) return;
-              await fetch(`${API_URL}/api/pages/${id}`, {
+              await fetch(`${API_URL}/api/projects/${projectId}/pages/${id}`, {
                 method: 'DELETE',
                 headers: { 'Authorization': `Bearer ${token}` }
               });
@@ -1450,7 +1496,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
               }
             }}
             onSetHomepage={async (id) => {
-              const res = await fetch(`${API_URL}/api/pages/${id}`, {
+              const res = await fetch(`${API_URL}/api/projects/${projectId}/pages/${id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                 body: JSON.stringify({ isHomepage: true })
