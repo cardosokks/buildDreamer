@@ -64,8 +64,9 @@ public class LeadPreset {
     @Column(name = "sort_by", nullable = false)
     private String sortBy = "rating";
 
+    @com.fasterxml.jackson.annotation.JsonIgnore
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id", nullable = false)
+    @JoinColumn(name = "user_id", nullable = true)
     private User user;
 
     @Builder.Default

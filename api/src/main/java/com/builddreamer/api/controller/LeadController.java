@@ -292,7 +292,7 @@ public class LeadController {
     // 7. Get user's presets (GET /api/leads/presets)
     @GetMapping("/presets")
     public ResponseEntity<?> getPresets(@AuthenticationPrincipal String userId) {
-        List<LeadPreset> presets = leadPresetRepository.findByUserIdOrderByCreatedAtDesc(userId);
+        List<LeadPreset> presets = leadPresetRepository.findAllByUserId(userId);
         return ResponseEntity.ok(Map.of("presets", presets));
     }
 
@@ -332,7 +332,7 @@ public class LeadController {
             @AuthenticationPrincipal String userId,
             @PathVariable String id,
             @RequestBody Map<String, Object> body) {
-        Optional<LeadPreset> presetOpt = leadPresetRepository.findByIdAndUserId(id, userId);
+        Optional<LeadPreset> presetOpt = leadPresetRepository.findByIdAndUserIdCustom(id, userId);
         if (presetOpt.isEmpty()) {
             return ResponseEntity.notFound().build();
         }
@@ -356,7 +356,7 @@ public class LeadController {
     // 10. Delete a preset (DELETE /api/leads/presets/{id})
     @DeleteMapping("/presets/{id}")
     public ResponseEntity<?> deletePreset(@AuthenticationPrincipal String userId, @PathVariable String id) {
-        Optional<LeadPreset> presetOpt = leadPresetRepository.findByIdAndUserId(id, userId);
+        Optional<LeadPreset> presetOpt = leadPresetRepository.findByIdAndUserIdCustom(id, userId);
         if (presetOpt.isEmpty()) {
             return ResponseEntity.notFound().build();
         }
