@@ -66,6 +66,22 @@ public class SiteRemasterService {
                 String bodyHtml = doc.body() != null ? doc.body().html() : doc.html();
                 String bodyText = doc.body() != null ? doc.body().text() : "";
                 
+                // Extract inline CSS styles
+                StringBuilder cssSb = new StringBuilder();
+                for (Element style : doc.select("style")) {
+                    cssSb.append(style.html()).append("\n");
+                }
+                String extractedCss = cssSb.toString();
+
+                // Extract inline JS scripts
+                StringBuilder jsSb = new StringBuilder();
+                for (Element script : doc.select("script")) {
+                    if (!script.hasAttr("src") && !script.html().trim().isEmpty()) {
+                        jsSb.append(script.html()).append("\n");
+                    }
+                }
+                String extractedJs = jsSb.toString();
+
                 // Get slug
                 String slug = "index";
                 try {
@@ -82,8 +98,12 @@ public class SiteRemasterService {
                 pageData.put("name", title.isEmpty() ? slug : title);
                 pageData.put("slug", slug);
                 pageData.put("url", currentUrl);
+                pageData.put("html", bodyHtml);
+                pageData.put("css", extractedCss);
+                pageData.put("js", extractedJs);
                 pageData.put("rawHtml", bodyHtml.length() > 20000 ? bodyHtml.substring(0, 20000) : bodyHtml);
                 pageData.put("cleanText", bodyText.length() > 5000 ? bodyText.substring(0, 5000) : bodyText);
+                pageData.put("isHomepage", "index".equals(slug) || pages.isEmpty());
                 pageData.put("media", new ArrayList<>());
 
                 pages.add(pageData);
