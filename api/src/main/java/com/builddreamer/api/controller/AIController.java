@@ -463,7 +463,6 @@ public class AIController {
                 } catch (Exception ignored) {}
             }
             if (models.isEmpty()) {
-                Optional<User> userOpt = userRepository.findById(userId);
                 if (userOpt.isPresent() && userOpt.get().getCustomAiModels() != null) {
                     try {
                         models = objectMapper.readValue(userOpt.get().getCustomAiModels(), new TypeReference<List<String>>() {});
