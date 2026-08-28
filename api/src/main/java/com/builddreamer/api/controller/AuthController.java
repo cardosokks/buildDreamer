@@ -103,6 +103,37 @@ public class AuthController {
         return ResponseEntity.ok(response);
     }
 
+    // GET /api/auth/settings — wraps the same user data in a 'settings' object
+    // as expected by Dashboard.tsx: data.settings.geminiApiKey etc.
+    @GetMapping("/settings")
+    public ResponseEntity<?> getSettings(@AuthenticationPrincipal String userId) {
+        Optional<User> userOpt = userRepository.findById(userId);
+        if (userOpt.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+        User user = userOpt.get();
+        ObjectMapper mapper = new ObjectMapper();
+        Map<String, Object> settings = new HashMap<>();
+        settings.put("geminiApiKey", user.getGeminiApiKey());
+        settings.put("openaiApiKey", user.getOpenaiApiKey());
+        settings.put("aiProxyUrl", user.getAiProxyUrl());
+        settings.put("ngrokAuthToken", user.getNgrokAuthToken());
+        try {
+            settings.put("customAiSkills", user.getCustomAiSkills() != null ? mapper.readTree(user.getCustomAiSkills()) : mapper.createArrayNode());
+        } catch (Exception ex) { settings.put("customAiSkills", Collections.emptyList()); }
+        try {
+            settings.put("customAiModels", user.getCustomAiModels() != null ? mapper.readTree(user.getCustomAiModels()) : mapper.createArrayNode());
+        } catch (Exception ex) { settings.put("customAiModels", Collections.emptyList()); }
+        try {
+            settings.put("savedLeads", user.getSavedLeads() != null ? mapper.readTree(user.getSavedLeads()) : mapper.createArrayNode());
+        } catch (Exception ex) { settings.put("savedLeads", Collections.emptyList()); }
+        try {
+            settings.put("filterPresets", user.getFilterPresets() != null ? mapper.readTree(user.getFilterPresets()) : mapper.createArrayNode());
+        } catch (Exception ex) { settings.put("filterPresets", Collections.emptyList()); }
+
+        return ResponseEntity.ok(Map.of("settings", settings));
+    }
+
     @PutMapping("/settings")
     public ResponseEntity<?> updateSettings(@AuthenticationPrincipal String userId, @RequestBody Map<String, Object> settings) {
         Optional<User> userOpt = userRepository.findById(userId);

@@ -404,4 +404,24 @@ public class LeadController {
             return ResponseEntity.status(500).body(Map.of("error", ex.getMessage()));
         }
     }
+
+    // POST /api/leads/search-leads — fallback search endpoint used by Dashboard.tsx
+    @PostMapping("/search-leads")
+    public ResponseEntity<?> searchLeadsFallback(
+            @AuthenticationPrincipal String userId,
+            @RequestBody Map<String, Object> body) {
+        try {
+            String query = (String) body.getOrDefault("query", "");
+            String location = (String) body.getOrDefault("location", "");
+            // Parse city from "city state country" string
+            String[] parts = location.trim().split("\\s+", 2);
+            String city = parts.length > 0 ? parts[0] : "";
+            String state = parts.length > 1 ? parts[1] : null;
+            List<Map<String, Object>> leads = crawlerService.searchLeads(query, city, state, 1);
+            return ResponseEntity.ok(Map.of("leads", leads));
+        } catch (Exception ex) {
+            return ResponseEntity.status(500).body(Map.of("error", ex.getMessage()));
+        }
+    }
 }
+
