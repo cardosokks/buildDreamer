@@ -1284,7 +1284,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
       }
 
       setShowRemasterModal(false);
-      setActiveTab('projects');
+      onSelectProject(newProject.id);
       fetchProjects();
     } catch (err: any) {
       alert(err.message);
