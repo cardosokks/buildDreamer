@@ -63,7 +63,8 @@ public class SiteRemasterService {
                         .get();
 
                 String title = doc.title();
-                String bodyText = doc.body().text();
+                String bodyHtml = doc.body() != null ? doc.body().html() : doc.html();
+                String bodyText = doc.body() != null ? doc.body().text() : "";
                 
                 // Get slug
                 String slug = "index";
@@ -73,14 +74,15 @@ public class SiteRemasterService {
                         slug = path.substring(path.lastIndexOf('/') + 1).replace(".html", "").replace(".php", "");
                     }
                 } catch (Exception ignored) {}
-                if (slug.isEmpty()) {
-                    slug = "page-" + pages.size();
+                if (slug.isEmpty() || "home".equalsIgnoreCase(slug)) {
+                    slug = "index";
                 }
 
                 Map<String, Object> pageData = new HashMap<>();
                 pageData.put("name", title.isEmpty() ? slug : title);
                 pageData.put("slug", slug);
                 pageData.put("url", currentUrl);
+                pageData.put("rawHtml", bodyHtml.length() > 20000 ? bodyHtml.substring(0, 20000) : bodyHtml);
                 pageData.put("cleanText", bodyText.length() > 5000 ? bodyText.substring(0, 5000) : bodyText);
                 pageData.put("media", new ArrayList<>());
 
@@ -144,17 +146,22 @@ public class SiteRemasterService {
                 Map<String, Object> pMap = pages.get(i);
                 String pageName = (String) pMap.get("name");
                 String slug = (String) pMap.get("slug");
-                String cleanText = (String) pMap.get("cleanText");
+                if ("home".equalsIgnoreCase(slug)) slug = "index";
+
+                String rawHtml = (String) pMap.get("rawHtml");
+                if (rawHtml == null || rawHtml.isEmpty()) {
+                    rawHtml = (String) pMap.getOrDefault("cleanText", "Conteúdo original da página: " + pageName);
+                }
 
                 logs.add("IA gerando página: " + pageName + " (Slug: " + slug + ")...");
                 progress.put("progress", i + 1);
 
                 Map<String, String> context = new HashMap<>();
-                context.put("html", "<div id=\"canvas-root\" class=\"bg-slate-900 min-h-screen text-white p-8\">Conteúdo original da página: " + cleanText + "</div>");
+                context.put("html", rawHtml);
                 context.put("css", "");
                 context.put("js", "");
 
-                String prompt = "Remasterizar a página " + pageName + " com Tailwind CSS moderno, garantindo design responsivo, animações sutis e visual luxuoso.";
+                String prompt = "Remasterizar a página " + pageName + " mantendo todo o conteúdo, textos e imagens originais, mas recriando o design completo com HTML5 moderno e Tailwind CSS elegante e responsivo.";
 
                 Map<String, Object> aiResult = geminiService.generateAIResponse(
                         prompt,
@@ -178,8 +185,13 @@ public class SiteRemasterService {
                     }
                 }
 
-                // Check if page already exists, otherwise create new
+                // Check if page already exists by slug or is homepage, otherwise create new
                 Optional<Page> existingPage = pageRepository.findByProjectIdAndSlug(project.getId(), slug);
+                if (existingPage.isEmpty() && ("index".equals(slug) || "home".equals(slug))) {
+                    List<Page> projectPages = pageRepository.findByProjectId(project.getId());
+                    existingPage = projectPages.stream().filter(Page::isHomepage).findFirst();
+                }
+
                 Page page = existingPage.orElseGet(() -> Page.builder()
                         .project(project)
                         .slug(slug)
