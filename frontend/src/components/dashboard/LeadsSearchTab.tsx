@@ -510,7 +510,11 @@ export const LeadsSearchTab: React.FC<LeadsSearchTabProps> = ({
                 </thead>
                 <tbody className="divide-y divide-slate-850/30">
                   {currentLeads.map(lead => {
-                    const isSaved = savedLeads.some(sl => sl.phone === lead.phone || (lead.website && sl.website === lead.website));
+                    const isSaved = savedLeads.some(sl => 
+                      (lead.phone && lead.phone !== 'Não informado' && lead.phone !== 'Sem Telefone' && sl.phone === lead.phone) ||
+                      (lead.website && sl.website === lead.website) ||
+                      (sl.name && sl.name === lead.name && sl.address === lead.address)
+                    );
                     return (
                       <tr key={lead.id} className="hover:bg-slate-900/35 transition-colors">
                         <td className="px-5 py-3.5">
@@ -597,7 +601,11 @@ export const LeadsSearchTab: React.FC<LeadsSearchTabProps> = ({
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {currentLeads.map(lead => {
-                const isSaved = savedLeads.some(sl => sl.phone === lead.phone || (lead.website && sl.website === lead.website));
+                const isSaved = savedLeads.some(sl => 
+                  (lead.phone && lead.phone !== 'Não informado' && lead.phone !== 'Sem Telefone' && sl.phone === lead.phone) ||
+                  (lead.website && sl.website === lead.website) ||
+                  (sl.name && sl.name === lead.name && sl.address === lead.address)
+                );
                 return (
                   <div key={lead.id} className="bg-[#0f0b18] border border-slate-850 hover:border-slate-800 rounded-2xl p-5 flex flex-col justify-between shadow-lg transition-all">
                     <div>

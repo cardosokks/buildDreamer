@@ -9,6 +9,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.*;
@@ -79,14 +80,70 @@ public class AIController {
     }
 
     @GetMapping("/models")
-    public ResponseEntity<?> listModels() {
-        List<Map<String, String>> models = Arrays.asList(
-                Map.of("id", "gemini-3.5-flash", "name", "Gemini 3.5 Flash", "category", "flash"),
-                Map.of("id", "gemini-3.6-flash", "name", "Gemini 3.6 Flash", "category", "flash"),
-                Map.of("id", "gemini-3.7-flash", "name", "Gemini 3.7 Flash", "category", "flash"),
-                Map.of("id", "gemini-3.5-flash-lite", "name", "Gemini 3.5 Flash Lite", "category", "flash")
+    public ResponseEntity<?> listModels(
+            @RequestHeader(name = "x-gemini-key", required = false) String rawGeminiKey,
+            @RequestHeader(name = "x-proxy-url", required = false) String rawProxyUrl) {
+        
+        List<Map<String, String>> defaultModels = Arrays.asList(
+                Map.of("id", "gemini-2.5-flash", "name", "Gemini 2.5 Flash", "category", "flash"),
+                Map.of("id", "gemini-2.0-flash", "name", "Gemini 2.0 Flash", "category", "flash"),
+                Map.of("id", "gemini-1.5-flash", "name", "Gemini 1.5 Flash", "category", "flash"),
+                Map.of("id", "gemini-1.5-pro", "name", "Gemini 1.5 Pro", "category", "pro")
         );
-        return ResponseEntity.ok(models);
+
+        String apiKey = null;
+        if (rawGeminiKey != null && !rawGeminiKey.isEmpty()) {
+            try {
+                apiKey = new String(Base64.getDecoder().decode(rawGeminiKey), StandardCharsets.UTF_8);
+            } catch (Exception ex) {
+                apiKey = rawGeminiKey;
+            }
+        }
+
+        if (apiKey == null || apiKey.trim().isEmpty()) {
+            apiKey = System.getenv("GEMINI_API_KEY");
+        }
+
+        if (apiKey == null || apiKey.trim().isEmpty()) {
+            return ResponseEntity.ok(Map.of("models", defaultModels));
+        }
+
+        try {
+            String baseUrl = "https://generativelanguage.googleapis.com";
+            if (rawProxyUrl != null && !rawProxyUrl.isEmpty()) {
+                try {
+                    String decodedProxy = new String(Base64.getDecoder().decode(rawProxyUrl), StandardCharsets.UTF_8);
+                    if (decodedProxy.startsWith("http")) baseUrl = decodedProxy.replaceAll("/+$", "");
+                } catch (Exception ignored) {}
+            }
+
+            java.net.http.HttpClient client = java.net.http.HttpClient.newHttpClient();
+            java.net.http.HttpRequest req = java.net.http.HttpRequest.newBuilder()
+                    .uri(URI.create(baseUrl + "/v1beta/models?key=" + apiKey))
+                    .GET()
+                    .build();
+
+            java.net.http.HttpResponse<String> resp = client.send(req, java.net.http.HttpResponse.BodyHandlers.ofString());
+            if (resp.statusCode() == 200) {
+                com.fasterxml.jackson.databind.JsonNode root = objectMapper.readTree(resp.body());
+                List<Map<String, String>> discovered = new ArrayList<>();
+                if (root.has("models") && root.get("models").isArray()) {
+                    for (com.fasterxml.jackson.databind.JsonNode m : root.get("models")) {
+                        String name = m.path("name").asText(""); // models/gemini-2.0-flash
+                        String id = name.replace("models/", "");
+                        String displayName = m.path("displayName").asText(id);
+                        if (id.startsWith("gemini")) {
+                            discovered.add(Map.of("id", id, "name", displayName));
+                        }
+                    }
+                }
+                if (!discovered.isEmpty()) {
+                    return ResponseEntity.ok(Map.of("models", discovered));
+                }
+            }
+        } catch (Exception ignored) {}
+
+        return ResponseEntity.ok(Map.of("models", defaultModels));
     }
 
     @PostMapping("/remaster/scrape")

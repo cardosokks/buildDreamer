@@ -10,6 +10,7 @@ import java.util.Optional;
 public interface MediaRepository extends JpaRepository<Media, String> {
     List<Media> findByProjectId(String projectId);
     List<Media> findByUserId(String userId);
+    List<Media> findByUserIdAndProjectId(String userId, String projectId);
     Optional<Media> findByUserIdAndId(String userId, String id);
     void deleteByUserIdAndId(String userId, String id);
 }

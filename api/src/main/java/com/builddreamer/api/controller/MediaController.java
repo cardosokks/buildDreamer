@@ -31,8 +31,19 @@ public class MediaController {
     }
 
     @GetMapping
-    public ResponseEntity<List<Media>> listMedia(@AuthenticationPrincipal String userId) {
-        return ResponseEntity.ok(mediaRepository.findByUserId(userId));
+    public ResponseEntity<?> listMedia(
+            @AuthenticationPrincipal String userId,
+            @RequestParam(required = false) String projectId) {
+        List<Media> list;
+        if (projectId != null && !projectId.isEmpty()) {
+            list = mediaRepository.findByUserIdAndProjectId(userId, projectId);
+            if (list.isEmpty()) {
+                list = mediaRepository.findByUserId(userId);
+            }
+        } else {
+            list = mediaRepository.findByUserId(userId);
+        }
+        return ResponseEntity.ok(Map.of("media", list));
     }
 
     @PostMapping("/upload")
@@ -41,30 +52,47 @@ public class MediaController {
             @RequestParam(required = false) String projectId,
             @RequestParam(required = false) String base64Data,
             @RequestParam(required = false) String filename,
-            @RequestParam(required = false) MultipartFile file) {
+            @RequestParam(required = false) MultipartFile file,
+            @RequestBody(required = false) Map<String, Object> body) {
         
         try {
-            String name;
-            byte[] fileBytes;
-            String contentType;
-            long size;
+            String name = filename;
+            byte[] fileBytes = null;
+            String contentType = "image/png";
+            long size = 0;
+            String targetProjectId = projectId;
 
-            if (file != null) {
+            if (body != null) {
+                if (body.containsKey("name")) name = (String) body.get("name");
+                if (body.containsKey("filename")) name = (String) body.get("filename");
+                if (body.containsKey("projectId")) targetProjectId = (String) body.get("projectId");
+                if (body.containsKey("mimeType")) contentType = (String) body.get("mimeType");
+                if (body.containsKey("base64Data")) {
+                    String b64 = (String) body.get("base64Data");
+                    if (b64.contains(",")) {
+                        b64 = b64.split(",")[1];
+                    }
+                    fileBytes = Base64.getDecoder().decode(b64);
+                    size = fileBytes.length;
+                }
+            }
+
+            if (fileBytes == null && file != null) {
                 name = file.getOriginalFilename();
                 fileBytes = file.getBytes();
                 contentType = file.getContentType();
                 size = file.getSize();
-            } else if (base64Data != null && filename != null) {
-                name = filename;
+            } else if (fileBytes == null && base64Data != null) {
                 String pureBase64 = base64Data;
                 if (base64Data.contains(",")) {
                     pureBase64 = base64Data.split(",")[1];
                 }
                 fileBytes = Base64.getDecoder().decode(pureBase64);
-                contentType = "image/png"; // Default to image
                 size = fileBytes.length;
-            } else {
-                return ResponseEntity.badRequest().body(Map.of("error", "No file payload found"));
+            }
+
+            if (fileBytes == null || name == null) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Payload de arquivo inválido ou ausente"));
             }
 
             // Save to disk
@@ -82,14 +110,14 @@ public class MediaController {
                     .size(size)
                     .mimeType(contentType)
                     .userId(userId)
-                    .projectId(projectId)
+                    .projectId(targetProjectId)
                     .build();
 
             mediaRepository.save(media);
-            return ResponseEntity.ok(media);
+            return ResponseEntity.ok(Map.of("media", media));
 
-        } catch (IOException ex) {
-            return ResponseEntity.status(500).body(Map.of("error", "Failed uploading file: " + ex.getMessage()));
+        } catch (Exception ex) {
+            return ResponseEntity.status(500).body(Map.of("error", "Falha ao enviar arquivo: " + ex.getMessage()));
         }
     }
 

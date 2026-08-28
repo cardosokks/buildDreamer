@@ -78,6 +78,9 @@ public class LeadCrawlerService {
                             rawPhone = info.get(3).asText();
                         }
                         String phone = extractPhone(rawPhone);
+                        if ("Não informado".equalsIgnoreCase(phone) || "Sem Telefone".equalsIgnoreCase(phone)) {
+                            phone = null;
+                        }
 
                         double rating = info.get(4) != null && info.get(4).get(7) != null ? info.get(4).get(7).asDouble() : 4.5;
                         
