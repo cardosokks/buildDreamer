@@ -32,7 +32,8 @@ import {
   ChevronDown,
   Loader2,
   Upload,
-  Image as ImageIcon
+  Image as ImageIcon,
+  XCircle
 } from 'lucide-react';
 import { Sidebar } from './Sidebar';
 import type { ElementNode } from './Sidebar';
@@ -247,6 +248,21 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
       }
     } catch {}
   }, [projectId, token]);
+
+  const handleCancelAiJob = async () => {
+    try {
+      await fetch(`${API_URL}/api/ai/remaster/job/${projectId}/cancel`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      setAiGenerating(false);
+      setAiJobStatus(null);
+      notify.success('Geração de IA cancelada com sucesso!', 'Cancelado');
+      fetchAiJobLogs();
+    } catch (e: any) {
+      notify.error('Não foi possível cancelar a geração.', 'Erro');
+    }
+  };
 
   // Monitorar se há uma geração com IA em andamento no projeto
   useEffect(() => {
@@ -1293,6 +1309,17 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
             {aiGenerating && <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-400" />}
           </button>
 
+          {aiGenerating && (
+            <button
+              onClick={handleCancelAiJob}
+              className="px-2.5 py-1.5 bg-red-950/80 hover:bg-red-900 border border-red-500/50 text-red-300 text-xs font-semibold rounded-xl transition-all cursor-pointer shadow-sm flex items-center gap-1"
+              title="Cancelar Geração da IA"
+            >
+              <XCircle className="w-3.5 h-3.5 text-red-400" />
+              <span className="hidden md:inline">Cancelar IA</span>
+            </button>
+          )}
+
           {/* Botão Unificado de Preview (Local + Ngrok) */}
           <div className="relative">
             {ngrokActive && ngrokUrl ? (
@@ -2046,13 +2073,24 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
               </div>
             </div>
 
-            <div className="p-4 border-t border-slate-800 bg-slate-950 flex items-center justify-between">
-              <button
-                onClick={fetchAiJobLogs}
-                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
-              >
-                🔄 Atualizar Logs
-              </button>
+            <div className="p-4 border-t border-slate-800 bg-slate-950 flex items-center justify-between gap-2 flex-wrap">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={fetchAiJobLogs}
+                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  🔄 Atualizar Logs
+                </button>
+                {aiGenerating && (
+                  <button
+                    onClick={handleCancelAiJob}
+                    className="px-3 py-1.5 bg-red-950/80 hover:bg-red-900 border border-red-500/50 text-red-300 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <XCircle className="w-3.5 h-3.5 text-red-400" />
+                    Cancelar Geração com IA
+                  </button>
+                )}
+              </div>
               <button
                 onClick={() => setShowAiLogsModal(false)}
                 className="px-4 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-xl transition-all cursor-pointer shadow-lg shadow-purple-600/30"

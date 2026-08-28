@@ -318,6 +318,17 @@ public class SiteRemasterService {
                 context.put("css", downloadedCss);
                 context.put("js", downloadedJs);
 
+                if ("canceled".equalsIgnoreCase((String) progress.get("status"))) {
+                    logs.add("Geração cancelada pelo usuário.");
+                    project.setStatus("ready");
+                    projectRepository.save(project);
+                    if (jobId != null && aiChatJobsQueue != null) {
+                        Map<String, Object> jState = aiChatJobsQueue.computeIfAbsent(jobId, k -> new ConcurrentHashMap<>());
+                        jState.put("status", "canceled");
+                    }
+                    return;
+                }
+
                 try {
                     Map<String, Object> aiResult = geminiService.generateAIResponse(
                             prompt,
@@ -460,5 +471,20 @@ public class SiteRemasterService {
             jobData.put("status", "failed");
             jobData.put("error", ex.getMessage());
         }
+    public boolean cancelJob(String projectId) {
+        Map<String, Object> progress = activeJobs.get(projectId);
+        if (progress != null) {
+            progress.put("status", "canceled");
+            if (progress.get("logs") != null) {
+                ((List<String>) progress.get("logs")).add("Solicitação de cancelamento enviada pelo usuário.");
+            }
+        }
+        Optional<Project> projOpt = projectRepository.findById(projectId);
+        if (projOpt.isPresent()) {
+            Project proj = projOpt.get();
+            proj.setStatus("ready");
+            projectRepository.save(proj);
+        }
+        return true;
     }
 }

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { API_URL } from '../../config';
 import {
   FolderPlus,
   Search,
@@ -12,7 +13,8 @@ import {
   Edit2,
   Trash2,
   ChevronRight,
-  Loader2
+  Loader2,
+  XCircle
 } from 'lucide-react';
 
 interface Project {
@@ -56,6 +58,17 @@ export const ProjectsTab: React.FC<ProjectsTabProps> = ({
   const [projectsSearch, setProjectsSearch] = useState('');
   const [projectsSort, setProjectsSort] = useState<'newest' | 'oldest' | 'name_asc' | 'name_desc'>('newest');
   const [projectsViewMode, setProjectsViewMode] = useState<'grid' | 'list'>('grid');
+
+  const handleCancelJob = async (projectId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await fetch(`${API_URL}/api/ai/remaster/job/${projectId}/cancel`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      alert('Solicitação de cancelamento enviada com sucesso!');
+    } catch {}
+  };
 
   // Filter & Sort Projects
   const filteredProjects = projects
@@ -143,10 +156,8 @@ export const ProjectsTab: React.FC<ProjectsTabProps> = ({
 
       {/* Dashboard Grid / List */}
       {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {[1, 2, 3].map(i => (
-            <div key={i} className="h-48 rounded-2xl bg-[#0f0b18] border border-slate-800 animate-pulse" />
-          ))}
+        <div className="p-12 text-center text-slate-400 font-mono text-xs flex items-center justify-center gap-2">
+          <Loader2 className="w-4 h-4 animate-spin text-purple-400" /> Carregando projetos...
         </div>
       ) : error ? (
         <div className="p-8 bg-red-950/20 border border-red-500/20 rounded-2xl text-center">
@@ -186,26 +197,40 @@ export const ProjectsTab: React.FC<ProjectsTabProps> = ({
             return (
               <div
                 key={project.id}
-                onClick={() => {
-                  if (isGenerating) return;
-                  onSelectProject(project.id);
-                }}
+                onClick={() => onSelectProject(project.id)}
                 className={`border rounded-2xl p-5 transition-all group flex flex-col justify-between min-h-[200px] shadow-lg relative ${isGenerating
-                  ? 'bg-[#0f0b18] border-amber-500/50 shadow-[0_0_25px_rgba(229,185,95,0.15)] cursor-not-allowed overflow-hidden'
+                  ? 'bg-[#0f0b18] border-amber-500/50 shadow-[0_0_25px_rgba(229,185,95,0.15)] cursor-pointer overflow-hidden'
                   : theme === 'light'
                     ? 'bg-white border-slate-200 hover:border-purple-400/60 cursor-pointer hover:shadow-purple-100'
                     : 'bg-[#0f0b18] border-slate-800/80 hover:border-purple-500/40 hover:bg-[#130d1e] cursor-pointer hover:shadow-[0_0_20px_rgba(168,85,247,0.08)]'
                   }`}
               >
                 {isGenerating && (
-                  <div className="absolute inset-0 bg-black/75 backdrop-blur-[2px] z-10 flex flex-col items-center justify-center p-4 text-center rounded-2xl">
-                    <div className="w-10 h-10 rounded-full border-2 border-amber-500/50 p-1 mb-2 animate-spin flex items-center justify-center">
-                      <Sparkles className="w-5 h-5 text-amber-400 animate-pulse" />
+                  <div className="absolute inset-0 bg-black/80 backdrop-blur-[3px] z-10 flex flex-col items-center justify-center p-4 text-center rounded-2xl gap-2">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-5 h-5 text-amber-400 animate-spin" />
+                      <span className="text-xs font-bold text-amber-300">Construindo com IA...</span>
                     </div>
-                    <span className="text-xs font-bold text-amber-300 tracking-wide">Construindo com IA...</span>
-                    <span className="text-[10px] text-slate-300 font-mono mt-1 animate-pulse">
-                      {jobInfo?.currentModel ? `${jobInfo.currentModel} (${jobInfo.attempt}/${jobInfo.total})` : 'Estruturando HTML, CSS e Seções'}
+                    <span className="text-[10px] text-slate-300 font-mono">
+                      {jobInfo?.currentModel ? `${jobInfo.currentModel}` : 'Estruturando HTML e CSS'}
                     </span>
+                    <div className="flex items-center gap-2 mt-1">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onSelectProject(project.id); }}
+                        className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white font-bold text-[11px] rounded-xl transition-all shadow-md cursor-pointer flex items-center gap-1"
+                      >
+                        <ChevronRight className="w-3.5 h-3.5" />
+                        Entrar no Projeto
+                      </button>
+                      <button
+                        onClick={(e) => handleCancelJob(project.id, e)}
+                        className="px-2.5 py-1.5 bg-red-950/80 hover:bg-red-900 border border-red-500/50 text-red-300 font-bold text-[11px] rounded-xl transition-all cursor-pointer flex items-center gap-1"
+                        title="Cancelar Geração com IA"
+                      >
+                        <XCircle className="w-3.5 h-3.5 text-red-400" />
+                        Cancelar
+                      </button>
+                    </div>
                   </div>
                 )}
 

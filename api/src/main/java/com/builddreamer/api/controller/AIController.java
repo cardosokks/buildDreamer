@@ -510,4 +510,10 @@ public class AIController {
         }
         return ResponseEntity.ok(status);
     }
+
+    @PostMapping("/remaster/job/{projectId}/cancel")
+    public ResponseEntity<?> cancelRemasterJob(@PathVariable String projectId) {
+        boolean canceled = remasterService.cancelJob(projectId);
+        return ResponseEntity.ok(Map.of("canceled", canceled, "projectId", projectId));
+    }
 }
