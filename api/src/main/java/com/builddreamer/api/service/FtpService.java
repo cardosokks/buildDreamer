@@ -79,13 +79,13 @@ public class FtpService {
             String footerHtml
     ) {
         String safeName = projectName.toLowerCase().replaceAll("[^a-z0-9]+", "-");
-        String host = System.getenv("FTP_HOST") != null ? System.getenv("FTP_HOST") : "localhost";
+        String host = (System.getenv("FTP_HOST") != null && !System.getenv("FTP_HOST").trim().isEmpty()) ? System.getenv("FTP_HOST") : "ftp";
         int port = 21;
         try {
-            if (System.getenv("FTP_PORT") != null) port = Integer.parseInt(System.getenv("FTP_PORT"));
+            if (System.getenv("FTP_PORT") != null && !System.getenv("FTP_PORT").trim().isEmpty()) port = Integer.parseInt(System.getenv("FTP_PORT"));
         } catch (Exception ignored) {}
-        String user = System.getenv("FTP_USER") != null ? System.getenv("FTP_USER") : "ftpuser";
-        String password = System.getenv("FTP_PASSWORD") != null ? System.getenv("FTP_PASSWORD") : "ftppassword";
+        String user = (System.getenv("FTP_USER") != null && !System.getenv("FTP_USER").trim().isEmpty()) ? System.getenv("FTP_USER") : "ftpuser";
+        String password = (System.getenv("FTP_PASSWORD") != null && !System.getenv("FTP_PASSWORD").trim().isEmpty()) ? System.getenv("FTP_PASSWORD") : "ftppassword123";
 
         FTPClient ftpClient = new FTPClient();
         try {
