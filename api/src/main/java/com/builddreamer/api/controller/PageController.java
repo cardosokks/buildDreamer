@@ -20,14 +20,17 @@ public class PageController {
     private final PageRepository pageRepository;
     private final ProjectRepository projectRepository;
     private final ProjectMemberRepository memberRepository;
+    private final com.builddreamer.api.service.FtpService ftpService;
 
     public PageController(
             PageRepository pageRepository,
             ProjectRepository projectRepository,
-            ProjectMemberRepository memberRepository) {
+            ProjectMemberRepository memberRepository,
+            com.builddreamer.api.service.FtpService ftpService) {
         this.pageRepository = pageRepository;
         this.projectRepository = projectRepository;
         this.memberRepository = memberRepository;
+        this.ftpService = ftpService;
     }
 
     private boolean checkAccess(String projectId, String userId) {
@@ -80,6 +83,13 @@ public class PageController {
                 .build();
 
         pageRepository.save(page);
+
+        // Upload page to FTP in background
+        try {
+            Project proj = projectOpt.get();
+            ftpService.uploadSinglePageToFTP(proj.getName(), page.getSlug(), page.getHtml(), page.getCss(), page.getJs(), page.isHomepage(), proj.getNavbarHtml(), proj.getFooterHtml());
+        } catch (Exception ignored) {}
+
         return ResponseEntity.ok(page);
     }
 
@@ -140,6 +150,15 @@ public class PageController {
         }
 
         pageRepository.save(page);
+
+        // Upload page to FTP in background
+        try {
+            Project proj = page.getProject();
+            if (proj != null) {
+                ftpService.uploadSinglePageToFTP(proj.getName(), page.getSlug(), page.getHtml(), page.getCss(), page.getJs(), page.isHomepage(), proj.getNavbarHtml(), proj.getFooterHtml());
+            }
+        } catch (Exception ignored) {}
+
         return ResponseEntity.ok(page);
     }
 

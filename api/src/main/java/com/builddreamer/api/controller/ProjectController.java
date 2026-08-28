@@ -37,6 +37,7 @@ public class ProjectController {
     private final VersionRepository versionRepository;
     private final GeminiService geminiService;
     private final SiteRemasterService remasterService;
+    private final com.builddreamer.api.service.FtpService ftpService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     // Background jobs queue for AI project generation
@@ -49,7 +50,8 @@ public class ProjectController {
             PageRepository pageRepository,
             VersionRepository versionRepository,
             GeminiService geminiService,
-            SiteRemasterService remasterService) {
+            SiteRemasterService remasterService,
+            com.builddreamer.api.service.FtpService ftpService) {
         this.projectRepository = projectRepository;
         this.memberRepository = memberRepository;
         this.userRepository = userRepository;
@@ -57,6 +59,7 @@ public class ProjectController {
         this.versionRepository = versionRepository;
         this.geminiService = geminiService;
         this.remasterService = remasterService;
+        this.ftpService = ftpService;
     }
 
     private String decodeHeader(String header) {
@@ -146,9 +149,21 @@ public class ProjectController {
                             .snapshot(objectMapper.writeValueAsString(snapshotData))
                             .build();
                     versionRepository.save(version);
+
+                    // FTP Deployment
+                    ftpService.uploadSinglePageToFTP(
+                        projectOpt.get().getName(),
+                        page.getSlug(),
+                        finalHtml,
+                        finalCss,
+                        finalJs,
+                        page.isHomepage(),
+                        projectOpt.get().getNavbarHtml(),
+                        projectOpt.get().getFooterHtml()
+                    );
                 }
             } catch (Exception ex) {
-                System.err.println("Erro ao criar snapshot de versão: " + ex.getMessage());
+                System.err.println("Erro no pos-processamento do projeto (FTP/Version): " + ex.getMessage());
             }
 
             Map<String, Object> completedJob = new ConcurrentHashMap<>();
