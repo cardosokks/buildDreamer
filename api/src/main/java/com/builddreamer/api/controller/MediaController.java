@@ -20,11 +20,13 @@ public class MediaController {
 
     private final MediaRepository mediaRepository;
     private final StorageService storageService;
+    private final com.fasterxml.jackson.databind.ObjectMapper objectMapper;
     private final String uploadDir = "uploads";
 
-    public MediaController(MediaRepository mediaRepository, StorageService storageService) {
+    public MediaController(MediaRepository mediaRepository, StorageService storageService, com.fasterxml.jackson.databind.ObjectMapper objectMapper) {
         this.mediaRepository = mediaRepository;
         this.storageService = storageService;
+        this.objectMapper = objectMapper;
         File dir = new File(uploadDir);
         if (!dir.exists()) {
             dir.mkdirs();
@@ -51,7 +53,7 @@ public class MediaController {
             @RequestParam(required = false) String base64Data,
             @RequestParam(required = false) String filename,
             @RequestParam(required = false) MultipartFile file,
-            @RequestBody(required = false) Map<String, Object> body) {
+            jakarta.servlet.http.HttpServletRequest request) {
         
         try {
             String name = filename;
@@ -60,19 +62,25 @@ public class MediaController {
             long size = 0;
             String targetProjectId = projectId;
 
-            if (body != null) {
-                if (body.containsKey("name")) name = (String) body.get("name");
-                if (body.containsKey("filename")) name = (String) body.get("filename");
-                if (body.containsKey("projectId")) targetProjectId = (String) body.get("projectId");
-                if (body.containsKey("mimeType")) contentType = (String) body.get("mimeType");
-                if (body.containsKey("base64Data")) {
-                    String b64 = (String) body.get("base64Data");
-                    if (b64.contains(",")) {
-                        b64 = b64.split(",")[1];
+            String reqContentType = request.getContentType();
+            if (reqContentType != null && reqContentType.toLowerCase().contains("application/json")) {
+                try {
+                    Map<String, Object> body = objectMapper.readValue(request.getInputStream(), Map.class);
+                    if (body != null) {
+                        if (body.containsKey("name")) name = (String) body.get("name");
+                        if (body.containsKey("filename")) name = (String) body.get("filename");
+                        if (body.containsKey("projectId")) targetProjectId = (String) body.get("projectId");
+                        if (body.containsKey("mimeType")) contentType = (String) body.get("mimeType");
+                        if (body.containsKey("base64Data")) {
+                            String b64 = (String) body.get("base64Data");
+                            if (b64.contains(",")) {
+                                b64 = b64.split(",")[1];
+                            }
+                            fileBytes = Base64.getDecoder().decode(b64);
+                            size = fileBytes.length;
+                        }
                     }
-                    fileBytes = Base64.getDecoder().decode(b64);
-                    size = fileBytes.length;
-                }
+                } catch (Exception ignored) {}
             }
 
             if (fileBytes == null && file != null) {
@@ -95,8 +103,13 @@ public class MediaController {
 
             // 1. Save to local disk
             String fileId = UUID.randomUUID().toString();
-            String savedFilename = fileId + "_" + name;
+            String sanitizeName = name.replaceAll("[^a-zA-Z0-9._-]", "_");
+            if (sanitizeName.isEmpty()) sanitizeName = "upload.png";
+            String savedFilename = fileId + "_" + sanitizeName;
             Path filePath = Paths.get(uploadDir, savedFilename);
+            if (filePath.getParent() != null && !Files.exists(filePath.getParent())) {
+                Files.createDirectories(filePath.getParent());
+            }
             Files.write(filePath, fileBytes);
 
             // 2. Upload to MinIO S3 Storage
@@ -105,21 +118,22 @@ public class MediaController {
             } catch (Exception ignored) {}
 
             String url = "/uploads/" + savedFilename;
+            String safeUserId = (userId != null && !userId.trim().isEmpty()) ? userId : "system";
 
             Media media = Media.builder()
-                    .id(fileId)
                     .name(name)
                     .url(url)
                     .size(size)
                     .mimeType(contentType)
-                    .userId(userId)
+                    .userId(safeUserId)
                     .projectId(targetProjectId)
                     .build();
 
-            mediaRepository.save(media);
-            return ResponseEntity.ok(Map.of("media", media));
+            Media savedMedia = mediaRepository.save(media);
+            return ResponseEntity.ok(Map.of("media", savedMedia));
 
         } catch (Exception ex) {
+            ex.printStackTrace();
             return ResponseEntity.status(500).body(Map.of("error", "Falha ao enviar arquivo: " + ex.getMessage()));
         }
     }
