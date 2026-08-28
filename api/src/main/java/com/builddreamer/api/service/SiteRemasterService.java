@@ -145,15 +145,15 @@ public class SiteRemasterService {
             for (int i = 0; i < pages.size(); i++) {
                 Map<String, Object> pMap = pages.get(i);
                 String pageName = (String) pMap.get("name");
-                String slug = (String) pMap.get("slug");
-                if ("home".equalsIgnoreCase(slug)) slug = "index";
+                String rawSlug = (String) pMap.get("slug");
+                final String targetSlug = ("home".equalsIgnoreCase(rawSlug) || rawSlug == null || rawSlug.trim().isEmpty()) ? "index" : rawSlug.trim();
 
                 String rawHtml = (String) pMap.get("rawHtml");
                 if (rawHtml == null || rawHtml.isEmpty()) {
                     rawHtml = (String) pMap.getOrDefault("cleanText", "Conteúdo original da página: " + pageName);
                 }
 
-                logs.add("IA gerando página: " + pageName + " (Slug: " + slug + ")...");
+                logs.add("IA gerando página: " + pageName + " (Slug: " + targetSlug + ")...");
                 progress.put("progress", i + 1);
 
                 Map<String, String> context = new HashMap<>();
@@ -186,22 +186,22 @@ public class SiteRemasterService {
                 }
 
                 // Check if page already exists by slug or is homepage, otherwise create new
-                Optional<Page> existingPage = pageRepository.findByProjectIdAndSlug(project.getId(), slug);
-                if (existingPage.isEmpty() && ("index".equals(slug) || "home".equals(slug))) {
+                Optional<Page> existingPage = pageRepository.findByProjectIdAndSlug(project.getId(), targetSlug);
+                if (existingPage.isEmpty() && ("index".equals(targetSlug) || "home".equals(targetSlug))) {
                     List<Page> projectPages = pageRepository.findByProjectId(project.getId());
                     existingPage = projectPages.stream().filter(Page::isHomepage).findFirst();
                 }
 
                 Page page = existingPage.orElseGet(() -> Page.builder()
                         .project(project)
-                        .slug(slug)
+                        .slug(targetSlug)
                         .build());
 
                 page.setName(pageName);
                 page.setHtml(html);
                 page.setCss(css);
                 page.setJs(js);
-                page.setHomepage("index".equals(slug) || i == 0);
+                page.setHomepage("index".equals(targetSlug) || i == 0);
 
                 pageRepository.save(page);
             }
