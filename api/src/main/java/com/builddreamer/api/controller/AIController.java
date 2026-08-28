@@ -210,10 +210,18 @@ public class AIController {
     @GetMapping("/jobs/{jobId}/status")
     public ResponseEntity<?> getJobStatus(@PathVariable String jobId) {
         Map<String, Object> job = aiChatJobsQueue.get(jobId);
-        if (job == null) {
-            return ResponseEntity.notFound().build();
+        if (job != null) {
+            return ResponseEntity.ok(job);
         }
-        return ResponseEntity.ok(job);
+        Map<String, Object> scrapeStatus = remasterService.getScrapeJobStatus(jobId);
+        if (!scrapeStatus.isEmpty()) {
+            return ResponseEntity.ok(scrapeStatus);
+        }
+        Map<String, Object> remasterStatus = remasterService.getJobStatus(jobId);
+        if (!remasterStatus.isEmpty()) {
+            return ResponseEntity.ok(remasterStatus);
+        }
+        return ResponseEntity.notFound().build();
     }
 
     @GetMapping("/models")
@@ -408,42 +416,11 @@ public class AIController {
     }
 
     @GetMapping("/remaster/job/{projectId}")
-    public ResponseEntity<?> getJobStatus(@PathVariable String projectId) {
+    public ResponseEntity<?> getRemasterJobStatus(@PathVariable String projectId) {
         Map<String, Object> status = remasterService.getJobStatus(projectId);
         if (status.isEmpty()) {
             return ResponseEntity.notFound().build();
         }
         return ResponseEntity.ok(status);
-    }
-
-    /**
-     * GET /api/ai/jobs/{jobId}/status — used by ChatPanel.tsx to poll AI generation job status
-     * Checks both remaster jobs (by projectId) and scrape jobs (by jobId)
-     */
-    @GetMapping("/jobs/{jobId}/status")
-    public ResponseEntity<?> getAiJobStatus(@PathVariable String jobId) {
-        // Try scrape job first
-        Map<String, Object> scrapeStatus = remasterService.getScrapeJobStatus(jobId);
-        if (!scrapeStatus.isEmpty()) {
-            return ResponseEntity.ok(scrapeStatus);
-        }
-        // Try remaster (generation) job by projectId
-        Map<String, Object> remasterStatus = remasterService.getJobStatus(jobId);
-        if (!remasterStatus.isEmpty()) {
-            return ResponseEntity.ok(remasterStatus);
-        }
-        return ResponseEntity.notFound().build();
-    }
-
-    /**
-     * GET /api/ai/jobs/active — used by ChatPanel.tsx to check if there is an active job
-     * Returns 200 with empty body when there is no active job for the given page/project
-     */
-    @GetMapping("/jobs/active")
-    public ResponseEntity<?> getActiveJob(
-            @RequestParam(required = false) String pageId,
-            @RequestParam(required = false) String projectId) {
-        // We don't track per-page jobs, just return empty so ChatPanel handles gracefully
-        return ResponseEntity.ok(Map.of("noActiveJob", true));
     }
 }
