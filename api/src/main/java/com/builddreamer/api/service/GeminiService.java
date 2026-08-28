@@ -20,7 +20,8 @@ public class GeminiService {
     private String defaultApiKey;
 
     private final HttpClient httpClient = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(120))
+            .version(HttpClient.Version.HTTP_1_1)
+            .connectTimeout(Duration.ofSeconds(20))
             .build();
 
     @FunctionalInterface
@@ -128,6 +129,7 @@ public class GeminiService {
 
                     String requestBody = objectMapper.writeValueAsString(n8nPayload);
 
+                    System.out.println("[AI Engine] Disparando HTTP POST para o n8n Webhook: " + n8nWebhookUrl);
                     HttpRequest request = HttpRequest.newBuilder()
                             .uri(URI.create(n8nWebhookUrl))
                             .header("Content-Type", "application/json")
@@ -136,6 +138,7 @@ public class GeminiService {
                             .build();
 
                     HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+                    System.out.println("[AI Engine] Resposta HTTP do n8n recebida! Status Code: " + response.statusCode());
                     
                     if (response.statusCode() == 200) {
                         String respBody = response.body();
@@ -162,9 +165,12 @@ public class GeminiService {
                         parsed.put("_usedModel", modelToTry + " (via n8n real-premise-agent)");
                         System.out.println("[AI Engine] Sucesso total na geração via n8n real-premise-agent com o modelo: " + modelToTry);
                         return parsed;
+                    } else {
+                        System.err.println("[AI Engine] n8n retornou código de erro HTTP " + response.statusCode() + ": " + response.body());
                     }
                 } catch (Exception n8nEx) {
-                    System.err.println("[AI Engine] Falha/timeout no n8n real-premise-agent: " + n8nEx.getMessage() + ". Recorrendo ao endpoint direto do Gemini...");
+                    System.err.println("[AI Engine] Falha/timeout no n8n real-premise-agent: " + n8nEx.getMessage());
+                    n8nEx.printStackTrace();
                 }
 
                 // Fallback to direct Gemini API
