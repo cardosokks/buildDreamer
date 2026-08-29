@@ -81,18 +81,49 @@ public class SiteRemasterService {
                 String title = doc.title();
                 String bodyHtml = doc.body() != null ? doc.body().html() : doc.html();
                 
-                // Extract inline CSS styles
+                // Extract inline and external CSS styles
                 StringBuilder cssSb = new StringBuilder();
                 for (Element style : doc.select("style")) {
-                    cssSb.append(style.html()).append("\n");
+                    if (!style.html().trim().isEmpty()) {
+                        cssSb.append(style.html()).append("\n");
+                    }
+                }
+                for (Element link : doc.select("link[rel~=(?i)stylesheet]")) {
+                    String href = link.absUrl("href");
+                    if (href.isEmpty() || href.startsWith("data:")) continue;
+                    try {
+                        org.jsoup.Connection.Response cssRes = Jsoup.connect(href)
+                                .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                                .timeout(5000)
+                                .ignoreContentType(true)
+                                .ignoreHttpErrors(true)
+                                .execute();
+                        if (cssRes.statusCode() == 200 && cssRes.body() != null) {
+                            cssSb.append("/* CSS Import: ").append(href).append(" */\n").append(cssRes.body().trim()).append("\n");
+                        }
+                    } catch (Exception ignored) {}
                 }
                 String extractedCss = cssSb.toString();
 
-                // Extract inline JS scripts
+                // Extract inline and external JS scripts
                 StringBuilder jsSb = new StringBuilder();
                 for (Element script : doc.select("script")) {
                     if (!script.hasAttr("src") && !script.html().trim().isEmpty()) {
                         jsSb.append(script.html()).append("\n");
+                    } else if (script.hasAttr("src")) {
+                        String src = script.absUrl("src");
+                        if (src.isEmpty() || src.startsWith("data:") || src.contains("analytics") || src.contains("gtag")) continue;
+                        try {
+                            org.jsoup.Connection.Response jsRes = Jsoup.connect(src)
+                                    .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                                    .timeout(4000)
+                                    .ignoreContentType(true)
+                                    .ignoreHttpErrors(true)
+                                    .execute();
+                            if (jsRes.statusCode() == 200 && jsRes.body() != null) {
+                                jsSb.append("// JS Import: ").append(src).append("\n").append(jsRes.body().trim()).append("\n");
+                            }
+                        } catch (Exception ignored) {}
                     }
                 }
                 String extractedJs = jsSb.toString();
@@ -399,6 +430,14 @@ public class SiteRemasterService {
                     String html = (String) aiResult.getOrDefault("html", "<div></div>");
                     String css = (String) aiResult.getOrDefault("css", "");
                     String js = (String) aiResult.getOrDefault("js", "");
+
+                    if (css == null || css.trim().isEmpty()) {
+                        css = downloadedCss;
+                    }
+                    if (js == null || js.trim().isEmpty()) {
+                        js = downloadedJs;
+                    }
+
                     String usedModel = (String) aiResult.getOrDefault("_usedModel", "gemini-3.6-flash");
 
                     // Parse HTML using Jsoup to extract or remove navbar/footer elements
