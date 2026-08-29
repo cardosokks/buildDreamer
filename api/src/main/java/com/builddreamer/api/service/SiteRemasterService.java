@@ -14,7 +14,6 @@ import org.jsoup.select.Elements;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import java.net.URI;
-import java.net.URL;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -22,6 +21,7 @@ import java.util.regex.Pattern;
 import java.util.regex.Matcher;
 
 @Service
+@SuppressWarnings("unchecked")
 public class SiteRemasterService {
 
     private final GeminiService geminiService;
@@ -177,7 +177,7 @@ public class SiteRemasterService {
                     String absUrl = img.absUrl(srcAttr);
                     if (absUrl.isEmpty()) {
                         try {
-                            absUrl = new URL(new URL(currentUrl), rawSrc).toString();
+                            absUrl = java.net.URI.create(currentUrl).resolve(rawSrc).toString();
                         } catch (Exception ignored) {}
                     }
 
@@ -212,7 +212,7 @@ public class SiteRemasterService {
                         String bgSrc = m.group(1);
                         String absUrl = "";
                         try {
-                            absUrl = new URL(new URL(currentUrl), bgSrc).toString();
+                            absUrl = java.net.URI.create(currentUrl).resolve(bgSrc).toString();
                         } catch (Exception ignored) {}
                         if (!absUrl.isEmpty() && !globalSeenMedia.contains(absUrl) && !absUrl.contains("pixel")) {
                             globalSeenMedia.add(absUrl);
@@ -232,7 +232,7 @@ public class SiteRemasterService {
                     String absUrl = video.absUrl("src");
                     if (absUrl.isEmpty() && !vSrc.isEmpty()) {
                         try {
-                            absUrl = new URL(new URL(currentUrl), vSrc).toString();
+                            absUrl = java.net.URI.create(currentUrl).resolve(vSrc).toString();
                         } catch (Exception ignored) {}
                     }
                     if (!absUrl.isEmpty() && !globalSeenMedia.contains(absUrl)) {
@@ -272,7 +272,7 @@ public class SiteRemasterService {
                     String absUrl = link.absUrl("href");
                     if (absUrl.isEmpty()) {
                         try {
-                            absUrl = new URL(new URL(currentUrl), rawHref).toString();
+                            absUrl = java.net.URI.create(currentUrl).resolve(rawHref).toString();
                         } catch (Exception ignored) {}
                     }
 

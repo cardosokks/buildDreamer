@@ -8,7 +8,6 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import java.io.File;
-import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -65,7 +64,7 @@ public class MediaController {
             String reqContentType = request.getContentType();
             if (reqContentType != null && reqContentType.toLowerCase().contains("application/json")) {
                 try {
-                    Map<String, Object> body = objectMapper.readValue(request.getInputStream(), Map.class);
+                    Map<String, Object> body = objectMapper.readValue(request.getInputStream(), new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {});
                     if (body != null) {
                         if (body.containsKey("name")) name = (String) body.get("name");
                         if (body.containsKey("filename")) name = (String) body.get("filename");

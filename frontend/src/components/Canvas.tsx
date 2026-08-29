@@ -246,6 +246,9 @@ export const Canvas: React.FC<CanvasProps> = ({
             tagBadge.textContent = tag + id + (cls ? cls.slice(0, 12) : '');
           }
 
+          window.addEventListener('scroll', updateOverlayPosition, true);
+          window.addEventListener('resize', updateOverlayPosition);
+
           function removeSelection() {
             if (currentSelected) {
               currentSelected.removeAttribute('contenteditable');

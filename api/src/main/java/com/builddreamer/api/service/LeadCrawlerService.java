@@ -101,6 +101,7 @@ public class LeadCrawlerService {
                         lead.put("email", null);
                         lead.put("website", website);
                         lead.put("address", address);
+                        lead.put("category", category);
                         lead.put("rating", String.format(Locale.US, "%.1f", rating));
                         lead.put("status", "PROSPECT");
                         lead.put("origin", "CRAWLER");
@@ -137,6 +138,7 @@ public class LeadCrawlerService {
                             lead.put("name", displayName.split(",")[0]);
                             lead.put("company", displayName.split(",")[0]);
                             lead.put("phone", "Não informado");
+                            lead.put("type", type);
                             lead.put("email", null);
                             lead.put("website", null);
                             lead.put("address", displayName);

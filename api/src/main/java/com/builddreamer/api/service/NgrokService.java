@@ -87,7 +87,7 @@ public class NgrokService {
 
     private String fetchNgrokPublicUrl() {
         try {
-            URL url = new URL("http://127.0.0.1:4040/api/tunnels");
+            URL url = java.net.URI.create("http://127.0.0.1:4040/api/tunnels").toURL();
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
             conn.setRequestMethod("GET");
             conn.setConnectTimeout(1000);

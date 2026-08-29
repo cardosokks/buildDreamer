@@ -179,7 +179,7 @@ const ColorInput: React.FC<{
   onChange: (p: string, v: string) => void;
 }> = ({ label, prop, value, onChange }) => {
   const hex = rgbToHex(value);
-  const isHex = hex.startsWith('#') && (hex.length === 7 || hex.length === 4);
+  const isHex = hex && hex.startsWith('#') && (hex.length === 7 || hex.length === 4);
 
   return (
     <div>
@@ -188,14 +188,14 @@ const ColorInput: React.FC<{
         <input
           type="color"
           className="w-7 h-7 rounded cursor-pointer border border-slate-800 bg-transparent p-0 shrink-0"
-          value={isHex ? hex : '#000000'}
+          value={isHex ? (hex.length === 4 ? '#' + hex[1] + hex[1] + hex[2] + hex[2] + hex[3] + hex[3] : hex) : '#000000'}
           onChange={e => onChange(prop, e.target.value)}
         />
         <input
           type="text"
           className={`${inputCls} flex-1`}
           placeholder="transparent / #hex / rgba()"
-          value={value}
+          value={value || ''}
           onChange={e => onChange(prop, e.target.value)}
         />
       </div>

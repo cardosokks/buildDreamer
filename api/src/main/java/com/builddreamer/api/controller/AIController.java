@@ -11,7 +11,6 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
-import java.time.LocalDateTime;
 import java.util.*;
 
 import com.builddreamer.api.service.StorageService;
@@ -128,6 +127,7 @@ public class AIController {
 
             stateRef.put("status", "completed");
             stateRef.put("response", response);
+            stateRef.put("result", response);
             if (response.containsKey("explanation")) stateRef.put("explanation", response.get("explanation"));
             if (response.containsKey("html")) stateRef.put("html", response.get("html"));
             if (response.containsKey("css")) stateRef.put("css", response.get("css"));
@@ -140,7 +140,50 @@ public class AIController {
         }
     }
 
+    @PostMapping("/generate")
+    @SuppressWarnings("unchecked")
+    public ResponseEntity<Map<String, Object>> generateAI(
+            @AuthenticationPrincipal String userId,
+            @RequestHeader(name = "x-gemini-key", required = false) String rawGeminiKey,
+            @RequestHeader(name = "x-gemini-models", required = false) String rawGeminiModels,
+            @RequestBody Map<String, Object> body) {
+        String prompt = (String) body.get("prompt");
+        Map<String, String> context = (Map<String, String>) body.get("context");
+        String apiKey = (String) body.get("apiKey");
+        String model = (String) body.get("model");
+        String pageId = (String) body.get("pageId");
+        String projectId = (String) body.get("projectId");
+
+        if (apiKey == null || apiKey.trim().isEmpty()) {
+            apiKey = decodeHeader(rawGeminiKey);
+        }
+
+        List<String> registeredModels = null;
+        if (rawGeminiModels != null && !rawGeminiModels.isEmpty()) {
+            try {
+                String jsonStr = decodeHeader(rawGeminiModels);
+                registeredModels = objectMapper.readValue(jsonStr, new TypeReference<List<String>>() {});
+            } catch (Exception ignored) {}
+        }
+
+        String jobId = "job-" + System.currentTimeMillis() + "-" + new Random().nextInt(10000);
+        String scope = (projectId != null && pageId == null) ? "all" : "single";
+
+        Map<String, Object> initialJob = new ConcurrentHashMap<>();
+        initialJob.put("status", "pending");
+        initialJob.put("scope", scope);
+        if (pageId != null) initialJob.put("pageId", pageId);
+        if (projectId != null) initialJob.put("projectId", projectId);
+
+        aiChatJobsQueue.put(jobId, initialJob);
+
+        processAiChatJob(jobId, pageId, projectId, prompt, context, apiKey, model, registeredModels);
+
+        return ResponseEntity.status(202).body(Map.of("jobId", jobId, "status", "pending", "scope", scope));
+    }
+
     @PostMapping("/chat")
+    @SuppressWarnings("unchecked")
     public ResponseEntity<?> editPageChat(
             @AuthenticationPrincipal String userId,
             @RequestHeader(name = "x-gemini-key", required = false) String rawGeminiKey,
@@ -327,6 +370,7 @@ public class AIController {
     }
 
     @PostMapping("/remaster/generate")
+    @SuppressWarnings("unchecked")
     public ResponseEntity<?> generateRemaster(
             @AuthenticationPrincipal String userId,
             @RequestHeader(value = "X-Gemini-Key", required = false) String clientGeminiKeyEncoded,

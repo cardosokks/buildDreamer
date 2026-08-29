@@ -284,18 +284,19 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
           const jobData = await statusRes.json();
           if (jobData.currentModel) setActiveJobModel(jobData.currentModel);
 
-          if (jobData.status === 'completed' && jobData.result) {
+          const resObj = jobData.result || jobData;
+          if (jobData.status === 'completed' && resObj && (resObj.html || resObj.explanation)) {
             if (activePollRef.current) clearInterval(activePollRef.current);
             setLoading(false);
             setActiveJobModel(null);
 
             const assistantMessage: Message = { 
               role: 'assistant', 
-              text: jobData.result.explanation || 'Alterações arquitetadas e geradas com sucesso.',
-              html: jobData.result.html,
-              css: jobData.result.css,
-              js: jobData.result.js,
-              modelUsed: jobData.result._usedModel || jobData.currentModel || selectedModel,
+              text: resObj.explanation || 'Alterações arquitetadas e geradas com sucesso.',
+              html: resObj.html,
+              css: resObj.css,
+              js: resObj.js,
+              modelUsed: resObj._usedModel || jobData.currentModel || selectedModel,
               applied: true,
               scope: jobData.scope
             };
@@ -313,8 +314,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
             }
 
             // Auto-aplica as alterações imediatamente no Canvas atual
-            if (jobData.result.html) {
-              onApplyChanges(jobData.result.html, jobData.result.css || '', jobData.result.js || '', targetPageId);
+            if (resObj.html) {
+              onApplyChanges(resObj.html, resObj.css || '', resObj.js || '', targetPageId);
             }
           } else if (jobData.status === 'failed') {
             if (activePollRef.current) clearInterval(activePollRef.current);

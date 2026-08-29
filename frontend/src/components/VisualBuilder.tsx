@@ -1708,9 +1708,10 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
           }}
         >
           <div 
-            className="transition-all duration-200 h-full flex items-center justify-center relative"
+            className="transition-all duration-200 h-full flex items-center justify-center relative mx-auto"
             style={{
               width: viewport === 'mobile' ? '375px' : viewport === 'tablet' ? '768px' : '100%',
+              maxWidth: '100%',
               height: '100%'
             }}
           >

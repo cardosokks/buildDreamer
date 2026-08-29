@@ -87,6 +87,7 @@ public class LeadController {
 
     // 2. Create or update a CRM lead (POST /api/leads/crm)
     @PostMapping("/crm")
+    @SuppressWarnings("unchecked")
     public ResponseEntity<?> createLead(@AuthenticationPrincipal String userId, @RequestBody Map<String, Object> body) {
         String name = (String) body.get("name");
         if (name == null || name.trim().isEmpty()) {
@@ -156,6 +157,7 @@ public class LeadController {
 
     // 4. Update single lead (PUT /api/leads/crm/{id})
     @PutMapping("/crm/{id}")
+    @SuppressWarnings("unchecked")
     public ResponseEntity<?> updateLead(
             @AuthenticationPrincipal String userId,
             @PathVariable String id,

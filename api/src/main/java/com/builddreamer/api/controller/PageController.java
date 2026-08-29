@@ -2,7 +2,6 @@ package com.builddreamer.api.controller;
 
 import com.builddreamer.api.model.Page;
 import com.builddreamer.api.model.Project;
-import com.builddreamer.api.model.ProjectMember;
 import com.builddreamer.api.repository.PageRepository;
 import com.builddreamer.api.repository.ProjectMemberRepository;
 import com.builddreamer.api.repository.ProjectRepository;

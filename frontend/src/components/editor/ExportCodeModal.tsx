@@ -104,7 +104,22 @@ export const ExportCodeModal: React.FC<CodeModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-slate-800 flex justify-end">
+        <div className="px-6 py-4 border-t border-slate-800 flex justify-between items-center">
+          <button
+            onClick={() => {
+              const fullDocument = `<!DOCTYPE html>\n<html lang="pt-BR">\n<head>\n  <meta charset="UTF-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n  <script src="https://cdn.tailwindcss.com"></script>\n  <style>\n${codeCss}\n  </style>\n</head>\n<body>\n${codeHtml}\n  <script>\n${codeJs}\n  </script>\n</body>\n</html>`;
+              const blob = new Blob([fullDocument], { type: 'text/html;charset=utf-8' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = 'index.html';
+              a.click();
+              URL.revokeObjectURL(url);
+            }}
+            className="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center gap-1.5"
+          >
+            <span>Baixar Página Completa (.html)</span>
+          </button>
           <button
             onClick={onClose}
             className="px-5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-xl transition-all"
