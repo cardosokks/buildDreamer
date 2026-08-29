@@ -42,10 +42,10 @@ public class GeminiService {
     }
 
     private String sanitizeModelName(String rawModel) {
-        if (rawModel == null || rawModel.trim().isEmpty()) return "gemini-3.6-flash";
+        if (rawModel == null || rawModel.trim().isEmpty()) return "gemini-2.0-flash";
         String m = rawModel.trim();
-        if ("gemini-2.5-flash".equalsIgnoreCase(m) || "gemini-2.0-flash-exp".equalsIgnoreCase(m)) return "gemini-3.6-flash";
-        if ("gemini-2.5-pro".equalsIgnoreCase(m) || "gemini-1.0-pro".equalsIgnoreCase(m)) return "gemini-3.1-pro-preview";
+        if ("gemini-3.6-flash".equalsIgnoreCase(m) || "gemini-2.5-flash".equalsIgnoreCase(m) || "gemini-2.0-flash-exp".equalsIgnoreCase(m)) return "gemini-2.0-flash";
+        if ("gemini-3.1-pro-preview".equalsIgnoreCase(m) || "gemini-2.5-pro".equalsIgnoreCase(m) || "gemini-1.0-pro".equalsIgnoreCase(m)) return "gemini-1.5-pro";
         return m;
     }
 
@@ -84,7 +84,7 @@ public class GeminiService {
         if (registeredModels != null && !registeredModels.isEmpty()) {
             rawList.addAll(registeredModels);
         }
-        rawList.addAll(Arrays.asList("gemini-3.6-flash", "gemini-3.1-pro-preview", "gemini-1.5-flash", "gemini-1.5-pro"));
+        rawList.addAll(Arrays.asList("gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"));
 
         List<String> candidateModels = new ArrayList<>();
         for (String m : rawList) {

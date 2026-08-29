@@ -516,7 +516,7 @@ public class SiteRemasterService {
                 if (css == null || css.trim().isEmpty()) css = pageCss;
                 if (js == null || js.trim().isEmpty()) js = pageJs;
 
-                String usedModel = (String) aiResult.getOrDefault("_usedModel", "gemini-3.6-flash");
+                String usedModel = (String) aiResult.getOrDefault("_usedModel", "gemini-2.0-flash");
                 logs.add("IA retornou página '" + pageName + "' com sucesso via " + usedModel + "!");
 
                 // 6. Extract navbar/footer from first page

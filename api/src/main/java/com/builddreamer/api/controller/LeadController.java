@@ -336,7 +336,6 @@ public class LeadController {
         preset.setHasPhoneOnly(body.containsKey("hasPhoneOnly") && (boolean) body.get("hasPhoneOnly"));
         preset.setHasWhatsappOnly(body.containsKey("hasWhatsappOnly") && (boolean) body.get("hasWhatsappOnly"));
         preset.setMinRating(body.containsKey("minRating") ? Double.parseDouble(body.get("minRating").toString()) : 0.0);
-        preset.setUserId(userId);
         preset.setUser(userOpt.get());
 
         leadPresetRepository.save(preset);

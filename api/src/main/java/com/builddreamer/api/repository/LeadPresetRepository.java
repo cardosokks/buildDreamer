@@ -10,9 +10,9 @@ import java.util.Optional;
 
 @Repository
 public interface LeadPresetRepository extends JpaRepository<LeadPreset, String> {
-    @Query("SELECT p FROM LeadPreset p WHERE p.userId = :userId OR (p.user IS NOT NULL AND p.user.id = :userId) ORDER BY p.createdAt DESC")
+    @Query("SELECT p FROM LeadPreset p WHERE p.user IS NOT NULL AND p.user.id = :userId ORDER BY p.createdAt DESC")
     List<LeadPreset> findAllByUserId(@Param("userId") String userId);
 
-    @Query("SELECT p FROM LeadPreset p WHERE p.id = :id AND (p.userId = :userId OR (p.user IS NOT NULL AND p.user.id = :userId))")
+    @Query("SELECT p FROM LeadPreset p WHERE p.id = :id AND p.user IS NOT NULL AND p.user.id = :userId")
     Optional<LeadPreset> findByIdAndUserIdCustom(@Param("id") String id, @Param("userId") String userId);
 }

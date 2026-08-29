@@ -169,8 +169,9 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       } catch {}
     }
     return [
-      { id: 'gemini-3.6-flash', name: 'Gemini 3.6 Flash' },
-      { id: 'gemini-3.1-pro-preview', name: 'Gemini 3.1 Pro Preview' }
+      { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash' },
+      { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash' },
+      { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro' }
     ];
   });
 
@@ -195,7 +196,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     }
     const savedLastModel = localStorage.getItem('last_selected_ai_model');
     if (savedLastModel) return savedLastModel;
-    return 'gemini-3.6-flash';
+    return 'gemini-2.0-flash';
   });
 
   const handleModelChange = (modelId: string) => {
@@ -399,7 +400,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
         attachedFiles: currentFiles.length > 0 ? currentFiles : undefined
       } as Message
     ];
-    const modelToSend = selectedModel || (availableModels.length > 0 ? availableModels[0].id : 'gemini-3.6-flash');
+    const modelToSend = selectedModel || (availableModels.length > 0 ? availableModels[0].id : 'gemini-2.0-flash');
 
     setMessages(updatedMessages);
     localStorage.setItem(chatStorageKey, JSON.stringify(updatedMessages));

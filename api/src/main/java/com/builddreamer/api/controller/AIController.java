@@ -496,7 +496,7 @@ public class AIController {
             initialJob.put("progress", 0);
             initialJob.put("total", pages.size());
             initialJob.put("scope", pages.size() > 1 ? "all" : "single");
-            initialJob.put("currentModel", models != null && !models.isEmpty() ? models.get(0) : "gemini-3.6-flash");
+            initialJob.put("currentModel", models != null && !models.isEmpty() ? models.get(0) : "gemini-2.0-flash");
             aiChatJobsQueue.put(jobId, initialJob);
 
             remasterService.runRemasterGenerationJob(

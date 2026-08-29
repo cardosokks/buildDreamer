@@ -108,7 +108,7 @@ export const SettingsPage: React.FC = () => {
     localStorage.getItem('ollama_model') || 'cardosokks:latest'
   );
   const [geminiModel, setGeminiModel] = useState(
-    localStorage.getItem('gemini_default_model') || 'gemini-3.6-flash'
+    localStorage.getItem('gemini_default_model') || 'gemini-2.0-flash'
   );
 
   const [ollamaModelsList, setOllamaModelsList] = useState<string[]>(() => {

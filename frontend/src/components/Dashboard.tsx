@@ -259,7 +259,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
   const [remasterModel, setRemasterModel] = useState<string>(() => {
     const prov = (localStorage.getItem('ai_active_provider') as 'ollama' | 'gemini') || 'ollama';
     if (prov === 'ollama') return localStorage.getItem('ollama_model') || 'cardosokks:latest';
-    return localStorage.getItem('gemini_default_model') || 'gemini-3.6-flash';
+    return localStorage.getItem('gemini_default_model') || 'gemini-2.0-flash';
   });
 
   const [ollamaAvailableModels, setOllamaAvailableModels] = useState<string[]>(() => {
@@ -282,8 +282,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
       } catch {}
     }
     return [
-      { id: 'gemini-3.6-flash', name: 'Gemini 3.6 Flash' },
-      { id: 'gemini-3.1-pro-preview', name: 'Gemini 3.1 Pro Preview' }
+      { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash' },
+      { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash' },
+      { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro' }
     ];
   });
   const [remasterPages, setRemasterPages] = useState<Array<{
@@ -1328,7 +1329,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
           localStorage.setItem(`chat_history_${firstPageId}`, JSON.stringify([initialMsg]));
           localStorage.setItem(`active_ai_job_${firstPageId}`, JSON.stringify({
             jobId: newProject.jobId,
-            currentModel: 'gemini-3.6-flash'
+            currentModel: 'gemini-2.0-flash'
           }));
         }
       }
@@ -2838,7 +2839,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                             type="button"
                             onClick={() => {
                               setRemasterProvider('gemini');
-                              setRemasterModel(localStorage.getItem('gemini_default_model') || 'gemini-3.6-flash');
+                              setRemasterModel(localStorage.getItem('gemini_default_model') || 'gemini-2.0-flash');
                             }}
                             className={`py-1.5 px-2 rounded-lg border text-xs font-bold flex items-center justify-center gap-1 transition-all cursor-pointer ${
                               remasterProvider === 'gemini'

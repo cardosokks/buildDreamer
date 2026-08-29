@@ -49,9 +49,6 @@ public class LeadPreset {
     @Column(name = "has_whatsapp_only", nullable = false)
     private boolean hasWhatsappOnly = false;
 
-    @Column(name = "user_id_str")
-    private String userId;
-
     @Builder.Default
     @Column(name = "min_rating", nullable = false)
     private double minRating = 0.0;

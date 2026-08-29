@@ -2118,7 +2118,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
             
             <div className="p-4 overflow-y-auto font-mono text-xs space-y-3 flex-1 bg-slate-950">
               <div className="bg-slate-900 border border-slate-800 p-3 rounded-xl space-y-1">
-                <p className="text-slate-400">Modelo AI: <span className="text-purple-400 font-bold">gemini-3.6-flash (via n8n real-premise-agent)</span></p>
+                <p className="text-slate-400">Modelo AI: <span className="text-purple-400 font-bold">gemini-2.0-flash / custom (via AI Engine)</span></p>
                 <p className="text-slate-400">Projeto ID: <span className="text-slate-200">{projectId}</span></p>
                 {aiLogsData.status && (
                   <p className="text-slate-400">Status Atual: <span className="text-cyan-400 uppercase font-bold">{aiLogsData.status}</span></p>
