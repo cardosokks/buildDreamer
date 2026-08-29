@@ -43,6 +43,9 @@ import { CodeEditor } from './CodeEditor';
 import { MediaLibrarySidebar } from './MediaLibrarySidebar';
 import { ChatPanel } from './ChatPanel';
 import { GlobalsManagerModal } from './GlobalsManagerModal';
+import { EditorHeader } from './editor/EditorHeader';
+import { ExportCodeModal } from './editor/ExportCodeModal';
+import { AiLogsModal } from './editor/AiLogsModal';
 import { API_URL } from '../config';
 import { useNotification } from '../context/NotificationContext';
 

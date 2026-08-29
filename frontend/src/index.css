@@ -3,55 +3,55 @@
 
 /* ─── Professional Design System Variables ──────────────────────────── */
 :root {
-  --bg-app: #09090b;
-  --bg-surface: #0f0f12;
-  --bg-sidebar: #0c0c0f;
-  --bg-card: #131317;
-  --bg-input: #0a0a0d;
+  --bg-app: #0b0f19;
+  --bg-surface: #111827;
+  --bg-sidebar: #0e1320;
+  --bg-card: #151d30;
+  --bg-input: #0d121f;
 
-  --border-subtle: #1a1a1f;
-  --border-strong: #252530;
+  --border-subtle: #1e293b;
+  --border-strong: #334155;
 
-  --text-primary: #f4f4f5;
-  --text-secondary: #a1a1aa;
-  --text-muted: #52525b;
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
 
-  --accent-primary: #6366f1;
-  --accent-hover: #4f46e5;
-  --accent-light: rgba(99, 102, 241, 0.12);
+  --accent-primary: #3b82f6;
+  --accent-hover: #2563eb;
+  --accent-light: rgba(59, 130, 246, 0.12);
 
-  --gold-accent: #a78bfa;
-  --border-purple: #a855f7;
-  --border-teal: #06b6d4;
-  --bg-panel: #0f0b18;
-  --border-deep: #7e22ce;
-  --bg-tag: #9333ea;
-  --bg-toolbar: #1e1630;
-  --border-toolbar: #3b285a;
+  --gold-accent: #60a5fa;
+  --border-purple: #3b82f6;
+  --border-teal: #0284c7;
+  --bg-panel: #111827;
+  --border-deep: #1d4ed8;
+  --bg-tag: #2563eb;
+  --bg-toolbar: #1e293b;
+  --border-toolbar: #334155;
   --danger-color: #ef4444;
-  --outline-success: #22c55e;
+  --outline-success: #10b981;
 }
 
-/* Light mode: more contrast, professional grey-blue tones */
+/* Light mode: Slate CRM crisp white look */
 html.light {
-  --bg-app: #f0f2f5;
+  --bg-app: #f8fafc;
   --bg-surface: #ffffff;
-  --bg-sidebar: #e8eaed;
+  --bg-sidebar: #f1f5f9;
   --bg-card: #ffffff;
   --bg-input: #ffffff;
 
-  --border-subtle: #d4d7dc;
-  --border-strong: #b8bcc4;
+  --border-subtle: #e2e8f0;
+  --border-strong: #cbd5e1;
 
-  --text-primary: #0f1117;
-  --text-secondary: #3d4350;
-  --text-muted: #6b7280;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #64748b;
 
-  --accent-primary: #4f46e5;
-  --accent-hover: #4338ca;
-  --accent-light: rgba(79, 70, 229, 0.1);
+  --accent-primary: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-light: rgba(37, 99, 235, 0.08);
 
-  --gold-accent: #7c3aed;
+  --gold-accent: #3b82f6;
 }
 
 body {
