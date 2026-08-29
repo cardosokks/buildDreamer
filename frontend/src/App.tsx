@@ -73,7 +73,7 @@ const MainApp: React.FC = () => {
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-950 flex justify-center items-center text-slate-400 font-mono text-xs">
-        Carregando sessão...
+        Carregando...
       </div>
     );
   }

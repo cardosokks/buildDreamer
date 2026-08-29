@@ -6,6 +6,8 @@ services:
       POSTGRES_USER: builder_user
       POSTGRES_PASSWORD: builder_password
       POSTGRES_DB: builder_db
+    ports:
+      - "${POSTGRES_PORT:-11032}:5432"
     expose:
       - "5432"
     volumes:
@@ -17,17 +19,17 @@ services:
       dockerfile: Dockerfile
     restart: always
     ports:
-      - "${API_PORT:-5005}:5000"
+      - "${API_PORT:-11005}:5000"
     expose:
       - "5000"
     environment:
       - API_URL=${API_URL}
-      - PORT=${PORT}
-      - DATABASE_HOST=postgres
-      - DATABASE_PORT=5432
-      - DATABASE_NAME=builder_db
-      - DATABASE_USER=builder_user
-      - DATABASE_PASSWORD=builder_password
+      - PORT=${PORT:-5000}
+      - DATABASE_HOST=${DATABASE_HOST:-postgres}
+      - DATABASE_PORT=${DATABASE_PORT:-5432}
+      - DATABASE_NAME=${DATABASE_NAME:-builder_db}
+      - DATABASE_USER=${DATABASE_USER:-builder_user}
+      - DATABASE_PASSWORD=${DATABASE_PASSWORD:-builder_password}
       - JWT_SECRET=${JWT_SECRET}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - MINIO_ENDPOINT=${MINIO_ENDPOINT:-http://minio:9000}
@@ -44,9 +46,12 @@ services:
       dockerfile: Dockerfile
     restart: always
     ports:
-      - "${FRONTEND_PORT:-3000}:80"
+      - "${FRONTEND_PORT:-11000}:80"
     expose:
       - "80"
+    environment:
+      - BACKEND_HOST=${BACKEND_HOST:-backend}
+      - BACKEND_PORT=${BACKEND_PORT:-5000}
     depends_on:
       - backend
 
@@ -55,8 +60,8 @@ services:
     restart: always
     command: server /data --console-address ":9001"
     ports:
-      - "${MINIO_PORT:-9005}:9000"
-      - "${MINIO_CONSOLE_PORT:-9006}:9001"
+      - "${MINIO_PORT:-11001}:9000"
+      - "${MINIO_CONSOLE_PORT:-11002}:9001"
     environment:
       - MINIO_ROOT_USER=${MINIO_ACCESS_KEY:-admin}
       - MINIO_ROOT_PASSWORD=${MINIO_SECRET_KEY:-minioadmin123}

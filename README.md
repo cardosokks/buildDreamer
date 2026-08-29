@@ -8,10 +8,10 @@ A brief description of the buildDreamer project.
 Use this section to quickly understand the current architecture and state of the repository without doing a full codebase scan.
 
 ### 1. Stack & Architecture
-- **Frontend:** React + TypeScript + Vite + Tailwind. Servido via container Docker (Nginx) ou `npm run dev` local na porta `3001`.
-- **Backend:** Express.js + Prisma ORM + PostgreSQL. Rodando em container Docker na porta `5000`.
-- **Database:** PostgreSQL rodando no container na porta `63590` (mapeada localmente).
-- **FTP Local:** Container FTP rodando na porta `21` para simular deploy/sincronização de páginas estáticas.
+- **Frontend:** React + TypeScript + Vite + Tailwind (Servido via Nginx na porta container `80`, mapeada para porta externa `${FRONTEND_PORT:-11000}`).
+- **Backend:** Spring Boot (Java 21) rodando na porta container `5000` (mapeada para porta externa `${API_PORT:-11005}`).
+- **Database:** PostgreSQL no container rodando na porta `5432` (mapeada para porta externa `${POSTGRES_PORT:-11032}`).
+- **Object Storage:** MinIO S3 rodando nas portas container `9000` / `9001` (mapeadas para `${MINIO_PORT:-11001}` e `${MINIO_CONSOLE_PORT:-11002}`).
 
 ### 2. Recent Key Refactors
 - **Dashboard Modularization:** O componente gigantesco `Dashboard.tsx` foi fragmentado em subcomponentes dentro de `frontend/src/components/dashboard/`:
