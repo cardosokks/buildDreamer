@@ -174,57 +174,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
           setNgrokLoading(false);
         }
         if (data.status === 'error' && data.error) {
-          setNgrokLoading(false);
-        }
-      }
-    } catch { }
-  };
-
-  const handleToggleNgrok = async () => {
-    const customToken = localStorage.getItem('ngrok_authtoken') || '';
-    if (!ngrokOnline && !customToken) {
-      alert('Para ligar o Ngrok, configure seu "Ngrok Authtoken" nas Configurações.');
-      setShowSettings(true);
-      return;
-    }
-
-    setNgrokLoading(true);
-    try {
-      if (ngrokOnline) {
-        await fetch(`${API_URL}/api/ngrok/stop`, {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        setNgrokOnline(false);
-        setNgrokUrl(null);
-        setNgrokStatus('idle');
-      } else {
-        setNgrokStatus('starting');
-        const res = await fetch(`${API_URL}/api/ngrok/start`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-            'x-ngrok-token': customToken
-          }
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Erro ao disparar job do Ngrok');
-        if (data.url && data.status === 'online') {
-          setNgrokOnline(true);
-          setNgrokUrl(data.url);
-          setNgrokStatus('online');
-        }
-      }
-    } catch (err: any) {
-      setNgrokStatus('error');
-      alert(`Falha no Ngrok: ${err.message}`);
-    } finally {
-      // Polling rápido para acompanhar a conclusão do job
-      setTimeout(checkNgrokStatus, 600);
-      setTimeout(checkNgrokStatus, 1500);
-      setTimeout(checkNgrokStatus, 3000);
-      setTimeout(checkNgrokStatus, 5000);
     }
   };
 

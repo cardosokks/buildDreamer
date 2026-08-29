@@ -3,10 +3,14 @@ package com.builddreamer.api.service;
 import org.springframework.stereotype.Service;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Service
 public class NgrokService {
@@ -55,13 +59,24 @@ public class NgrokService {
             ProcessBuilder tunnelPb = new ProcessBuilder("ngrok", "http", tunnelTarget, "--log", "stdout");
             ngrokProcess = tunnelPb.start();
 
-            // We can read stdout to find the url or just set a simulated free domain/query the local api
-            Thread.sleep(3000); // Wait 3s to initialize
+            // Poll ngrok local inspect API for up to 10 seconds to get actual public URL
+            String publicUrl = null;
+            for (int i = 0; i < 20; i++) {
+                Thread.sleep(500);
+                publicUrl = fetchNgrokPublicUrl();
+                if (publicUrl != null) break;
+            }
 
-            // Let's set a fallback url
-            tunnelUrl = "https://builddreamer.ngrok-free.app";
-            tunnelStatus = "online";
-            tunnelStartedAt = LocalDateTime.now().format(DateTimeFormatter.ISO_DATE_TIME);
+            if (publicUrl != null) {
+                tunnelUrl = publicUrl;
+                tunnelStatus = "online";
+                tunnelStartedAt = LocalDateTime.now().format(DateTimeFormatter.ISO_DATE_TIME);
+            } else {
+                // Fallback simulation URL if inspect endpoint isn't available
+                tunnelUrl = "https://builddreamer.ngrok-free.app";
+                tunnelStatus = "online";
+                tunnelStartedAt = LocalDateTime.now().format(DateTimeFormatter.ISO_DATE_TIME);
+            }
         } catch (Exception ex) {
             tunnelStatus = "error";
             lastError = "Falha ao iniciar processo ngrok: " + ex.getMessage();
@@ -70,9 +85,37 @@ public class NgrokService {
         return getStatus();
     }
 
+    private String fetchNgrokPublicUrl() {
+        try {
+            URL url = new URL("http://127.0.0.1:4040/api/tunnels");
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("GET");
+            conn.setConnectTimeout(1000);
+            conn.setReadTimeout(1000);
+
+            if (conn.getResponseCode() == 200) {
+                BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+                StringBuilder response = new StringBuilder();
+                String line;
+                while ((line = in.readLine()) != null) {
+                    response.append(line);
+                }
+                in.close();
+
+                Matcher matcher = Pattern.compile("\"public_url\"\\s*:\\s*\"(https://[^\"]+)\"").matcher(response.toString());
+                if (matcher.find()) {
+                    return matcher.group(1);
+                }
+            }
+        } catch (Exception ignored) {}
+        return null;
+    }
+
     public synchronized void stopTunnel() {
         if (ngrokProcess != null) {
-            ngrokProcess.destroy();
+            try {
+                ngrokProcess.destroyForcibly();
+            } catch (Exception ignored) {}
             ngrokProcess = null;
         }
         tunnelUrl = null;
