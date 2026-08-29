@@ -161,7 +161,7 @@ public class GeminiService {
                 HttpRequest request = HttpRequest.newBuilder()
                         .uri(URI.create(n8nWebhookUrl))
                         .header("Content-Type", "application/json")
-                        .timeout(Duration.ofSeconds(300))
+                        .timeout(Duration.ofMinutes(30))
                         .POST(HttpRequest.BodyPublishers.ofString(requestBody, StandardCharsets.UTF_8))
                         .build();
 
