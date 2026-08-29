@@ -174,7 +174,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
           setNgrokLoading(false);
         }
         if (data.status === 'error' && data.error) {
-    }
+          setNgrokLoading(false);
+        }
+      }
+    } catch { }
   };
 
   useEffect(() => {
