@@ -10,5 +10,7 @@ import java.util.Optional;
 public interface ProjectMemberRepository extends JpaRepository<ProjectMember, String> {
     Optional<ProjectMember> findByProjectIdAndUserId(String projectId, String userId);
     List<ProjectMember> findByProjectId(String projectId);
+    @org.springframework.data.jpa.repository.Query("SELECT pm FROM ProjectMember pm JOIN FETCH pm.user WHERE pm.project.id = :projectId")
+    List<ProjectMember> findByProjectIdWithUser(@org.springframework.data.repository.query.Param("projectId") String projectId);
     void deleteByProjectIdAndUserId(String projectId, String userId);
 }

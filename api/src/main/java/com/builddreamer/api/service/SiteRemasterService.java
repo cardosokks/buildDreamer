@@ -424,7 +424,7 @@ public class SiteRemasterService {
             String ollamaModel = "cardosokks:latest";
             String ollamaUrl = "http://192.168.18.33:11434";
 
-            List<ProjectMember> members = projectMemberRepository.findByProjectId(projectId);
+            List<ProjectMember> members = projectMemberRepository.findByProjectIdWithUser(projectId);
             if (members != null && !members.isEmpty()) {
                 User owner = members.get(0).getUser();
                 if (owner != null) {
