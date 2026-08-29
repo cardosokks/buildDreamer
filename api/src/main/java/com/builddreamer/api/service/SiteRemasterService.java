@@ -297,6 +297,25 @@ public class SiteRemasterService {
 
     public Map<String, Object> getJobStatus(String projectId) {
         return activeJobs.getOrDefault(projectId, Collections.emptyMap());
+    }    private String preProcessImageUrls(String rawHtml, List<Map<String, Object>> pageMedia, List<String> projectMediaUrls) {
+        if (rawHtml == null || rawHtml.isEmpty()) return "";
+        try {
+            org.jsoup.nodes.Document doc = Jsoup.parseBodyFragment(rawHtml);
+            if (projectMediaUrls != null && !projectMediaUrls.isEmpty()) {
+                org.jsoup.select.Elements imgs = doc.select("img");
+                int mediaIdx = 0;
+                for (org.jsoup.nodes.Element img : imgs) {
+                    String newUrl = projectMediaUrls.get(mediaIdx % projectMediaUrls.size());
+                    img.attr("src", newUrl);
+                    img.removeAttr("data-src");
+                    img.removeAttr("srcset");
+                    mediaIdx++;
+                }
+            }
+            return doc.body().html();
+        } catch (Exception ex) {
+            return rawHtml;
+        }
     }
 
     @Async
@@ -339,15 +358,16 @@ public class SiteRemasterService {
         try {
             List<String> logs = (List<String>) progress.get("logs");
             
-            // Set basic structure status
-            logs.add("Importando mídias e organizando estrutura...");
+            logs.add("Mapeando mídias cadastradas e preparando pacote com " + pages.size() + " páginas...");
             progress.put("status", "generating");
 
+            // 1. Pre-process pages with image replacements and build unified JSON package
+            List<Map<String, Object>> preparedPages = new ArrayList<>();
             for (int i = 0; i < pages.size(); i++) {
                 Map<String, Object> pMap = pages.get(i);
                 String pageName = (String) pMap.get("name");
                 String rawSlug = (String) pMap.get("slug");
-                final String targetSlug = ("home".equalsIgnoreCase(rawSlug) || rawSlug == null || rawSlug.trim().isEmpty()) ? "index" : rawSlug.trim();
+                String targetSlug = ("home".equalsIgnoreCase(rawSlug) || rawSlug == null || rawSlug.trim().isEmpty()) ? "index" : rawSlug.trim();
 
                 String rawHtml = (String) pMap.get("rawHtml");
                 if (rawHtml == null || rawHtml.isEmpty()) {
@@ -357,203 +377,199 @@ public class SiteRemasterService {
                     rawHtml = "Conteúdo original da página: " + pageName;
                 }
 
-                // Truncate overly long raw HTML to avoid Gemini API token/context limit errors
-                if (rawHtml != null && rawHtml.length() > 8000) {
-                    rawHtml = rawHtml.substring(0, 8000) + "... [Conteúdo truncado]";
+                if (rawHtml.length() > 8000) {
+                    rawHtml = rawHtml.substring(0, 8000) + "... [Truncado]";
                 }
 
-                String customPrompt = (String) pMap.get("customPrompt");
-                StringBuilder promptBuilder = new StringBuilder();
-                promptBuilder.append("Remasterizar ").append(pageName).append(" (slug: ").append(targetSlug).append(") com HTML5 e Tailwind CSS modernos.\n");
-                promptBuilder.append("- Layout Flexbox min-h-screen com <header>/<nav> no topo e <footer> no rodapé apenas na Home. Páginas internas contêm apenas <main>.\n");
+                List<Map<String, Object>> pMedia = (List<Map<String, Object>>) pMap.get("media");
+                String processedHtml = preProcessImageUrls(rawHtml, pMedia, projectMediaUrls);
 
-                if (customPrompt != null && !customPrompt.trim().isEmpty()) {
-                    promptBuilder.append("Diretrizes: ").append(customPrompt.trim()).append("\n");
+                Map<String, Object> pObj = new HashMap<>();
+                pObj.put("slug", targetSlug);
+                pObj.put("name", pageName);
+                pObj.put("customPrompt", pMap.getOrDefault("customPrompt", ""));
+                pObj.put("html", processedHtml);
+                pObj.put("css", pMap.getOrDefault("css", ""));
+                pObj.put("js", pMap.getOrDefault("js", ""));
+                preparedPages.add(pObj);
+            }
+
+            // 2. Build global prompt and context
+            StringBuilder promptBuilder = new StringBuilder();
+            promptBuilder.append("Remasterização completa do projeto '").append(project.getName()).append("' contendo ").append(preparedPages.size()).append(" páginas.\n");
+            promptBuilder.append("Instruções: Recriar as páginas com HTML5 moderno e Tailwind CSS. Preservar mídias, imagens e textos originais.\n");
+            promptBuilder.append("Retornar ESTRITAMENTE um JSON padronizado na estrutura: {\"explanation\": \"...\", \"pages\": [{\"slug\": \"...\", \"name\": \"...\", \"html\": \"...\", \"css\": \"...\", \"js\": \"...\"}]}\n");
+
+            if (customAiSkills != null && !customAiSkills.trim().isEmpty()) {
+                promptBuilder.append("Skills: ").append(customAiSkills.trim()).append("\n");
+            }
+            if (projectMediaUrls != null && !projectMediaUrls.isEmpty()) {
+                promptBuilder.append("Mídias: ").append(String.join(", ", projectMediaUrls)).append("\n");
+            }
+
+            String globalPrompt = promptBuilder.toString();
+
+            Map<String, String> context = new HashMap<>();
+            try {
+                context.put("pagesJson", com.fasterxml.jackson.databind.ObjectMapper.class.getDeclaredConstructor().newInstance().writeValueAsString(preparedPages));
+            } catch (Exception ignored) {
+                context.put("pagesJson", preparedPages.toString());
+            }
+
+            logs.add("Enviando pacote com " + preparedPages.size() + " páginas em requisição única para o n8n/IA...");
+            progress.put("progress", 1);
+            progress.put("currentPage", "Pacote Completo (" + pages.size() + " páginas)");
+
+            if (Thread.currentThread().isInterrupted() || "canceled".equalsIgnoreCase((String) progress.get("status"))) {
+                logs.add("Geração cancelada pelo usuário. Abortando worker.");
+                project.setStatus("ready");
+                projectRepository.save(project);
+                if (jobId != null && aiChatJobsQueue != null) {
+                    Map<String, Object> jState = aiChatJobsQueue.computeIfAbsent(jobId, k -> new ConcurrentHashMap<>());
+                    jState.put("status", "canceled");
                 }
+                activeJobThreads.remove(projectId);
+                return;
+            }
 
-                if (customAiSkills != null && !customAiSkills.trim().isEmpty()) {
-                    promptBuilder.append("Skills: ").append(customAiSkills.trim()).append("\n");
-                }
-
-                if (projectMediaUrls != null && !projectMediaUrls.isEmpty()) {
-                    promptBuilder.append("Mídias: ").append(String.join(", ", projectMediaUrls)).append("\n");
-                }
-
-                String prompt = promptBuilder.toString();
-
-                logs.add("Fila de Remasterização [" + (i + 1) + "/" + pages.size() + "]: Enviando página '" + pageName + "' (" + targetSlug + ") ao n8n com diretrizes personalizadas...");
-                progress.put("progress", i + 1);
-                progress.put("currentPage", pageName);
-
-                String downloadedCss = (String) pMap.getOrDefault("css", "");
-                String downloadedJs = (String) pMap.getOrDefault("js", "");
-
-                Map<String, String> context = new HashMap<>();
-                context.put("html", rawHtml);
-                context.put("css", downloadedCss);
-                context.put("js", downloadedJs);
-
-                if (Thread.currentThread().isInterrupted() || "canceled".equalsIgnoreCase((String) progress.get("status"))) {
-                    logs.add("Geração cancelada pelo usuário. Abortando worker.");
-                    project.setStatus("ready");
-                    projectRepository.save(project);
-                    if (jobId != null && aiChatJobsQueue != null) {
-                        Map<String, Object> jState = aiChatJobsQueue.computeIfAbsent(jobId, k -> new ConcurrentHashMap<>());
-                        jState.put("status", "canceled");
-                    }
-                    activeJobThreads.remove(projectId);
-                    return;
-                }
-
-                final int pageNum = i + 1;
-                final int totalPages = pages.size();
-
-                try {
-                    Map<String, Object> aiResult = geminiService.generateAIResponse(
-                            prompt,
-                            context,
-                            apiKey,
-                            null,
-                            models,
-                            (model, attempt, total) -> {
-                                if (jobId != null && aiChatJobsQueue != null) {
-                                    Map<String, Object> jState = aiChatJobsQueue.computeIfAbsent(jobId, k -> new ConcurrentHashMap<>());
-                                    jState.put("status", "processing");
-                                    jState.put("currentModel", model + " - Gerando " + pageName + " (" + pageNum + "/" + totalPages + ")");
-                                    jState.put("attempt", attempt);
-                                    jState.put("total", total);
-                                }
-                            },
-                            () -> Thread.currentThread().isInterrupted() || "canceled".equalsIgnoreCase((String) progress.get("status"))
-                    );
-
-                    String html = (String) aiResult.getOrDefault("html", "<div></div>");
-                    String css = (String) aiResult.getOrDefault("css", "");
-                    String js = (String) aiResult.getOrDefault("js", "");
-
-                    if (css == null || css.trim().isEmpty()) {
-                        css = downloadedCss;
-                    }
-                    if (js == null || js.trim().isEmpty()) {
-                        js = downloadedJs;
-                    }
-
-                    String usedModel = (String) aiResult.getOrDefault("_usedModel", "gemini-3.6-flash");
-
-                    // Parse HTML using Jsoup to extract or remove navbar/footer elements
-                    try {
-                        org.jsoup.nodes.Document bodyDoc = Jsoup.parseBodyFragment(html);
-                        org.jsoup.nodes.Element headerEl = bodyDoc.selectFirst("header, nav, div[id*='navbar'], div[class*='navbar'], div[id*='header'], div[class*='header']");
-                        org.jsoup.nodes.Element footerEl = bodyDoc.selectFirst("footer, div[id*='footer'], div[class*='footer']");
-
-                        if (i == 0) {
-                            if (repeatNavbar && headerEl != null) {
-                                project.setNavbarHtml(headerEl.outerHtml());
-                                headerEl.remove();
-                            } else if (repeatNavbar) {
-                                project.setNavbarHtml("<header class=\"bg-slate-950 p-4\"><nav class=\"max-w-7xl mx-auto flex justify-between\"><a href=\"index.html\" class=\"text-xl font-bold\">" + project.getName() + "</a></nav></header>");
-                            }
-
-                            if (repeatFooter && footerEl != null) {
-                                project.setFooterHtml(footerEl.outerHtml());
-                                footerEl.remove();
-                            } else if (repeatFooter) {
-                                project.setFooterHtml("<footer class=\"bg-slate-950 p-8 text-center text-slate-500\">&copy; " + project.getName() + "</footer>");
-                            }
-                            projectRepository.save(project);
-                        } else {
-                            // On subsequent pages, strip any navbar/footer components so the project's global navbar/footer is used
-                            if (repeatNavbar && headerEl != null) {
-                                headerEl.remove();
-                            }
-                            if (repeatFooter && footerEl != null) {
-                                footerEl.remove();
-                            }
-                        }
-                        html = bodyDoc.body().html();
-                    } catch (Exception parseEx) {
-                        System.err.println("Erro ao extrair/remover navbar e footer na página " + pageName + ": " + parseEx.getMessage());
-                    }
-
-                    // Check if page already exists by slug or is homepage, otherwise create new
-                    Optional<Page> existingPage = pageRepository.findFirstByProjectIdAndSlug(project.getId(), targetSlug);
-                    if (existingPage.isEmpty() && ("index".equals(targetSlug) || "home".equals(targetSlug))) {
-                        List<Page> projectPages = pageRepository.findByProjectId(project.getId());
-                        existingPage = projectPages.stream().filter(Page::isHomepage).findFirst();
-                    }
-
-                    Page page = existingPage.orElseGet(() -> Page.builder()
-                            .project(project)
-                            .slug(targetSlug)
-                            .build());
-
-                    page.setName(pageName);
-                    page.setHtml(html);
-                    page.setCss(css);
-                    page.setJs(js);
-                    page.setHomepage("index".equals(targetSlug) || i == 0);
-
-                    pageRepository.save(page);
-
-                    // Sync page to MinIO storage
-                    try {
-                        storageService.uploadSinglePage(project.getName(), page.getSlug(), page.getHtml(), page.getCss(), page.getJs(), page.isHomepage(), project.getNavbarHtml(), project.getFooterHtml());
-                    } catch (Exception ignored) {}
-
-                    // Push intermediate page progress to aiChatJobsQueue for live UI tracking
-                    if (jobId != null && aiChatJobsQueue != null) {
-                        Map<String, Object> jState = aiChatJobsQueue.computeIfAbsent(jobId, k -> new ConcurrentHashMap<>());
-                        jState.put("status", "processing");
-                        jState.put("currentModel", usedModel);
-                        jState.put("currentPage", pageName);
-                        jState.put("progress", i + 1);
-                        jState.put("total", pages.size());
-                        jState.put("scope", pages.size() > 1 ? "all" : "single");
-                        jState.put("lastPageResult", Map.of(
-                            "pageId", page.getId(),
-                            "pageName", pageName,
-                            "slug", targetSlug,
-                            "html", html,
-                            "css", css,
-                            "js", js,
-                            "explanation", "Página '" + pageName + "' (" + (i + 1) + "/" + pages.size() + ") remasterizada e salva no banco/canvas em tempo real.",
-                            "_usedModel", usedModel
-                        ));
-                    }
-                    logs.add("Sucesso [" + (i + 1) + "/" + pages.size() + "]: Página '" + pageName + "' remasterizada, aplicada no banco/canvas e sincronizada no MinIO!");
-                } catch (Exception pageEx) {
-                    if (Thread.currentThread().isInterrupted() || "canceled".equalsIgnoreCase((String) progress.get("status")) || pageEx instanceof InterruptedException) {
-                        logs.add("Geração cancelada pelo usuário. Requisição ao n8n abortada com sucesso.");
-                        project.setStatus("ready");
-                        projectRepository.save(project);
+            // 3. Send single HTTP package request to n8n / Gemini / Ollama
+            Map<String, Object> aiResult = geminiService.generateAIResponse(
+                    globalPrompt,
+                    context,
+                    apiKey,
+                    null,
+                    models,
+                    (model, attempt, total) -> {
                         if (jobId != null && aiChatJobsQueue != null) {
                             Map<String, Object> jState = aiChatJobsQueue.computeIfAbsent(jobId, k -> new ConcurrentHashMap<>());
-                            jState.put("status", "canceled");
+                            jState.put("status", "processing");
+                            jState.put("currentModel", model + " - Remasterizando pacote (" + pages.size() + " páginas)");
+                            jState.put("attempt", attempt);
+                            jState.put("total", total);
                         }
-                        activeJobThreads.remove(projectId);
-                        return;
+                    },
+                    () -> Thread.currentThread().isInterrupted() || "canceled".equalsIgnoreCase((String) progress.get("status"))
+            );
+
+            // 4. Process returned package pages
+            List<Map<String, Object>> returnedPagesList = new ArrayList<>();
+            Object pagesObj = aiResult.get("pages");
+            if (pagesObj instanceof List) {
+                returnedPagesList = (List<Map<String, Object>>) pagesObj;
+            } else if (aiResult.containsKey("html")) {
+                Map<String, Object> single = new HashMap<>();
+                single.put("slug", "index");
+                single.put("name", "Página Inicial");
+                single.put("html", aiResult.get("html"));
+                single.put("css", aiResult.getOrDefault("css", ""));
+                single.put("js", aiResult.getOrDefault("js", ""));
+                returnedPagesList.add(single);
+            }
+
+            logs.add("Pacote de páginas processado pela IA com sucesso! Aplicando no banco e canvas...");
+
+            // 5. Save each returned page and update live canvas
+            for (int i = 0; i < pages.size(); i++) {
+                Map<String, Object> origPage = pages.get(i);
+                String origSlug = (String) origPage.get("slug");
+                final String targetSlug = ("home".equalsIgnoreCase(origSlug) || origSlug == null || origSlug.trim().isEmpty()) ? "index" : origSlug.trim();
+                String pageName = (String) origPage.get("name");
+
+                Map<String, Object> rPage = null;
+                for (Map<String, Object> rp : returnedPagesList) {
+                    String rSlug = (String) rp.get("slug");
+                    if (targetSlug.equalsIgnoreCase(rSlug)) {
+                        rPage = rp;
+                        break;
                     }
-
-                    pageEx.printStackTrace();
-                    logs.add("Erro na geração da página " + (i + 1) + "/" + pages.size() + " ('" + pageName + "'): " + pageEx.getMessage());
-
-                    // Save structured fallback page so project generation continues for remaining pages
-                    Optional<Page> existingPage = pageRepository.findFirstByProjectIdAndSlug(project.getId(), targetSlug);
-                    Page page = existingPage.orElseGet(() -> Page.builder()
-                            .project(project)
-                            .slug(targetSlug)
-                            .build());
-
-                    page.setName(pageName);
-                    page.setHomepage("index".equals(targetSlug) || i == 0);
-                    if (page.getHtml() == null || page.getHtml().isEmpty() || page.getHtml().contains("Reconstruindo")) {
-                        page.setHtml("<section class=\"min-h-screen bg-slate-900 text-white flex flex-col items-center justify-center p-8 text-center\">\n" +
-                                "  <h1 class=\"text-3xl font-bold mb-4\">" + pageName + "</h1>\n" +
-                                "  <p class=\"text-slate-400 max-w-lg mb-6\">A IA encontrou uma instabilidade ao gerar esta página automaticamente (" + pageEx.getMessage() + "). Você pode gerar ou ajustar esta página a qualquer momento no Chat de IA ao lado.</p>\n" +
-                                "</section>");
-                    }
-                    pageRepository.save(page);
                 }
+                if (rPage == null && i < returnedPagesList.size()) {
+                    rPage = returnedPagesList.get(i);
+                }
+
+                String html = rPage != null ? (String) rPage.getOrDefault("html", "<div></div>") : "<div></div>";
+                String css = rPage != null ? (String) rPage.getOrDefault("css", "") : "";
+                String js = rPage != null ? (String) rPage.getOrDefault("js", "") : "";
+
+                String downloadedCss = (String) origPage.getOrDefault("css", "");
+                String downloadedJs = (String) origPage.getOrDefault("js", "");
+                if (css == null || css.trim().isEmpty()) css = downloadedCss;
+                if (js == null || js.trim().isEmpty()) js = downloadedJs;
+
+                String usedModel = (String) aiResult.getOrDefault("_usedModel", "gemini-3.6-flash");
+
+                try {
+                    org.jsoup.nodes.Document bodyDoc = Jsoup.parseBodyFragment(html);
+                    org.jsoup.nodes.Element headerEl = bodyDoc.selectFirst("header, nav, div[id*='navbar'], div[class*='navbar'], div[id*='header'], div[class*='header']");
+                    org.jsoup.nodes.Element footerEl = bodyDoc.selectFirst("footer, div[id*='footer'], div[class*='footer']");
+
+                    if (i == 0) {
+                        if (repeatNavbar && headerEl != null) {
+                            project.setNavbarHtml(headerEl.outerHtml());
+                            headerEl.remove();
+                        } else if (repeatNavbar) {
+                            project.setNavbarHtml("<header class=\"bg-slate-950 p-4\"><nav class=\"max-w-7xl mx-auto flex justify-between\"><a href=\"index.html\" class=\"text-xl font-bold\">" + project.getName() + "</a></nav></header>");
+                        }
+
+                        if (repeatFooter && footerEl != null) {
+                            project.setFooterHtml(footerEl.outerHtml());
+                            footerEl.remove();
+                        } else if (repeatFooter) {
+                            project.setFooterHtml("<footer class=\"bg-slate-950 p-8 text-center text-slate-500\">&copy; " + project.getName() + "</footer>");
+                        }
+                        projectRepository.save(project);
+                    } else {
+                        if (repeatNavbar && headerEl != null) headerEl.remove();
+                        if (repeatFooter && footerEl != null) footerEl.remove();
+                    }
+                    html = bodyDoc.body().html();
+                } catch (Exception parseEx) {
+                    System.err.println("Erro ao extrair navbar e footer na página " + pageName + ": " + parseEx.getMessage());
+                }
+
+                Optional<Page> existingPage = pageRepository.findFirstByProjectIdAndSlug(project.getId(), targetSlug);
+                if (existingPage.isEmpty() && ("index".equals(targetSlug) || "home".equals(targetSlug))) {
+                    List<Page> projectPages = pageRepository.findByProjectId(project.getId());
+                    existingPage = projectPages.stream().filter(Page::isHomepage).findFirst();
+                }
+
+                Page page = existingPage.orElseGet(() -> Page.builder()
+                        .project(project)
+                        .slug(targetSlug)
+                        .build());
+
+                page.setName(pageName);
+                page.setHtml(html);
+                page.setCss(css);
+                page.setJs(js);
+                page.setHomepage("index".equals(targetSlug) || i == 0);
+
+                pageRepository.save(page);
+
+                try {
+                    storageService.uploadSinglePage(project.getName(), page.getSlug(), page.getHtml(), page.getCss(), page.getJs(), page.isHomepage(), project.getNavbarHtml(), project.getFooterHtml());
+                } catch (Exception ignored) {}
+
+                if (jobId != null && aiChatJobsQueue != null) {
+                    Map<String, Object> jState = aiChatJobsQueue.computeIfAbsent(jobId, k -> new ConcurrentHashMap<>());
+                    jState.put("status", "processing");
+                    jState.put("currentModel", usedModel);
+                    jState.put("currentPage", pageName);
+                    jState.put("progress", i + 1);
+                    jState.put("total", pages.size());
+                    jState.put("scope", pages.size() > 1 ? "all" : "single");
+                    jState.put("lastPageResult", Map.of(
+                        "pageId", page.getId(),
+                        "pageName", pageName,
+                        "slug", targetSlug,
+                        "html", html,
+                        "css", css,
+                        "js", js,
+                        "explanation", "Página '" + pageName + "' (" + (i + 1) + "/" + pages.size() + ") remasterizada do pacote e salva no canvas em tempo real.",
+                        "_usedModel", usedModel
+                    ));
+                }
+                logs.add("Página '" + pageName + "' (" + (i + 1) + "/" + pages.size() + ") salva no banco e sincronizada no canvas!");
             }
 
             project.setStatus("ready");

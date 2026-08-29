@@ -211,9 +211,13 @@ public class GeminiService {
 
                     Map<String, Object> parsed = resilientJsonParse(rawText);
                     String html = (String) parsed.get("html");
-                    if (html == null || html.trim().isEmpty()) {
-                        System.err.println("[AI Engine] Modelo " + modelToTry + " via n8n não gerou HTML. Tentando próximo modelo...");
-                        throw new RuntimeException("n8n não retornou estrutura HTML válida para o modelo " + modelToTry);
+                    Object pagesObj = parsed.get("pages");
+                    boolean hasPages = pagesObj instanceof List && !((List<?>) pagesObj).isEmpty();
+                    boolean hasHtml = html != null && !html.trim().isEmpty();
+
+                    if (!hasPages && !hasHtml) {
+                        System.err.println("[AI Engine] Modelo " + modelToTry + " via n8n não gerou HTML nem lista de páginas. Tentando próximo modelo...");
+                        throw new RuntimeException("n8n não retornou estrutura HTML/pages válida para o modelo " + modelToTry);
                     }
 
                     parsed.put("_usedModel", modelToTry + " (via n8n real-premise-agent)");
@@ -335,7 +339,11 @@ public class GeminiService {
                     Map<String, Object> parsed = resilientJsonParse(rawText);
 
                     String html = (String) parsed.get("html");
-                    if (html != null && !html.trim().isEmpty()) {
+                    Object pagesObj = parsed.get("pages");
+                    boolean hasPages = pagesObj instanceof List && !((List<?>) pagesObj).isEmpty();
+                    boolean hasHtml = html != null && !html.trim().isEmpty();
+
+                    if (hasPages || hasHtml) {
                         parsed.put("_usedModel", ollamaModel + " (Ollama Local Fallback)");
                         System.out.println("[AI Engine] Sucesso total na geração com Ollama local: " + ollamaModel);
                         return parsed;
