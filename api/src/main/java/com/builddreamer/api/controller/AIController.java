@@ -457,11 +457,27 @@ public class AIController {
             String clientGeminiKey = decodeHeader(clientGeminiKeyEncoded);
             String customAiSkills = decodeHeader(clientAiSkillsEncoded);
 
+            String reqProvider = body.containsKey("provider") ? (String) body.get("provider") : (String) body.get("agent");
+            String reqModel = (String) body.get("model");
+            String reqOllamaModel = (String) body.get("ollamaModel");
+            String reqOllamaUrl = (String) body.get("ollamaUrl");
+
+            if (reqOllamaModel == null && "ollama".equalsIgnoreCase(reqProvider) && reqModel != null) {
+                reqOllamaModel = reqModel;
+            }
+
             List<String> models = new ArrayList<>();
+            if (reqModel != null && !reqModel.trim().isEmpty()) {
+                models.add(reqModel.trim());
+            }
+
             String decodedModels = decodeHeader(clientModelsEncoded);
             if (decodedModels != null) {
                 try {
-                    models = objectMapper.readValue(decodedModels, new TypeReference<List<String>>() {});
+                    List<String> headerModels = objectMapper.readValue(decodedModels, new TypeReference<List<String>>() {});
+                    for (String hm : headerModels) {
+                        if (!models.contains(hm)) models.add(hm);
+                    }
                 } catch (Exception ignored) {}
             }
             if (models.isEmpty()) {
@@ -493,7 +509,10 @@ public class AIController {
                     models,
                     aiChatJobsQueue,
                     customAiSkills,
-                    new ArrayList<>(projectMediaUrls)
+                    new ArrayList<>(projectMediaUrls),
+                    reqProvider,
+                    reqOllamaModel,
+                    reqOllamaUrl
             );
 
             Map<String, Object> resMap = new LinkedHashMap<>();

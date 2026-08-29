@@ -335,7 +335,10 @@ public class SiteRemasterService {
             List<String> models,
             Map<String, Map<String, Object>> aiChatJobsQueue,
             String customAiSkills,
-            List<String> projectMediaUrls
+            List<String> projectMediaUrls,
+            String reqProvider,
+            String reqOllamaModel,
+            String reqOllamaUrl
     ) {
         activeJobThreads.put(projectId, Thread.currentThread());
         Map<String, Object> progress = new ConcurrentHashMap<>();
@@ -420,25 +423,31 @@ public class SiteRemasterService {
             context.put("projectMediaUrls", projectMediaUrls != null ? projectMediaUrls : Collections.emptyList());
             context.put("customAiSkills", customAiSkills != null ? customAiSkills : "");
 
-            String provider = "ollama";
-            String ollamaModel = "cardosokks:latest";
-            String ollamaUrl = "http://192.168.18.33:11434";
+            String provider = (reqProvider != null && !reqProvider.trim().isEmpty()) ? reqProvider.trim() : null;
+            String ollamaModel = (reqOllamaModel != null && !reqOllamaModel.trim().isEmpty()) ? reqOllamaModel.trim() : null;
+            String ollamaUrl = (reqOllamaUrl != null && !reqOllamaUrl.trim().isEmpty()) ? reqOllamaUrl.trim() : null;
 
-            List<ProjectMember> members = projectMemberRepository.findByProjectIdWithUser(projectId);
-            if (members != null && !members.isEmpty()) {
-                User owner = members.get(0).getUser();
-                if (owner != null) {
-                    if (owner.getActiveProvider() != null && !owner.getActiveProvider().trim().isEmpty()) {
-                        provider = owner.getActiveProvider().trim();
-                    }
-                    if (owner.getOllamaModel() != null && !owner.getOllamaModel().trim().isEmpty()) {
-                        ollamaModel = owner.getOllamaModel().trim();
-                    }
-                    if (owner.getOllamaServerUrl() != null && !owner.getOllamaServerUrl().trim().isEmpty()) {
-                        ollamaUrl = owner.getOllamaServerUrl().trim();
+            if (provider == null || ollamaModel == null || ollamaUrl == null) {
+                List<ProjectMember> members = projectMemberRepository.findByProjectIdWithUser(projectId);
+                if (members != null && !members.isEmpty()) {
+                    User owner = members.get(0).getUser();
+                    if (owner != null) {
+                        if (provider == null && owner.getActiveProvider() != null && !owner.getActiveProvider().trim().isEmpty()) {
+                            provider = owner.getActiveProvider().trim();
+                        }
+                        if (ollamaModel == null && owner.getOllamaModel() != null && !owner.getOllamaModel().trim().isEmpty()) {
+                            ollamaModel = owner.getOllamaModel().trim();
+                        }
+                        if (ollamaUrl == null && owner.getOllamaServerUrl() != null && !owner.getOllamaServerUrl().trim().isEmpty()) {
+                            ollamaUrl = owner.getOllamaServerUrl().trim();
+                        }
                     }
                 }
             }
+
+            if (provider == null) provider = "ollama";
+            if (ollamaModel == null) ollamaModel = "cardosokks:latest";
+            if (ollamaUrl == null) ollamaUrl = "http://192.168.18.33:11434";
 
             context.put("provider", provider);
             context.put("ollamaModel", ollamaModel);
