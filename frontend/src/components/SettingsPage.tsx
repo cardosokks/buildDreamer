@@ -16,7 +16,8 @@ import {
   Database, 
   CheckCircle2, 
   AlertCircle,
-  Loader2
+  Loader2,
+  RefreshCw
 } from 'lucide-react';
 import { API_URL } from '../config';
 
@@ -93,6 +94,35 @@ export const SettingsPage: React.FC = () => {
   const [name, setName] = useState(user?.name || '');
   const [email, setEmail] = useState(user?.email || '');
 
+  // AI & Agente Settings
+  const [activeProvider, setActiveProvider] = useState<'ollama' | 'gemini'>(
+    (localStorage.getItem('ai_active_provider') as 'ollama' | 'gemini') || 'ollama'
+  );
+  const [n8nWebhookUrl, setN8nWebhookUrl] = useState(
+    localStorage.getItem('n8n_webhook_url') || 'http://n8n.192.168.18.39.nip.io/webhook/real-premise-agent'
+  );
+  const [ollamaServerUrl, setOllamaServerUrl] = useState(
+    localStorage.getItem('ollama_server_url') || 'http://192.168.18.33:11434'
+  );
+  const [ollamaModel, setOllamaModel] = useState(
+    localStorage.getItem('ollama_model') || 'cardosokks:latest'
+  );
+  const [geminiModel, setGeminiModel] = useState(
+    localStorage.getItem('gemini_default_model') || 'gemini-3.6-flash'
+  );
+
+  const [ollamaModelsList, setOllamaModelsList] = useState<string[]>(() => {
+    const stored = localStorage.getItem('ollama_available_models');
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch {}
+    }
+    return ['cardosokks:latest'];
+  });
+  const [fetchingOllama, setFetchingOllama] = useState(false);
+
   // AI, Proxy & Ngrok credentials
   const [geminiKey, setGeminiKey] = useState(localStorage.getItem('gemini_api_key') || '');
   const [openaiKey, setOpenaiKey] = useState(localStorage.getItem('openai_api_key') || '');
@@ -143,6 +173,122 @@ export const SettingsPage: React.FC = () => {
   const [newSkillSnippet, setNewSkillSnippet] = useState('');
   const [editingSkillId, setEditingSkillId] = useState<string | null>(null);
 
+  const handleFetchOllamaModels = async () => {
+    setFetchingOllama(true);
+    try {
+      const targetUrl = ollamaServerUrl.trim() || 'http://192.168.18.33:11434';
+      const res = await fetch(`${API_URL}/api/ai/ollama/models?url=${encodeURIComponent(targetUrl)}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.models) && data.models.length > 0) {
+          setOllamaModelsList(data.models);
+          localStorage.setItem('ollama_available_models', JSON.stringify(data.models));
+          if (!data.models.includes(ollamaModel)) {
+            setOllamaModel(data.models[0]);
+          }
+          await saveToDatabase({ customOllamaModels: data.models, ollamaServerUrl: targetUrl });
+          setSuccessMsg(`Buscado e salvo no banco! ${data.models.length} modelos encontrados no Ollama.`);
+        }
+      }
+    } catch (err: any) {
+      setErrorMsg("Erro ao buscar modelos do Ollama: " + err.message);
+    } finally {
+      setFetchingOllama(false);
+    }
+  };
+
+  const handleDownloadN8nWorkflow = () => {
+    const codeMapNode = [
+      "const body = $json.body || {};",
+      "let pages = body.pages || [];",
+      "if (typeof pages === 'string') { try { pages = JSON.parse(pages); } catch(e) {} }",
+      "if (!Array.isArray(pages) || pages.length === 0) {",
+      "  pages = [{ slug: body.slug || 'index', name: body.name || 'Página Inicial', html: body.html || body.userPrompt || '<div></div>', css: body.css || '', js: body.js || '', customPrompt: body.customPrompt || '' }];",
+      "}",
+      "const provider = (body.provider || body.agent || '" + activeProvider + "').toLowerCase();",
+      `const ollamaModel = body.ollamaModel || '${ollamaModel}';`,
+      `const ollamaUrl = body.ollamaUrl || '${ollamaServerUrl}';`,
+      `const geminiModel = body.model || body.geminiModel || '${geminiModel}';`,
+      `const apiKey = body.apiKey || '${geminiKey}';`,
+      "const customAiSkills = body.customAiSkills || '';",
+      "let projectMediaUrls = body.projectMediaUrls || [];",
+      "if (typeof projectMediaUrls === 'string') { try { projectMediaUrls = JSON.parse(projectMediaUrls); } catch(e) {} }",
+      "let siteMappingText = '=========================================\\nMAPA GERAL DA ESTRUTURA E CONTEÚDO DO SITE\\n=========================================\\n\\n';",
+      "pages.forEach((p, index) => {",
+      "  siteMappingText += 'PÁGINA ' + (index + 1) + ': ' + p.name + ' (slug: ' + p.slug + ')\\n';",
+      "  siteMappingText += 'Diretrizes Específicas: ' + (p.customPrompt || 'Manter estrutura e melhorar o design') + '\\n';",
+      "  siteMappingText += 'Tamanho do HTML Original: ' + (p.html ? p.html.length : 0) + ' caracteres\\n';",
+      "  siteMappingText += '-----------------------------------------\\n\\n';",
+      "});",
+      "if (projectMediaUrls.length > 0) {",
+      "  siteMappingText += 'BANCO DE MÍDIAS E IMAGENS REGISTRADAS PARA O SITE:\\n';",
+      "  projectMediaUrls.forEach((mUrl, mIdx) => { siteMappingText += ' - Imagem ' + (mIdx + 1) + ': ' + mUrl + '\\n'; });",
+      "  siteMappingText += '\\n';",
+      "}",
+      "return pages.map((page, index) => {",
+      "  return { json: { pageIndex: index + 1, totalPages: pages.length, slug: page.slug || 'index', name: page.name || 'Página', html: page.html || '', css: page.css || '', js: page.js || '', customPrompt: page.customPrompt || '', provider, ollamaModel, ollamaUrl, geminiModel, apiKey, customAiSkills, siteMappingText, projectMediaUrls } };",
+      "});"
+    ].join("\n");
+
+    const codeAggregateNode = [
+      "const items = $input.all();",
+      "const remasteredPages = items.map((item, index) => {",
+      "  const inputJson = item.json;",
+      "  let parsed = {};",
+      "  try {",
+      "    const rawText = inputJson.message?.content || inputJson.candidates?.[0]?.content?.parts?.[0]?.text || inputJson.text || '{}';",
+      "    let cleanText = rawText.replace(/<think>[\\s\\S]*?<\\/think>/gi, '').trim();",
+      "    if (cleanText.includes('```')) {",
+      "      const match = cleanText.match(/```(?:json)?\\s*([\\s\\S]*?)\\s*```/i);",
+      "      if (match && match[1]) cleanText = match[1].trim();",
+      "    }",
+      "    const start = cleanText.indexOf('{');",
+      "    const end = cleanText.lastIndexOf('}');",
+      "    if (start !== -1 && end > start) cleanText = cleanText.substring(start, end + 1);",
+      "    parsed = JSON.parse(cleanText);",
+      "  } catch (e) {",
+      "    parsed = { html: inputJson.html || '<div></div>', css: inputJson.css || '', js: inputJson.js || '' };",
+      "  }",
+      "  return { slug: inputJson.slug || 'index', name: inputJson.name || ('Página ' + (index + 1)), html: parsed.html || inputJson.html || '<div></div>', css: parsed.css || inputJson.css || '', js: parsed.js || inputJson.js || '' };",
+      "});",
+      "return { json: { explanation: 'Site remasterizado com sucesso via workflow n8n', pages: remasteredPages } };"
+    ].join("\n");
+
+    const workflowJson = {
+      name: "real-premise-agent",
+      nodes: [
+        { parameters: { httpMethod: "POST", path: "real-premise-agent", responseMode: "responseNode" }, name: "Webhook Trigger4", type: "n8n-nodes-base.webhook", typeVersion: 2.1, position: [-160, 496] },
+        { parameters: { jsCode: codeMapNode }, name: "Mapear Estrutura e Links do Site", type: "n8n-nodes-base.code", typeVersion: 2, position: [64, 496] },
+        { parameters: { batchSize: 1, options: {} }, name: "Loop Over Items", type: "n8n-nodes-base.splitInBatches", typeVersion: 3, position: [280, 496] },
+        { parameters: { mode: "rules", options: { fallbackOutput: "extra" }, rules: { values: [{ conditions: { combinator: "and", conditions: [{ leftValue: "={{ $json.provider }}", operator: { operation: "equals", type: "string" }, rightValue: "ollama" }], options: { caseSensitive: false } } }] } }, name: "Verificar Agente", type: "n8n-nodes-base.switch", typeVersion: 3, position: [480, 496] },
+        { parameters: { method: "POST", url: "={{ ($json.ollamaUrl || '" + ollamaServerUrl + "') + '/api/chat' }}", sendHeaders: true, headerParameters: { parameters: [{ name: "Content-Type", value: "application/json" }] }, sendBody: true, specifyBody: "json", jsonBody: "={{ JSON.stringify({ model: $json.ollamaModel || '" + ollamaModel + "', messages: [ { role: 'system', content: 'Você é um Mestre Frontend Senior. Responda ESTRITAMENTE em JSON válido com a estrutura: {\\\"html\\\": \\\"...\\\", \\\"css\\\": \\\"...\\\", \\\"js\\\": \\\"...\\\"}. Crie um design HTML5 moderno com Tailwind CSS.' }, { role: 'user', content: 'REMASTERIZAR PÁGINA (' + $json.pageIndex + '/' + $json.totalPages + '): ' + $json.name + ' (slug: ' + $json.slug + ')\\n\\n' + $json.siteMappingText + '\\nSKILLS E HABILIDADES DE DESIGN:\\n' + $json.customAiSkills + '\\n\\nDIRETRIZES DA PÁGINA:\\n' + $json.customPrompt + '\\n\\nHTML DA PÁGINA:\\n' + $json.html } ], stream: false, format: 'json', options: { temperature: 0.3, num_predict: 4096 } }) }}", options: { timeout: 1800000 } }, name: "Refazer Página com Ollama", type: "n8n-nodes-base.httpRequest", typeVersion: 4.3, position: [680, 380] },
+        { parameters: { method: "POST", url: "=https://generativelanguage.googleapis.com/v1beta/models/{{ $json.geminiModel || '" + geminiModel + "' }}:generateContent?key={{ $json.apiKey }}", sendHeaders: true, headerParameters: { parameters: [{ name: "Content-Type", value: "application/json" }] }, sendBody: true, specifyBody: "json", jsonBody: "={{ JSON.stringify({ systemInstruction: { parts: [{ text: 'Você é um Mestre Frontend Senior. Responda ESTRITAMENTE em JSON válido com as chaves: {\\\"html\\\": \\\"...\\\", \\\"css\\\": \\\"...\\\", \\\"js\\\": \\\"...\\\"}. Crie um layout HTML5 moderno com Tailwind CSS elegante.' }] }, contents: [{ role: 'user', parts: [{ text: 'PÁGINA ATUAL (' + $json.pageIndex + '/' + $json.totalPages + '): ' + $json.name + ' (slug: ' + $json.slug + ')\\n\\n' + $json.siteMappingText + '\\nSKILLS E HABILIDADES DE DESIGN:\\n' + $json.customAiSkills + '\\n\\nDIRETRIZES DA PÁGINA:\\n' + $json.customPrompt + '\\n\\nHTML DA PÁGINA:\\n' + $json.html }] }], generationConfig: { responseMimeType: 'application/json', temperature: 0.35, maxOutputTokens: 8192 } }) }}", options: { timeout: 1800000 } }, name: "Refazer Página com Gemini", type: "n8n-nodes-base.httpRequest", typeVersion: 4.3, position: [680, 600] },
+        { parameters: { jsCode: codeAggregateNode }, name: "Agrupar Páginas no JSON Padronizado", type: "n8n-nodes-base.code", typeVersion: 2, position: [920, 496] },
+        { parameters: { options: {} }, name: "Respond to Webhook4", type: "n8n-nodes-base.respondToWebhook", typeVersion: 1.5, position: [1120, 496] }
+      ],
+      connections: {
+        "Webhook Trigger4": { main: [[{ node: "Mapear Estrutura e Links do Site", type: "main", index: 0 }]] },
+        "Mapear Estrutura e Links do Site": { main: [[{ node: "Loop Over Items", type: "main", index: 0 }]] },
+        "Loop Over Items": { main: [[{ node: "Verificar Agente", type: "main", index: 0 }], [{ node: "Agrupar Páginas no JSON Padronizado", type: "main", index: 0 }]] },
+        "Verificar Agente": { main: [[{ node: "Refazer Página com Ollama", type: "main", index: 0 }], [{ node: "Refazer Página com Gemini", type: "main", index: 0 }]] },
+        "Refazer Página com Ollama": { main: [[{ node: "Loop Over Items", type: "main", index: 0 }]] },
+        "Refazer Página com Gemini": { main: [[{ node: "Loop Over Items", type: "main", index: 0 }]] },
+        "Agrupar Páginas no JSON Padronizado": { main: [[{ node: "Respond to Webhook4", type: "main", index: 0 }]] }
+      }
+    };
+
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(workflowJson, null, 2));
+    const downloadAnchor = document.createElement('a');
+    downloadAnchor.setAttribute("href", dataStr);
+    downloadAnchor.setAttribute("download", "builddreamer-n8n-workflow.json");
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
+    setSuccessMsg('Workflow `.json` do n8n gerado e baixado com sucesso!');
+  };
+
   // Sincronizar configurações do Banco de Dados ao carregar a página
   useEffect(() => {
     if (!token) return;
@@ -158,6 +304,26 @@ export const SettingsPage: React.FC = () => {
           if (s) {
             if (s.name) setName(s.name);
             if (s.email) setEmail(s.email);
+            if (s.activeProvider && (s.activeProvider === 'ollama' || s.activeProvider === 'gemini')) {
+              setActiveProvider(s.activeProvider);
+              localStorage.setItem('ai_active_provider', s.activeProvider);
+            }
+            if (s.n8nWebhookUrl) {
+              setN8nWebhookUrl(s.n8nWebhookUrl);
+              localStorage.setItem('n8n_webhook_url', s.n8nWebhookUrl);
+            }
+            if (s.ollamaServerUrl) {
+              setOllamaServerUrl(s.ollamaServerUrl);
+              localStorage.setItem('ollama_server_url', s.ollamaServerUrl);
+            }
+            if (s.ollamaModel) {
+              setOllamaModel(s.ollamaModel);
+              localStorage.setItem('ollama_model', s.ollamaModel);
+            }
+            if (s.customOllamaModels && Array.isArray(s.customOllamaModels)) {
+              setOllamaModelsList(s.customOllamaModels);
+              localStorage.setItem('ollama_available_models', JSON.stringify(s.customOllamaModels));
+            }
             if (s.geminiApiKey) {
               setGeminiKey(s.geminiApiKey);
               localStorage.setItem('gemini_api_key', s.geminiApiKey);
@@ -233,7 +399,7 @@ export const SettingsPage: React.FC = () => {
         login(token!, updatedUser);
         localStorage.setItem('rp_navbar_size', navbarSize);
         await saveToDatabase({ name, navbarSize });
-        setSuccessMsg('Perfil atualizado com sucesso!');
+        setSuccessMsg('Perfil e preferências da barra superior salvos no banco de dados!');
       }
     } catch (err: any) {
       setErrorMsg(err.message);
@@ -248,6 +414,11 @@ export const SettingsPage: React.FC = () => {
     setSuccessMsg(null);
     
     // Atualiza localmente
+    localStorage.setItem('ai_active_provider', activeProvider);
+    localStorage.setItem('n8n_webhook_url', n8nWebhookUrl);
+    localStorage.setItem('ollama_server_url', ollamaServerUrl);
+    localStorage.setItem('ollama_model', ollamaModel);
+    localStorage.setItem('gemini_default_model', geminiModel);
     localStorage.setItem('gemini_api_key', geminiKey);
     localStorage.setItem('openai_api_key', openaiKey);
     localStorage.setItem('ai_proxy_url', proxyUrl);
@@ -255,13 +426,19 @@ export const SettingsPage: React.FC = () => {
 
     // Salva no banco de dados
     await saveToDatabase({
+      activeProvider,
+      n8nWebhookUrl,
+      ollamaServerUrl,
+      ollamaModel,
+      geminiModel,
       geminiApiKey: geminiKey,
       openaiApiKey: openaiKey,
       aiProxyUrl: proxyUrl,
-      ngrokAuthToken: ngrokToken
+      ngrokAuthToken: ngrokToken,
+      customOllamaModels: ollamaModelsList
     });
 
-    setSuccessMsg('Configurações salvas com sucesso!');
+    setSuccessMsg('Configurações de IA (Agente, n8n, Ollama, Gemini) salvas com sucesso!');
     setLoading(false);
   };
 
@@ -639,11 +816,133 @@ export const SettingsPage: React.FC = () => {
               <div>
                 <h3 className="text-lg font-bold text-white mb-1 flex items-center gap-2">
                   <Key className="w-5 h-5 text-purple-400" />
-                  Chaves de API & Conexões de Infraestrutura
+                  Agente Ativo, n8n, Ollama & Chaves de API
                 </h3>
                 <p className="text-xs text-slate-400">
-                  Configure suas chaves para os motores de inteligência artificial e túnel de acesso remoto.
+                  Escolha qual agente de IA o n8n vai acionar, configure a URL do Webhook do n8n, servidor do Ollama e chaves.
                 </p>
+              </div>
+
+              {/* Agente Padrão & Webhook n8n */}
+              <div className="p-4 bg-slate-950/80 border border-purple-500/30 rounded-2xl space-y-4 shadow-inner">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-purple-400 flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4" />
+                    Provedor de IA Padrão (Agente)
+                  </label>
+                  <span className="text-[10px] text-slate-400 font-mono">Processamento via n8n</span>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setActiveProvider('ollama')}
+                    className={`py-3 px-4 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                      activeProvider === 'ollama'
+                        ? 'bg-purple-600 border-purple-500 text-white shadow-lg shadow-purple-600/30'
+                        : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <Cpu className="w-4 h-4 text-cyan-300" />
+                    Ollama Local
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveProvider('gemini')}
+                    className={`py-3 px-4 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                      activeProvider === 'gemini'
+                        ? 'bg-purple-600 border-purple-500 text-white shadow-lg shadow-purple-600/30'
+                        : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <Sparkles className="w-4 h-4 text-amber-300" />
+                    Google Gemini
+                  </button>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">Webhook URL do n8n</label>
+                  <input 
+                    type="url"
+                    required
+                    placeholder="http://n8n.192.168.18.39.nip.io/webhook/real-premise-agent"
+                    value={n8nWebhookUrl}
+                    onChange={(e) => setN8nWebhookUrl(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-slate-900 border border-slate-800 rounded-xl focus:outline-none focus:ring-1 focus:ring-purple-500 text-xs text-white font-mono"
+                  />
+                  <p className="text-[11px] text-slate-500 mt-1">Endereço do webhook n8n que a API chamará para executar a remasterização.</p>
+                </div>
+
+                {/* Download Workflow Button */}
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    onClick={handleDownloadN8nWorkflow}
+                    className="w-full py-2.5 bg-slate-900 hover:bg-slate-850 border border-purple-500/40 text-purple-300 hover:text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm"
+                  >
+                    <Box className="w-4 h-4 text-purple-400" />
+                    Baixar Workflow n8n (.json) pré-configurado
+                  </button>
+                  <p className="text-[10px] text-slate-500 mt-1 text-center">
+                    Gera o arquivo `.json` do workflow configurado com Ollama e Gemini prontos para importar no seu n8n.
+                  </p>
+                </div>
+              </div>
+
+              {/* Servidor e Modelos do Ollama */}
+              <div className="p-4 bg-slate-950/60 border border-slate-800 rounded-2xl space-y-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold text-slate-300 flex items-center gap-2">
+                    <Cpu className="w-4 h-4 text-cyan-400" />
+                    Configurações do Ollama Local
+                  </h4>
+                  <button
+                    type="button"
+                    onClick={handleFetchOllamaModels}
+                    disabled={fetchingOllama}
+                    className="px-3 py-1.5 bg-cyan-950/60 hover:bg-cyan-900/80 border border-cyan-500/30 text-cyan-300 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${fetchingOllama ? 'animate-spin' : ''}`} />
+                    {fetchingOllama ? 'Buscando...' : 'Buscar Modelos via API'}
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">URL do Servidor Ollama</label>
+                    <input 
+                      type="text"
+                      placeholder="http://192.168.18.33:11434"
+                      value={ollamaServerUrl}
+                      onChange={(e) => setOllamaServerUrl(e.target.value)}
+                      className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">Modelo Ollama Padrão</label>
+                    {ollamaModelsList.length > 0 ? (
+                      <select
+                        value={ollamaModel}
+                        onChange={(e) => setOllamaModel(e.target.value)}
+                        className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-cyan-300 font-mono focus:outline-none cursor-pointer"
+                      >
+                        {ollamaModelsList.map((m) => (
+                          <option key={m} value={m} className="bg-slate-950 text-white">
+                            {m}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input 
+                        type="text"
+                        placeholder="cardosokks:latest"
+                        value={ollamaModel}
+                        onChange={(e) => setOllamaModel(e.target.value)}
+                        className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-cyan-300 font-mono"
+                      />
+                    )}
+                  </div>
+                </div>
               </div>
 
               <div className="space-y-5 pt-2">
