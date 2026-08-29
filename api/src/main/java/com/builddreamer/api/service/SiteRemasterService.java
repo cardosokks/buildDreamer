@@ -26,8 +26,9 @@ public class SiteRemasterService {
     private final PageRepository pageRepository;
     private final StorageService storageService;
 
-    // Track active jobs in memory
+    // Track active jobs and worker threads in memory
     private final Map<String, Map<String, Object>> activeJobs = new ConcurrentHashMap<>();
+    private final Map<String, Thread> activeJobThreads = new ConcurrentHashMap<>();
 
     public SiteRemasterService(
             GeminiService geminiService,
