@@ -261,6 +261,31 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
     if (prov === 'ollama') return localStorage.getItem('ollama_model') || 'cardosokks:latest';
     return localStorage.getItem('gemini_default_model') || 'gemini-3.6-flash';
   });
+
+  const [ollamaAvailableModels, setOllamaAvailableModels] = useState<string[]>(() => {
+    const stored = localStorage.getItem('ollama_available_models');
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch {}
+    }
+    return ['cardosokks:latest'];
+  });
+
+  const [geminiAvailableModels, setGeminiAvailableModels] = useState<Array<{ id: string; name: string }>>(() => {
+    const stored = localStorage.getItem('custom_gemini_models');
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch {}
+    }
+    return [
+      { id: 'gemini-3.6-flash', name: 'Gemini 3.6 Flash' },
+      { id: 'gemini-3.1-pro-preview', name: 'Gemini 3.1 Pro Preview' }
+    ];
+  });
   const [remasterPages, setRemasterPages] = useState<Array<{
     name: string;
     slug: string;
@@ -2818,23 +2843,28 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                       <div>
                         <label className="block text-[10px] text-slate-400 mb-1">Modelo Selecionado</label>
                         {remasterProvider === 'ollama' ? (
-                          <input
-                            type="text"
+                          <select
                             value={remasterModel}
                             onChange={(e) => setRemasterModel(e.target.value)}
-                            placeholder="cardosokks:latest"
-                            className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-xs text-cyan-300 font-mono focus:outline-none"
-                          />
+                            className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-xs text-cyan-300 font-mono focus:outline-none cursor-pointer"
+                          >
+                            {ollamaAvailableModels.map((m) => (
+                              <option key={m} value={m} className="bg-slate-950 text-white">
+                                {m}
+                              </option>
+                            ))}
+                          </select>
                         ) : (
                           <select
                             value={remasterModel}
                             onChange={(e) => setRemasterModel(e.target.value)}
                             className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-xs text-amber-300 focus:outline-none cursor-pointer"
                           >
-                            <option value="gemini-3.6-flash">Gemini 3.6 Flash</option>
-                            <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro Preview</option>
-                            <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
-                            <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+                            {geminiAvailableModels.map((m) => (
+                              <option key={m.id} value={m.id} className="bg-slate-950 text-white">
+                                {m.name || m.id}
+                              </option>
+                            ))}
                           </select>
                         )}
                       </div>

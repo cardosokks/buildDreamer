@@ -525,4 +525,32 @@ public class AIController {
         boolean canceled = remasterService.cancelJob(projectId);
         return ResponseEntity.ok(Map.of("canceled", canceled, "projectId", projectId));
     }
+
+    @GetMapping("/ollama/models")
+    public ResponseEntity<?> getOllamaModels(@RequestParam(required = false, defaultValue = "http://192.168.18.33:11434") String url) {
+        try {
+            String baseUrl = url.trim().replaceAll("/+$", "");
+            org.springframework.web.client.RestTemplate restTemplate = new org.springframework.web.client.RestTemplate();
+            String response = restTemplate.getForObject(baseUrl + "/api/tags", String.class);
+            
+            List<String> modelNames = new ArrayList<>();
+            if (response != null) {
+                com.fasterxml.jackson.databind.JsonNode root = objectMapper.readTree(response);
+                com.fasterxml.jackson.databind.JsonNode modelsNode = root.get("models");
+                if (modelsNode != null && modelsNode.isArray()) {
+                    for (com.fasterxml.jackson.databind.JsonNode mNode : modelsNode) {
+                        if (mNode.has("name")) {
+                            modelNames.add(mNode.get("name").asText());
+                        }
+                    }
+                }
+            }
+            if (modelNames.isEmpty()) {
+                modelNames.add("cardosokks:latest");
+            }
+            return ResponseEntity.ok(Map.of("models", modelNames));
+        } catch (Exception ex) {
+            return ResponseEntity.ok(Map.of("models", List.of("cardosokks:latest"), "warning", "Não foi possível conectar ao Ollama: " + ex.getMessage()));
+        }
+    }
 }

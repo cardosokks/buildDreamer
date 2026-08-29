@@ -149,6 +149,17 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     } catch {}
   };
 
+  const [ollamaAvailableModels, setOllamaAvailableModels] = useState<string[]>(() => {
+    const stored = localStorage.getItem('ollama_available_models');
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch {}
+    }
+    return ['cardosokks:latest'];
+  });
+
   const [availableModels, setAvailableModels] = useState<Array<{ id: string; name: string }>>(() => {
     const stored = localStorage.getItem('custom_gemini_models');
     if (stored) {
@@ -162,6 +173,21 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       { id: 'gemini-3.1-pro-preview', name: 'Gemini 3.1 Pro Preview' }
     ];
   });
+
+  useEffect(() => {
+    const syncStoredModels = () => {
+      const storedOllama = localStorage.getItem('ollama_available_models');
+      if (storedOllama) {
+        try { setOllamaAvailableModels(JSON.parse(storedOllama)); } catch {}
+      }
+      const storedGemini = localStorage.getItem('custom_gemini_models');
+      if (storedGemini) {
+        try { setAvailableModels(JSON.parse(storedGemini)); } catch {}
+      }
+    };
+    window.addEventListener('storage', syncStoredModels);
+    return () => window.removeEventListener('storage', syncStoredModels);
+  }, []);
 
   const [selectedModel, setSelectedModel] = useState<string>(() => {
     if (selectedProvider === 'ollama') {
@@ -510,14 +536,18 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
 
           {/* Model Selector */}
           {selectedProvider === 'ollama' ? (
-            <input
-              type="text"
+            <select
               value={selectedModel}
               onChange={(e) => handleModelChange(e.target.value)}
-              placeholder="cardosokks:latest"
-              className="bg-slate-900 border border-slate-800 text-[10px] text-cyan-300 font-mono rounded-lg px-2 py-1 focus:outline-none focus:border-cyan-500 max-w-[110px] truncate"
-              title="Modelo Ollama"
-            />
+              className="bg-slate-900 border border-slate-800 text-[10px] text-cyan-300 font-mono rounded-lg px-2 py-1 focus:outline-none focus:border-cyan-500 cursor-pointer max-w-[120px] truncate"
+              title="Modelo Ollama (carregado das Configurações)"
+            >
+              {ollamaAvailableModels.map(m => (
+                <option key={m} value={m} className="bg-slate-950 text-white">
+                  {m}
+                </option>
+              ))}
+            </select>
           ) : (
             <select
               value={selectedModel}

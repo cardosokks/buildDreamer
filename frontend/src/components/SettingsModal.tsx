@@ -96,6 +96,43 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
     localStorage.getItem('gemini_default_model') || 'gemini-3.6-flash'
   );
 
+  const [ollamaModelsList, setOllamaModelsList] = useState<string[]>(() => {
+    const stored = localStorage.getItem('ollama_available_models');
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch {}
+    }
+    return ['cardosokks:latest'];
+  });
+  const [fetchingOllama, setFetchingOllama] = useState(false);
+
+  const handleFetchOllamaModels = async () => {
+    setFetchingOllama(true);
+    try {
+      const targetUrl = ollamaServerUrl.trim() || 'http://192.168.18.33:11434';
+      const res = await fetch(`${API_URL}/api/ai/ollama/models?url=${encodeURIComponent(targetUrl)}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.models) && data.models.length > 0) {
+          setOllamaModelsList(data.models);
+          localStorage.setItem('ollama_available_models', JSON.stringify(data.models));
+          if (!data.models.includes(ollamaModel)) {
+            setOllamaModel(data.models[0]);
+          }
+          setSuccessMsg(`Buscado com sucesso! ${data.models.length} modelos encontrados no Ollama.`);
+        }
+      }
+    } catch (err: any) {
+      setErrorMsg("Erro ao buscar modelos do Ollama: " + err.message);
+    } finally {
+      setFetchingOllama(false);
+    }
+  };
+
   const [geminiKey, setGeminiKey] = useState(localStorage.getItem('gemini_api_key') || '');
   const [openaiKey, setOpenaiKey] = useState(localStorage.getItem('openai_api_key') || '');
   const [proxyUrl, setProxyUrl] = useState(localStorage.getItem('ai_proxy_url') || '');
@@ -332,8 +369,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
         { parameters: { httpMethod: "POST", path: "real-premise-agent", responseMode: "responseNode" }, name: "Webhook Trigger4", type: "n8n-nodes-base.webhook", typeVersion: 2.1, position: [16, 496] },
         { parameters: { jsCode: codeMapNode }, name: "Mapear Estrutura e Links do Site", type: "n8n-nodes-base.code", typeVersion: 2, position: [240, 496] },
         { parameters: { mode: "rules", options: { fallbackOutput: "extra" }, rules: { values: [{ conditions: { combinator: "and", conditions: [{ leftValue: "={{ $json.provider }}", operator: { operation: "equals", type: "string" }, rightValue: "ollama" }], options: { caseSensitive: false } } }] } }, name: "Verificar Agente", type: "n8n-nodes-base.switch", typeVersion: 3, position: [400, 496] },
-        { parameters: { method: "POST", url: "={{ ($json.ollamaUrl || '" + ollamaServerUrl + "') + '/api/chat' }}", sendHeaders: true, headerParameters: { parameters: [{ name: "Content-Type", value: "application/json" }] }, sendBody: true, specifyBody: "json", jsonBody: "={{ JSON.stringify({ model: $json.ollamaModel || '" + ollamaModel + "', messages: [ { role: 'system', content: 'Você é um Mestre Frontend Senior. Responda ESTRITAMENTE em JSON válido com a estrutura: {\\\"html\\\": \\\"...\\\", \\\"css\\\": \\\"...\\\", \\\"js\\\": \\\"...\\\"}. Crie um design HTML5 moderno com Tailwind CSS.' }, { role: 'user', content: 'REMASTERIZAR PÁGINA (' + $json.pageIndex + '/' + $json.totalPages + '): ' + $json.name + ' (slug: ' + $json.slug + ')\\n\\n' + $json.siteMappingText + '\\nSKILLS E HABILIDADES DE DESIGN:\\n' + $json.customAiSkills + '\\n\\nDIRETRIZES DA PÁGINA:\\n' + $json.customPrompt + '\\n\\nHTML DA PÁGINA:\\n' + $json.html } ], stream: false, format: 'json', options: { temperature: 0.35, num_predict: 8192 } }) }}" }, name: "Refazer Página com Ollama", type: "n8n-nodes-base.httpRequest", typeVersion: 4.3, position: [500, 380] },
-        { parameters: { method: "POST", url: "=https://generativelanguage.googleapis.com/v1beta/models/{{ $json.geminiModel || '" + geminiModel + "' }}:generateContent?key={{ $json.apiKey }}", sendHeaders: true, headerParameters: { parameters: [{ name: "Content-Type", value: "application/json" }] }, sendBody: true, specifyBody: "json", jsonBody: "={{ JSON.stringify({ systemInstruction: { parts: [{ text: 'Você é um Mestre Frontend Senior. Responda ESTRITAMENTE em JSON válido com as chaves: {\\\"html\\\": \\\"...\\\", \\\"css\\\": \\\"...\\\", \\\"js\\\": \\\"...\\\"}. Crie um layout HTML5 moderno com Tailwind CSS elegante.' }] }, contents: [{ role: 'user', parts: [{ text: 'PÁGINA ATUAL (' + $json.pageIndex + '/' + $json.totalPages + '): ' + $json.name + ' (slug: ' + $json.slug + ')\\n\\n' + $json.siteMappingText + '\\nSKILLS E HABILIDADES DE DESIGN:\\n' + $json.customAiSkills + '\\n\\nDIRETRIZES DA PÁGINA:\\n' + $json.customPrompt + '\\n\\nHTML DA PÁGINA:\\n' + $json.html }] }], generationConfig: { responseMimeType: 'application/json', temperature: 0.35, maxOutputTokens: 8192 } }) }}" }, name: "Refazer Página com Gemini", type: "n8n-nodes-base.httpRequest", typeVersion: 4.3, position: [500, 600] },
+        { parameters: { method: "POST", url: "={{ ($json.ollamaUrl || '" + ollamaServerUrl + "') + '/api/chat' }}", sendHeaders: true, headerParameters: { parameters: [{ name: "Content-Type", value: "application/json" }] }, sendBody: true, specifyBody: "json", jsonBody: "={{ JSON.stringify({ model: $json.ollamaModel || '" + ollamaModel + "', messages: [ { role: 'system', content: 'Você é um Mestre Frontend Senior. Responda ESTRITAMENTE em JSON válido com a estrutura: {\\\"html\\\": \\\"...\\\", \\\"css\\\": \\\"...\\\", \\\"js\\\": \\\"...\\\"}. Crie um design HTML5 moderno com Tailwind CSS.' }, { role: 'user', content: 'REMASTERIZAR PÁGINA (' + $json.pageIndex + '/' + $json.totalPages + '): ' + $json.name + ' (slug: ' + $json.slug + ')\\n\\n' + $json.siteMappingText + '\\nSKILLS E HABILIDADES DE DESIGN:\\n' + $json.customAiSkills + '\\n\\nDIRETRIZES DA PÁGINA:\\n' + $json.customPrompt + '\\n\\nHTML DA PÁGINA:\\n' + $json.html } ], stream: false, format: 'json', options: { temperature: 0.35, num_predict: 8192 } }) }}", options: { batching: { batch: { batchSize: 1, batchInterval: 1000 } } } }, name: "Refazer Página com Ollama", type: "n8n-nodes-base.httpRequest", typeVersion: 4.3, position: [500, 380] },
+        { parameters: { method: "POST", url: "=https://generativelanguage.googleapis.com/v1beta/models/{{ $json.geminiModel || '" + geminiModel + "' }}:generateContent?key={{ $json.apiKey }}", sendHeaders: true, headerParameters: { parameters: [{ name: "Content-Type", value: "application/json" }] }, sendBody: true, specifyBody: "json", jsonBody: "={{ JSON.stringify({ systemInstruction: { parts: [{ text: 'Você é um Mestre Frontend Senior. Responda ESTRITAMENTE em JSON válido com as chaves: {\\\"html\\\": \\\"...\\\", \\\"css\\\": \\\"...\\\", \\\"js\\\": \\\"...\\\"}. Crie um layout HTML5 moderno com Tailwind CSS elegante.' }] }, contents: [{ role: 'user', parts: [{ text: 'PÁGINA ATUAL (' + $json.pageIndex + '/' + $json.totalPages + '): ' + $json.name + ' (slug: ' + $json.slug + ')\\n\\n' + $json.siteMappingText + '\\nSKILLS E HABILIDADES DE DESIGN:\\n' + $json.customAiSkills + '\\n\\nDIRETRIZES DA PÁGINA:\\n' + $json.customPrompt + '\\n\\nHTML DA PÁGINA:\\n' + $json.html }] }], generationConfig: { responseMimeType: 'application/json', temperature: 0.35, maxOutputTokens: 8192 } }) }}", options: { batching: { batch: { batchSize: 1, batchInterval: 1000 } } } }, name: "Refazer Página com Gemini", type: "n8n-nodes-base.httpRequest", typeVersion: 4.3, position: [500, 600] },
         { parameters: { jsCode: codeAggregateNode }, name: "Agrupar Páginas no JSON Padronizado", type: "n8n-nodes-base.code", typeVersion: 2, position: [740, 496] },
         { parameters: { options: {} }, name: "Respond to Webhook4", type: "n8n-nodes-base.respondToWebhook", typeVersion: 1.5, position: [960, 496] }
       ],
@@ -670,10 +707,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
 
               {/* Servidor e Modelo do Ollama */}
               <div className="p-3 bg-slate-950/60 border border-slate-800 rounded-xl space-y-3">
-                <h4 className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
-                  <Cpu className="w-3.5 h-3.5 text-cyan-400" />
-                  Configurações do Ollama Local
-                </h4>
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                    <Cpu className="w-3.5 h-3.5 text-cyan-400" />
+                    Configurações do Ollama Local
+                  </h4>
+                  <button
+                    type="button"
+                    onClick={handleFetchOllamaModels}
+                    disabled={fetchingOllama}
+                    className="px-2.5 py-1 bg-cyan-950/60 hover:bg-cyan-900/80 border border-cyan-500/30 text-cyan-300 rounded-lg text-[10px] font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${fetchingOllama ? 'animate-spin' : ''}`} />
+                    Buscar Modelos via API
+                  </button>
+                </div>
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div>
                     <label className="block text-[10px] text-slate-400 mb-1">URL do Servidor Ollama</label>
@@ -687,13 +736,27 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                   </div>
                   <div>
                     <label className="block text-[10px] text-slate-400 mb-1">Modelo Ollama Padrão</label>
-                    <input 
-                      type="text"
-                      placeholder="cardosokks:latest"
-                      value={ollamaModel}
-                      onChange={(e) => setOllamaModel(e.target.value)}
-                      className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-xs text-white font-mono"
-                    />
+                    {ollamaModelsList.length > 0 ? (
+                      <select
+                        value={ollamaModel}
+                        onChange={(e) => setOllamaModel(e.target.value)}
+                        className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-xs text-cyan-300 font-mono focus:outline-none cursor-pointer"
+                      >
+                        {ollamaModelsList.map((m) => (
+                          <option key={m} value={m} className="bg-slate-950 text-white">
+                            {m}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input 
+                        type="text"
+                        placeholder="cardosokks:latest"
+                        value={ollamaModel}
+                        onChange={(e) => setOllamaModel(e.target.value)}
+                        className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-xs text-white font-mono"
+                      />
+                    )}
                   </div>
                 </div>
               </div>
