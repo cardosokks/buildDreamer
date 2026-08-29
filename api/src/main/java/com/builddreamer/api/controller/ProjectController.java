@@ -246,7 +246,7 @@ public class ProjectController {
                     .html("<section class=\"relative bg-slate-900 text-white py-24 px-6 md:px-12 rounded-3xl my-6 border border-slate-800 shadow-2xl overflow-hidden\">\n" +
                           "  <div class=\"max-w-4xl mx-auto text-center space-y-6\">\n" +
                           "    <span class=\"inline-block px-4 py-1.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 text-xs font-semibold uppercase tracking-wider\">\n" +
-                          "      Bem-vindo ao BuildDreamer\n" +
+                          "      Bem-vindo ao REAL PREMISE\n" +
                           "    </span>\n" +
                           "    <h1 class=\"text-4xl md:text-6xl font-extrabold tracking-tight bg-gradient-to-r from-white via-slate-200 to-cyan-400 bg-clip-text text-transparent\">\n" +
                           "      " + project.getName() + "\n" +

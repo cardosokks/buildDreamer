@@ -1,7 +1,7 @@
-# buildDreamer
+# REAL PREMISE
 
 ## Description
-A brief description of the buildDreamer project.
+Plataforma completa REAL PREMISE - Construtor visual de sites com Inteligência Artificial, CRM e Remasterização.
 
 ## 🛠️ Developer Checkpoints & Architecture (Token-Saving Guide)
 

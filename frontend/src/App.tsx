@@ -44,7 +44,7 @@ const MainApp: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    document.title = 'BuildDreamer';
+    document.title = 'REAL PREMISE Studio';
   }, []);
 
   // Update browser URL

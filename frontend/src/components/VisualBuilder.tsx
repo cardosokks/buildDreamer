@@ -191,12 +191,12 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
             slug: 'home',
             isHomepage: true,
             title: data.name || 'Meu Site',
-            description: 'Página inicial criada com o BuildDreamer Studio',
+            description: 'Página inicial criada com o REAL PREMISE Studio',
             html: `<section class="relative bg-slate-900 text-white py-24 px-6 md:px-12 rounded-3xl my-6 border border-slate-800 shadow-2xl overflow-hidden">
   <div class="max-w-4xl mx-auto text-center space-y-6">
     <span class="inline-block px-4 py-1.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 text-xs font-semibold uppercase tracking-wider">
-      Bem-vindo ao BuildDreamer
-    </span>
+      Bem-vindo ao REAL PREMISE
+    </span>`,StartLine:193,TargetContent:
     <h1 class="text-4xl md:text-6xl font-extrabold tracking-tight bg-gradient-to-r from-white via-slate-200 to-cyan-400 bg-clip-text text-transparent">
       Crie Sites Extraordinários sem Limites
     </h1>
