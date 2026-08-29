@@ -138,6 +138,17 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     }
   }, [projectId, pageId]);
 
+  const [selectedProvider, setSelectedProvider] = useState<'ollama' | 'gemini'>(
+    () => (localStorage.getItem('ai_active_provider') as 'ollama' | 'gemini') || 'ollama'
+  );
+
+  const handleProviderChange = (provider: 'ollama' | 'gemini') => {
+    setSelectedProvider(provider);
+    try {
+      localStorage.setItem('ai_active_provider', provider);
+    } catch {}
+  };
+
   const [availableModels, setAvailableModels] = useState<Array<{ id: string; name: string }>>(() => {
     const stored = localStorage.getItem('custom_gemini_models');
     if (stored) {
@@ -146,30 +157,29 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       } catch {}
     }
-    return [];
+    return [
+      { id: 'gemini-3.6-flash', name: 'Gemini 3.6 Flash' },
+      { id: 'gemini-3.1-pro-preview', name: 'Gemini 3.1 Pro Preview' }
+    ];
   });
 
   const [selectedModel, setSelectedModel] = useState<string>(() => {
-    // 1. Prioriza o último modelo salvo pelo usuário
+    if (selectedProvider === 'ollama') {
+      return localStorage.getItem('ollama_model') || 'cardosokks:latest';
+    }
     const savedLastModel = localStorage.getItem('last_selected_ai_model');
     if (savedLastModel) return savedLastModel;
-
-    // 2. Se não houver, tenta o primeiro modelo customizado configurado
-    const stored = localStorage.getItem('custom_gemini_models');
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored);
-        if (parsed.length > 0) return parsed[0].id;
-      } catch {}
-    }
-    return '';
+    return 'gemini-3.6-flash';
   });
 
-  // Salvar no localStorage sempre que o usuário alterar o modelo
   const handleModelChange = (modelId: string) => {
     setSelectedModel(modelId);
     try {
-      localStorage.setItem('last_selected_ai_model', modelId);
+      if (selectedProvider === 'ollama') {
+        localStorage.setItem('ollama_model', modelId);
+      } else {
+        localStorage.setItem('last_selected_ai_model', modelId);
+      }
     } catch {}
   };
 
@@ -401,7 +411,11 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
         body: JSON.stringify({ 
           prompt: messageText, 
           pageId: currentRequestPageId, 
+          provider: selectedProvider,
+          agent: selectedProvider,
           model: modelToSend,
+          ollamaModel: selectedProvider === 'ollama' ? (selectedModel || 'cardosokks:latest') : undefined,
+          ollamaUrl: localStorage.getItem('ollama_server_url') || 'http://192.168.18.33:11434',
           applyToAll: isMultiTarget,
           targetPageIds: targetPageIds,
           attachedFiles: currentFiles.length > 0 ? currentFiles : undefined
@@ -483,30 +497,51 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
         </div>
 
         <div className="flex items-center gap-1.5">
+          {/* Provider Selector (Ollama vs Gemini) */}
+          <select
+            value={selectedProvider}
+            onChange={(e) => handleProviderChange(e.target.value as 'ollama' | 'gemini')}
+            className="bg-slate-900 border border-slate-800 text-[10px] font-bold text-cyan-300 rounded-lg px-1.5 py-1 focus:outline-none focus:border-cyan-500 cursor-pointer"
+            title="Escolher Agente de IA"
+          >
+            <option value="ollama" className="bg-slate-950 text-cyan-300">🦙 Ollama</option>
+            <option value="gemini" className="bg-slate-950 text-amber-300">✨ Gemini</option>
+          </select>
+
+          {/* Model Selector */}
+          {selectedProvider === 'ollama' ? (
+            <input
+              type="text"
+              value={selectedModel}
+              onChange={(e) => handleModelChange(e.target.value)}
+              placeholder="cardosokks:latest"
+              className="bg-slate-900 border border-slate-800 text-[10px] text-cyan-300 font-mono rounded-lg px-2 py-1 focus:outline-none focus:border-cyan-500 max-w-[110px] truncate"
+              title="Modelo Ollama"
+            />
+          ) : (
+            <select
+              value={selectedModel}
+              onChange={(e) => handleModelChange(e.target.value)}
+              className="bg-slate-900 border border-slate-800 text-[10px] text-amber-300 font-mono rounded-lg px-2 py-1 focus:outline-none focus:border-amber-500 cursor-pointer max-w-[120px] truncate"
+              title="Modelo Gemini"
+            >
+              {availableModels.map(m => (
+                <option key={m.id} value={m.id} className="bg-slate-950 text-white">
+                  {m.name}
+                </option>
+              ))}
+            </select>
+          )}
+
           {canUndo && onUndo && (
             <button
               onClick={onUndo}
-              className="flex items-center gap-1 px-2 py-1 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 rounded-lg text-[10px] font-semibold transition-all cursor-pointer"
+              className="flex items-center gap-1 px-1.5 py-1 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 rounded-lg text-[10px] font-semibold transition-all cursor-pointer"
               title="Desfazer última alteração de IA"
             >
               <Undo2 className="w-3 h-3" />
-              Desfazer
             </button>
           )}
-
-          {/* Model Selector Dropdown */}
-          <select
-            value={selectedModel}
-            onChange={(e) => handleModelChange(e.target.value)}
-            className="bg-slate-900 border border-slate-800 text-[10px] text-purple-300 font-mono rounded-lg px-2 py-1 focus:outline-none focus:border-purple-500 cursor-pointer max-w-[135px] truncate"
-            title="Selecionar modelo de IA (lembrado automaticamente)"
-          >
-            {availableModels.map(m => (
-              <option key={m.id} value={m.id} className="bg-slate-950 text-white">
-                {m.name}
-              </option>
-            ))}
-          </select>
         </div>
       </div>
 

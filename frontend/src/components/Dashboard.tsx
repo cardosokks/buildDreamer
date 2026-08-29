@@ -253,6 +253,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
   const [remasterScrapingStatus, setRemasterScrapingStatus] = useState<'idle' | 'scraping' | 'completed' | 'failed'>('idle');
   const [remasterProgressMsg, setRemasterProgressMsg] = useState('');
   const [remasterGlobalPrompt, setRemasterGlobalPrompt] = useState('Design ultra premium, tema escuro moderno com detalhes neon, tipografia elegante, seções de alto impacto, animações de scroll e foco em alta conversão de vendas.');
+  const [remasterProvider, setRemasterProvider] = useState<'ollama' | 'gemini'>(
+    () => (localStorage.getItem('ai_active_provider') as 'ollama' | 'gemini') || 'ollama'
+  );
+  const [remasterModel, setRemasterModel] = useState<string>(() => {
+    const prov = (localStorage.getItem('ai_active_provider') as 'ollama' | 'gemini') || 'ollama';
+    if (prov === 'ollama') return localStorage.getItem('ollama_model') || 'cardosokks:latest';
+    return localStorage.getItem('gemini_default_model') || 'gemini-3.6-flash';
+  });
   const [remasterPages, setRemasterPages] = useState<Array<{
     name: string;
     slug: string;
@@ -1203,6 +1211,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
         body: JSON.stringify({
           projectName: finalProjectName,
           globalPrompt: remasterGlobalPrompt,
+          provider: remasterProvider,
+          agent: remasterProvider,
+          model: remasterModel,
+          ollamaModel: remasterProvider === 'ollama' ? remasterModel : undefined,
+          ollamaUrl: localStorage.getItem('ollama_server_url') || 'http://192.168.18.33:11434',
           pages: sanitizedPages,
           leadId: remasterTargetLead?.id || undefined,
           sharedComponents: {
@@ -2754,6 +2767,79 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
               {/* ETAPA 2: Configuração de Prompts e Componentes (Disponível quando o scraping conclui) */}
               {remasterScrapingStatus === 'completed' && (
                 <div className="space-y-6 animate-in fade-in duration-300">
+
+                  {/* Seleção do Agente e Modelo de IA */}
+                  <div className="p-3.5 bg-slate-950/90 border border-purple-500/30 rounded-xl space-y-3">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-xs font-bold uppercase tracking-wider text-purple-400 flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5" />
+                        Agente & Modelo para Remasterização
+                      </label>
+                      <span className="text-[10px] text-slate-400 font-mono">Execução via n8n</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[10px] text-slate-400 mb-1">Agente de IA</label>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setRemasterProvider('ollama');
+                              setRemasterModel(localStorage.getItem('ollama_model') || 'cardosokks:latest');
+                            }}
+                            className={`py-1.5 px-2 rounded-lg border text-xs font-bold flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                              remasterProvider === 'ollama'
+                                ? 'bg-purple-600 border-purple-500 text-white shadow-sm'
+                                : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
+                            }`}
+                          >
+                            <Cpu className="w-3.5 h-3.5 text-cyan-300" />
+                            Ollama
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setRemasterProvider('gemini');
+                              setRemasterModel(localStorage.getItem('gemini_default_model') || 'gemini-3.6-flash');
+                            }}
+                            className={`py-1.5 px-2 rounded-lg border text-xs font-bold flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                              remasterProvider === 'gemini'
+                                ? 'bg-purple-600 border-purple-500 text-white shadow-sm'
+                                : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
+                            }`}
+                          >
+                            <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                            Gemini
+                          </button>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] text-slate-400 mb-1">Modelo Selecionado</label>
+                        {remasterProvider === 'ollama' ? (
+                          <input
+                            type="text"
+                            value={remasterModel}
+                            onChange={(e) => setRemasterModel(e.target.value)}
+                            placeholder="cardosokks:latest"
+                            className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-xs text-cyan-300 font-mono focus:outline-none"
+                          />
+                        ) : (
+                          <select
+                            value={remasterModel}
+                            onChange={(e) => setRemasterModel(e.target.value)}
+                            className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-xs text-amber-300 focus:outline-none cursor-pointer"
+                          >
+                            <option value="gemini-3.6-flash">Gemini 3.6 Flash</option>
+                            <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro Preview</option>
+                            <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
+                            <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+                          </select>
+                        )}
+                      </div>
+                    </div>
+                  </div>
 
                   {/* Prompt Global do Site */}
                   <div className="p-4 bg-purple-950/20 border border-purple-500/30 rounded-xl space-y-2">
