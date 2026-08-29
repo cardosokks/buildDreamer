@@ -431,7 +431,7 @@ public class SiteRemasterService {
                     }
 
                     // Check if page already exists by slug or is homepage, otherwise create new
-                    Optional<Page> existingPage = pageRepository.findByProjectIdAndSlug(project.getId(), targetSlug);
+                    Optional<Page> existingPage = pageRepository.findFirstByProjectIdAndSlug(project.getId(), targetSlug);
                     if (existingPage.isEmpty() && ("index".equals(targetSlug) || "home".equals(targetSlug))) {
                         List<Page> projectPages = pageRepository.findByProjectId(project.getId());
                         existingPage = projectPages.stream().filter(Page::isHomepage).findFirst();
@@ -493,7 +493,7 @@ public class SiteRemasterService {
                     logs.add("Erro na geração da página " + (i + 1) + "/" + pages.size() + " ('" + pageName + "'): " + pageEx.getMessage());
 
                     // Save structured fallback page so project generation continues for remaining pages
-                    Optional<Page> existingPage = pageRepository.findByProjectIdAndSlug(project.getId(), targetSlug);
+                    Optional<Page> existingPage = pageRepository.findFirstByProjectIdAndSlug(project.getId(), targetSlug);
                     Page page = existingPage.orElseGet(() -> Page.builder()
                             .project(project)
                             .slug(targetSlug)

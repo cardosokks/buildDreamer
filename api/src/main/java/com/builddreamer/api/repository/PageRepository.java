@@ -9,7 +9,8 @@ import java.util.Optional;
 @Repository
 public interface PageRepository extends JpaRepository<Page, String> {
     List<Page> findByProjectId(String projectId);
-    Optional<Page> findByProjectIdAndSlug(String projectId, String slug);
+    Optional<Page> findFirstByProjectIdAndSlug(String projectId, String slug);
+    List<Page> findByProjectIdAndSlug(String projectId, String slug);
     Optional<Page> findByProjectIdAndId(String projectId, String id);
     boolean existsByProjectIdAndSlug(String projectId, String slug);
     void deleteByProjectIdAndId(String projectId, String id);
