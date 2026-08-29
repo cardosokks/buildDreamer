@@ -337,12 +337,28 @@ public class AIController {
 
         String projectName = (String) body.get("projectName");
         String globalPrompt = (String) body.get("globalPrompt");
-        List<Map<String, Object>> pages = (List<Map<String, Object>>) body.get("pages");
+        List<Map<String, Object>> pages = null;
+        try {
+            pages = (List<Map<String, Object>>) body.get("pages");
+        } catch (Exception e) {
+            System.err.println("[REMASTER] Erro ao parsear pages do body: " + e.getMessage());
+        }
         String leadId = (String) body.get("leadId");
 
-        Map<String, Object> sharedComponents = (Map<String, Object>) body.getOrDefault("sharedComponents", Collections.emptyMap());
-        boolean repeatNavbar = sharedComponents.containsKey("repeatNavbar") ? (boolean) sharedComponents.get("repeatNavbar") : true;
-        boolean repeatFooter = sharedComponents.containsKey("repeatFooter") ? (boolean) sharedComponents.get("repeatFooter") : true;
+        Map<String, Object> sharedComponents = null;
+        try {
+            sharedComponents = (Map<String, Object>) body.getOrDefault("sharedComponents", Collections.emptyMap());
+        } catch (Exception e) {
+            sharedComponents = Collections.emptyMap();
+        }
+        boolean repeatNavbar = true;
+        boolean repeatFooter = true;
+        try {
+            Object rn = sharedComponents.get("repeatNavbar");
+            if (rn instanceof Boolean) repeatNavbar = (Boolean) rn;
+            Object rf = sharedComponents.get("repeatFooter");
+            if (rf instanceof Boolean) repeatFooter = (Boolean) rf;
+        } catch (Exception ignored) {}
 
         if (projectName == null || projectName.trim().isEmpty()) {
             projectName = "Novo Projeto Remasterizado";

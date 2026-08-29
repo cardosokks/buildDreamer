@@ -1218,14 +1218,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
         try { return btoa(unescape(encodeURIComponent(val))); } catch { return ''; }
       };
 
+      const sanitize = (s: string, maxLen: number) =>
+        (s || '').slice(0, maxLen).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\uFFFE\uFFFF]/g, '').replace(/[\uD800-\uDFFF]/g, '');
       const sanitizedPages = activePages.map(p => ({
         name: p.name || 'Página',
         slug: p.slug || 'page',
         customPrompt: p.customPrompt || '',
-        rawHtml: ((p as any).rawHtml || p.html || p.cleanText || '').slice(0, 20000).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, ''),
-        html: (p.html || (p as any).rawHtml || p.cleanText || '').slice(0, 20000).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, ''),
-        css: (p.css || '').slice(0, 8000),
-        js: (p.js || '').slice(0, 8000),
+        rawHtml: sanitize((p as any).rawHtml || p.html || p.cleanText || '', 20000),
+        html: sanitize(p.html || (p as any).rawHtml || p.cleanText || '', 20000),
+        css: sanitize(p.css || '', 8000),
+        js: sanitize(p.js || '', 8000),
         isHomepage: !!p.isHomepage,
         media: (p.media || []).slice(0, 15)
       }));
