@@ -46,6 +46,21 @@ public class User {
     @Column(name = "custom_ai_models", columnDefinition = "text")
     private String customAiModels;
 
+    @Column(name = "active_provider")
+    private String activeProvider;
+
+    @Column(name = "n8n_webhook_url")
+    private String n8nWebhookUrl;
+
+    @Column(name = "ollama_server_url")
+    private String ollamaServerUrl;
+
+    @Column(name = "ollama_model")
+    private String ollamaModel;
+
+    @Column(name = "custom_ollama_models", columnDefinition = "text")
+    private String customOllamaModels;
+
     @Column(name = "saved_leads", columnDefinition = "text")
     private String savedLeads;
 

@@ -123,7 +123,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
           if (!data.models.includes(ollamaModel)) {
             setOllamaModel(data.models[0]);
           }
-          setSuccessMsg(`Buscado com sucesso! ${data.models.length} modelos encontrados no Ollama.`);
+          await saveToDatabase({ customOllamaModels: data.models, ollamaServerUrl: targetUrl });
+          setSuccessMsg(`Buscado e salvo no banco! ${data.models.length} modelos encontrados no Ollama.`);
         }
       }
     } catch (err: any) {
@@ -299,7 +300,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
       geminiApiKey: geminiKey,
       openaiApiKey: openaiKey,
       aiProxyUrl: proxyUrl,
-      ngrokAuthToken: ngrokToken
+      ngrokAuthToken: ngrokToken,
+      customOllamaModels: ollamaModelsList
     });
 
     setSuccessMsg('Configurações de IA (Agente, n8n, Ollama, Gemini) salvas com sucesso!');

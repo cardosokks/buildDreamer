@@ -77,6 +77,10 @@ public class AuthController {
         response.put("openaiApiKey", user.getOpenaiApiKey());
         response.put("aiProxyUrl", user.getAiProxyUrl());
         response.put("ngrokAuthToken", user.getNgrokAuthToken());
+        response.put("activeProvider", user.getActiveProvider());
+        response.put("n8nWebhookUrl", user.getN8nWebhookUrl());
+        response.put("ollamaServerUrl", user.getOllamaServerUrl());
+        response.put("ollamaModel", user.getOllamaModel());
 
         // Parse JSON strings to objects so the frontend receives them as JSON arrays/objects
         try {
@@ -88,6 +92,11 @@ public class AuthController {
             response.put("customAiModels", user.getCustomAiModels() != null ? mapper.readTree(user.getCustomAiModels()) : mapper.createArrayNode());
         } catch (Exception ex) {
             response.put("customAiModels", Collections.emptyList());
+        }
+        try {
+            response.put("customOllamaModels", user.getCustomOllamaModels() != null ? mapper.readTree(user.getCustomOllamaModels()) : mapper.createArrayNode());
+        } catch (Exception ex) {
+            response.put("customOllamaModels", Collections.emptyList());
         }
         try {
             response.put("savedLeads", user.getSavedLeads() != null ? mapper.readTree(user.getSavedLeads()) : mapper.createArrayNode());
@@ -104,7 +113,6 @@ public class AuthController {
     }
 
     // GET /api/auth/settings — wraps the same user data in a 'settings' object
-    // as expected by Dashboard.tsx: data.settings.geminiApiKey etc.
     @GetMapping("/settings")
     public ResponseEntity<?> getSettings(@AuthenticationPrincipal String userId) {
         Optional<User> userOpt = userRepository.findById(userId);
@@ -118,12 +126,19 @@ public class AuthController {
         settings.put("openaiApiKey", user.getOpenaiApiKey());
         settings.put("aiProxyUrl", user.getAiProxyUrl());
         settings.put("ngrokAuthToken", user.getNgrokAuthToken());
+        settings.put("activeProvider", user.getActiveProvider());
+        settings.put("n8nWebhookUrl", user.getN8nWebhookUrl());
+        settings.put("ollamaServerUrl", user.getOllamaServerUrl());
+        settings.put("ollamaModel", user.getOllamaModel());
         try {
             settings.put("customAiSkills", user.getCustomAiSkills() != null ? mapper.readTree(user.getCustomAiSkills()) : mapper.createArrayNode());
         } catch (Exception ex) { settings.put("customAiSkills", Collections.emptyList()); }
         try {
             settings.put("customAiModels", user.getCustomAiModels() != null ? mapper.readTree(user.getCustomAiModels()) : mapper.createArrayNode());
         } catch (Exception ex) { settings.put("customAiModels", Collections.emptyList()); }
+        try {
+            settings.put("customOllamaModels", user.getCustomOllamaModels() != null ? mapper.readTree(user.getCustomOllamaModels()) : mapper.createArrayNode());
+        } catch (Exception ex) { settings.put("customOllamaModels", Collections.emptyList()); }
         try {
             settings.put("savedLeads", user.getSavedLeads() != null ? mapper.readTree(user.getSavedLeads()) : mapper.createArrayNode());
         } catch (Exception ex) { settings.put("savedLeads", Collections.emptyList()); }
@@ -149,6 +164,10 @@ public class AuthController {
         if (settings.containsKey("openaiApiKey")) user.setOpenaiApiKey((String) settings.get("openaiApiKey"));
         if (settings.containsKey("aiProxyUrl")) user.setAiProxyUrl((String) settings.get("aiProxyUrl"));
         if (settings.containsKey("ngrokAuthToken")) user.setNgrokAuthToken((String) settings.get("ngrokAuthToken"));
+        if (settings.containsKey("activeProvider")) user.setActiveProvider((String) settings.get("activeProvider"));
+        if (settings.containsKey("n8nWebhookUrl")) user.setN8nWebhookUrl((String) settings.get("n8nWebhookUrl"));
+        if (settings.containsKey("ollamaServerUrl")) user.setOllamaServerUrl((String) settings.get("ollamaServerUrl"));
+        if (settings.containsKey("ollamaModel")) user.setOllamaModel((String) settings.get("ollamaModel"));
 
         if (settings.containsKey("customAiSkills")) {
             Object val = settings.get("customAiSkills");
@@ -164,6 +183,14 @@ public class AuthController {
                 user.setCustomAiModels((String) val);
             } else {
                 try { user.setCustomAiModels(mapper.writeValueAsString(val)); } catch (Exception ignored) {}
+            }
+        }
+        if (settings.containsKey("customOllamaModels")) {
+            Object val = settings.get("customOllamaModels");
+            if (val instanceof String) {
+                user.setCustomOllamaModels((String) val);
+            } else {
+                try { user.setCustomOllamaModels(mapper.writeValueAsString(val)); } catch (Exception ignored) {}
             }
         }
         if (settings.containsKey("savedLeads")) {
