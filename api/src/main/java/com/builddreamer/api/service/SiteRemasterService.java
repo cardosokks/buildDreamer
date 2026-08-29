@@ -310,8 +310,9 @@ public class SiteRemasterService {
 
                 String prompt = promptBuilder.toString();
 
-                logs.add("IA gerando página: " + pageName + " (Slug: " + targetSlug + ")...");
+                logs.add("Fila de Remasterização [" + (i + 1) + "/" + pages.size() + "]: Enviando página '" + pageName + "' (" + targetSlug + ") ao n8n com diretrizes personalizadas...");
                 progress.put("progress", i + 1);
+                progress.put("currentPage", pageName);
 
                 Map<String, String> context = new HashMap<>();
                 context.put("html", rawHtml);
@@ -340,7 +341,7 @@ public class SiteRemasterService {
                                 if (jobId != null && aiChatJobsQueue != null) {
                                     Map<String, Object> jState = aiChatJobsQueue.computeIfAbsent(jobId, k -> new ConcurrentHashMap<>());
                                     jState.put("status", "processing");
-                                    jState.put("currentModel", model);
+                                    jState.put("currentModel", model + " - Gerando " + pageName + " (" + (i + 1) + "/" + pages.size() + ")");
                                     jState.put("attempt", attempt);
                                     jState.put("total", total);
                                 }
@@ -397,13 +398,17 @@ public class SiteRemasterService {
                         jState.put("total", pages.size());
                         jState.put("scope", pages.size() > 1 ? "all" : "single");
                         jState.put("lastPageResult", Map.of(
+                            "pageId", page.getId(),
                             "pageName", pageName,
                             "slug", targetSlug,
-                            "explanation", "Página '" + pageName + "' (" + (i + 1) + "/" + pages.size() + ") remasterizada com sucesso.",
+                            "html", html,
+                            "css", css,
+                            "js", js,
+                            "explanation", "Página '" + pageName + "' (" + (i + 1) + "/" + pages.size() + ") remasterizada e salva no banco/canvas em tempo real.",
                             "_usedModel", usedModel
                         ));
                     }
-                    logs.add("Página " + (i + 1) + "/" + pages.size() + " ('" + pageName + "') gerada, salva e sincronizada com sucesso!");
+                    logs.add("Sucesso [" + (i + 1) + "/" + pages.size() + "]: Página '" + pageName + "' remasterizada, aplicada no banco/canvas e sincronizada no MinIO!");
                 } catch (Exception pageEx) {
                     pageEx.printStackTrace();
                     logs.add("Erro na geração da página " + (i + 1) + "/" + pages.size() + " ('" + pageName + "'): " + pageEx.getMessage());
