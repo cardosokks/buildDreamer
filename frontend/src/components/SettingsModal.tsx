@@ -79,7 +79,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
   const [name, setName] = useState(user?.name || '');
   const [email, setEmail] = useState(user?.email || '');
 
-  // AI, Proxy & Ngrok credentials
+  // AI, Proxy, Ngrok & n8n credentials
+  const [activeProvider, setActiveProvider] = useState<'ollama' | 'gemini'>(
+    (localStorage.getItem('ai_active_provider') as 'ollama' | 'gemini') || 'ollama'
+  );
+  const [n8nWebhookUrl, setN8nWebhookUrl] = useState(
+    localStorage.getItem('n8n_webhook_url') || 'http://n8n.192.168.18.39.nip.io/webhook/real-premise-agent'
+  );
+  const [ollamaServerUrl, setOllamaServerUrl] = useState(
+    localStorage.getItem('ollama_server_url') || 'http://192.168.18.33:11434'
+  );
+  const [ollamaModel, setOllamaModel] = useState(
+    localStorage.getItem('ollama_model') || 'cardosokks:latest'
+  );
+  const [geminiModel, setGeminiModel] = useState(
+    localStorage.getItem('gemini_default_model') || 'gemini-3.6-flash'
+  );
+
   const [geminiKey, setGeminiKey] = useState(localStorage.getItem('gemini_api_key') || '');
   const [openaiKey, setOpenaiKey] = useState(localStorage.getItem('openai_api_key') || '');
   const [proxyUrl, setProxyUrl] = useState(localStorage.getItem('ai_proxy_url') || '');
@@ -226,6 +242,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
     setSuccessMsg(null);
     
     // Atualiza localmente
+    localStorage.setItem('ai_active_provider', activeProvider);
+    localStorage.setItem('n8n_webhook_url', n8nWebhookUrl);
+    localStorage.setItem('ollama_server_url', ollamaServerUrl);
+    localStorage.setItem('ollama_model', ollamaModel);
+    localStorage.setItem('gemini_default_model', geminiModel);
     localStorage.setItem('gemini_api_key', geminiKey);
     localStorage.setItem('openai_api_key', openaiKey);
     localStorage.setItem('ai_proxy_url', proxyUrl);
@@ -233,14 +254,241 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
 
     // Salva no banco de dados
     await saveToDatabase({
+      activeProvider,
+      n8nWebhookUrl,
+      ollamaServerUrl,
+      ollamaModel,
+      geminiModel,
       geminiApiKey: geminiKey,
       openaiApiKey: openaiKey,
       aiProxyUrl: proxyUrl,
       ngrokAuthToken: ngrokToken
     });
 
-    setSuccessMsg('Configurações de IA, Proxy e Ngrok salvas com sucesso no banco de dados!');
+    setSuccessMsg('Configurações de IA (Agente, n8n, Ollama, Gemini) salvas com sucesso!');
     setLoading(false);
+  };
+
+  const handleDownloadN8nWorkflow = () => {
+    const workflowJson = {
+      name: "real-premise-agent",
+      nodes: [
+        {
+          parameters: { httpMethod: "POST", path: "real-premise-agent", responseMode: "responseNode" },
+          name: "Webhook Trigger4",
+          type: "n8n-nodes-base.webhook",
+          typeVersion: 2.1,
+          position: [16, 496]
+        },
+        {
+          parameters: {
+            jsCode: `const body = $json.body || {};
+let pages = body.pages || [];
+if (typeof pages === 'string') {
+  try { pages = JSON.parse(pages); } catch(e) {}
+}
+if (!Array.isArray(pages) || pages.length === 0) {
+  pages = [{
+    slug: body.slug || 'index',
+    name: body.name || 'Página Inicial',
+    html: body.html || body.userPrompt || '<div></div>',
+    css: body.css || '',
+    js: body.js || '',
+    customPrompt: body.customPrompt || ''
+  }];
+}
+
+const provider = (body.provider || body.agent || '${activeProvider}').toLowerCase();
+const ollamaModel = body.ollamaModel || '${ollamaModel}';
+const ollamaUrl = body.ollamaUrl || '${ollamaServerUrl}';
+const geminiModel = body.model || body.geminiModel || '${geminiModel}';
+const apiKey = body.apiKey || '${geminiKey}';
+const customAiSkills = body.customAiSkills || '';
+let projectMediaUrls = body.projectMediaUrls || [];
+if (typeof projectMediaUrls === 'string') {
+  try { projectMediaUrls = JSON.parse(projectMediaUrls); } catch(e) {}
+}
+
+let siteMappingText = "=========================================\\n";
+siteMappingText += "MAPA GERAL DA ESTRUTURA E CONTEÚDO DO SITE\\n";
+siteMappingText += "=========================================\\n\\n";
+
+pages.forEach((p, index) => {
+  siteMappingText += \`PÁGINA \${index + 1}: \${p.name} (slug: \${p.slug})\\n\`;
+  siteMappingText += \`Diretrizes Específicas: \${p.customPrompt || 'Manter estrutura e melhorar o design'}\\n\`;
+  siteMappingText += \`Tamanho do HTML Original: \${p.html ? p.html.length : 0} caracteres\\n\`;
+  siteMappingText += \`-----------------------------------------\\n\\n\`;
+});
+
+if (projectMediaUrls.length > 0) {
+  siteMappingText += "BANCO DE MÍDIAS E IMAGENS REGISTRADAS PARA O SITE:\\n";
+  projectMediaUrls.forEach((mUrl, mIdx) => {
+    siteMappingText += \` - Imagem \${mIdx + 1}: \${mUrl}\\n\`;
+  });
+  siteMappingText += "\\n";
+}
+
+return pages.map((page, index) => {
+  return {
+    json: {
+      pageIndex: index + 1,
+      totalPages: pages.length,
+      slug: page.slug || 'index',
+      name: page.name || 'Página',
+      html: page.html || '',
+      css: page.css || '',
+      js: page.js || '',
+      customPrompt: page.customPrompt || '',
+      provider: provider,
+      ollamaModel: ollamaModel,
+      ollamaUrl: ollamaUrl,
+      geminiModel: geminiModel,
+      apiKey: apiKey,
+      customAiSkills: customAiSkills,
+      siteMappingText: siteMappingText,
+      projectMediaUrls: projectMediaUrls
+    }
+  };
+});`
+          },
+          name: "Mapear Estrutura e Links do Site",
+          type: "n8n-nodes-base.code",
+          typeVersion: 2,
+          position: [240, 496]
+        },
+        {
+          parameters: {
+            mode: "rules",
+            options: { fallbackOutput: "extra" },
+            rules: {
+              values: [
+                {
+                  conditions: {
+                    combinator: "and",
+                    conditions: [
+                      { leftValue: "={{ $json.provider }}", operator: { operation: "equals", type: "string" }, rightValue: "ollama" }
+                    ],
+                    options: { caseSensitive: false }
+                  }
+                }
+              ]
+            }
+          },
+          name: "Verificar Agente",
+          type: "n8n-nodes-base.switch",
+          typeVersion: 3,
+          position: [400, 496]
+        },
+        {
+          parameters: {
+            method: "POST",
+            url: "={{ ($json.ollamaUrl || '" + ollamaServerUrl + "') + '/api/chat' }}",
+            sendHeaders: true,
+            headerParameters: { parameters: [{ name: "Content-Type", value: "application/json" }] },
+            sendBody: true,
+            specifyBody: "json",
+            jsonBody: "={{ JSON.stringify({ model: $json.ollamaModel || '" + ollamaModel + "', messages: [ { role: 'system', content: 'Você é um Mestre Frontend Senior. Responda ESTRITAMENTE em JSON válido com a estrutura: {\"html\": \"...\", \"css\": \"...\", \"js\": \"...\"}. Crie um design HTML5 moderno com Tailwind CSS.' }, { role: 'user', content: 'REMASTERIZAR PÁGINA (' + $json.pageIndex + '/' + $json.totalPages + '): ' + $json.name + ' (slug: ' + $json.slug + ')\\n\\n' + $json.siteMappingText + '\\nSKILLS E HABILIDADES DE DESIGN:\\n' + $json.customAiSkills + '\\n\\nDIRETRIZES DA PÁGINA:\\n' + $json.customPrompt + '\\n\\nHTML DA PÁGINA:\\n' + $json.html } ], stream: false, format: 'json', options: { temperature: 0.35, num_predict: 8192 } }) }}"
+          },
+          name: "Refazer Página com Ollama",
+          type: "n8n-nodes-base.httpRequest",
+          typeVersion: 4.3,
+          position: [500, 380]
+        },
+        {
+          parameters: {
+            method: "POST",
+            url: "=https://generativelanguage.googleapis.com/v1beta/models/{{ $json.geminiModel || '" + geminiModel + "' }}:generateContent?key={{ $json.apiKey }}",
+            sendHeaders: true,
+            headerParameters: { parameters: [{ name: "Content-Type", value: "application/json" }] },
+            sendBody: true,
+            specifyBody: "json",
+            jsonBody: "={{ JSON.stringify({ systemInstruction: { parts: [{ text: 'Você é um Mestre Frontend Senior. Responda ESTRITAMENTE em JSON válido com as chaves: {\"html\": \"...\", \"css\": \"...\", \"js\": \"...\"}. Crie um layout HTML5 moderno com Tailwind CSS elegante.' }] }, contents: [{ role: 'user', parts: [{ text: 'PÁGINA ATUAL (' + $json.pageIndex + '/' + $json.totalPages + '): ' + $json.name + ' (slug: ' + $json.slug + ')\\n\\n' + $json.siteMappingText + '\\nSKILLS E HABILIDADES DE DESIGN:\\n' + $json.customAiSkills + '\\n\\nDIRETRIZES DA PÁGINA:\\n' + $json.customPrompt + '\\n\\nHTML DA PÁGINA:\\n' + $json.html }] }], generationConfig: { responseMimeType: 'application/json', temperature: 0.35, maxOutputTokens: 8192 } }) }}"
+          },
+          name: "Refazer Página com Gemini",
+          type: "n8n-nodes-base.httpRequest",
+          typeVersion: 4.3,
+          position: [500, 600]
+        },
+        {
+          parameters: {
+            jsCode: `const items = $input.all();
+const remasteredPages = items.map((item, index) => {
+  const inputJson = item.json;
+  let parsed = {};
+  try {
+    const rawText = inputJson.message?.content || inputJson.candidates?.[0]?.content?.parts?.[0]?.text || inputJson.text || '{}';
+    let cleanText = rawText.replace(/<think>[\\s\\S]*?<\\/think>/gi, '').trim();
+    if (cleanText.includes("```")) {
+      const match = cleanText.match(/```(?:json)?\\s*([\\s\\S]*?)\\s*```/i);
+      if (match && match[1]) {
+        cleanText = match[1].trim();
+      }
+    }
+    const start = cleanText.indexOf('{');
+    const end = cleanText.lastIndexOf('}');
+    if (start !== -1 && end > start) {
+      cleanText = cleanText.substring(start, end + 1);
+    }
+    parsed = JSON.parse(cleanText);
+  } catch (e) {
+    parsed = {
+      html: inputJson.html || '<div></div>',
+      css: inputJson.css || '',
+      js: inputJson.js || ''
+    };
+  }
+
+  return {
+    slug: inputJson.slug || 'index',
+    name: inputJson.name || 'Página ' + (index + 1),
+    html: parsed.html || inputJson.html || '<div></div>',
+    css: parsed.css || inputJson.css || '',
+    js: parsed.js || inputJson.js || ''
+  };
+});
+
+return {
+  json: {
+    explanation: "Site remasterizado com sucesso via workflow n8n",
+    pages: remasteredPages
+  }
+};`
+          },
+          name: "Agrupar Páginas no JSON Padronizado",
+          type: "n8n-nodes-base.code",
+          typeVersion: 2,
+          position: [740, 496]
+        },
+        {
+          parameters: { options: {} },
+          name: "Respond to Webhook4",
+          type: "n8n-nodes-base.respondToWebhook",
+          typeVersion: 1.5,
+          position: [960, 496]
+        }
+      ],
+      connections: {
+        "Webhook Trigger4": { main: [[{ node: "Mapear Estrutura e Links do Site", type: "main", index: 0 }]] },
+        "Mapear Estrutura e Links do Site": { main: [[{ node: "Verificar Agente", type: "main", index: 0 }]] },
+        "Verificar Agente": {
+          main: [
+            [{ node: "Refazer Página com Ollama", type: "main", index: 0 }],
+            [{ node: "Refazer Página com Gemini", type: "main", index: 0 }]
+          ]
+        },
+        "Refazer Página com Ollama": { main: [[{ node: "Agrupar Páginas no JSON Padronizado", type: "main", index: 0 }]] },
+        "Refazer Página com Gemini": { main: [[{ node: "Agrupar Páginas no JSON Padronizado", type: "main", index: 0 }]] },
+        "Agrupar Páginas no JSON Padronizado": { main: [[{ node: "Respond to Webhook4", type: "main", index: 0 }]] }
+      }
+    };
+
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(workflowJson, null, 2));
+    const downloadAnchor = document.createElement('a');
+    downloadAnchor.setAttribute("href", dataStr);
+    downloadAnchor.setAttribute("download", "builddreamer-n8n-workflow.json");
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
   };
 
   const handleAddModel = async (e: React.FormEvent) => {
@@ -490,18 +738,132 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
 
           {activeTab === 'ai' && (
             <form onSubmit={handleSaveAIKeys} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-455 mb-2 flex items-center gap-1">
-                  Gemini API Key
-                  <span className="text-[10px] text-amber-400 lowercase italic font-normal">(Recomendado)</span>
-                </label>
-                <input 
-                  type="password"
-                  placeholder="AIzaSy..."
-                  value={geminiKey}
-                  onChange={(e) => setGeminiKey(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500 text-xs text-white"
-                />
+              {/* Seleção do Agente Ativo & Webhook n8n */}
+              <div className="p-3.5 bg-slate-950/80 border border-purple-500/30 rounded-xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-purple-400 flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5" />
+                    Provedor de IA Padrão (Agente)
+                  </label>
+                  <span className="text-[10px] text-slate-400 font-mono">Processamento via n8n</span>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setActiveProvider('ollama')}
+                    className={`py-2 px-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                      activeProvider === 'ollama'
+                        ? 'bg-purple-600 border-purple-500 text-white shadow-lg shadow-purple-600/30'
+                        : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <Cpu className="w-4 h-4 text-cyan-300" />
+                    Ollama Local
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveProvider('gemini')}
+                    className={`py-2 px-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                      activeProvider === 'gemini'
+                        ? 'bg-purple-600 border-purple-500 text-white shadow-lg shadow-purple-600/30'
+                        : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <Sparkles className="w-4 h-4 text-amber-300" />
+                    Google Gemini
+                  </button>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-350 mb-1">Webhook URL do n8n</label>
+                  <input 
+                    type="url"
+                    required
+                    placeholder="http://n8n.192.168.18.39.nip.io/webhook/real-premise-agent"
+                    value={n8nWebhookUrl}
+                    onChange={(e) => setN8nWebhookUrl(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 text-xs text-white font-mono"
+                  />
+                </div>
+
+                {/* Download Workflow Button */}
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    onClick={handleDownloadN8nWorkflow}
+                    className="w-full py-2 bg-slate-900 hover:bg-slate-850 border border-purple-500/40 text-purple-300 hover:text-white rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm"
+                  >
+                    <Box className="w-4 h-4 text-purple-400" />
+                    Baixar Workflow n8n (.json) pré-configurado
+                  </button>
+                  <p className="text-[10px] text-slate-500 mt-1 text-center">
+                    Baixa o arquivo `.json` do workflow configurado com o Ollama e Gemini prontos para importar no n8n.
+                  </p>
+                </div>
+              </div>
+
+              {/* Servidor e Modelo do Ollama */}
+              <div className="p-3 bg-slate-950/60 border border-slate-800 rounded-xl space-y-3">
+                <h4 className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                  <Cpu className="w-3.5 h-3.5 text-cyan-400" />
+                  Configurações do Ollama Local
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[10px] text-slate-400 mb-1">URL do Servidor Ollama</label>
+                    <input 
+                      type="text"
+                      placeholder="http://192.168.18.33:11434"
+                      value={ollamaServerUrl}
+                      onChange={(e) => setOllamaServerUrl(e.target.value)}
+                      className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-xs text-white font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-slate-400 mb-1">Modelo Ollama Padrão</label>
+                    <input 
+                      type="text"
+                      placeholder="cardosokks:latest"
+                      value={ollamaModel}
+                      onChange={(e) => setOllamaModel(e.target.value)}
+                      className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-xs text-white font-mono"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Gemini Key & Modelo Padrão */}
+              <div className="p-3 bg-slate-950/60 border border-slate-800 rounded-xl space-y-3">
+                <h4 className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                  Configurações do Google Gemini
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[10px] text-slate-400 mb-1">Gemini API Key</label>
+                    <input 
+                      type="password"
+                      placeholder="AIzaSy..."
+                      value={geminiKey}
+                      onChange={(e) => setGeminiKey(e.target.value)}
+                      className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-xs text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-slate-400 mb-1">Modelo Gemini Padrão</label>
+                    <select
+                      value={geminiModel}
+                      onChange={(e) => setGeminiModel(e.target.value)}
+                      className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-xs text-amber-300 focus:outline-none cursor-pointer"
+                    >
+                      <option value="gemini-3.6-flash">Gemini 3.6 Flash</option>
+                      <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro Preview</option>
+                      <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
+                      <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+                    </select>
+                  </div>
+                </div>
               </div>
 
               <div>
@@ -516,9 +878,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                   onChange={(e) => setProxyUrl(e.target.value)}
                   className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500 text-xs text-white font-mono"
                 />
-                <p className="text-[10px] text-slate-500 mt-1">
-                  Configure um proxy caso o Gemini esteja barrando requisições do seu IP ou datacenter. Todas as chamadas para IA passarão por este túnel.
-                </p>
               </div>
 
               <div>
@@ -533,34 +892,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                   onChange={(e) => setNgrokToken(e.target.value)}
                   className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl focus:outline-none focus:ring-1 focus:ring-cyan-500 text-xs text-white font-mono"
                 />
-                <p className="text-[10px] text-slate-500 mt-1">
-                  Seu token pessoal do ngrok.com para disponibilizar o painel e os previews do site na internet de qualquer lugar.
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-455 mb-2">OpenAI API Key (Opcional)</label>
-                <input 
-                  type="password"
-                  placeholder="sk-..."
-                  value={openaiKey}
-                  onChange={(e) => setOpenaiKey(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl focus:outline-none focus:ring-1 focus:ring-purple-500 text-xs text-white"
-                />
-              </div>
-
-              {/* Informações de Ambiente e Deploy FTP */}
-              <div className="pt-2 border-t border-slate-850 space-y-2">
-                <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-400">Ambiente de Deploy & Armazenamento</label>
-                <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl flex items-center justify-between">
-                  <div>
-                    <span className="text-xs font-bold text-white block">Servidor FTP Integrado</span>
-                    <span className="text-[10px] text-slate-500">Sincronização automática de arquivos e deploys</span>
-                  </div>
-                  <span className="text-[10px] font-mono bg-emerald-950/60 border border-emerald-500/30 text-emerald-400 px-2 py-0.5 rounded-full">
-                    Ativo
-                  </span>
-                </div>
               </div>
 
               <div className="pt-4">
@@ -570,7 +901,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                   className="w-full py-2.5 bg-purple-600 hover:bg-purple-505 text-white font-medium rounded-xl transition-all flex items-center justify-center gap-1.5 text-xs cursor-pointer shadow-md shadow-purple-600/20"
                 >
                   <Save className="w-4 h-4" />
-                  Salvar Chaves
+                  Salvar Configurações de IA
                 </button>
               </div>
             </form>
