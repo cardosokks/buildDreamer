@@ -413,7 +413,30 @@ public class SiteRemasterService {
             context.put("pages", preparedPages);
             context.put("projectMediaUrls", projectMediaUrls != null ? projectMediaUrls : Collections.emptyList());
             context.put("customAiSkills", customAiSkills != null ? customAiSkills : "");
-            context.put("ollamaModel", "cardosokks:latest");
+
+            String provider = "ollama";
+            String ollamaModel = "cardosokks:latest";
+            String ollamaUrl = "http://192.168.18.33:11434";
+
+            List<ProjectMember> members = projectMemberRepository.findByProjectId(projectId);
+            if (members != null && !members.isEmpty()) {
+                User owner = members.get(0).getUser();
+                if (owner != null) {
+                    if (owner.getActiveProvider() != null && !owner.getActiveProvider().trim().isEmpty()) {
+                        provider = owner.getActiveProvider().trim();
+                    }
+                    if (owner.getOllamaModel() != null && !owner.getOllamaModel().trim().isEmpty()) {
+                        ollamaModel = owner.getOllamaModel().trim();
+                    }
+                    if (owner.getOllamaServerUrl() != null && !owner.getOllamaServerUrl().trim().isEmpty()) {
+                        ollamaUrl = owner.getOllamaServerUrl().trim();
+                    }
+                }
+            }
+
+            context.put("provider", provider);
+            context.put("ollamaModel", ollamaModel);
+            context.put("ollamaUrl", ollamaUrl);
 
             logs.add("Enviando pacote com " + preparedPages.size() + " páginas em requisição única para o n8n/IA...");
             progress.put("progress", 1);
