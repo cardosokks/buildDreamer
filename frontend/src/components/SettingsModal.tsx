@@ -270,212 +270,77 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
   };
 
   const handleDownloadN8nWorkflow = () => {
+    const codeMapNode = [
+      "const body = $json.body || {};",
+      "let pages = body.pages || [];",
+      "if (typeof pages === 'string') { try { pages = JSON.parse(pages); } catch(e) {} }",
+      "if (!Array.isArray(pages) || pages.length === 0) {",
+      "  pages = [{ slug: body.slug || 'index', name: body.name || 'Página Inicial', html: body.html || body.userPrompt || '<div></div>', css: body.css || '', js: body.js || '', customPrompt: body.customPrompt || '' }];",
+      "}",
+      `const provider = (body.provider || body.agent || '${activeProvider}').toLowerCase();`,
+      `const ollamaModel = body.ollamaModel || '${ollamaModel}';`,
+      `const ollamaUrl = body.ollamaUrl || '${ollamaServerUrl}';`,
+      `const geminiModel = body.model || body.geminiModel || '${geminiModel}';`,
+      `const apiKey = body.apiKey || '${geminiKey}';`,
+      "const customAiSkills = body.customAiSkills || '';",
+      "let projectMediaUrls = body.projectMediaUrls || [];",
+      "if (typeof projectMediaUrls === 'string') { try { projectMediaUrls = JSON.parse(projectMediaUrls); } catch(e) {} }",
+      "let siteMappingText = '=========================================\\nMAPA GERAL DA ESTRUTURA E CONTEÚDO DO SITE\\n=========================================\\n\\n';",
+      "pages.forEach((p, index) => {",
+      "  siteMappingText += 'PÁGINA ' + (index + 1) + ': ' + p.name + ' (slug: ' + p.slug + ')\\n';",
+      "  siteMappingText += 'Diretrizes Específicas: ' + (p.customPrompt || 'Manter estrutura e melhorar o design') + '\\n';",
+      "  siteMappingText += 'Tamanho do HTML Original: ' + (p.html ? p.html.length : 0) + ' caracteres\\n';",
+      "  siteMappingText += '-----------------------------------------\\n\\n';",
+      "});",
+      "if (projectMediaUrls.length > 0) {",
+      "  siteMappingText += 'BANCO DE MÍDIAS E IMAGENS REGISTRADAS PARA O SITE:\\n';",
+      "  projectMediaUrls.forEach((mUrl, mIdx) => { siteMappingText += ' - Imagem ' + (mIdx + 1) + ': ' + mUrl + '\\n'; });",
+      "  siteMappingText += '\\n';",
+      "}",
+      "return pages.map((page, index) => {",
+      "  return { json: { pageIndex: index + 1, totalPages: pages.length, slug: page.slug || 'index', name: page.name || 'Página', html: page.html || '', css: page.css || '', js: page.js || '', customPrompt: page.customPrompt || '', provider, ollamaModel, ollamaUrl, geminiModel, apiKey, customAiSkills, siteMappingText, projectMediaUrls } };",
+      "});"
+    ].join("\n");
+
+    const codeAggregateNode = [
+      "const items = $input.all();",
+      "const remasteredPages = items.map((item, index) => {",
+      "  const inputJson = item.json;",
+      "  let parsed = {};",
+      "  try {",
+      "    const rawText = inputJson.message?.content || inputJson.candidates?.[0]?.content?.parts?.[0]?.text || inputJson.text || '{}';",
+      "    let cleanText = rawText.replace(/<think>[\\s\\S]*?<\\/think>/gi, '').trim();",
+      "    if (cleanText.includes('```')) {",
+      "      const match = cleanText.match(/```(?:json)?\\s*([\\s\\S]*?)\\s*```/i);",
+      "      if (match && match[1]) cleanText = match[1].trim();",
+      "    }",
+      "    const start = cleanText.indexOf('{');",
+      "    const end = cleanText.lastIndexOf('}');",
+      "    if (start !== -1 && end > start) cleanText = cleanText.substring(start, end + 1);",
+      "    parsed = JSON.parse(cleanText);",
+      "  } catch (e) {",
+      "    parsed = { html: inputJson.html || '<div></div>', css: inputJson.css || '', js: inputJson.js || '' };",
+      "  }",
+      "  return { slug: inputJson.slug || 'index', name: inputJson.name || ('Página ' + (index + 1)), html: parsed.html || inputJson.html || '<div></div>', css: parsed.css || inputJson.css || '', js: parsed.js || inputJson.js || '' };",
+      "});",
+      "return { json: { explanation: 'Site remasterizado com sucesso via workflow n8n', pages: remasteredPages } };"
+    ].join("\n");
+
     const workflowJson = {
       name: "real-premise-agent",
       nodes: [
-        {
-          parameters: { httpMethod: "POST", path: "real-premise-agent", responseMode: "responseNode" },
-          name: "Webhook Trigger4",
-          type: "n8n-nodes-base.webhook",
-          typeVersion: 2.1,
-          position: [16, 496]
-        },
-        {
-          parameters: {
-            jsCode: `const body = $json.body || {};
-let pages = body.pages || [];
-if (typeof pages === 'string') {
-  try { pages = JSON.parse(pages); } catch(e) {}
-}
-if (!Array.isArray(pages) || pages.length === 0) {
-  pages = [{
-    slug: body.slug || 'index',
-    name: body.name || 'Página Inicial',
-    html: body.html || body.userPrompt || '<div></div>',
-    css: body.css || '',
-    js: body.js || '',
-    customPrompt: body.customPrompt || ''
-  }];
-}
-
-const provider = (body.provider || body.agent || '${activeProvider}').toLowerCase();
-const ollamaModel = body.ollamaModel || '${ollamaModel}';
-const ollamaUrl = body.ollamaUrl || '${ollamaServerUrl}';
-const geminiModel = body.model || body.geminiModel || '${geminiModel}';
-const apiKey = body.apiKey || '${geminiKey}';
-const customAiSkills = body.customAiSkills || '';
-let projectMediaUrls = body.projectMediaUrls || [];
-if (typeof projectMediaUrls === 'string') {
-  try { projectMediaUrls = JSON.parse(projectMediaUrls); } catch(e) {}
-}
-
-let siteMappingText = "=========================================\\n";
-siteMappingText += "MAPA GERAL DA ESTRUTURA E CONTEÚDO DO SITE\\n";
-siteMappingText += "=========================================\\n\\n";
-
-pages.forEach((p, index) => {
-  siteMappingText += \`PÁGINA \${index + 1}: \${p.name} (slug: \${p.slug})\\n\`;
-  siteMappingText += \`Diretrizes Específicas: \${p.customPrompt || 'Manter estrutura e melhorar o design'}\\n\`;
-  siteMappingText += \`Tamanho do HTML Original: \${p.html ? p.html.length : 0} caracteres\\n\`;
-  siteMappingText += \`-----------------------------------------\\n\\n\`;
-});
-
-if (projectMediaUrls.length > 0) {
-  siteMappingText += "BANCO DE MÍDIAS E IMAGENS REGISTRADAS PARA O SITE:\\n";
-  projectMediaUrls.forEach((mUrl, mIdx) => {
-    siteMappingText += \` - Imagem \${mIdx + 1}: \${mUrl}\\n\`;
-  });
-  siteMappingText += "\\n";
-}
-
-return pages.map((page, index) => {
-  return {
-    json: {
-      pageIndex: index + 1,
-      totalPages: pages.length,
-      slug: page.slug || 'index',
-      name: page.name || 'Página',
-      html: page.html || '',
-      css: page.css || '',
-      js: page.js || '',
-      customPrompt: page.customPrompt || '',
-      provider: provider,
-      ollamaModel: ollamaModel,
-      ollamaUrl: ollamaUrl,
-      geminiModel: geminiModel,
-      apiKey: apiKey,
-      customAiSkills: customAiSkills,
-      siteMappingText: siteMappingText,
-      projectMediaUrls: projectMediaUrls
-    }
-  };
-});`
-          },
-          name: "Mapear Estrutura e Links do Site",
-          type: "n8n-nodes-base.code",
-          typeVersion: 2,
-          position: [240, 496]
-        },
-        {
-          parameters: {
-            mode: "rules",
-            options: { fallbackOutput: "extra" },
-            rules: {
-              values: [
-                {
-                  conditions: {
-                    combinator: "and",
-                    conditions: [
-                      { leftValue: "={{ $json.provider }}", operator: { operation: "equals", type: "string" }, rightValue: "ollama" }
-                    ],
-                    options: { caseSensitive: false }
-                  }
-                }
-              ]
-            }
-          },
-          name: "Verificar Agente",
-          type: "n8n-nodes-base.switch",
-          typeVersion: 3,
-          position: [400, 496]
-        },
-        {
-          parameters: {
-            method: "POST",
-            url: "={{ ($json.ollamaUrl || '" + ollamaServerUrl + "') + '/api/chat' }}",
-            sendHeaders: true,
-            headerParameters: { parameters: [{ name: "Content-Type", value: "application/json" }] },
-            sendBody: true,
-            specifyBody: "json",
-            jsonBody: "={{ JSON.stringify({ model: $json.ollamaModel || '" + ollamaModel + "', messages: [ { role: 'system', content: 'Você é um Mestre Frontend Senior. Responda ESTRITAMENTE em JSON válido com a estrutura: {\"html\": \"...\", \"css\": \"...\", \"js\": \"...\"}. Crie um design HTML5 moderno com Tailwind CSS.' }, { role: 'user', content: 'REMASTERIZAR PÁGINA (' + $json.pageIndex + '/' + $json.totalPages + '): ' + $json.name + ' (slug: ' + $json.slug + ')\\n\\n' + $json.siteMappingText + '\\nSKILLS E HABILIDADES DE DESIGN:\\n' + $json.customAiSkills + '\\n\\nDIRETRIZES DA PÁGINA:\\n' + $json.customPrompt + '\\n\\nHTML DA PÁGINA:\\n' + $json.html } ], stream: false, format: 'json', options: { temperature: 0.35, num_predict: 8192 } }) }}"
-          },
-          name: "Refazer Página com Ollama",
-          type: "n8n-nodes-base.httpRequest",
-          typeVersion: 4.3,
-          position: [500, 380]
-        },
-        {
-          parameters: {
-            method: "POST",
-            url: "=https://generativelanguage.googleapis.com/v1beta/models/{{ $json.geminiModel || '" + geminiModel + "' }}:generateContent?key={{ $json.apiKey }}",
-            sendHeaders: true,
-            headerParameters: { parameters: [{ name: "Content-Type", value: "application/json" }] },
-            sendBody: true,
-            specifyBody: "json",
-            jsonBody: "={{ JSON.stringify({ systemInstruction: { parts: [{ text: 'Você é um Mestre Frontend Senior. Responda ESTRITAMENTE em JSON válido com as chaves: {\"html\": \"...\", \"css\": \"...\", \"js\": \"...\"}. Crie um layout HTML5 moderno com Tailwind CSS elegante.' }] }, contents: [{ role: 'user', parts: [{ text: 'PÁGINA ATUAL (' + $json.pageIndex + '/' + $json.totalPages + '): ' + $json.name + ' (slug: ' + $json.slug + ')\\n\\n' + $json.siteMappingText + '\\nSKILLS E HABILIDADES DE DESIGN:\\n' + $json.customAiSkills + '\\n\\nDIRETRIZES DA PÁGINA:\\n' + $json.customPrompt + '\\n\\nHTML DA PÁGINA:\\n' + $json.html }] }], generationConfig: { responseMimeType: 'application/json', temperature: 0.35, maxOutputTokens: 8192 } }) }}"
-          },
-          name: "Refazer Página com Gemini",
-          type: "n8n-nodes-base.httpRequest",
-          typeVersion: 4.3,
-          position: [500, 600]
-        },
-        {
-          parameters: {
-            jsCode: `const items = $input.all();
-const remasteredPages = items.map((item, index) => {
-  const inputJson = item.json;
-  let parsed = {};
-  try {
-    const rawText = inputJson.message?.content || inputJson.candidates?.[0]?.content?.parts?.[0]?.text || inputJson.text || '{}';
-    let cleanText = rawText.replace(/<think>[\\s\\S]*?<\\/think>/gi, '').trim();
-    if (cleanText.includes("```")) {
-      const match = cleanText.match(/```(?:json)?\\s*([\\s\\S]*?)\\s*```/i);
-      if (match && match[1]) {
-        cleanText = match[1].trim();
-      }
-    }
-    const start = cleanText.indexOf('{');
-    const end = cleanText.lastIndexOf('}');
-    if (start !== -1 && end > start) {
-      cleanText = cleanText.substring(start, end + 1);
-    }
-    parsed = JSON.parse(cleanText);
-  } catch (e) {
-    parsed = {
-      html: inputJson.html || '<div></div>',
-      css: inputJson.css || '',
-      js: inputJson.js || ''
-    };
-  }
-
-  return {
-    slug: inputJson.slug || 'index',
-    name: inputJson.name || 'Página ' + (index + 1),
-    html: parsed.html || inputJson.html || '<div></div>',
-    css: parsed.css || inputJson.css || '',
-    js: parsed.js || inputJson.js || ''
-  };
-});
-
-return {
-  json: {
-    explanation: "Site remasterizado com sucesso via workflow n8n",
-    pages: remasteredPages
-  }
-};`
-          },
-          name: "Agrupar Páginas no JSON Padronizado",
-          type: "n8n-nodes-base.code",
-          typeVersion: 2,
-          position: [740, 496]
-        },
-        {
-          parameters: { options: {} },
-          name: "Respond to Webhook4",
-          type: "n8n-nodes-base.respondToWebhook",
-          typeVersion: 1.5,
-          position: [960, 496]
-        }
+        { parameters: { httpMethod: "POST", path: "real-premise-agent", responseMode: "responseNode" }, name: "Webhook Trigger4", type: "n8n-nodes-base.webhook", typeVersion: 2.1, position: [16, 496] },
+        { parameters: { jsCode: codeMapNode }, name: "Mapear Estrutura e Links do Site", type: "n8n-nodes-base.code", typeVersion: 2, position: [240, 496] },
+        { parameters: { mode: "rules", options: { fallbackOutput: "extra" }, rules: { values: [{ conditions: { combinator: "and", conditions: [{ leftValue: "={{ $json.provider }}", operator: { operation: "equals", type: "string" }, rightValue: "ollama" }], options: { caseSensitive: false } } }] } }, name: "Verificar Agente", type: "n8n-nodes-base.switch", typeVersion: 3, position: [400, 496] },
+        { parameters: { method: "POST", url: "={{ ($json.ollamaUrl || '" + ollamaServerUrl + "') + '/api/chat' }}", sendHeaders: true, headerParameters: { parameters: [{ name: "Content-Type", value: "application/json" }] }, sendBody: true, specifyBody: "json", jsonBody: "={{ JSON.stringify({ model: $json.ollamaModel || '" + ollamaModel + "', messages: [ { role: 'system', content: 'Você é um Mestre Frontend Senior. Responda ESTRITAMENTE em JSON válido com a estrutura: {\\\"html\\\": \\\"...\\\", \\\"css\\\": \\\"...\\\", \\\"js\\\": \\\"...\\\"}. Crie um design HTML5 moderno com Tailwind CSS.' }, { role: 'user', content: 'REMASTERIZAR PÁGINA (' + $json.pageIndex + '/' + $json.totalPages + '): ' + $json.name + ' (slug: ' + $json.slug + ')\\n\\n' + $json.siteMappingText + '\\nSKILLS E HABILIDADES DE DESIGN:\\n' + $json.customAiSkills + '\\n\\nDIRETRIZES DA PÁGINA:\\n' + $json.customPrompt + '\\n\\nHTML DA PÁGINA:\\n' + $json.html } ], stream: false, format: 'json', options: { temperature: 0.35, num_predict: 8192 } }) }}" }, name: "Refazer Página com Ollama", type: "n8n-nodes-base.httpRequest", typeVersion: 4.3, position: [500, 380] },
+        { parameters: { method: "POST", url: "=https://generativelanguage.googleapis.com/v1beta/models/{{ $json.geminiModel || '" + geminiModel + "' }}:generateContent?key={{ $json.apiKey }}", sendHeaders: true, headerParameters: { parameters: [{ name: "Content-Type", value: "application/json" }] }, sendBody: true, specifyBody: "json", jsonBody: "={{ JSON.stringify({ systemInstruction: { parts: [{ text: 'Você é um Mestre Frontend Senior. Responda ESTRITAMENTE em JSON válido com as chaves: {\\\"html\\\": \\\"...\\\", \\\"css\\\": \\\"...\\\", \\\"js\\\": \\\"...\\\"}. Crie um layout HTML5 moderno com Tailwind CSS elegante.' }] }, contents: [{ role: 'user', parts: [{ text: 'PÁGINA ATUAL (' + $json.pageIndex + '/' + $json.totalPages + '): ' + $json.name + ' (slug: ' + $json.slug + ')\\n\\n' + $json.siteMappingText + '\\nSKILLS E HABILIDADES DE DESIGN:\\n' + $json.customAiSkills + '\\n\\nDIRETRIZES DA PÁGINA:\\n' + $json.customPrompt + '\\n\\nHTML DA PÁGINA:\\n' + $json.html }] }], generationConfig: { responseMimeType: 'application/json', temperature: 0.35, maxOutputTokens: 8192 } }) }}" }, name: "Refazer Página com Gemini", type: "n8n-nodes-base.httpRequest", typeVersion: 4.3, position: [500, 600] },
+        { parameters: { jsCode: codeAggregateNode }, name: "Agrupar Páginas no JSON Padronizado", type: "n8n-nodes-base.code", typeVersion: 2, position: [740, 496] },
+        { parameters: { options: {} }, name: "Respond to Webhook4", type: "n8n-nodes-base.respondToWebhook", typeVersion: 1.5, position: [960, 496] }
       ],
       connections: {
         "Webhook Trigger4": { main: [[{ node: "Mapear Estrutura e Links do Site", type: "main", index: 0 }]] },
         "Mapear Estrutura e Links do Site": { main: [[{ node: "Verificar Agente", type: "main", index: 0 }]] },
-        "Verificar Agente": {
-          main: [
-            [{ node: "Refazer Página com Ollama", type: "main", index: 0 }],
-            [{ node: "Refazer Página com Gemini", type: "main", index: 0 }]
-          ]
-        },
+        "Verificar Agente": { main: [[{ node: "Refazer Página com Ollama", type: "main", index: 0 }], [{ node: "Refazer Página com Gemini", type: "main", index: 0 }]] },
         "Refazer Página com Ollama": { main: [[{ node: "Agrupar Páginas no JSON Padronizado", type: "main", index: 0 }]] },
         "Refazer Página com Gemini": { main: [[{ node: "Agrupar Páginas no JSON Padronizado", type: "main", index: 0 }]] },
         "Agrupar Páginas no JSON Padronizado": { main: [[{ node: "Respond to Webhook4", type: "main", index: 0 }]] }
