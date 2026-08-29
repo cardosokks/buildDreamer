@@ -57,6 +57,18 @@ public class GeminiService {
             List<String> registeredModels,
             ProgressCallback progressCallback
     ) throws Exception {
+        return generateAIResponse(prompt, context, customApiKey, customModel, registeredModels, progressCallback, null);
+    }
+
+    public Map<String, Object> generateAIResponse(
+            String prompt,
+            Map<String, String> context,
+            String customApiKey,
+            String customModel,
+            List<String> registeredModels,
+            ProgressCallback progressCallback,
+            java.util.function.Supplier<Boolean> isCanceledCheck
+    ) throws Exception {
         String activeKey = (customApiKey != null && !customApiKey.trim().isEmpty()) ? customApiKey : defaultApiKey;
         if (activeKey == null || activeKey.trim().isEmpty()) {
             activeKey = System.getenv("GEMINI_API_KEY");
@@ -116,6 +128,11 @@ public class GeminiService {
         // FASE 1: Tentar a requisição no n8n percorrendo CADA modelo em sequência se houver erro
         System.out.println("[AI Engine] Iniciando tentativas via n8n com a fila de modelos: " + candidateModels);
         for (int i = 0; i < candidateModels.size(); i++) {
+            if (Thread.currentThread().isInterrupted() || (isCanceledCheck != null && Boolean.TRUE.equals(isCanceledCheck.get()))) {
+                System.out.println("[AI Engine] Abortando n8n: Cancelamento detectado.");
+                throw new InterruptedException("Geração cancelada pelo usuário.");
+            }
+
             String modelToTry = candidateModels.get(i);
 
             if (progressCallback != null) {
@@ -206,6 +223,10 @@ public class GeminiService {
                     System.err.println("[AI Engine] n8n retornou erro HTTP " + response.statusCode() + " para o modelo " + modelToTry + ". Tentando próximo modelo...");
                 }
             } catch (Exception n8nEx) {
+                if (n8nEx instanceof InterruptedException || Thread.currentThread().isInterrupted() || (isCanceledCheck != null && Boolean.TRUE.equals(isCanceledCheck.get()))) {
+                    System.out.println("[AI Engine] Requisição n8n abortada instantaneamente por cancelamento.");
+                    throw new InterruptedException("Geração cancelada pelo usuário.");
+                }
                 System.err.println("[AI Engine] Falha no n8n para modelo " + modelToTry + ": " + n8nEx.getMessage() + ". Mudando para o próximo modelo...");
             }
         }
@@ -214,6 +235,11 @@ public class GeminiService {
         System.err.println("[AI Engine] Todos os modelos cadastrados falharam via n8n. Recorrendo ao endpoint direto do Gemini...");
         Exception lastError = null;
         for (int i = 0; i < candidateModels.size(); i++) {
+            if (Thread.currentThread().isInterrupted() || (isCanceledCheck != null && Boolean.TRUE.equals(isCanceledCheck.get()))) {
+                System.out.println("[AI Engine] Abortando Gemini direto: Cancelamento detectado.");
+                throw new InterruptedException("Geração cancelada pelo usuário.");
+            }
+
             String modelToTry = candidateModels.get(i);
             try {
                 System.out.println("[AI Engine] Direct Gemini Fallback - Testando modelo: " + modelToTry);
@@ -258,6 +284,10 @@ public class GeminiService {
                     System.err.println("[AI Engine] Endpoint direto retornou erro HTTP " + directResponse.statusCode() + ": " + directResponse.body());
                 }
             } catch (Exception error) {
+                if (error instanceof InterruptedException || Thread.currentThread().isInterrupted() || (isCanceledCheck != null && Boolean.TRUE.equals(isCanceledCheck.get()))) {
+                    System.out.println("[AI Engine] Direct Gemini abortado instantaneamente por cancelamento.");
+                    throw new InterruptedException("Geração cancelada pelo usuário.");
+                }
                 System.err.println("[AI Engine] Fallback direto para " + modelToTry + " falhou: " + error.getMessage());
                 lastError = error;
             }
@@ -272,6 +302,11 @@ public class GeminiService {
 
         List<String> ollamaModels = List.of("qwen2.5-coder:latest", "qwen2.5-coder:7b", "llama3:latest", "mistral:latest");
         for (String ollamaModel : ollamaModels) {
+            if (Thread.currentThread().isInterrupted() || (isCanceledCheck != null && Boolean.TRUE.equals(isCanceledCheck.get()))) {
+                System.out.println("[AI Engine] Abortando Ollama: Cancelamento detectado.");
+                throw new InterruptedException("Geração cancelada pelo usuário.");
+            }
+
             try {
                 System.out.println("[AI Engine] Ollama Fallback - Testando modelo local: " + ollamaModel + " em: " + ollamaUrl);
 
@@ -309,6 +344,10 @@ public class GeminiService {
                     System.err.println("[AI Engine] Ollama retornou status HTTP " + ollamaResponse.statusCode());
                 }
             } catch (Exception ollamaEx) {
+                if (ollamaEx instanceof InterruptedException || Thread.currentThread().isInterrupted() || (isCanceledCheck != null && Boolean.TRUE.equals(isCanceledCheck.get()))) {
+                    System.out.println("[AI Engine] Ollama abortado instantaneamente por cancelamento.");
+                    throw new InterruptedException("Geração cancelada pelo usuário.");
+                }
                 System.err.println("[AI Engine] Falha no Ollama com o modelo " + ollamaModel + ": " + ollamaEx.getMessage());
                 lastError = ollamaEx;
             }

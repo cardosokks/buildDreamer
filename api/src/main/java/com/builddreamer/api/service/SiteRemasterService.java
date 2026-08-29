@@ -237,6 +237,7 @@ public class SiteRemasterService {
             String customAiSkills,
             List<String> projectMediaUrls
     ) {
+        activeJobThreads.put(projectId, Thread.currentThread());
         Map<String, Object> progress = new ConcurrentHashMap<>();
         progress.put("status", "starting");
         progress.put("progress", 0);
@@ -254,6 +255,7 @@ public class SiteRemasterService {
                 jState.put("error", "Projeto não encontrado");
                 aiChatJobsQueue.put(jobId, jState);
             }
+            activeJobThreads.remove(projectId);
             return;
         }
 
@@ -323,14 +325,15 @@ public class SiteRemasterService {
                 context.put("css", downloadedCss);
                 context.put("js", downloadedJs);
 
-                if ("canceled".equalsIgnoreCase((String) progress.get("status"))) {
-                    logs.add("Geração cancelada pelo usuário.");
+                if (Thread.currentThread().isInterrupted() || "canceled".equalsIgnoreCase((String) progress.get("status"))) {
+                    logs.add("Geração cancelada pelo usuário. Abortando worker.");
                     project.setStatus("ready");
                     projectRepository.save(project);
                     if (jobId != null && aiChatJobsQueue != null) {
                         Map<String, Object> jState = aiChatJobsQueue.computeIfAbsent(jobId, k -> new ConcurrentHashMap<>());
                         jState.put("status", "canceled");
                     }
+                    activeJobThreads.remove(projectId);
                     return;
                 }
 
@@ -352,7 +355,8 @@ public class SiteRemasterService {
                                     jState.put("attempt", attempt);
                                     jState.put("total", total);
                                 }
-                            }
+                            },
+                            () -> Thread.currentThread().isInterrupted() || "canceled".equalsIgnoreCase((String) progress.get("status"))
                     );
 
                     String html = (String) aiResult.getOrDefault("html", "<div></div>");
@@ -442,6 +446,18 @@ public class SiteRemasterService {
                     }
                     logs.add("Sucesso [" + (i + 1) + "/" + pages.size() + "]: Página '" + pageName + "' remasterizada, aplicada no banco/canvas e sincronizada no MinIO!");
                 } catch (Exception pageEx) {
+                    if (Thread.currentThread().isInterrupted() || "canceled".equalsIgnoreCase((String) progress.get("status")) || pageEx instanceof InterruptedException) {
+                        logs.add("Geração cancelada pelo usuário. Requisição ao n8n abortada com sucesso.");
+                        project.setStatus("ready");
+                        projectRepository.save(project);
+                        if (jobId != null && aiChatJobsQueue != null) {
+                            Map<String, Object> jState = aiChatJobsQueue.computeIfAbsent(jobId, k -> new ConcurrentHashMap<>());
+                            jState.put("status", "canceled");
+                        }
+                        activeJobThreads.remove(projectId);
+                        return;
+                    }
+
                     pageEx.printStackTrace();
                     logs.add("Erro na geração da página " + (i + 1) + "/" + pages.size() + " ('" + pageName + "'): " + pageEx.getMessage());
 
@@ -477,16 +493,18 @@ public class SiteRemasterService {
             }
 
         } catch (Exception ex) {
-            progress.put("status", "error");
+            progress.put("status", "canceled".equalsIgnoreCase((String) progress.get("status")) ? "canceled" : "error");
             progress.put("error", "Erro ao executar worker de geração: " + ex.getMessage());
             if (progress.get("logs") != null) {
-                ((List<String>) progress.get("logs")).add("Erro: " + ex.getMessage());
+                ((List<String>) progress.get("logs")).add("Erro/Cancelamento: " + ex.getMessage());
             }
             if (jobId != null && aiChatJobsQueue != null) {
                 Map<String, Object> jState = aiChatJobsQueue.computeIfAbsent(jobId, k -> new ConcurrentHashMap<>());
-                jState.put("status", "failed");
+                jState.put("status", "canceled".equalsIgnoreCase((String) progress.get("status")) ? "canceled" : "failed");
                 jState.put("error", ex.getMessage());
             }
+        } finally {
+            activeJobThreads.remove(projectId);
         }
     }
     private final Map<String, Map<String, Object>> scrapeJobs = new ConcurrentHashMap<>();
@@ -518,9 +536,19 @@ public class SiteRemasterService {
         if (progress != null) {
             progress.put("status", "canceled");
             if (progress.get("logs") != null) {
-                ((List<String>) progress.get("logs")).add("Solicitação de cancelamento enviada pelo usuário.");
+                ((List<String>) progress.get("logs")).add("Solicitação de cancelamento enviada pelo usuário. Interrompendo requisições ao n8n...");
             }
         }
+
+        // Interrompe o Thread da geração síncrona/assíncrona para abortar requisições HTTP ao n8n imediatamente
+        Thread workerThread = activeJobThreads.remove(projectId);
+        if (workerThread != null && workerThread.isAlive()) {
+            try {
+                System.out.println("[SiteRemasterService] Interrompendo thread worker de n8n para projeto: " + projectId);
+                workerThread.interrupt();
+            } catch (Exception ignored) {}
+        }
+
         Optional<Project> projOpt = projectRepository.findById(projectId);
         if (projOpt.isPresent()) {
             Project proj = projOpt.get();
