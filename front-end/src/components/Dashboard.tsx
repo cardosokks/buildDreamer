@@ -64,6 +64,8 @@ import { useTheme } from '../context/ThemeContext';
 import { useNotification } from '../context/NotificationContext';
 import { SettingsPage } from './SettingsPage';
 import { CRMManager } from './CRMManager';
+import { UserManagementPanel } from './UserManagementPanel';
+import { TeamChatPanel } from './TeamChatPanel';
 import { API_URL } from '../config';
 
 interface Project {
@@ -113,8 +115,8 @@ interface FilterPreset {
 }
 
 interface DashboardProps {
-  initialTab?: 'general' | 'projects' | 'crm' | 'leads' | 'saved-leads' | 'presets' | 'settings';
-  onTabChange?: (tab: 'general' | 'projects' | 'crm' | 'leads' | 'saved-leads' | 'presets' | 'settings') => void;
+  initialTab?: 'general' | 'projects' | 'crm' | 'leads' | 'saved-leads' | 'presets' | 'settings' | 'users';
+  onTabChange?: (tab: 'general' | 'projects' | 'crm' | 'leads' | 'saved-leads' | 'presets' | 'settings' | 'users') => void;
   onSelectProject: (projectId: string) => void;
 }
 
@@ -126,17 +128,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [activeTab, setActiveTabState] = useState<'general' | 'projects' | 'crm' | 'leads' | 'saved-leads' | 'presets' | 'settings'>(() => {
+  const [isTeamChatOpen, setIsTeamChatOpen] = useState(false);
+
+  const [activeTab, setActiveTabState] = useState<'general' | 'projects' | 'crm' | 'leads' | 'saved-leads' | 'presets' | 'settings' | 'users'>(() => {
     try {
       const stored = localStorage.getItem('rp_dashboard_active_tab');
-      if (stored === 'general' || stored === 'projects' || stored === 'crm' || stored === 'leads' || stored === 'saved-leads' || stored === 'presets' || stored === 'settings') {
+      if (stored === 'general' || stored === 'projects' || stored === 'crm' || stored === 'leads' || stored === 'saved-leads' || stored === 'presets' || stored === 'settings' || stored === 'users') {
         return stored;
       }
     } catch { }
     return initialTab === 'tunnels' as any ? 'general' : initialTab;
   });
 
-  const setActiveTab = (tab: 'general' | 'projects' | 'crm' | 'leads' | 'saved-leads' | 'presets' | 'settings') => {
+  const setActiveTab = (tab: 'general' | 'projects' | 'crm' | 'leads' | 'saved-leads' | 'presets' | 'settings' | 'users') => {
     setActiveTabState(tab);
     if (onTabChange) onTabChange(tab);
     try {
@@ -1488,7 +1492,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
 
 
             {/* 🔔 Sino de Notificações */}
-            <div className="relative">
+            <div className="relative flex items-center gap-2">
+              {/* Botão Chat Corporativo */}
+              <button
+                onClick={() => setIsTeamChatOpen(true)}
+                className={`relative w-9 h-9 border rounded-xl flex items-center justify-center transition-all cursor-pointer shadow-sm ${theme === 'light' ? 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-600' : 'bg-slate-900/80 hover:bg-slate-800 border-slate-800 text-slate-300 hover:text-white'}`}
+                title="Chat Corporativo da Equipe"
+              >
+                <MessageSquare className="w-4 h-4 text-purple-400" />
+              </button>
+
               <button
                 onClick={() => { setShowBellDropdown(!showBellDropdown); setShowUserDropdown(false); if (!showBellDropdown) markAllBellRead(); }}
                 className={`relative w-9 h-9 border rounded-xl flex items-center justify-center transition-all cursor-pointer shadow-sm ${theme === 'light' ? 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-600' : 'bg-slate-900/80 hover:bg-slate-800 border-slate-800 text-slate-300 hover:text-white'}`}
@@ -1926,6 +1939,22 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
               ) : (
                 <div className="border-t border-slate-850/60 my-2" />
               )}
+
+              <button
+                onClick={() => setActiveTab('users')}
+                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2 py-2.5' : 'gap-3 px-3.5 py-2.5'} rounded-xl text-xs font-semibold transition-all cursor-pointer ${activeTab === 'users'
+                  ? theme === 'light'
+                    ? 'bg-purple-50 text-purple-700 font-bold'
+                    : 'bg-slate-800 text-white font-bold border border-purple-500/30'
+                  : theme === 'light'
+                    ? 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                    : 'text-slate-400 hover:bg-slate-900/60 hover:text-slate-200'
+                  }`}
+                title="Painel Admin & Usuários"
+              >
+                <Users className="w-4 h-4 text-purple-400 shrink-0" />
+                {!sidebarCollapsed && <span className="truncate flex-1 text-left">Usuários & Admin</span>}
+              </button>
 
               <button
                 onClick={() => setActiveTab('settings')}
@@ -3610,12 +3639,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                 </div>
               )}
             </div>
+          ) : activeTab === 'users' ? (
+            <UserManagementPanel />
           ) : activeTab === 'settings' ? (
             /* PÁGINA NATIVA DE CONFIGURAÇÕES DO SISTEMA */
             <SettingsPage />
           ) : null}
         </main>
       </div>
+
+      {/* Team Chat Slide-over Panel */}
+      <TeamChatPanel isOpen={isTeamChatOpen} onClose={() => setIsTeamChatOpen(false)} />
 
       {/* Preset List / Manager Modal */}
       {showPresetListModal && (

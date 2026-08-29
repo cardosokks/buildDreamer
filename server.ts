@@ -8,6 +8,8 @@ import path from 'path';
 import { createServer as createViteServer } from 'vite';
 
 import { authRouter } from './backend/routes/auth';
+import { usersRouter } from './backend/routes/users';
+import { chatRouter } from './backend/routes/chat';
 import { projectRouter } from './backend/routes/projects';
 import { pageRouter } from './backend/routes/pages';
 import { aiRouter } from './backend/routes/ai';
@@ -28,7 +30,7 @@ async function startServer() {
   const io = new Server(server, {
     cors: {
       origin: '*',
-      methods: ['GET', 'POST']
+      methods: ['GET', 'POST', 'PUT', 'DELETE']
     }
   });
 
@@ -43,6 +45,8 @@ async function startServer() {
 
   // API Routes
   app.use('/api/auth', authRouter);
+  app.use('/api/users', authenticateToken, usersRouter);
+  app.use('/api/chat', authenticateToken, chatRouter);
   app.use('/api/media', authenticateToken, mediaRouter);
   app.use('/api/projects', authenticateToken, projectRouter);
   app.use('/api/export', authenticateToken, exportRouter);
@@ -63,6 +67,30 @@ async function startServer() {
   // WebSocket Connection
   io.on('connection', (socket) => {
     console.log(`Client connected: ${socket.id}`);
+
+    socket.on('join_room', (userId) => {
+      if (userId) {
+        socket.join(`user_${userId}`);
+      }
+    });
+
+    socket.on('send_message', (message) => {
+      if (message.recipientId && message.recipientId !== 'ALL') {
+        io.to(`user_${message.recipientId}`).emit('receive_message', message);
+        io.to(`user_${message.senderId}`).emit('receive_message', message);
+      } else {
+        io.emit('receive_message', message);
+      }
+    });
+
+    socket.on('send_notification', (notif) => {
+      if (notif.recipientId) {
+        io.to(`user_${notif.recipientId}`).emit('receive_notification', notif);
+      } else {
+        io.emit('receive_notification', notif);
+      }
+    });
+
     socket.on('disconnect', () => {
       console.log(`Client disconnected: ${socket.id}`);
     });

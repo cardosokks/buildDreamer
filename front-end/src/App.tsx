@@ -6,7 +6,7 @@ import { VisualBuilder } from './components/VisualBuilder';
 
 export interface AppRoute {
   type: 'dashboard' | 'builder' | 'auth';
-  tab?: 'general' | 'projects' | 'crm' | 'leads' | 'saved-leads' | 'presets' | 'settings';
+  tab?: 'general' | 'projects' | 'crm' | 'leads' | 'saved-leads' | 'presets' | 'settings' | 'users';
   projectId?: string;
 }
 
@@ -25,6 +25,7 @@ const parseUrlToRoute = (): AppRoute => {
   if (path === '/saved-leads') return { type: 'dashboard', tab: 'saved-leads' };
   if (path === '/presets') return { type: 'dashboard', tab: 'presets' };
   if (path === '/settings') return { type: 'dashboard', tab: 'settings' };
+  if (path === '/users') return { type: 'dashboard', tab: 'users' };
   if (path === '/auth') return { type: 'auth' };
 
   return { type: 'dashboard', tab: 'general' };
@@ -59,6 +60,7 @@ const MainApp: React.FC = () => {
       else if (newRoute.tab === 'saved-leads') url = '/saved-leads';
       else if (newRoute.tab === 'presets') url = '/presets';
       else if (newRoute.tab === 'settings') url = '/settings';
+      else if (newRoute.tab === 'users') url = '/users';
       else url = '/';
     } else if (newRoute.type === 'auth') {
       url = '/auth';

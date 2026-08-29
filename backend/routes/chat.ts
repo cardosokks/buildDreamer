@@ -98,16 +98,17 @@ router.post('/messages', authenticateToken, async (req: AuthenticatedRequest, re
 // POST /api/chat/upload - Upload de arquivo de áudio (gravação de voz) ou imagem do chat
 router.post('/upload', authenticateToken, upload.single('file'), async (req: AuthenticatedRequest, res: any) => {
   try {
-    if (!req.file) {
+    const file = (req as any).file;
+    if (!file) {
       return res.status(400).json({ error: 'Nenhum arquivo enviado' });
     }
 
-    const fileUrl = `/uploads/chat/${req.file.filename}`;
+    const fileUrl = `/uploads/chat/${file.filename}`;
     return res.json({
       url: fileUrl,
-      fileName: req.file.originalname,
-      fileSize: req.file.size,
-      mimeType: req.file.mimetype
+      fileName: file.originalname,
+      fileSize: file.size,
+      mimeType: file.mimetype
     });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
