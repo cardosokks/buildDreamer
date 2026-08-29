@@ -32,7 +32,6 @@ RUN npm install --omit=dev
 
 # Copy built assets from builder
 COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/public ./public
 COPY --from=builder /app/prisma ./prisma
 
 # Generate Prisma Client in production image
