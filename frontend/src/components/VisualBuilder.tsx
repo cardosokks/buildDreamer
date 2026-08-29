@@ -235,7 +235,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
   };
 
   const [showAiLogsModal, setShowAiLogsModal] = useState(false);
-  const [aiLogsData, setAiLogsData] = useState<{ status?: string; currentModel?: string; logs?: string[]; error?: string; progress?: number }>({});
+  const [aiLogsData, setAiLogsData] = useState<{ status?: string; currentModel?: string; logs?: string[]; error?: string; progress?: number; total?: number }>({});
 
   const lastLoggedMsgRef = useRef<string>('');
 
