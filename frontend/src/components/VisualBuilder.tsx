@@ -196,7 +196,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
   <div class="max-w-4xl mx-auto text-center space-y-6">
     <span class="inline-block px-4 py-1.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 text-xs font-semibold uppercase tracking-wider">
       Bem-vindo ao REAL PREMISE
-    </span>`,StartLine:193,TargetContent:
+    </span>
     <h1 class="text-4xl md:text-6xl font-extrabold tracking-tight bg-gradient-to-r from-white via-slate-200 to-cyan-400 bg-clip-text text-transparent">
       Crie Sites Extraordinários sem Limites
     </h1>
