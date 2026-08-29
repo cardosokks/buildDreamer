@@ -1071,8 +1071,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
       });
 
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || 'Falha ao iniciar scraping do site.');
+        let errMessage = 'Falha ao iniciar scraping do site.';
+        try {
+          const err = await res.json();
+          errMessage = err.error || err.message || errMessage;
+        } catch {
+          if (res.status === 401) errMessage = 'Sessão expirada. Por favor, faça login novamente.';
+        }
+        throw new Error(errMessage);
       }
 
       const data = await res.json();
@@ -1251,8 +1257,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
       });
 
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || 'Falha ao iniciar geração do novo site.');
+        let errMessage = 'Falha ao iniciar geração do novo site.';
+        try {
+          const err = await res.json();
+          errMessage = err.error || err.message || errMessage;
+        } catch {
+          if (res.status === 401) errMessage = 'Sessão expirada. Por favor, faça login novamente.';
+        }
+        throw new Error(errMessage);
       }
 
       const newProject = await res.json();
