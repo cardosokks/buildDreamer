@@ -1744,65 +1744,42 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
           </div>
         )}
 
-        {/* Left Navigation Sidebar with Collapse (Icons Only), Hide & Drag-to-Resize Handle */}
-        {sidebarHidden ? (
-          <div
-            className={`hidden md:flex flex-col items-center justify-start pt-3 pb-3 gap-2 w-8 shrink-0 h-full border-r transition-all duration-200 ${theme === 'light' ? 'bg-white border-slate-200' : 'bg-[#0b0d13] border-slate-800/80'}`}
-          >
-            <button
-              onClick={() => setSidebarHidden(false)}
-              className={`p-1.5 rounded-lg transition-all cursor-pointer ${theme === 'light' ? 'text-slate-400 hover:text-slate-900 hover:bg-slate-100' : 'text-slate-500 hover:text-white hover:bg-slate-800'}`}
-              title="Abrir barra lateral"
-            >
-              <PanelLeftOpen className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        ) : (
-          <aside
-            style={{ width: sidebarCollapsed ? '60px' : `${sidebarWidth}px` }}
-            className={`border-r flex flex-col justify-between shrink-0 h-full overflow-y-auto ${sidebarCollapsed ? 'p-2' : 'p-3.5'
-              } hidden md:flex relative select-none transition-[width,padding] duration-200 ${theme === 'light'
-                ? 'bg-white border-slate-200'
-                : 'bg-[#0b0d13] border-slate-800/80'
-              }`}
-          >
-            <div className="space-y-1">
-              {/* Toggle Collapse/Expand Header on Sidebar */}
-              <div className={`flex items-center ${sidebarCollapsed ? 'justify-center pb-2' : 'justify-between pb-2'} border-b border-slate-850/60 mb-2`}>
-                {!sidebarCollapsed && (
-                  <span className={`text-[9px] font-bold uppercase tracking-wider ${theme === 'light' ? 'text-slate-400' : 'text-slate-500'
-                    }`}>
-                    Navegação
-                  </span>
-                )}
-                <button
-                  onClick={() => {
-                    if (!sidebarCollapsed) {
-                      setSidebarCollapsed(true);
-                    } else {
-                      setSidebarHidden(true);
-                      setSidebarCollapsed(false);
-                    }
-                  }}
-                  className={`p-1.5 rounded-lg transition-all cursor-pointer group ${theme === 'light' ? 'text-slate-400 hover:text-slate-900 hover:bg-slate-100' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
-                  title={sidebarCollapsed ? "Ocultar barra lateral" : "Recolher barra lateral (somente ícones)"}
-                >
-                  {sidebarCollapsed
-                    ? <PanelLeftClose className="w-3.5 h-3.5 text-purple-400" />
-                    : <PanelLeftClose className="w-3.5 h-3.5" />
-                  }
-                </button>
-              </div>
-
-              {/* Seção 1: Criação & Projetos */}
-              {!sidebarCollapsed ? (
-                <div className={`pt-2 pb-1 px-3 text-[10px] font-bold uppercase tracking-wider ${theme === 'light' ? 'text-slate-400' : 'text-slate-500'
+        {/* Left Navigation Sidebar with Collapse (Icons Only) & Drag-to-Resize Handle */}
+        <aside
+          style={{ width: sidebarCollapsed ? '60px' : `${sidebarWidth}px` }}
+          className={`border-0 flex flex-col justify-between shrink-0 h-full overflow-y-auto ${sidebarCollapsed ? 'p-2' : 'p-3.5'
+            } hidden md:flex relative select-none transition-[width,padding] duration-200 ${theme === 'light'
+              ? 'bg-white'
+              : 'bg-[#0b0d13]'
+            }`}
+        >
+          <div className="space-y-1">
+            {/* Toggle Collapse/Expand Header on Sidebar */}
+            <div className={`flex items-center ${sidebarCollapsed ? 'justify-center pb-2' : 'justify-between pb-2'} border-b border-transparent mb-2`}>
+              {!sidebarCollapsed && (
+                <span className={`text-[9px] font-bold uppercase tracking-wider ${theme === 'light' ? 'text-slate-400' : 'text-slate-500'
                   }`}>
-                  Principal
-                </div>
-              ) : (
-                <div className="border-t border-slate-850/60 my-2" />
+                  Navegação
+                </span>
               )}
+              <button
+                onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+                className={`p-1.5 rounded-lg transition-all cursor-pointer group ${theme === 'light' ? 'text-slate-400 hover:text-slate-900 hover:bg-slate-100' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+                title={sidebarCollapsed ? "Expandir barra lateral" : "Recolher barra lateral (somente ícones)"}
+              >
+                <PanelLeftClose className={`w-3.5 h-3.5 transition-transform ${sidebarCollapsed ? 'rotate-180' : ''}`} />
+              </button>
+            </div>
+
+            {/* Seção 1: Criação & Projetos */}
+            {!sidebarCollapsed ? (
+              <div className={`pt-2 pb-1 px-3 text-[10px] font-bold uppercase tracking-wider ${theme === 'light' ? 'text-slate-400' : 'text-slate-500'
+                }`}>
+                Principal
+              </div>
+            ) : (
+              <div className="border-t border-transparent my-2" />
+            )}
 
               <button
                 onClick={() => setActiveTab('general')}
@@ -1851,7 +1828,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                   Vendas & CRM
                 </div>
               ) : (
-                <div className="border-t border-slate-850/60 my-2" />
+                <div className="border-t border-transparent my-2" />
               )}
 
               <button
@@ -1884,7 +1861,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                   Prospecção
                 </div>
               ) : (
-                <div className="border-t border-slate-850/60 my-2" />
+                <div className="border-t border-transparent my-2" />
               )}
 
               <button
@@ -1937,7 +1914,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                   Geral
                 </div>
               ) : (
-                <div className="border-t border-slate-850/60 my-2" />
+                <div className="border-t border-transparent my-2" />
               )}
 
               <button
@@ -2029,7 +2006,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
               </div>
             )}
           </aside>
-        )}
 
         {/* Dynamic Content Panel */}
         <main className="flex-1 overflow-y-auto px-4 py-5 sm:px-6 sm:py-6">
@@ -2125,17 +2101,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                 <div className="bg-[#0f0f12] border border-zinc-800 rounded-2xl p-5 shadow-xl relative overflow-hidden group">
                   <div className="absolute top-0 right-0 w-20 h-20 bg-zinc-700/5 rounded-full blur-xl group-hover:bg-zinc-700/10 transition-all" />
                   <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-zinc-500 font-bold uppercase tracking-wider">Servidor FTP</span>
+                    <span className="text-[11px] text-zinc-500 font-bold uppercase tracking-wider">Servidor App</span>
                     <div className="p-2 rounded-xl bg-zinc-800/60 text-zinc-400 border border-zinc-700">
                       <Server className="w-4 h-4" />
                     </div>
                   </div>
                   <p className="text-lg font-bold text-zinc-300 mt-2 flex items-center gap-1.5">
                     <span className="w-2.5 h-2.5 bg-indigo-400 rounded-full" />
-                    Conectado
+                    Online & Ativo
                   </p>
                   <span className="text-[11px] text-zinc-600 font-mono mt-2 block">
-                    Sync Sandbox Live
+                    Porta 3000 • Docker
                   </span>
                 </div>
               </div>

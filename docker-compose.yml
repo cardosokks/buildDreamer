@@ -57,8 +57,8 @@ services:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadminpassword
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "12000:9000"
+      - "12001:9001"
     volumes:
       - minio_data:/data
 

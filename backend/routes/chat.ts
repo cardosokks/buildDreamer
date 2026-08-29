@@ -37,19 +37,23 @@ router.get('/messages', authenticateToken, async (req: AuthenticatedRequest, res
 
     let messages: any[] = [];
     if (targetUserId && targetUserId !== 'ALL') {
-      // Conversa direta entre currentUserId e targetUserId
+      // Conversa direta entre currentUserId e targetUserId (ambas as direções)
       messages = await (prisma as any).message.findMany({
         where: {
-          senderId: currentUserId,
-          recipientId: String(targetUserId)
-        }
+          OR: [
+            { senderId: currentUserId, recipientId: String(targetUserId) },
+            { senderId: String(targetUserId), recipientId: currentUserId }
+          ]
+        },
+        orderBy: { createdAt: 'asc' }
       });
     } else {
       // Canal Geral / Broadcast
       messages = await (prisma as any).message.findMany({
         where: {
           recipientId: 'ALL'
-        }
+        },
+        orderBy: { createdAt: 'asc' }
       });
     }
 

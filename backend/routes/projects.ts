@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import { prisma } from '../db';
 import { AuthenticatedRequest } from '../middleware/auth';
-import { uploadProjectToFTP } from '../services/ftp';
 import { generateAIResponse } from '../services/gemini';
 
 const router = Router();
@@ -256,13 +255,6 @@ router.post('/', async (req: AuthenticatedRequest, res: any) => {
       // Enqueue job immediately on process memory thread
       projectJobsQueue[project.id] = { status: 'pending' };
       processAIProjectGeneration(project.id, aiPromptMessage, clientGeminiKey, undefined, registeredModels, clientProxyUrl, customSkills);
-    }
-
-    // Upload to FTP background
-    try {
-      await uploadProjectToFTP(project.name, project.pages);
-    } catch (ftpErr) {
-      console.error("Failed to upload newly created project to FTP:", ftpErr);
     }
 
     return res.status(201).json(project);

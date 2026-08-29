@@ -407,7 +407,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
         manualSaveRequestedRef.current = false;
       }
     } catch (e: any) {
-      console.error('Erro ao sincronizar com banco e FTP:', e);
+      console.error('Erro ao sincronizar com banco de dados:', e);
       setSaveStatus('error');
       if (shouldShowToast) {
         manualSaveRequestedRef.current = false;
@@ -443,7 +443,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
     };
   }, []);
 
-  // Update Page Code with Database & FTP Sync
+  // Update Page Code with Database Sync
   const handleCodeChange = async (type: 'html' | 'css' | 'js', value: string) => {
     const currentPage = activePageRef.current;
     if (!currentPage) return;

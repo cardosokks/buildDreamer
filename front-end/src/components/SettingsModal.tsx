@@ -553,13 +553,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                 />
               </div>
 
-              {/* Informações de Ambiente e Deploy FTP */}
+              {/* Informações de Ambiente e Armazenamento */}
               <div className="pt-2 border-t border-slate-850 space-y-2">
                 <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-400">Ambiente de Deploy & Armazenamento</label>
                 <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl flex items-center justify-between">
                   <div>
-                    <span className="text-xs font-bold text-white block">Servidor FTP Integrado</span>
-                    <span className="text-[10px] text-slate-500">Sincronização automática de arquivos e deploys</span>
+                    <span className="text-xs font-bold text-white block">Object Storage (MinIO)</span>
+                    <span className="text-[10px] text-slate-500">Armazenamento de assets e arquivos na nuvem</span>
                   </div>
                   <span className="text-[10px] font-mono bg-emerald-950/60 border border-emerald-500/30 text-emerald-400 px-2 py-0.5 rounded-full">
                     Ativo
