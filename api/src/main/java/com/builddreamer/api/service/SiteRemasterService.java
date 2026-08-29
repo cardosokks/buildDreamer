@@ -51,21 +51,28 @@ public class SiteRemasterService {
             normalizedUrl = "https://" + normalizedUrl;
         }
 
-        queue.add(normalizedUrl);
-        String host = "";
+        String baseCleanUrl = normalizedUrl.replaceAll("#.*$", "").replaceAll("\\?.*$", "");
+        queue.add(baseCleanUrl);
+
+        String mainHost = "";
         try {
-            host = new URI(normalizedUrl).getHost();
+            URI u = new URI(baseCleanUrl);
+            mainHost = u.getHost() != null ? u.getHost().replaceAll("^www\\.", "").toLowerCase() : "";
         } catch (Exception ignored) {}
 
         while (!queue.isEmpty() && pages.size() < maxPages) {
             String currentUrl = queue.poll();
-            if (visited.contains(currentUrl)) continue;
-            visited.add(currentUrl);
+            if (currentUrl == null || currentUrl.trim().isEmpty()) continue;
+
+            String cleanCurrent = currentUrl.replaceAll("#.*$", "").replaceAll("\\?.*$", "").replaceAll("/+$", "");
+            if (visited.contains(cleanCurrent)) continue;
+            visited.add(cleanCurrent);
 
             try {
                 Document doc = Jsoup.connect(currentUrl)
                         .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
-                        .timeout(12000)
+                        .timeout(15000)
+                        .followRedirects(true)
                         .ignoreHttpErrors(true)
                         .get();
 
@@ -89,16 +96,24 @@ public class SiteRemasterService {
                 }
                 String extractedJs = jsSb.toString();
 
-                // Get slug
+                // Get clean slug
                 String slug = "index";
                 try {
-                    String path = new URL(currentUrl).getPath();
+                    String path = new URI(currentUrl).getPath();
                     if (path != null && !path.isEmpty() && !"/".equals(path)) {
-                        slug = path.substring(path.lastIndexOf('/') + 1).replace(".html", "").replace(".php", "");
+                        String[] parts = path.split("/");
+                        for (int k = parts.length - 1; k >= 0; k--) {
+                            String pName = parts[k].replaceAll("\\.(html|php|aspx|jsp)$", "").trim();
+                            if (!pName.isEmpty() && !"index".equalsIgnoreCase(pName) && !"home".equalsIgnoreCase(pName)) {
+                                slug = pName;
+                                break;
+                            }
+                        }
                     }
                 } catch (Exception ignored) {}
-                if (slug.isEmpty() || "home".equalsIgnoreCase(slug)) {
-                    slug = "index";
+
+                if (slug.isEmpty() || "home".equalsIgnoreCase(slug) || pages.isEmpty()) {
+                    slug = pages.isEmpty() ? "index" : slug;
                 }
 
                 // Extract page media (Images, Logos, Backgrounds, Videos)
@@ -122,20 +137,18 @@ public class SiteRemasterService {
                         } catch (Exception ignored) {}
                     }
 
-                    if (absUrl.isEmpty() || seenMediaUrls.contains(absUrl) || absUrl.contains("pixel") || absUrl.contains("tracking") || absUrl.contains("favicon")) continue;
-
+                    if (absUrl.isEmpty() || seenMediaUrls.contains(absUrl) || absUrl.contains("pixel") || absUrl.contains("tracking")) continue;
                     seenMediaUrls.add(absUrl);
+
                     String alt = img.attr("alt");
-                    String cls = img.attr("class").toLowerCase();
-                    String lowerUrl = absUrl.toLowerCase();
+                    String imgClass = img.className().toLowerCase();
+                    String imgId = img.id().toLowerCase();
 
                     String role = "content";
-                    if (lowerUrl.contains("logo") || alt.toLowerCase().contains("logo") || cls.contains("logo") || cls.contains("brand") || cls.contains("marca")) {
+                    if (imgClass.contains("logo") || imgId.contains("logo") || alt.toLowerCase().contains("logo")) {
                         role = "logo";
-                    } else if (lowerUrl.contains("hero") || lowerUrl.contains("banner") || lowerUrl.contains("destaque") || cls.contains("hero") || cls.contains("banner") || cls.contains("cover")) {
+                    } else if (imgClass.contains("hero") || imgId.contains("hero") || imgClass.contains("banner")) {
                         role = "hero";
-                    } else if (lowerUrl.contains("card") || lowerUrl.contains("servico") || lowerUrl.contains("produto") || cls.contains("card") || cls.contains("item")) {
-                        role = "card";
                     }
 
                     Map<String, Object> mediaItem = new HashMap<>();
@@ -198,19 +211,43 @@ public class SiteRemasterService {
                 pageData.put("js", extractedJs);
                 pageData.put("rawHtml", bodyHtml.length() > 20000 ? bodyHtml.substring(0, 20000) : bodyHtml);
                 pageData.put("cleanText", bodyText.length() > 5000 ? bodyText.substring(0, 5000) : bodyText);
-                pageData.put("isHomepage", "index".equals(slug) || pages.isEmpty());
+                pageData.put("isHomepage", pages.isEmpty() || "index".equalsIgnoreCase(slug));
                 pageData.put("media", pageMedia);
 
                 pages.add(pageData);
 
-                // Find other links on same domain
-                Elements links = doc.select("a[href]");
+                // 4. Discover subpages on the same domain
+                Elements links = doc.select("a[href], [data-href], [data-url]");
                 for (Element link : links) {
+                    String rawHref = link.hasAttr("href") ? link.attr("href") :
+                                     link.hasAttr("data-href") ? link.attr("data-href") :
+                                     link.attr("data-url");
+                    if (rawHref.isEmpty() || rawHref.startsWith("#") || rawHref.startsWith("javascript:") || rawHref.startsWith("mailto:") || rawHref.startsWith("tel:") || rawHref.startsWith("whatsapp:")) {
+                        continue;
+                    }
+
                     String absUrl = link.absUrl("href");
+                    if (absUrl.isEmpty()) {
+                        try {
+                            absUrl = new URL(new URL(currentUrl), rawHref).toString();
+                        } catch (Exception ignored) {}
+                    }
+
+                    if (absUrl.isEmpty()) continue;
+                    String cleanCandidate = absUrl.replaceAll("#.*$", "").replaceAll("\\?.*$", "").replaceAll("/+$", "");
+
+                    // Exclude non-page assets
+                    if (cleanCandidate.matches("(?i).*\\.(png|jpg|jpeg|gif|svg|pdf|zip|css|js|woff2?|ico|mp4|webm)$")) {
+                        continue;
+                    }
+
                     try {
-                        String linkHost = new URI(absUrl).getHost();
-                        if (host.equals(linkHost) && !visited.contains(absUrl) && !queue.contains(absUrl)) {
-                            queue.add(absUrl);
+                        URI linkUri = new URI(cleanCandidate);
+                        String linkHost = linkUri.getHost() != null ? linkUri.getHost().replaceAll("^www\\.", "").toLowerCase() : "";
+                        boolean isSameHost = mainHost.isEmpty() || linkHost.equals(mainHost) || linkHost.endsWith("." + mainHost) || mainHost.endsWith("." + linkHost);
+
+                        if (isSameHost && !visited.contains(cleanCandidate) && !queue.contains(cleanCandidate)) {
+                            queue.add(cleanCandidate);
                         }
                     } catch (Exception ignored) {}
                 }
@@ -283,36 +320,26 @@ public class SiteRemasterService {
                     rawHtml = (String) pMap.getOrDefault("cleanText", "Conteúdo original da página: " + pageName);
                 }
 
-                String downloadedCss = (String) pMap.getOrDefault("css", "");
-                String downloadedJs = (String) pMap.getOrDefault("js", "");
-
                 // Truncate overly long raw HTML to avoid Gemini API token/context limit errors
-                if (rawHtml != null && rawHtml.length() > 12000) {
-                    rawHtml = rawHtml.substring(0, 12000) + "... [Conteúdo truncado para otimização da IA]";
+                if (rawHtml != null && rawHtml.length() > 8000) {
+                    rawHtml = rawHtml.substring(0, 8000) + "... [Conteúdo truncado]";
                 }
 
                 String customPrompt = (String) pMap.get("customPrompt");
                 StringBuilder promptBuilder = new StringBuilder();
-                promptBuilder.append("Remasterizar a página ").append(pageName)
-                        .append(" mantendo todo o conteúdo, textos e imagens originais, mas recriando o design completo com HTML5 moderno e Tailwind CSS elegante e responsivo.\n")
-                        .append("\nIMPORTANTE SOBRE LAYOUT GLOBALS (NAVBAR E FOOTER):\n")
-                        .append("- Esta página é renderizada dentro de um layout estruturado com Flexbox (flex flex-col min-h-screen justify-between).\n")
-                        .append("- A Navbar global fica no topo e o Footer global fica no rodapé. O conteúdo desta página é inserido dentro de um bloco `<main class=\"flex-grow w-full\">` que se expande automaticamente.\n")
-                        .append("- Para que não ocorra quebras de design nem duplicidade de componentes: a Navbar deve ser a primeira tag semântica `<header>` ou `<nav>` no topo, e o Footer deve ser a última tag semântica `<footer>` no rodapé. Apenas crie-as na página principal (Página Inicial). Nas demais páginas, não crie menus ou rodapés repetitivos, foque apenas nas seções internas de conteúdo.\n");
+                promptBuilder.append("Remasterizar ").append(pageName).append(" (slug: ").append(targetSlug).append(") com HTML5 e Tailwind CSS modernos.\n");
+                promptBuilder.append("- Layout Flexbox min-h-screen com <header>/<nav> no topo e <footer> no rodapé apenas na Home. Páginas internas contêm apenas <main>.\n");
 
                 if (customPrompt != null && !customPrompt.trim().isEmpty()) {
-                    promptBuilder.append("\nDIRETRIZES DO USUÁRIO PARA ESTA PÁGINA:\n").append(customPrompt.trim()).append("\n");
+                    promptBuilder.append("Diretrizes: ").append(customPrompt.trim()).append("\n");
                 }
 
                 if (customAiSkills != null && !customAiSkills.trim().isEmpty()) {
-                    promptBuilder.append("\nHABILIDADES / SKILLS DE DESIGN APLICADAS:\n").append(customAiSkills.trim()).append("\n");
+                    promptBuilder.append("Skills: ").append(customAiSkills.trim()).append("\n");
                 }
 
                 if (projectMediaUrls != null && !projectMediaUrls.isEmpty()) {
-                    promptBuilder.append("\nMÍDIAS CADASTRADAS NO PROJETO DISPONÍVEIS PARA INSERÇÃO NAS PÁGINAS:\n");
-                    for (String mediaUrl : projectMediaUrls) {
-                        promptBuilder.append("- ").append(mediaUrl).append("\n");
-                    }
+                    promptBuilder.append("Mídias: ").append(String.join(", ", projectMediaUrls)).append("\n");
                 }
 
                 String prompt = promptBuilder.toString();
@@ -320,6 +347,9 @@ public class SiteRemasterService {
                 logs.add("Fila de Remasterização [" + (i + 1) + "/" + pages.size() + "]: Enviando página '" + pageName + "' (" + targetSlug + ") ao n8n com diretrizes personalizadas...");
                 progress.put("progress", i + 1);
                 progress.put("currentPage", pageName);
+
+                String downloadedCss = (String) pMap.getOrDefault("css", "");
+                String downloadedJs = (String) pMap.getOrDefault("js", "");
 
                 Map<String, String> context = new HashMap<>();
                 context.put("html", rawHtml);

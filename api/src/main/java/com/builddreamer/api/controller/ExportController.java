@@ -199,7 +199,10 @@ public class ExportController {
                 }
 
                 if (css) {
-                    String normalizedCss = normalizeHtmlLinks(page.getCss(), isHome, projectPages, projectId);
+                    String rawCss = page.getCss() != null && !page.getCss().trim().isEmpty()
+                            ? page.getCss()
+                            : "/* Estilos personalizados da página " + page.getName() + " */\n";
+                    String normalizedCss = normalizeHtmlLinks(rawCss, isHome, projectPages, projectId);
                     ZipEntry cssEntry = new ZipEntry("css/" + cssFilename);
                     zos.putNextEntry(cssEntry);
                     zos.write(normalizedCss.getBytes(StandardCharsets.UTF_8));
@@ -207,9 +210,12 @@ public class ExportController {
                 }
 
                 if (js) {
+                    String rawJs = page.getJs() != null && !page.getJs().trim().isEmpty()
+                            ? page.getJs()
+                            : "// Scripts interativos da página " + page.getName() + "\n";
                     ZipEntry jsEntry = new ZipEntry("js/" + jsFilename);
                     zos.putNextEntry(jsEntry);
-                    zos.write((page.getJs() != null ? page.getJs() : "").getBytes(StandardCharsets.UTF_8));
+                    zos.write(rawJs.getBytes(StandardCharsets.UTF_8));
                     zos.closeEntry();
                 }
             }
