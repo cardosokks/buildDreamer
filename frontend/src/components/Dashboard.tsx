@@ -186,6 +186,54 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
     return () => clearInterval(interval);
   }, []);
 
+  const handleToggleNgrok = async () => {
+    const customToken = localStorage.getItem('ngrok_authtoken') || '';
+    setNgrokLoading(true);
+
+    try {
+      if (ngrokOnline) {
+        await fetch(`${API_URL}/api/ngrok/stop`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        setNgrokOnline(false);
+        setNgrokUrl(null);
+        setNgrokStatus('idle');
+      } else {
+        setNgrokStatus('starting');
+        const res = await fetch(`${API_URL}/api/ngrok/start`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+            'x-ngrok-token': customToken
+          }
+        });
+        const data = await res.json();
+        if (!res.ok || data.status === 'error') {
+          const errMsg = data.error || 'Erro ao iniciar túnel Ngrok';
+          if (errMsg.includes('Token do Ngrok não configurado')) {
+            alert('Para ligar o Ngrok, configure seu "Ngrok Authtoken" na aba IA / Conexões das Configurações.');
+          } else {
+            alert(`Falha no Ngrok: ${errMsg}`);
+          }
+          throw new Error(errMsg);
+        }
+        if (data.url && data.status === 'online') {
+          setNgrokOnline(true);
+          setNgrokUrl(data.url);
+          setNgrokStatus('online');
+        }
+      }
+    } catch (err: any) {
+      setNgrokStatus('error');
+    } finally {
+      setTimeout(checkNgrokStatus, 600);
+      setTimeout(checkNgrokStatus, 1500);
+      setTimeout(checkNgrokStatus, 3000);
+    }
+  };
+
   // Accessibility & UX Customization States (Persistência no LocalStorage)
   const [navbarMinimized, setNavbarMinimized] = useState<boolean>(() => {
     try {
