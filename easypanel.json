@@ -1,0 +1,146 @@
+{
+  "version": "1.0",
+  "name": "BuildDreamer Suite",
+  "description": "Plataforma completa No-Code / AI Website Builder com suporte a MinIO S3, Ollama Local/Cloud e PostgreSQL.",
+  "services": [
+    {
+      "type": "app",
+      "data": {
+        "projectName": "builddreamer",
+        "serviceName": "app",
+        "source": {
+          "type": "git",
+          "repository": "cardosokks/buildDreamer",
+          "branch": "main"
+        },
+        "build": {
+          "type": "dockerfile",
+          "file": "Dockerfile"
+        },
+        "env": [
+          "NODE_ENV=production",
+          "PORT=3000",
+          "DATABASE_URL=postgresql://postgres:builddreamer_secret_password@postgres:5432/builddreamer?schema=public",
+          "JWT_SECRET=builddreamer_super_secure_jwt_token_2026",
+          "GEMINI_API_KEY=",
+          "MINIO_ENDPOINT=minio",
+          "MINIO_PORT=9000",
+          "MINIO_USE_SSL=false",
+          "MINIO_ACCESS_KEY=minioadmin",
+          "MINIO_SECRET_KEY=minioadminpassword",
+          "MINIO_BUCKET=builddreamer-assets",
+          "OLLAMA_HOST=http://ollama:11434"
+        ],
+        "ports": [
+          {
+            "published": 3000,
+            "target": 3000,
+            "protocol": "tcp"
+          }
+        ],
+        "domains": [
+          {
+            "host": "$(PRIMARY_DOMAIN)",
+            "port": 3000,
+            "https": true
+          }
+        ],
+        "resources": {
+          "memoryReservation": 512,
+          "memoryLimit": 2048,
+          "cpuLimit": 2
+        }
+      }
+    },
+    {
+      "type": "app",
+      "data": {
+        "projectName": "builddreamer",
+        "serviceName": "minio",
+        "image": "minio/minio:latest",
+        "command": "server /data --console-address \":9001\"",
+        "env": [
+          "MINIO_ROOT_USER=minioadmin",
+          "MINIO_ROOT_PASSWORD=minioadminpassword"
+        ],
+        "mounts": [
+          {
+            "type": "volume",
+            "name": "minio_data",
+            "mountPath": "/data"
+          }
+        ],
+        "ports": [
+          {
+            "published": 9000,
+            "target": 9000,
+            "protocol": "tcp"
+          },
+          {
+            "published": 9001,
+            "target": 9001,
+            "protocol": "tcp"
+          }
+        ],
+        "domains": [
+          {
+            "host": "s3-$(PRIMARY_DOMAIN)",
+            "port": 9000,
+            "https": true
+          },
+          {
+            "host": "minio-console-$(PRIMARY_DOMAIN)",
+            "port": 9001,
+            "https": true
+          }
+        ]
+      }
+    },
+    {
+      "type": "postgres",
+      "data": {
+        "projectName": "builddreamer",
+        "serviceName": "postgres",
+        "image": "postgres:16-alpine",
+        "env": [
+          "POSTGRES_DB=builddreamer",
+          "POSTGRES_USER=postgres",
+          "POSTGRES_PASSWORD=builddreamer_secret_password"
+        ],
+        "mounts": [
+          {
+            "type": "volume",
+            "name": "pg_data",
+            "mountPath": "/var/lib/postgresql/data"
+          }
+        ]
+      }
+    },
+    {
+      "type": "app",
+      "data": {
+        "projectName": "builddreamer",
+        "serviceName": "ollama",
+        "image": "ollama/ollama:latest",
+        "env": [
+          "OLLAMA_ORIGINS=*",
+          "OLLAMA_HOST=0.0.0.0:11434"
+        ],
+        "mounts": [
+          {
+            "type": "volume",
+            "name": "ollama_data",
+            "mountPath": "/root/.ollama"
+          }
+        ],
+        "ports": [
+          {
+            "published": 11434,
+            "target": 11434,
+            "protocol": "tcp"
+          }
+        ]
+      }
+    }
+  ]
+}

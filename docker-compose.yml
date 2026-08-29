@@ -1,61 +1,80 @@
+version: '3.8'
+
 services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: builddreamer-app
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DATABASE_URL=postgresql://postgres:builddreamer_secret_password@postgres:5432/builddreamer?schema=public
+      - JWT_SECRET=builddreamer_super_secure_jwt_token_2026
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - MINIO_ENDPOINT=minio
+      - MINIO_PORT=9000
+      - MINIO_USE_SSL=false
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadminpassword
+      - MINIO_BUCKET=builddreamer-assets
+      - OLLAMA_HOST=http://ollama:11434
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    volumes:
+      - ./public/uploads:/app/public/uploads
+
   postgres:
-    image: postgres:15-alpine
+    image: postgres:16-alpine
+    container_name: builddreamer-postgres
     restart: always
     environment:
-      POSTGRES_USER: builder_user
-      POSTGRES_PASSWORD: builder_password
-      POSTGRES_DB: builder_db
+      POSTGRES_DB: builddreamer
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: builddreamer_secret_password
     ports:
-      - "5432"
+      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d builddreamer"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
-  backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+  minio:
+    image: minio/minio:latest
+    container_name: builddreamer-minio
     restart: always
-    expose:
-      - "5000"
+    command: server /data --console-address ":9001"
     environment:
-      - API_URL=${API_URL}
-      - PORT=${PORT}
-      - DATABASE_URL=${DATABASE_URL}
-      - JWT_SECRET=${JWT_SECRET}
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
-      - FTP_HOST=${FTP_HOST}
-      - FTP_PORT=${FTP_PORT}
-      - FTP_USER=${FTP_USER}
-      - FTP_PASSWORD=${FTP_PASSWORD}
-    depends_on:
-      - postgres
-      - ftp
-
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    restart: always
-    expose:
-      - "80"
-    depends_on:
-      - backend
-
-  ftp:
-    image: delfer/alpine-ftp-server:latest
-    restart: always
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadminpassword
     ports:
-      - "${FTP_PORT}:${FTP_PORT}"
-      - "21000-21010:21000-21010"
-    environment:
-      - FTP_USER=${FTP_USER}
-      - FTP_PASS=${FTP_PASSWORD}
-      - MIN_PORT=21000
-      - MAX_PORT=21010
+      - "9000:9000"
+      - "9001:9001"
     volumes:
-      - ftp_data:/ftp/ftpuser
+      - minio_data:/data
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: builddreamer-ollama
+    restart: always
+    environment:
+      - OLLAMA_ORIGINS=*
+      - OLLAMA_HOST=0.0.0.0:11434
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
 
 volumes:
   postgres_data:
-  ftp_data:
+  minio_data:
+  ollama_data:
