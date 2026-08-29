@@ -1,0 +1,75 @@
+version: '3.8'
+
+services:
+  postgres-test:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-builder_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-builder_password}
+      POSTGRES_DB: ${POSTGRES_DB:-builder_db_test}
+    ports:
+      - "${TEST_POSTGRES_PORT:-12032}:5432"
+    expose:
+      - "5432"
+    volumes:
+      - postgres_test_data:/var/lib/postgresql/data
+
+  backend-test:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    restart: always
+    ports:
+      - "${TEST_API_PORT:-12005}:5000"
+    expose:
+      - "5000"
+    environment:
+      - API_URL=${TEST_API_URL:-http://localhost:12005}
+      - PORT=5000
+      - DATABASE_HOST=postgres-test
+      - DATABASE_PORT=5432
+      - DATABASE_NAME=${POSTGRES_DB:-builder_db_test}
+      - DATABASE_USER=${POSTGRES_USER:-builder_user}
+      - DATABASE_PASSWORD=${POSTGRES_PASSWORD:-builder_password}
+      - JWT_SECRET=${JWT_SECRET:-secret_test_key_12345}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - MINIO_ENDPOINT=http://minio-test:9000
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:-admin}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:-minioadmin123}
+      - MINIO_BUCKET=${MINIO_BUCKET:-realpremise-test}
+    depends_on:
+      - postgres-test
+      - minio-test
+
+  frontend-test:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: always
+    ports:
+      - "${TEST_FRONTEND_PORT:-12000}:80"
+    expose:
+      - "80"
+    environment:
+      - BACKEND_HOST=backend-test
+      - BACKEND_PORT=5000
+    depends_on:
+      - backend-test
+
+  minio-test:
+    image: minio/minio:latest
+    restart: always
+    command: server /data --console-address ":9001"
+    ports:
+      - "${TEST_MINIO_PORT:-12001}:9000"
+      - "${TEST_MINIO_CONSOLE_PORT:-12002}:9001"
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ACCESS_KEY:-admin}
+      - MINIO_ROOT_PASSWORD=${MINIO_SECRET_KEY:-minioadmin123}
+    volumes:
+      - minio_test_data:/data
+
+volumes:
+  postgres_test_data:
+  minio_test_data:
