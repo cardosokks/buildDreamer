@@ -2,7 +2,10 @@ package com.builddreamer.api.service;
 
 import com.builddreamer.api.model.Page;
 import com.builddreamer.api.model.Project;
+import com.builddreamer.api.model.ProjectMember;
+import com.builddreamer.api.model.User;
 import com.builddreamer.api.repository.PageRepository;
+import com.builddreamer.api.repository.ProjectMemberRepository;
 import com.builddreamer.api.repository.ProjectRepository;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
@@ -24,6 +27,7 @@ public class SiteRemasterService {
     private final GeminiService geminiService;
     private final ProjectRepository projectRepository;
     private final PageRepository pageRepository;
+    private final ProjectMemberRepository projectMemberRepository;
     private final StorageService storageService;
 
     // Track active jobs and worker threads in memory
@@ -34,10 +38,12 @@ public class SiteRemasterService {
             GeminiService geminiService,
             ProjectRepository projectRepository,
             PageRepository pageRepository,
+            ProjectMemberRepository projectMemberRepository,
             StorageService storageService) {
         this.geminiService = geminiService;
         this.projectRepository = projectRepository;
         this.pageRepository = pageRepository;
+        this.projectMemberRepository = projectMemberRepository;
         this.storageService = storageService;
     }
 
