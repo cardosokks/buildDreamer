@@ -356,14 +356,39 @@ public class SiteRemasterService {
                     String js = (String) aiResult.getOrDefault("js", "");
                     String usedModel = (String) aiResult.getOrDefault("_usedModel", "gemini-3.6-flash");
 
-                    // Exclude navbar/footer global components if desired
-                    if (i == 0) {
-                        if (repeatNavbar) {
-                            project.setNavbarHtml("<header class=\"bg-slate-950 p-4\"><nav class=\"max-w-7xl mx-auto flex justify-between\"><a href=\"index.html\" class=\"text-xl font-bold\">" + project.getName() + "</a></nav></header>");
+                    // Parse HTML using Jsoup to extract or remove navbar/footer elements
+                    try {
+                        org.jsoup.nodes.Document bodyDoc = Jsoup.parseBodyFragment(html);
+                        org.jsoup.nodes.Element headerEl = bodyDoc.selectFirst("header, nav, div[id*='navbar'], div[class*='navbar'], div[id*='header'], div[class*='header']");
+                        org.jsoup.nodes.Element footerEl = bodyDoc.selectFirst("footer, div[id*='footer'], div[class*='footer']");
+
+                        if (i == 0) {
+                            if (repeatNavbar && headerEl != null) {
+                                project.setNavbarHtml(headerEl.outerHTML());
+                                headerEl.remove();
+                            } else if (repeatNavbar) {
+                                project.setNavbarHtml("<header class=\"bg-slate-950 p-4\"><nav class=\"max-w-7xl mx-auto flex justify-between\"><a href=\"index.html\" class=\"text-xl font-bold\">" + project.getName() + "</a></nav></header>");
+                            }
+
+                            if (repeatFooter && footerEl != null) {
+                                project.setFooterHtml(footerEl.outerHTML());
+                                footerEl.remove();
+                            } else if (repeatFooter) {
+                                project.setFooterHtml("<footer class=\"bg-slate-950 p-8 text-center text-slate-500\">&copy; " + project.getName() + "</footer>");
+                            }
+                            projectRepository.save(project);
+                        } else {
+                            // On subsequent pages, strip any navbar/footer components so the project's global navbar/footer is used
+                            if (repeatNavbar && headerEl != null) {
+                                headerEl.remove();
+                            }
+                            if (repeatFooter && footerEl != null) {
+                                footerEl.remove();
+                            }
                         }
-                        if (repeatFooter) {
-                            project.setFooterHtml("<footer class=\"bg-slate-950 p-8 text-center text-slate-500\">&copy; " + project.getName() + "</footer>");
-                        }
+                        html = bodyDoc.body().html();
+                    } catch (Exception parseEx) {
+                        System.err.println("Erro ao extrair/remover navbar e footer na página " + pageName + ": " + parseEx.getMessage());
                     }
 
                     // Check if page already exists by slug or is homepage, otherwise create new
