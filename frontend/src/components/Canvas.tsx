@@ -689,6 +689,8 @@ export const Canvas: React.FC<CanvasProps> = ({
             }
           });
 
+        </script>
+        <script>
           try {
             ${js}
           } catch(err) {
