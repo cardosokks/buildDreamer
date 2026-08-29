@@ -409,12 +409,11 @@ public class SiteRemasterService {
 
             String globalPrompt = promptBuilder.toString();
 
-            Map<String, String> context = new HashMap<>();
-            try {
-                context.put("pagesJson", com.fasterxml.jackson.databind.ObjectMapper.class.getDeclaredConstructor().newInstance().writeValueAsString(preparedPages));
-            } catch (Exception ignored) {
-                context.put("pagesJson", preparedPages.toString());
-            }
+            Map<String, Object> context = new HashMap<>();
+            context.put("pages", preparedPages);
+            context.put("projectMediaUrls", projectMediaUrls != null ? projectMediaUrls : Collections.emptyList());
+            context.put("customAiSkills", customAiSkills != null ? customAiSkills : "");
+            context.put("ollamaModel", "cardosokks:latest");
 
             logs.add("Enviando pacote com " + preparedPages.size() + " páginas em requisição única para o n8n/IA...");
             progress.put("progress", 1);

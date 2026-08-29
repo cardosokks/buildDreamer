@@ -62,7 +62,7 @@ public class GeminiService {
 
     public Map<String, Object> generateAIResponse(
             String prompt,
-            Map<String, String> context,
+            Map<String, ?> context,
             String customApiKey,
             String customModel,
             List<String> registeredModels,
@@ -104,9 +104,9 @@ public class GeminiService {
                 "}\n" +
                 "OTIMIZAÇÃO DE TOKENS E COMPACTAÇÃO: Escreva código HTML/CSS extremamente conciso, limpo e enxuto. Limite o HTML a no máximo 120-150 linhas. Evite seções repetitivas longas ou SVGs complexos para não estourar os tokens.";
 
-        String htmlContext = context.getOrDefault("html", "<div></div>");
-        String cssContext = context.getOrDefault("css", "");
-        String jsContext = context.getOrDefault("js", "");
+        String htmlContext = context != null && context.get("html") instanceof String ? (String) context.get("html") : "<div></div>";
+        String cssContext = context != null && context.get("css") instanceof String ? (String) context.get("css") : "";
+        String jsContext = context != null && context.get("js") instanceof String ? (String) context.get("js") : "";
 
         String userPrompt = String.format(
                 "CONTEXTO DA PÁGINA ATUAL:\n" +
@@ -145,6 +145,9 @@ public class GeminiService {
                 System.out.println("[AI Engine] n8n (" + (i + 1) + "/" + candidateModels.size() + ") - Testando modelo: " + modelToTry);
 
                 Map<String, Object> n8nPayload = new HashMap<>();
+                if (context != null) {
+                    n8nPayload.putAll(context);
+                }
                 n8nPayload.put("userPrompt", safeUserPrompt);
                 n8nPayload.put("systemPrompt", safeSystemPrompt);
                 n8nPayload.put("prompt", safeUserPrompt);
