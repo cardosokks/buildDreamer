@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { User, Key, Save, Trash2, Plus, Box, Sparkles, Cpu, Check, RotateCcw } from 'lucide-react';
+import { User, Key, Save, Trash2, Plus, Box, Sparkles, Cpu, Check, RotateCcw, RefreshCw } from 'lucide-react';
 import { API_URL } from '../config';
 
 interface SettingsModalProps {
