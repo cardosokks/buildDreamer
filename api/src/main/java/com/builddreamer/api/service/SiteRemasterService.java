@@ -364,14 +364,14 @@ public class SiteRemasterService {
 
                         if (i == 0) {
                             if (repeatNavbar && headerEl != null) {
-                                project.setNavbarHtml(headerEl.outerHTML());
+                                project.setNavbarHtml(headerEl.outerHtml());
                                 headerEl.remove();
                             } else if (repeatNavbar) {
                                 project.setNavbarHtml("<header class=\"bg-slate-950 p-4\"><nav class=\"max-w-7xl mx-auto flex justify-between\"><a href=\"index.html\" class=\"text-xl font-bold\">" + project.getName() + "</a></nav></header>");
                             }
 
                             if (repeatFooter && footerEl != null) {
-                                project.setFooterHtml(footerEl.outerHTML());
+                                project.setFooterHtml(footerEl.outerHtml());
                                 footerEl.remove();
                             } else if (repeatFooter) {
                                 project.setFooterHtml("<footer class=\"bg-slate-950 p-8 text-center text-slate-500\">&copy; " + project.getName() + "</footer>");
