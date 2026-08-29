@@ -78,7 +78,6 @@ public class SiteRemasterService {
 
                 String title = doc.title();
                 String bodyHtml = doc.body() != null ? doc.body().html() : doc.html();
-                String bodyText = doc.body() != null ? doc.body().text() : "";
                 
                 // Extract inline CSS styles
                 StringBuilder cssSb = new StringBuilder();
@@ -210,7 +209,6 @@ public class SiteRemasterService {
                 pageData.put("css", extractedCss);
                 pageData.put("js", extractedJs);
                 pageData.put("rawHtml", bodyHtml.length() > 20000 ? bodyHtml.substring(0, 20000) : bodyHtml);
-                pageData.put("cleanText", bodyText.length() > 5000 ? bodyText.substring(0, 5000) : bodyText);
                 pageData.put("isHomepage", pages.isEmpty() || "index".equalsIgnoreCase(slug));
                 pageData.put("media", pageMedia);
 
@@ -317,7 +315,7 @@ public class SiteRemasterService {
                     rawHtml = (String) pMap.get("html");
                 }
                 if (rawHtml == null || rawHtml.isEmpty()) {
-                    rawHtml = (String) pMap.getOrDefault("cleanText", "Conteúdo original da página: " + pageName);
+                    rawHtml = "Conteúdo original da página: " + pageName;
                 }
 
                 // Truncate overly long raw HTML to avoid Gemini API token/context limit errors
