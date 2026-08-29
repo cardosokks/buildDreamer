@@ -330,6 +330,9 @@ public class SiteRemasterService {
                     return;
                 }
 
+                final int pageNum = i + 1;
+                final int totalPages = pages.size();
+
                 try {
                     Map<String, Object> aiResult = geminiService.generateAIResponse(
                             prompt,
@@ -341,7 +344,7 @@ public class SiteRemasterService {
                                 if (jobId != null && aiChatJobsQueue != null) {
                                     Map<String, Object> jState = aiChatJobsQueue.computeIfAbsent(jobId, k -> new ConcurrentHashMap<>());
                                     jState.put("status", "processing");
-                                    jState.put("currentModel", model + " - Gerando " + pageName + " (" + (i + 1) + "/" + pages.size() + ")");
+                                    jState.put("currentModel", model + " - Gerando " + pageName + " (" + pageNum + "/" + totalPages + ")");
                                     jState.put("attempt", attempt);
                                     jState.put("total", total);
                                 }
