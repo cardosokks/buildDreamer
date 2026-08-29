@@ -367,62 +367,10 @@ public class SiteRemasterService {
         try {
             List<String> logs = (List<String>) progress.get("logs");
             
-            logs.add("Mapeando mídias cadastradas e preparando pacote com " + pages.size() + " páginas...");
+            logs.add("Mapeando mídias cadastradas e preparando " + pages.size() + " páginas para geração sequencial (1 por vez)...");
             progress.put("status", "generating");
 
-            // 1. Pre-process pages with image replacements and build unified JSON package
-            List<Map<String, Object>> preparedPages = new ArrayList<>();
-            for (int i = 0; i < pages.size(); i++) {
-                Map<String, Object> pMap = pages.get(i);
-                String pageName = (String) pMap.get("name");
-                String rawSlug = (String) pMap.get("slug");
-                String targetSlug = ("home".equalsIgnoreCase(rawSlug) || rawSlug == null || rawSlug.trim().isEmpty()) ? "index" : rawSlug.trim();
-
-                String rawHtml = (String) pMap.get("rawHtml");
-                if (rawHtml == null || rawHtml.isEmpty()) {
-                    rawHtml = (String) pMap.get("html");
-                }
-                if (rawHtml == null || rawHtml.isEmpty()) {
-                    rawHtml = "Conteúdo original da página: " + pageName;
-                }
-
-                if (rawHtml.length() > 8000) {
-                    rawHtml = rawHtml.substring(0, 8000) + "... [Truncado]";
-                }
-
-                List<Map<String, Object>> pMedia = (List<Map<String, Object>>) pMap.get("media");
-                String processedHtml = preProcessImageUrls(rawHtml, pMedia, projectMediaUrls);
-
-                Map<String, Object> pObj = new HashMap<>();
-                pObj.put("slug", targetSlug);
-                pObj.put("name", pageName);
-                pObj.put("customPrompt", pMap.getOrDefault("customPrompt", ""));
-                pObj.put("html", processedHtml);
-                pObj.put("css", pMap.getOrDefault("css", ""));
-                pObj.put("js", pMap.getOrDefault("js", ""));
-                preparedPages.add(pObj);
-            }
-
-            // 2. Build global prompt and context
-            StringBuilder promptBuilder = new StringBuilder();
-            promptBuilder.append("Remasterização completa do projeto '").append(project.getName()).append("' contendo ").append(preparedPages.size()).append(" páginas.\n");
-            promptBuilder.append("Instruções: Recriar as páginas com HTML5 moderno e Tailwind CSS. Preservar mídias, imagens e textos originais.\n");
-            promptBuilder.append("Retornar ESTRITAMENTE um JSON padronizado na estrutura: {\"explanation\": \"...\", \"pages\": [{\"slug\": \"...\", \"name\": \"...\", \"html\": \"...\", \"css\": \"...\", \"js\": \"...\"}]}\n");
-
-            if (customAiSkills != null && !customAiSkills.trim().isEmpty()) {
-                promptBuilder.append("Skills: ").append(customAiSkills.trim()).append("\n");
-            }
-            if (projectMediaUrls != null && !projectMediaUrls.isEmpty()) {
-                promptBuilder.append("Mídias: ").append(String.join(", ", projectMediaUrls)).append("\n");
-            }
-
-            String globalPrompt = promptBuilder.toString();
-
-            Map<String, Object> context = new HashMap<>();
-            context.put("pages", preparedPages);
-            context.put("projectMediaUrls", projectMediaUrls != null ? projectMediaUrls : Collections.emptyList());
-            context.put("customAiSkills", customAiSkills != null ? customAiSkills : "");
-
+            // Resolve provider/model/url from request or DB
             String provider = (reqProvider != null && !reqProvider.trim().isEmpty()) ? reqProvider.trim() : null;
             String ollamaModel = (reqOllamaModel != null && !reqOllamaModel.trim().isEmpty()) ? reqOllamaModel.trim() : null;
             String ollamaUrl = (reqOllamaUrl != null && !reqOllamaUrl.trim().isEmpty()) ? reqOllamaUrl.trim() : null;
@@ -449,92 +397,129 @@ public class SiteRemasterService {
             if (ollamaModel == null) ollamaModel = "cardosokks:latest";
             if (ollamaUrl == null) ollamaUrl = "http://192.168.18.33:11434";
 
-            context.put("provider", provider);
-            context.put("ollamaModel", ollamaModel);
-            context.put("ollamaUrl", ollamaUrl);
-
-            logs.add("Enviando pacote com " + preparedPages.size() + " páginas em requisição única para o n8n/IA...");
-            progress.put("progress", 1);
-            progress.put("currentPage", "Pacote Completo (" + pages.size() + " páginas)");
-
-            if (Thread.currentThread().isInterrupted() || "canceled".equalsIgnoreCase((String) progress.get("status"))) {
-                logs.add("Geração cancelada pelo usuário. Abortando worker.");
-                project.setStatus("ready");
-                projectRepository.save(project);
-                if (jobId != null && aiChatJobsQueue != null) {
-                    Map<String, Object> jState = aiChatJobsQueue.computeIfAbsent(jobId, k -> new ConcurrentHashMap<>());
-                    jState.put("status", "canceled");
-                }
-                activeJobThreads.remove(projectId);
-                return;
-            }
-
-            // 3. Send single HTTP package request to n8n / Gemini / Ollama
-            Map<String, Object> aiResult = geminiService.generateAIResponse(
-                    globalPrompt,
-                    context,
-                    apiKey,
-                    null,
-                    models,
-                    (model, attempt, total) -> {
-                        if (jobId != null && aiChatJobsQueue != null) {
-                            Map<String, Object> jState = aiChatJobsQueue.computeIfAbsent(jobId, k -> new ConcurrentHashMap<>());
-                            jState.put("status", "processing");
-                            jState.put("currentModel", model + " - Remasterizando pacote (" + pages.size() + " páginas)");
-                            jState.put("attempt", attempt);
-                            jState.put("total", total);
-                        }
-                    },
-                    () -> Thread.currentThread().isInterrupted() || "canceled".equalsIgnoreCase((String) progress.get("status"))
-            );
-
-            // 4. Process returned package pages
-            List<Map<String, Object>> returnedPagesList = new ArrayList<>();
-            Object pagesObj = aiResult.get("pages");
-            if (pagesObj instanceof List) {
-                returnedPagesList = (List<Map<String, Object>>) pagesObj;
-            } else if (aiResult.containsKey("html")) {
-                Map<String, Object> single = new HashMap<>();
-                single.put("slug", "index");
-                single.put("name", "Página Inicial");
-                single.put("html", aiResult.get("html"));
-                single.put("css", aiResult.getOrDefault("css", ""));
-                single.put("js", aiResult.getOrDefault("js", ""));
-                returnedPagesList.add(single);
-            }
-
-            logs.add("Pacote de páginas processado pela IA com sucesso! Aplicando no banco e canvas...");
-
-            // 5. Save each returned page and update live canvas
+            // ============================================================
+            // ITERAÇÃO PÁGINA-A-PÁGINA: Cada página é enviada separadamente
+            // para evitar timeout e overload no Ollama/n8n
+            // ============================================================
             for (int i = 0; i < pages.size(); i++) {
-                Map<String, Object> origPage = pages.get(i);
-                String origSlug = (String) origPage.get("slug");
-                final String targetSlug = ("home".equalsIgnoreCase(origSlug) || origSlug == null || origSlug.trim().isEmpty()) ? "index" : origSlug.trim();
-                String pageName = (String) origPage.get("name");
+                // Check cancellation before each page
+                if (Thread.currentThread().isInterrupted() || "canceled".equalsIgnoreCase((String) progress.get("status"))) {
+                    logs.add("Geração cancelada pelo usuário. Abortando worker na página " + (i + 1) + "/" + pages.size() + ".");
+                    project.setStatus("ready");
+                    projectRepository.save(project);
+                    if (jobId != null && aiChatJobsQueue != null) {
+                        Map<String, Object> jState = aiChatJobsQueue.computeIfAbsent(jobId, k -> new ConcurrentHashMap<>());
+                        jState.put("status", "canceled");
+                    }
+                    activeJobThreads.remove(projectId);
+                    return;
+                }
 
-                Map<String, Object> rPage = null;
-                for (Map<String, Object> rp : returnedPagesList) {
-                    String rSlug = (String) rp.get("slug");
-                    if (targetSlug.equalsIgnoreCase(rSlug)) {
-                        rPage = rp;
-                        break;
+                Map<String, Object> pMap = pages.get(i);
+                String pageName = (String) pMap.get("name");
+                String rawSlug = (String) pMap.get("slug");
+                String targetSlug = ("home".equalsIgnoreCase(rawSlug) || rawSlug == null || rawSlug.trim().isEmpty()) ? "index" : rawSlug.trim();
+
+                logs.add("Processando página " + (i + 1) + "/" + pages.size() + ": '" + pageName + "' (slug: " + targetSlug + ")...");
+                progress.put("progress", i);
+                progress.put("currentPage", pageName + " (" + (i + 1) + "/" + pages.size() + ")");
+
+                // 1. Pre-process this single page
+                String rawHtml = (String) pMap.get("rawHtml");
+                if (rawHtml == null || rawHtml.isEmpty()) {
+                    rawHtml = (String) pMap.get("html");
+                }
+                if (rawHtml == null || rawHtml.isEmpty()) {
+                    rawHtml = "Conteúdo original da página: " + pageName;
+                }
+                if (rawHtml.length() > 8000) {
+                    rawHtml = rawHtml.substring(0, 8000) + "... [Truncado]";
+                }
+
+                List<Map<String, Object>> pMedia = (List<Map<String, Object>>) pMap.get("media");
+                String processedHtml = preProcessImageUrls(rawHtml, pMedia, projectMediaUrls);
+
+                String pageCss = (String) pMap.getOrDefault("css", "");
+                String pageJs = (String) pMap.getOrDefault("js", "");
+                String customPrompt = (String) pMap.getOrDefault("customPrompt", "");
+
+                // 2. Build per-page prompt
+                StringBuilder promptBuilder = new StringBuilder();
+                promptBuilder.append("Remasterização da página '").append(pageName).append("' (slug: ").append(targetSlug).append(") do projeto '").append(project.getName()).append("'.\n");
+                promptBuilder.append("Esta é a página ").append(i + 1).append(" de ").append(pages.size()).append(" do projeto.\n");
+                promptBuilder.append("Instruções: Recriar esta página com HTML5 moderno e Tailwind CSS. Preservar mídias, imagens e textos originais.\n");
+                promptBuilder.append("Retornar ESTRITAMENTE um JSON padronizado na estrutura: {\"explanation\": \"...\", \"html\": \"...\", \"css\": \"...\", \"js\": \"...\"}\n");
+
+                if (customPrompt != null && !customPrompt.trim().isEmpty()) {
+                    promptBuilder.append("Instrução customizada para esta página: ").append(customPrompt.trim()).append("\n");
+                }
+                if (customAiSkills != null && !customAiSkills.trim().isEmpty()) {
+                    promptBuilder.append("Skills: ").append(customAiSkills.trim()).append("\n");
+                }
+                if (projectMediaUrls != null && !projectMediaUrls.isEmpty()) {
+                    promptBuilder.append("Mídias do projeto: ").append(String.join(", ", projectMediaUrls)).append("\n");
+                }
+
+                String pagePrompt = promptBuilder.toString();
+
+                // 3. Build per-page context (single page, not array)
+                Map<String, Object> context = new HashMap<>();
+                context.put("html", processedHtml);
+                context.put("css", pageCss);
+                context.put("js", pageJs);
+                context.put("provider", provider);
+                context.put("ollamaModel", ollamaModel);
+                context.put("ollamaUrl", ollamaUrl);
+                context.put("projectMediaUrls", projectMediaUrls != null ? projectMediaUrls : Collections.emptyList());
+                context.put("customAiSkills", customAiSkills != null ? customAiSkills : "");
+
+                final int pageIndex = i;
+
+                // 4. Send single-page request to n8n / Gemini / Ollama
+                logs.add("Enviando página '" + pageName + "' para IA (" + provider + ")...");
+                Map<String, Object> aiResult = geminiService.generateAIResponse(
+                        pagePrompt,
+                        context,
+                        apiKey,
+                        null,
+                        models,
+                        (model, attempt, total) -> {
+                            if (jobId != null && aiChatJobsQueue != null) {
+                                Map<String, Object> jState = aiChatJobsQueue.computeIfAbsent(jobId, k -> new ConcurrentHashMap<>());
+                                jState.put("status", "processing");
+                                jState.put("currentModel", model + " - Página " + (pageIndex + 1) + "/" + pages.size() + ": " + pageName);
+                                jState.put("attempt", attempt);
+                                jState.put("total", total);
+                            }
+                        },
+                        () -> Thread.currentThread().isInterrupted() || "canceled".equalsIgnoreCase((String) progress.get("status"))
+                );
+
+                // 5. Extract result (single page response: {html, css, js})
+                String html = (String) aiResult.getOrDefault("html", "<div></div>");
+                String css = (String) aiResult.getOrDefault("css", "");
+                String js = (String) aiResult.getOrDefault("js", "");
+
+                // If the AI returned a pages array anyway, try to extract the first matching one
+                Object pagesObj = aiResult.get("pages");
+                if ((html == null || html.trim().isEmpty() || "<div></div>".equals(html)) && pagesObj instanceof List) {
+                    List<Map<String, Object>> returnedPages = (List<Map<String, Object>>) pagesObj;
+                    if (!returnedPages.isEmpty()) {
+                        Map<String, Object> rp = returnedPages.get(0);
+                        html = (String) rp.getOrDefault("html", html);
+                        css = (String) rp.getOrDefault("css", css);
+                        js = (String) rp.getOrDefault("js", js);
                     }
                 }
-                if (rPage == null && i < returnedPagesList.size()) {
-                    rPage = returnedPagesList.get(i);
-                }
 
-                String html = rPage != null ? (String) rPage.getOrDefault("html", "<div></div>") : "<div></div>";
-                String css = rPage != null ? (String) rPage.getOrDefault("css", "") : "";
-                String js = rPage != null ? (String) rPage.getOrDefault("js", "") : "";
-
-                String downloadedCss = (String) origPage.getOrDefault("css", "");
-                String downloadedJs = (String) origPage.getOrDefault("js", "");
-                if (css == null || css.trim().isEmpty()) css = downloadedCss;
-                if (js == null || js.trim().isEmpty()) js = downloadedJs;
+                // Fallback to original CSS/JS if AI returned empty
+                if (css == null || css.trim().isEmpty()) css = pageCss;
+                if (js == null || js.trim().isEmpty()) js = pageJs;
 
                 String usedModel = (String) aiResult.getOrDefault("_usedModel", "gemini-3.6-flash");
+                logs.add("IA retornou página '" + pageName + "' com sucesso via " + usedModel + "!");
 
+                // 6. Extract navbar/footer from first page
                 try {
                     org.jsoup.nodes.Document bodyDoc = Jsoup.parseBodyFragment(html);
                     org.jsoup.nodes.Element headerEl = bodyDoc.selectFirst("header, nav, div[id*='navbar'], div[class*='navbar'], div[id*='header'], div[class*='header']");
@@ -564,6 +549,7 @@ public class SiteRemasterService {
                     System.err.println("Erro ao extrair navbar e footer na página " + pageName + ": " + parseEx.getMessage());
                 }
 
+                // 7. Save page to database
                 Optional<Page> existingPage = pageRepository.findFirstByProjectIdAndSlug(project.getId(), targetSlug);
                 if (existingPage.isEmpty() && ("index".equals(targetSlug) || "home".equals(targetSlug))) {
                     List<Page> projectPages = pageRepository.findByProjectId(project.getId());
@@ -587,6 +573,7 @@ public class SiteRemasterService {
                     storageService.uploadSinglePage(project.getName(), page.getSlug(), page.getHtml(), page.getCss(), page.getJs(), page.isHomepage(), project.getNavbarHtml(), project.getFooterHtml());
                 } catch (Exception ignored) {}
 
+                // 8. Update progress for frontend polling
                 if (jobId != null && aiChatJobsQueue != null) {
                     Map<String, Object> jState = aiChatJobsQueue.computeIfAbsent(jobId, k -> new ConcurrentHashMap<>());
                     jState.put("status", "processing");
@@ -602,7 +589,7 @@ public class SiteRemasterService {
                         "html", html,
                         "css", css,
                         "js", js,
-                        "explanation", "Página '" + pageName + "' (" + (i + 1) + "/" + pages.size() + ") remasterizada do pacote e salva no canvas em tempo real.",
+                        "explanation", "Página '" + pageName + "' (" + (i + 1) + "/" + pages.size() + ") remasterizada individualmente e salva no canvas em tempo real.",
                         "_usedModel", usedModel
                     ));
                 }
@@ -612,7 +599,7 @@ public class SiteRemasterService {
             project.setStatus("ready");
             projectRepository.save(project);
 
-            logs.add("Todas as " + pages.size() + " páginas do projeto foram remasterizadas com sucesso!");
+            logs.add("Todas as " + pages.size() + " páginas do projeto foram remasterizadas com sucesso (página por página)!");
             progress.put("status", "completed");
             if (jobId != null && aiChatJobsQueue != null) {
                 Map<String, Object> jState = aiChatJobsQueue.computeIfAbsent(jobId, k -> new ConcurrentHashMap<>());

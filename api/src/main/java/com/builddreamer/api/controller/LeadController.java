@@ -134,6 +134,12 @@ public class LeadController {
             projectOpt.ifPresent(lead::setProject);
         }
 
+        if (body.containsKey("lastContactDate") && body.get("lastContactDate") != null) {
+            try {
+                lead.setLastContactDate(LocalDateTime.parse((String) body.get("lastContactDate")));
+            } catch (Exception ignored) {}
+        }
+
         leadRepository.save(lead);
         return ResponseEntity.ok(lead);
     }
@@ -187,6 +193,17 @@ public class LeadController {
             } else {
                 Optional<Project> projectOpt = projectRepository.findById(pId);
                 projectOpt.ifPresent(lead::setProject);
+            }
+        }
+
+        if (body.containsKey("lastContactDate")) {
+            Object lcd = body.get("lastContactDate");
+            if (lcd == null) {
+                lead.setLastContactDate(null);
+            } else {
+                try {
+                    lead.setLastContactDate(LocalDateTime.parse(lcd.toString()));
+                } catch (Exception ignored) {}
             }
         }
 
