@@ -462,11 +462,18 @@ public class SiteRemasterService {
 
                 String pagePrompt = promptBuilder.toString();
 
-                // 3. Build per-page context (single page, not array)
+                // 3. Build per-page context (single page, sent 1 by 1)
                 Map<String, Object> context = new HashMap<>();
+                context.put("name", pageName);
+                context.put("pageName", pageName);
+                context.put("slug", targetSlug);
+                context.put("pageIndex", i + 1);
+                context.put("totalPages", pages.size());
+                context.put("projectName", project.getName());
                 context.put("html", processedHtml);
                 context.put("css", pageCss);
                 context.put("js", pageJs);
+                context.put("customPrompt", customPrompt != null ? customPrompt : "");
                 context.put("provider", provider);
                 context.put("ollamaModel", ollamaModel);
                 context.put("ollamaUrl", ollamaUrl);
