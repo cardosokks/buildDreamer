@@ -237,6 +237,8 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
   const [showAiLogsModal, setShowAiLogsModal] = useState(false);
   const [aiLogsData, setAiLogsData] = useState<{ status?: string; currentModel?: string; logs?: string[]; error?: string; progress?: number }>({});
 
+  const lastLoggedMsgRef = useRef<string>('');
+
   const fetchAiJobLogs = useCallback(async () => {
     try {
       const res = await fetch(`${API_URL}/api/ai/remaster/job/${projectId}`, {
@@ -245,6 +247,24 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
       if (res.ok) {
         const data = await res.json();
         setAiLogsData(data);
+
+        // Envia mensagens em tempo real para o Chat do IA Copilot
+        if (data.logs && data.logs.length > 0) {
+          const latestLog = data.logs[data.logs.length - 1];
+          if (latestLog && latestLog !== lastLoggedMsgRef.current) {
+            lastLoggedMsgRef.current = latestLog;
+            
+            const chatKey = `chat_history_proj_${projectId}`;
+            const existingRaw = localStorage.getItem(chatKey);
+            let msgs: any[] = existingRaw ? JSON.parse(existingRaw) : [];
+            msgs.push({
+              role: 'assistant',
+              text: `⚡ [IA Worker]: ${latestLog}`
+            });
+            localStorage.setItem(chatKey, JSON.stringify(msgs));
+            window.dispatchEvent(new Event('chat_history_updated'));
+          }
+        }
       }
     } catch {}
   }, [projectId, token]);
@@ -279,10 +299,11 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
         if (job.status === 'processing' || job.status === 'pending') {
           setAiGenerating(true);
           if (job.currentModel) {
-            setAiJobStatus(`Criando site com ${job.currentModel}...`);
+            setAiJobStatus(`${job.currentModel}`);
           } else {
-            setAiJobStatus('A IA está construindo a estrutura e o design do site...');
+            setAiJobStatus('A IA está construindo o design e ajustando o código HTML/CSS/JS...');
           }
+          fetchAiJobLogs();
           // Atualiza em tempo real a lousa/canvas conforme as páginas são gravadas
           fetchProjectDetails();
         } else if (job.status === 'completed') {
@@ -290,23 +311,25 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
             setAiGenerating(false);
             setAiJobStatus(null);
             fetchProjectDetails();
+            fetchAiJobLogs();
           }
           if (interval) clearInterval(interval);
         } else if (job.status === 'failed') {
           setAiGenerating(false);
           setAiJobStatus(null);
+          fetchAiJobLogs();
           if (interval) clearInterval(interval);
         }
       } catch {}
     };
 
     checkJob();
-    interval = setInterval(checkJob, 3000);
+    interval = setInterval(checkJob, 2500);
 
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [projectId, token, aiGenerating]);
+  }, [projectId, token, aiGenerating, fetchAiJobLogs]);
 
   useEffect(() => {
     fetchProjectDetails();
@@ -1688,44 +1711,69 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
               height: '100%'
             }}
           >
-            {/* Retorno Visual Flutuante de Geração com IA (não-bloqueante) */}
+            {/* Tela/Card de Loading Flutuante em frente ao Canvas durante Geração com IA */}
             {aiGenerating && (
-              <div className="absolute top-4 left-1/2 -translate-x-1/2 z-40 bg-[#0d0914]/90 border border-purple-500/50 backdrop-blur-md rounded-2xl px-4 py-2.5 shadow-[0_0_30px_rgba(168,85,247,0.35)] flex items-center gap-3 animate-in fade-in slide-in-from-top-4 duration-300">
-                <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-xl bg-purple-500/20 border border-purple-500/40 flex items-center justify-center">
-                    <Sparkles className="w-4 h-4 text-purple-400 animate-spin" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-white tracking-wide">IA Gerando em Tempo Real</span>
-                      <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+              <div className="absolute top-6 left-1/2 -translate-x-1/2 z-40 w-[92%] max-w-xl bg-[#0b0714]/95 border border-purple-500/50 backdrop-blur-xl rounded-2xl p-4 shadow-[0_0_50px_rgba(168,85,247,0.4)] animate-in fade-in slide-in-from-top-4 duration-300 space-y-3">
+                {/* Header do Status */}
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-purple-500/20 border border-purple-500/50 flex items-center justify-center relative">
+                      <Sparkles className="w-5 h-5 text-purple-400 animate-spin" />
+                      <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-amber-400 animate-ping" />
                     </div>
-                    <p className="text-[10px] text-purple-300/80 font-mono truncate max-w-[280px]">
-                      {aiJobStatus || 'Atualizando seções e estilos live no canvas...'}
-                    </p>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold text-white tracking-tight">IA Construindo o Site</span>
+                        {aiLogsData.progress && aiLogsData.total ? (
+                          <span className="px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 text-[10px] font-mono font-bold">
+                            Página {aiLogsData.progress} de {aiLogsData.total}
+                          </span>
+                        ) : null}
+                      </div>
+                      <p className="text-xs text-purple-300 font-medium truncate max-w-md mt-0.5">
+                        {aiJobStatus || 'Processando HTML5, Tailwind CSS e estilos no n8n...'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => { setShowAiLogsModal(true); fetchAiJobLogs(); }}
+                      className="px-3 py-1.5 bg-purple-900/60 hover:bg-purple-800 border border-purple-500/40 text-purple-200 text-xs font-semibold rounded-xl transition-all cursor-pointer flex items-center gap-1.5"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+                      Logs
+                    </button>
+                    <button
+                      onClick={handleCancelAiJob}
+                      className="px-3 py-1.5 bg-red-950/80 hover:bg-red-900 border border-red-500/50 text-red-300 text-xs font-semibold rounded-xl transition-all cursor-pointer flex items-center gap-1.5"
+                    >
+                      <XCircle className="w-3.5 h-3.5 text-red-400" />
+                      Cancelar
+                    </button>
                   </div>
                 </div>
 
-                <div className="h-6 w-px bg-slate-800" />
+                {/* Barra de Progresso Animada */}
+                <div className="w-full bg-slate-900/90 rounded-full h-1.5 overflow-hidden border border-slate-800">
+                  <div 
+                    className="bg-gradient-to-r from-purple-500 via-cyan-400 to-amber-400 h-full rounded-full transition-all duration-500"
+                    style={{
+                      width: aiLogsData.progress && aiLogsData.total 
+                        ? `${Math.min(100, Math.max(8, (aiLogsData.progress / aiLogsData.total) * 100))}%`
+                        : '45%'
+                    }}
+                  />
+                </div>
 
-                <div className="flex items-center gap-1.5">
-                  <button
-                    onClick={() => { setShowAiLogsModal(true); fetchAiJobLogs(); }}
-                    className="px-2.5 py-1 bg-purple-950/80 hover:bg-purple-900 border border-purple-500/40 text-purple-300 text-[11px] font-semibold rounded-xl transition-all cursor-pointer flex items-center gap-1"
-                    title="Ver Logs Detalhados da IA"
-                  >
-                    <Sparkles className="w-3 h-3 text-purple-400" />
-                    Logs
-                  </button>
-
-                  <button
-                    onClick={handleCancelAiJob}
-                    className="px-2.5 py-1 bg-red-950/80 hover:bg-red-900 border border-red-500/50 text-red-300 text-[11px] font-semibold rounded-xl transition-all cursor-pointer flex items-center gap-1"
-                    title="Cancelar Geração da IA"
-                  >
-                    <XCircle className="w-3 h-3 text-red-400" />
-                    Cancelar
-                  </button>
+                {/* Snippet do Terminal de Logs ao Vivo */}
+                <div className="bg-[#050308] border border-slate-800/80 rounded-xl px-3 py-1.5 flex items-center gap-2 font-mono text-[11px] text-slate-300 overflow-hidden">
+                  <span className="text-purple-400 font-bold select-none">&gt;</span>
+                  <span className="truncate text-slate-300">
+                    {aiLogsData.logs && aiLogsData.logs.length > 0
+                      ? aiLogsData.logs[aiLogsData.logs.length - 1]
+                      : 'Iniciando worker e enviando requisições ao n8n em tempo real...'}
+                  </span>
                 </div>
               </div>
             )}

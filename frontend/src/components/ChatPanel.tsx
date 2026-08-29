@@ -65,6 +65,21 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const syncChat = () => {
+      const stored = localStorage.getItem(chatStorageKey);
+      if (stored) {
+        try { setMessages(JSON.parse(stored)); } catch {}
+      }
+    };
+    window.addEventListener('chat_history_updated', syncChat);
+    window.addEventListener('storage', syncChat);
+    return () => {
+      window.removeEventListener('chat_history_updated', syncChat);
+      window.removeEventListener('storage', syncChat);
+    };
+  }, [chatStorageKey]);
   const [copiedMessageIdx, setCopiedMessageIdx] = useState<number | null>(null);
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
