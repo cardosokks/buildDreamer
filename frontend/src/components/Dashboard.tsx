@@ -694,7 +694,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
         })
       });
       const data = await res.json();
-      if (res.ok && data.lead) {
+      if (res.ok && data.id) {
         notify.success(`"${lead.name}" foi cadastrado no CRM como Novo Lead!`, 'CRM Atualizado');
         addBellNotification({
           type: 'success',
