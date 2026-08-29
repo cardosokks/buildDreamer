@@ -43,7 +43,9 @@ public class SiteRemasterService {
 
     public List<Map<String, Object>> crawlEntireClientWebsite(String startUrl, int maxPages) {
         List<Map<String, Object>> pages = new ArrayList<>();
-        Set<String> visited = new HashSet<>();
+        Set<String> visitedUrls = new HashSet<>();
+        Set<String> seenSlugs = new HashSet<>();
+        Set<String> globalSeenMedia = new HashSet<>();
         Queue<String> queue = new LinkedList<>();
 
         String normalizedUrl = startUrl.trim();
@@ -65,8 +67,8 @@ public class SiteRemasterService {
             if (currentUrl == null || currentUrl.trim().isEmpty()) continue;
 
             String cleanCurrent = currentUrl.replaceAll("#.*$", "").replaceAll("\\?.*$", "").replaceAll("/+$", "");
-            if (visited.contains(cleanCurrent)) continue;
-            visited.add(cleanCurrent);
+            if (visitedUrls.contains(cleanCurrent)) continue;
+            visitedUrls.add(cleanCurrent);
 
             try {
                 Document doc = Jsoup.connect(currentUrl)
@@ -115,9 +117,15 @@ public class SiteRemasterService {
                     slug = pages.isEmpty() ? "index" : slug;
                 }
 
-                // Extract page media (Images, Logos, Backgrounds, Videos)
+                // Prevent fetching/saving duplicate pages with the same slug
+                if (seenSlugs.contains(slug)) {
+                    System.out.println("[Crawler] Ignorando página com slug duplicado: " + slug + " (URL: " + currentUrl + ")");
+                    continue;
+                }
+                seenSlugs.add(slug);
+
+                // Extract page media (Images, Logos, Backgrounds, Videos) without duplicates
                 List<Map<String, Object>> pageMedia = new ArrayList<>();
-                Set<String> seenMediaUrls = new HashSet<>();
 
                 // 1. <img> tags
                 for (Element img : doc.select("img")) {
@@ -136,8 +144,8 @@ public class SiteRemasterService {
                         } catch (Exception ignored) {}
                     }
 
-                    if (absUrl.isEmpty() || seenMediaUrls.contains(absUrl) || absUrl.contains("pixel") || absUrl.contains("tracking")) continue;
-                    seenMediaUrls.add(absUrl);
+                    if (absUrl.isEmpty() || globalSeenMedia.contains(absUrl) || absUrl.contains("pixel") || absUrl.contains("tracking")) continue;
+                    globalSeenMedia.add(absUrl);
 
                     String alt = img.attr("alt");
                     String imgClass = img.className().toLowerCase();
@@ -169,8 +177,8 @@ public class SiteRemasterService {
                         try {
                             absUrl = new URL(new URL(currentUrl), bgSrc).toString();
                         } catch (Exception ignored) {}
-                        if (!absUrl.isEmpty() && !seenMediaUrls.contains(absUrl) && !absUrl.contains("pixel")) {
-                            seenMediaUrls.add(absUrl);
+                        if (!absUrl.isEmpty() && !globalSeenMedia.contains(absUrl) && !absUrl.contains("pixel")) {
+                            globalSeenMedia.add(absUrl);
                             Map<String, Object> mediaItem = new HashMap<>();
                             mediaItem.put("url", absUrl);
                             mediaItem.put("alt", (title.isEmpty() ? slug : title) + " Background");
@@ -190,8 +198,8 @@ public class SiteRemasterService {
                             absUrl = new URL(new URL(currentUrl), vSrc).toString();
                         } catch (Exception ignored) {}
                     }
-                    if (!absUrl.isEmpty() && !seenMediaUrls.contains(absUrl)) {
-                        seenMediaUrls.add(absUrl);
+                    if (!absUrl.isEmpty() && !globalSeenMedia.contains(absUrl)) {
+                        globalSeenMedia.add(absUrl);
                         Map<String, Object> mediaItem = new HashMap<>();
                         mediaItem.put("url", absUrl);
                         mediaItem.put("alt", (title.isEmpty() ? slug : title) + " Vídeo");
@@ -244,7 +252,7 @@ public class SiteRemasterService {
                         String linkHost = linkUri.getHost() != null ? linkUri.getHost().replaceAll("^www\\.", "").toLowerCase() : "";
                         boolean isSameHost = mainHost.isEmpty() || linkHost.equals(mainHost) || linkHost.endsWith("." + mainHost) || mainHost.endsWith("." + linkHost);
 
-                        if (isSameHost && !visited.contains(cleanCandidate) && !queue.contains(cleanCandidate)) {
+                        if (isSameHost && !visitedUrls.contains(cleanCandidate) && !queue.contains(cleanCandidate)) {
                             queue.add(cleanCandidate);
                         }
                     } catch (Exception ignored) {}

@@ -411,7 +411,7 @@ public class AIController {
                 page.setProject(project);
                 pageRepository.save(page);
 
-                // Process and register media items
+                // Process and register media items without duplicates
                 Object mediaObj = pMap.get("media");
                 if (mediaObj instanceof List) {
                     List<?> mediaList = (List<?>) mediaObj;
@@ -425,17 +425,19 @@ public class AIController {
 
                         if (mUrl != null && !mUrl.trim().isEmpty()) {
                             String finalUrl = mUrl.trim();
-                            projectMediaUrls.add(finalUrl);
-                            try {
-                                Media media = Media.builder()
-                                        .name("Mídia da página " + pageName)
-                                        .url(finalUrl)
-                                        .userId(userId)
-                                        .projectId(project.getId())
-                                        .mimeType(finalUrl.endsWith(".svg") ? "image/svg+xml" : "image/jpeg")
-                                        .build();
-                                mediaRepository.save(media);
-                            } catch (Exception ignored) {}
+                            if (!projectMediaUrls.contains(finalUrl)) {
+                                projectMediaUrls.add(finalUrl);
+                                try {
+                                    Media media = Media.builder()
+                                            .name("Mídia da página " + pageName)
+                                            .url(finalUrl)
+                                            .userId(userId)
+                                            .projectId(project.getId())
+                                            .mimeType(finalUrl.endsWith(".svg") ? "image/svg+xml" : "image/jpeg")
+                                            .build();
+                                    mediaRepository.save(media);
+                                } catch (Exception ignored) {}
+                            }
                         }
                     }
                 }
