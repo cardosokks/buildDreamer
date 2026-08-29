@@ -101,18 +101,20 @@ public class StorageService {
         String relativePrefix = isHomepage ? "." : "..";
         String nav = navbarHtml != null ? navbarHtml : "";
         String foot = footerHtml != null ? footerHtml : "";
-        String bodyContent = nav + "\n" + (html != null ? html : "") + "\n" + foot;
-
         String htmlContent = "<!DOCTYPE html>\n" +
-                "<html lang=\"pt-br\">\n" +
+                "<html lang=\"pt-br\" class=\"h-full\">\n" +
                 "<head>\n" +
                 "  <meta charset=\"UTF-8\">\n" +
                 "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n" +
                 "  <script src=\"https://cdn.tailwindcss.com\"></script>\n" +
                 "  <link rel=\"stylesheet\" href=\"" + relativePrefix + "/css/" + pageSlug + ".css\">\n" +
                 "</head>\n" +
-                "<body class=\"bg-slate-950 text-slate-100 min-h-screen\">\n" +
-                "  " + bodyContent + "\n" +
+                "<body class=\"bg-slate-950 text-slate-100 min-h-screen flex flex-col justify-between m-0\">\n" +
+                "  " + (nav != null && !nav.trim().isEmpty() ? nav : "") + "\n" +
+                "  <main class=\"flex-grow w-full\">\n" +
+                "    " + (html != null ? html : "") + "\n" +
+                "  </main>\n" +
+                "  " + (foot != null && !foot.trim().isEmpty() ? foot : "") + "\n" +
                 "  <script src=\"" + relativePrefix + "/js/" + pageSlug + ".js\"></script>\n" +
                 "</body>\n" +
                 "</html>";

@@ -291,7 +291,11 @@ public class SiteRemasterService {
                 String customPrompt = (String) pMap.get("customPrompt");
                 StringBuilder promptBuilder = new StringBuilder();
                 promptBuilder.append("Remasterizar a página ").append(pageName)
-                        .append(" mantendo todo o conteúdo, textos e imagens originais, mas recriando o design completo com HTML5 moderno e Tailwind CSS elegante e responsivo.\n");
+                        .append(" mantendo todo o conteúdo, textos e imagens originais, mas recriando o design completo com HTML5 moderno e Tailwind CSS elegante e responsivo.\n")
+                        .append("\nIMPORTANTE SOBRE LAYOUT GLOBALS (NAVBAR E FOOTER):\n")
+                        .append("- Esta página é renderizada dentro de um layout estruturado com Flexbox (flex flex-col min-h-screen justify-between).\n")
+                        .append("- A Navbar global fica no topo e o Footer global fica no rodapé. O conteúdo desta página é inserido dentro de um bloco `<main class=\"flex-grow w-full\">` que se expande automaticamente.\n")
+                        .append("- Para que não ocorra quebras de design nem duplicidade de componentes: a Navbar deve ser a primeira tag semântica `<header>` ou `<nav>` no topo, e o Footer deve ser a última tag semântica `<footer>` no rodapé. Apenas crie-as na página principal (Página Inicial). Nas demais páginas, não crie menus ou rodapés repetitivos, foque apenas nas seções internas de conteúdo.\n");
 
                 if (customPrompt != null && !customPrompt.trim().isEmpty()) {
                     promptBuilder.append("\nDIRETRIZES DO USUÁRIO PARA ESTA PÁGINA:\n").append(customPrompt.trim()).append("\n");

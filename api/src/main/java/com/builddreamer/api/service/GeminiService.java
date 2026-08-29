@@ -263,7 +263,58 @@ public class GeminiService {
             }
         }
 
-        throw new RuntimeException("Erro na geração com IA em todos os modelos cadastrados no n8n: " + (lastError != null ? lastError.getMessage() : "Sem resposta dos modelos"));
+        // FASE 3: Fallback final para o Ollama local/servidor se todos os endpoints externos falharem
+        System.err.println("[AI Engine] Todos os modelos Gemini e n8n falharam. Iniciando fallback de emergência via Ollama local...");
+        String ollamaUrl = System.getenv("OLLAMA_API_URL");
+        if (ollamaUrl == null || ollamaUrl.trim().isEmpty()) {
+            ollamaUrl = "http://host.docker.internal:11434/api/chat";
+        }
+
+        List<String> ollamaModels = List.of("qwen2.5-coder:latest", "qwen2.5-coder:7b", "llama3:latest", "mistral:latest");
+        for (String ollamaModel : ollamaModels) {
+            try {
+                System.out.println("[AI Engine] Ollama Fallback - Testando modelo local: " + ollamaModel + " em: " + ollamaUrl);
+
+                Map<String, Object> ollamaPayload = new HashMap<>();
+                ollamaPayload.put("model", ollamaModel);
+                ollamaPayload.put("stream", false);
+                ollamaPayload.put("format", "json");
+
+                List<Map<String, String>> messages = new ArrayList<>();
+                messages.add(Map.of("role", "system", "content", safeSystemPrompt));
+                messages.add(Map.of("role", "user", "content", safeUserPrompt));
+                ollamaPayload.put("messages", messages);
+
+                String ollamaReqBody = objectMapper.writeValueAsString(ollamaPayload);
+                HttpRequest ollamaRequest = HttpRequest.newBuilder()
+                        .uri(URI.create(ollamaUrl))
+                        .header("Content-Type", "application/json")
+                        .timeout(Duration.ofSeconds(120))
+                        .POST(HttpRequest.BodyPublishers.ofString(ollamaReqBody, StandardCharsets.UTF_8))
+                        .build();
+
+                HttpResponse<String> ollamaResponse = httpClient.send(ollamaRequest, HttpResponse.BodyHandlers.ofString());
+                if (ollamaResponse.statusCode() == 200) {
+                    JsonNode rootNode = objectMapper.readTree(ollamaResponse.body());
+                    String rawText = rootNode.path("message").path("content").asText("{}");
+                    Map<String, Object> parsed = resilientJsonParse(rawText);
+
+                    String html = (String) parsed.get("html");
+                    if (html != null && !html.trim().isEmpty()) {
+                        parsed.put("_usedModel", ollamaModel + " (Ollama Local Fallback)");
+                        System.out.println("[AI Engine] Sucesso total na geração com Ollama local: " + ollamaModel);
+                        return parsed;
+                    }
+                } else {
+                    System.err.println("[AI Engine] Ollama retornou status HTTP " + ollamaResponse.statusCode());
+                }
+            } catch (Exception ollamaEx) {
+                System.err.println("[AI Engine] Falha no Ollama com o modelo " + ollamaModel + ": " + ollamaEx.getMessage());
+                lastError = ollamaEx;
+            }
+        }
+
+        throw new RuntimeException("Erro na geração com IA em todos os modelos cadastrados no n8n, Direct Gemini e Ollama: " + (lastError != null ? lastError.getMessage() : "Sem resposta dos modelos"));
     }
 
     private Map<String, Object> resilientJsonParse(String rawString) throws Exception {
