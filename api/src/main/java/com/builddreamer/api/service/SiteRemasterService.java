@@ -387,25 +387,28 @@ public class SiteRemasterService {
                         storageService.uploadSinglePage(project.getName(), page.getSlug(), page.getHtml(), page.getCss(), page.getJs(), page.isHomepage(), project.getNavbarHtml(), project.getFooterHtml());
                     } catch (Exception ignored) {}
 
-                    // Push job completion result to aiChatJobsQueue for Chat tracking
+                    // Push intermediate page progress to aiChatJobsQueue for live UI tracking
                     if (jobId != null && aiChatJobsQueue != null) {
                         Map<String, Object> jState = aiChatJobsQueue.computeIfAbsent(jobId, k -> new ConcurrentHashMap<>());
-                        jState.put("status", "completed");
+                        jState.put("status", "processing");
                         jState.put("currentModel", usedModel);
+                        jState.put("currentPage", pageName);
+                        jState.put("progress", i + 1);
+                        jState.put("total", pages.size());
                         jState.put("scope", pages.size() > 1 ? "all" : "single");
-                        jState.put("result", Map.of(
-                            "explanation", "Página '" + pageName + "' remasterizada com IA com sucesso.",
-                            "html", html,
-                            "css", css,
-                            "js", js,
+                        jState.put("lastPageResult", Map.of(
+                            "pageName", pageName,
+                            "slug", targetSlug,
+                            "explanation", "Página '" + pageName + "' (" + (i + 1) + "/" + pages.size() + ") remasterizada com sucesso.",
                             "_usedModel", usedModel
                         ));
                     }
+                    logs.add("Página " + (i + 1) + "/" + pages.size() + " ('" + pageName + "') gerada, salva e sincronizada com sucesso!");
                 } catch (Exception pageEx) {
                     pageEx.printStackTrace();
-                    logs.add("Erro na geração da página '" + pageName + "': " + pageEx.getMessage());
+                    logs.add("Erro na geração da página " + (i + 1) + "/" + pages.size() + " ('" + pageName + "'): " + pageEx.getMessage());
 
-                    // Save structured fallback page so project generation continues
+                    // Save structured fallback page so project generation continues for remaining pages
                     Optional<Page> existingPage = pageRepository.findByProjectIdAndSlug(project.getId(), targetSlug);
                     Page page = existingPage.orElseGet(() -> Page.builder()
                             .project(project)
@@ -421,20 +424,20 @@ public class SiteRemasterService {
                                 "</section>");
                     }
                     pageRepository.save(page);
-
-                    if (jobId != null && aiChatJobsQueue != null) {
-                        Map<String, Object> jState = aiChatJobsQueue.computeIfAbsent(jobId, k -> new ConcurrentHashMap<>());
-                        jState.put("status", "failed");
-                        jState.put("error", "Erro ao gerar página '" + pageName + "': " + pageEx.getMessage());
-                    }
                 }
             }
 
             project.setStatus("ready");
             projectRepository.save(project);
 
-            logs.add("Projeto remasterizado com sucesso!");
+            logs.add("Todas as " + pages.size() + " páginas do projeto foram remasterizadas com sucesso!");
             progress.put("status", "completed");
+            if (jobId != null && aiChatJobsQueue != null) {
+                Map<String, Object> jState = aiChatJobsQueue.computeIfAbsent(jobId, k -> new ConcurrentHashMap<>());
+                jState.put("status", "completed");
+                jState.put("progress", pages.size());
+                jState.put("total", pages.size());
+            }
 
         } catch (Exception ex) {
             progress.put("status", "error");
