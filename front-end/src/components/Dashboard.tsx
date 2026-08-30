@@ -1154,6 +1154,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
             name: p.name,
             slug: p.slug,
             url: p.url,
+            originalUrl: p.url || p.originalUrl || '',
             customPrompt: p.isHomepage
               ? 'Hero impactante com CTA duplo, apresentação dos diferenciais, estatísticas da empresa, depoimentos e formulário de contato/WhatsApp.'
               : `Apresentação detalhada com tópicos visuais, benefícios claros, cards ilustrativos e chamadas para ação focadas em ${p.name}.`,
@@ -1203,6 +1204,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
         try { return btoa(unescape(encodeURIComponent(val))); } catch { return ''; }
       };
 
+      const preferredProvider = localStorage.getItem('preferred_ai_provider') || 'gemini';
+      const selectedModel = preferredProvider === 'ollama' 
+        ? (localStorage.getItem('ollama_selected_model') || 'qwen2.5-coder:1.5b')
+        : (localStorage.getItem('last_selected_ai_model') || '');
+      const ollamaEndpoint = localStorage.getItem('ollama_endpoint') || 'http://localhost:11434';
+      const ollamaLowSpec = localStorage.getItem('ollama_low_spec_mode') || 'true';
+
       const res = await fetch(`${API_URL}/api/ai/remaster/generate`, {
         method: 'POST',
         headers: {
@@ -1212,8 +1220,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
           'X-Gemini-Models': safeHeader(JSON.stringify(registeredModelIds)),
           'X-Proxy-Url': safeHeader(localStorage.getItem('ai_proxy_url') || ''),
           'X-AI-Skills': safeHeader(localStorage.getItem('custom_ai_skills') || ''),
-          'X-AI-Provider': localStorage.getItem('preferred_ai_provider') || 'gemini',
-          'X-Ollama-Endpoint': localStorage.getItem('ollama_endpoint') || 'http://localhost:11434'
+          'X-AI-Provider': preferredProvider,
+          'X-AI-Model': safeHeader(selectedModel),
+          'X-Ollama-Endpoint': ollamaEndpoint,
+          'X-Ollama-Model': safeHeader(localStorage.getItem('ollama_selected_model') || ''),
+          'X-Ollama-Low-Spec': ollamaLowSpec
         },
         body: JSON.stringify({
           projectName: remasterBusinessName,
@@ -1362,6 +1373,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
         try { return btoa(unescape(encodeURIComponent(val))); } catch { return ''; }
       };
 
+      const preferredProvider = localStorage.getItem('preferred_ai_provider') || 'gemini';
+      const selectedModel = preferredProvider === 'ollama' 
+        ? (localStorage.getItem('ollama_selected_model') || 'qwen2.5-coder:1.5b')
+        : (localStorage.getItem('last_selected_ai_model') || '');
+      const ollamaEndpoint = localStorage.getItem('ollama_endpoint') || 'http://localhost:11434';
+      const ollamaLowSpec = localStorage.getItem('ollama_low_spec_mode') || 'true';
+
       const res = await fetch(`${API_URL}/api/projects`, {
         method: 'POST',
         headers: {
@@ -1371,8 +1389,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
           'X-Gemini-Models': safeHeader(JSON.stringify(registeredModelIds)),
           'X-Proxy-Url': safeHeader(localStorage.getItem('ai_proxy_url') || ''),
           'X-AI-Skills': safeHeader(localStorage.getItem('custom_ai_skills') || ''),
-          'X-AI-Provider': localStorage.getItem('preferred_ai_provider') || 'gemini',
-          'X-Ollama-Endpoint': localStorage.getItem('ollama_endpoint') || 'http://localhost:11434'
+          'X-AI-Provider': preferredProvider,
+          'X-AI-Model': safeHeader(selectedModel),
+          'X-Ollama-Endpoint': ollamaEndpoint,
+          'X-Ollama-Model': safeHeader(localStorage.getItem('ollama_selected_model') || ''),
+          'X-Ollama-Low-Spec': ollamaLowSpec
         },
         body: JSON.stringify({
           name: finalName,

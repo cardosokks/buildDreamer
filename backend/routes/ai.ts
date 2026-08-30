@@ -5,7 +5,8 @@ import { testOllamaConnection, RECOMMENDED_LOW_SPEC_MODELS } from '../services/o
 import { 
   scrapeJobsQueue, 
   startWebsiteScrapeJob, 
-  processCustomRemasterGenerationJob 
+  processCustomRemasterGenerationJob,
+  detectMedia
 } from '../services/siteRemaster';
 import { projectJobsQueue } from './projects';
 import { prisma } from '../db';
@@ -418,6 +419,8 @@ router.post(['/scrape-url', '/remaster/scrape'], async (req: AuthenticatedReques
             slug: 'index',
             url: targetUrl || 'http://localhost',
             cleanText: rawHtml.replace(/<[^>]+>/g, ' ').slice(0, 3000),
+            html: rawHtml,
+            media: detectMedia(rawHtml, targetUrl || 'http://localhost'),
             excerpt: rawHtml.replace(/<[^>]+>/g, ' ').slice(0, 180) + '...',
             isHomepage: true
           }
@@ -489,7 +492,9 @@ router.post('/remaster/generate', async (req: AuthenticatedRequest, res: any) =>
     }
     
     const aiProvider = decodeHeader(req.headers['x-ai-provider']);
+    const customModel = decodeHeader(req.headers['x-ai-model'] || req.headers['x-ollama-model'] || req.headers['x-gemini-model']);
     const ollamaEndpoint = decodeHeader(req.headers['x-ollama-endpoint']);
+    const lowSpecMode = req.headers['x-ollama-low-spec'] ? req.headers['x-ollama-low-spec'] === 'true' : undefined;
 
     // 4. Disparar geração em Background
     projectJobsQueue[project.id] = { status: 'pending' };
@@ -513,7 +518,9 @@ router.post('/remaster/generate', async (req: AuthenticatedRequest, res: any) =>
       customSkills,
       userId,
       aiProvider,
-      ollamaEndpoint
+      ollamaEndpoint,
+      customModel,
+      lowSpecMode
     ).then(() => {
       projectJobsQueue[project.id] = { status: 'completed' };
     }).catch((err) => {

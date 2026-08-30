@@ -92,12 +92,25 @@ router.get('/:projectId', async (req: AuthenticatedRequest, res: any) => {
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <style>
-    body { font-family: 'Inter', sans-serif; }
-    h1,h2,h3,h4,h5,h6 { font-family: 'Outfit', sans-serif; }
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      padding: 0;
+      min-height: 100vh;
+      background: #ffffff;
+      color: #0f172a;
+      font-family: 'Inter', sans-serif;
+      position: relative;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      font-family: 'Outfit', sans-serif;
+    }
   </style>
   ${includeCss ? `<link rel="stylesheet" href="css/${cssFilename}">` : ''}
 </head>
-<body class="bg-slate-950 text-slate-100 min-h-screen">
+<body>
   ${normalizedPageHtml}
   ${includeJs ? `<script src="js/${jsFilename}"></script>` : ''}
 </body>

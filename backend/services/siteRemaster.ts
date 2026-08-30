@@ -20,7 +20,7 @@ interface ScrapedPage {
 /**
  * Detecta mídias em um HTML
  */
-function detectMedia(html: string, baseUrl: string): string[] {
+export function detectMedia(html: string, baseUrl: string): string[] {
   const mediaUrls = new Set<string>();
   const assetRegex = /(src|poster|href)=["']([^"'#?]+(\.(png|jpe?g|gif|svg|webp|mp4|webm)))(\?[^"']*)?["']/gi;
   const matches = html.matchAll(assetRegex);
@@ -186,8 +186,8 @@ async function processPageAssets(
 /**
  * Separa HTML, CSS e JS de um conteúdo HTML bruto
  */
-function extractCodeComponents(html: string): { html: string; css: string; js: string } {
-  let processedHtml = html;
+export function extractCodeComponents(html: string): { html: string; css: string; js: string } {
+  let processedHtml = html || '';
   let css = '';
   let js = '';
 
@@ -202,6 +202,15 @@ function extractCodeComponents(html: string): { html: string; css: string; js: s
   const scriptRegex = /<script\b[^>]*>([\s\S]*?)<\/script>/gi;
   processedHtml = processedHtml.replace(scriptRegex, (match, content) => {
     js += content + '\n';
+    return '';
+  });
+
+  // Extrair <link rel="stylesheet">
+  const linkCssRegex = /<link\b[^>]*rel=["']stylesheet["'][^>]*href=["']([^"']+)["'][^>]*>/gi;
+  processedHtml = processedHtml.replace(linkCssRegex, (match, href) => {
+    if (href && !href.includes('fonts.googleapis.com')) {
+      css = `@import url("${href}");\n` + css;
+    }
     return '';
   });
 
@@ -479,6 +488,7 @@ export async function processCustomRemasterGenerationJob(
   pagesList: Array<{
     name: string;
     slug: string;
+    url?: string;
     originalUrl?: string;
     customPrompt?: string;
     cleanText?: string;
@@ -495,7 +505,9 @@ export async function processCustomRemasterGenerationJob(
   customSkills?: any[],
   userId?: string,
   aiProvider?: string,
-  ollamaEndpoint?: string
+  ollamaEndpoint?: string,
+  customModel?: string,
+  lowSpecMode?: boolean
 ) {
   try {
     let resolvedUserId = userId;
@@ -504,43 +516,61 @@ export async function processCustomRemasterGenerationJob(
       if (proj && proj.ownerId) {
         resolvedUserId = proj.ownerId;
       } else {
-        // Fallback para evitar erro se não encontrar
         resolvedUserId = 'system';
       }
     }
 
     const assetCache = new Map<string, string>();
     const activePages = pagesList.filter(p => p.enabled !== false);
-    
+    const totalPages = activePages.length;
+    const providerLabel = aiProvider === 'ollama' ? 'Ollama' : (aiProvider || 'Gemini');
+    const modelLabel = customModel || (aiProvider === 'ollama' ? 'qwen2.5-coder:1.5b' : 'gemini-2.5-flash');
+
     // 1. PROCESSAR ATIVOS E PREPARAR CONTEÚDO DE TODAS AS PÁGINAS
-    if (onProgress) onProgress(`Baixando mídias e preparando páginas...`, 0, activePages.length * 2);
+    if (onProgress) onProgress(`Baixando mídias e extraindo conteúdo (${totalPages} páginas)...`, 0, totalPages * 2);
     
     const preparedPages = [];
-    for (let i = 0; i < activePages.length; i++) {
+    for (let i = 0; i < totalPages; i++) {
       if (projectJobsQueue[projectId]?.status === 'cancelled') throw new Error('Job cancelled');
       const p = activePages[i];
-      if (onProgress) onProgress(`Processando página: ${p.name}...`, i + 1, activePages.length * 2);
+      if (onProgress) onProgress(`Preparando estrutura da página (${i + 1}/${totalPages}): ${p.name}...`, i + 1, totalPages * 2);
       
+      const targetOriginalUrl = p.originalUrl || p.url || '';
       const sourceHtml = p.html || p.rewrittenHtml || '';
-      if (sourceHtml && p.originalUrl) {
-        p.rewrittenHtml = await processPageAssets(sourceHtml, p.originalUrl, assetCache, resolvedUserId!);
+      if (sourceHtml && targetOriginalUrl) {
+        try {
+          p.rewrittenHtml = await processPageAssets(sourceHtml, targetOriginalUrl, assetCache, resolvedUserId!);
+        } catch (assetErr) {
+          console.warn(`[Remaster] Não foi possível reescrever mídias da página ${p.name}:`, assetErr);
+        }
       }
       
-      // Extrair componentes e Criar página inicial preparada
-      const context = extractCodeComponents(p.rewrittenHtml || p.cleanText || '');
+      // Extrair componentes (HTML, CSS e JS) preservando o HTML completo da página original do cliente
+      const rawHtmlToUse = p.rewrittenHtml || p.html || p.cleanText || '';
+      const context = extractCodeComponents(rawHtmlToUse);
+      const finalHtml = context.html || rawHtmlToUse;
+      const finalCss = context.css || '';
+      const finalJs = context.js || '';
+
       const createdPage = await prisma.page.create({
         data: {
           projectId,
           name: p.name,
           slug: p.slug,
           isHomepage: p.isHomepage || false,
-          html: context.html,
-          css: context.css,
-          js: context.js
+          html: finalHtml,
+          css: finalCss,
+          js: finalJs
         }
       });
       
-      preparedPages.push({ ...p, ...context, dbId: createdPage.id });
+      preparedPages.push({ 
+        ...p, 
+        html: finalHtml,
+        css: finalCss,
+        js: finalJs,
+        dbId: createdPage.id 
+      });
     }
 
     let homePage = preparedPages.find(p => p.isHomepage || p.slug === 'index') || preparedPages[0];
@@ -553,8 +583,8 @@ export async function processCustomRemasterGenerationJob(
     ];
     const navigationLinksText = allNavigationRoutes.map(r => `- "${r.name}" -> href="${r.href}"`).join('\n');
 
-    // 2. GERAR MELHORIAS (ETAPA DE IA)
-    if (onProgress) onProgress(`IA melhorando Home...`, activePages.length + 1, activePages.length * 2);
+    // 2. GERAR MELHORIA DA HOME (PÁGINA 1 DE N) - UMA PÁGINA POR VEZ
+    if (onProgress) onProgress(`Melhorando página 1 de ${totalPages} (${homePage.name}) via ${providerLabel} [${modelLabel}]...`, totalPages + 1, totalPages * 2);
 
     const homeAiPrompt = `
       Você é o Arquiteto Frontend Líder e Designer Master.
@@ -600,17 +630,19 @@ export async function processCustomRemasterGenerationJob(
       {
         provider: (aiProvider as any) || 'gemini',
         apiKey: customApiKey,
+        model: customModel,
         registeredModels: registeredModels,
         proxyUrl: customProxyUrl,
         ollamaEndpoint: ollamaEndpoint,
+        lowSpecMode: lowSpecMode,
         customSkills: customSkills,
         onProgress: (info) => {
-          if (onProgress) onProgress(`IA melhorando Home (${info.model || 'modelo'} - 1/1)...`, activePages.length + 1, activePages.length * 2);
+          if (onProgress) onProgress(`Gerando página 1 de ${totalPages} (${homePage.name}) [${info.model || modelLabel}]...`, totalPages + 1, totalPages * 2);
         }
       }
     );
 
-    // Atualizar Home
+    // Atualizar Home imediatamente no banco de dados
     await prisma.page.update({
       where: { id: homePage.dbId },
       data: {
@@ -624,11 +656,14 @@ export async function processCustomRemasterGenerationJob(
     const globalCss = homeAiResponse.css || '';
     const globalJs = homeAiResponse.js || '';
 
-    // 4. GERAR SUBPÁGINAS
+    // 3. GERAR SUBPÁGINAS SEQUENCIALMENTE - UMA PÁGINA POR VEZ
     for (let idx = 0; idx < subPages.length; idx++) {
       if (projectJobsQueue[projectId]?.status === 'cancelled') throw new Error('Job cancelled');
       const sub = subPages[idx];
+      const pageNum = idx + 2;
       
+      if (onProgress) onProgress(`Melhorando página ${pageNum} de ${totalPages} (${sub.name}) via ${providerLabel} [${modelLabel}]...`, totalPages + pageNum, totalPages * 2);
+
       const subPrompt = `
         Você é o Engenheiro Frontend do site "${businessName}".
         Subpágina: "${sub.name}" (${sub.slug}).
@@ -664,13 +699,19 @@ export async function processCustomRemasterGenerationJob(
           {
             provider: (aiProvider as any) || 'gemini',
             apiKey: customApiKey,
+            model: customModel,
             registeredModels: registeredModels,
             proxyUrl: customProxyUrl,
             ollamaEndpoint: ollamaEndpoint,
-            customSkills: customSkills
+            lowSpecMode: lowSpecMode,
+            customSkills: customSkills,
+            onProgress: (info) => {
+              if (onProgress) onProgress(`Gerando página ${pageNum} de ${totalPages} (${sub.name}) [${info.model || modelLabel}]...`, totalPages + pageNum, totalPages * 2);
+            }
           }
         );
 
+        // SALVAR IMEDIATAMENTE NO BANCO DE DADOS CADA SUBPÁGINA CONCLUÍDA
         await prisma.page.update({
           where: { id: sub.dbId },
           data: {
@@ -679,10 +720,12 @@ export async function processCustomRemasterGenerationJob(
             js: subAiResponse.js || globalJs
           }
         });
-      } catch (e) {}
+      } catch (e: any) {
+        console.error(`Erro ao melhorar subpágina ${sub.name}:`, e);
+      }
     }
 
-    if (onProgress) onProgress(`Site remasterizado com sucesso!`, activePages.length * 2, activePages.length * 2);
+    if (onProgress) onProgress(`Site remasterizado com sucesso! (${totalPages} páginas atualizadas)`, totalPages * 2, totalPages * 2);
     return projectId;
   } catch (err: any) {
     console.error("Erro no processCustomRemasterGenerationJob:", err);
@@ -703,7 +746,10 @@ export async function processWebsiteRemasterJob(
   onProgress?: (status: string, attempt: number, total: number) => void,
   customSkills?: any[],
   aiProvider?: string,
-  ollamaEndpoint?: string
+  ollamaEndpoint?: string,
+  customModel?: string,
+  lowSpecMode?: boolean,
+  userId?: string
 ) {
   try {
     if (onProgress) onProgress(`Analisando estrutura e páginas do site (${websiteUrl})...`, 1, 4);
@@ -762,7 +808,12 @@ export async function processWebsiteRemasterJob(
       registeredModels,
       customProxyUrl,
       onProgress,
-      customSkills
+      customSkills,
+      userId,
+      aiProvider,
+      ollamaEndpoint,
+      customModel,
+      lowSpecMode
     );
   } catch (err: any) {
     console.error("Erro no processWebsiteRemasterJob:", err);

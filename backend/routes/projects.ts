@@ -29,7 +29,10 @@ async function processAIProjectGeneration(
   customModel?: string, 
   registeredModels?: string[],
   customProxyUrl?: string,
-  customSkills?: any[], aiProvider?: string, ollamaEndpoint?: string
+  customSkills?: any[], 
+  aiProvider?: string, 
+  ollamaEndpoint?: string,
+  lowSpecMode?: boolean
 ) {
   projectJobsQueue[projectId] = { status: 'processing' };
   try {
@@ -50,6 +53,7 @@ async function processAIProjectGeneration(
         registeredModels: registeredModels,
         proxyUrl: customProxyUrl,
         ollamaEndpoint: ollamaEndpoint,
+        lowSpecMode: lowSpecMode,
         customSkills: customSkills,
         onProgress: (info) => {
           projectJobsQueue[projectId] = {
@@ -275,7 +279,9 @@ router.post('/', async (req: AuthenticatedRequest, res: any) => {
     } catch {}
 
     const aiProvider = decodeHeader(req.headers['x-ai-provider'] || req.headers['X-Ai-Provider'] || req.headers['X-AI-Provider']);
+    const customModel = decodeHeader(req.headers['x-ai-model'] || req.headers['X-Ai-Model'] || req.headers['X-AI-Model'] || req.headers['x-ollama-model'] || req.headers['X-Ollama-Model']);
     const ollamaEndpoint = decodeHeader(req.headers['x-ollama-endpoint'] || req.headers['X-Ollama-Endpoint']);
+    const lowSpecMode = (req.headers['x-ollama-low-spec'] || req.headers['X-Ollama-Low-Spec']) ? (req.headers['x-ollama-low-spec'] || req.headers['X-Ollama-Low-Spec']) === 'true' : undefined;
 
     // 1. Caso seja remasterização/melhoria de site existente (analisa páginas e subpáginas)
     if (remasterWebsiteUrl) {
@@ -297,7 +303,10 @@ router.post('/', async (req: AuthenticatedRequest, res: any) => {
         },
         customSkills,
         aiProvider,
-        ollamaEndpoint
+        ollamaEndpoint,
+        customModel,
+        lowSpecMode,
+        userId
       ).then(() => {
         projectJobsQueue[project.id] = { status: 'completed' };
       }).catch((err) => {
@@ -310,7 +319,7 @@ router.post('/', async (req: AuthenticatedRequest, res: any) => {
       
       // Enqueue job immediately on process memory thread
       projectJobsQueue[project.id] = { status: 'pending' };
-      processAIProjectGeneration(project.id, aiPromptMessage, clientGeminiKey, undefined, registeredModels, clientProxyUrl, customSkills, aiProvider, ollamaEndpoint);
+      processAIProjectGeneration(project.id, aiPromptMessage, clientGeminiKey, customModel, registeredModels, clientProxyUrl, customSkills, aiProvider, ollamaEndpoint, lowSpecMode);
     }
 
     return res.status(201).json(project);

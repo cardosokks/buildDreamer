@@ -879,14 +879,31 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
   <meta name="description" content="${activePage.seoDescription || ''}">
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <style>
-    body { font-family: 'Inter', sans-serif; }
-    h1,h2,h3,h4,h5,h6 { font-family: 'Outfit', sans-serif; }
+  <style id="studio-core-styles">
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      padding: 0;
+      min-height: 100vh;
+      background: #ffffff;
+      color: #0f172a;
+      font-family: 'Inter', sans-serif;
+      position: relative;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      font-family: 'Outfit', sans-serif;
+    }
+  </style>
+  <style id="studio-user-styles">
     ${activePage.css || ''}
   </style>
 </head>
-<body class="bg-slate-950 text-slate-100 min-h-screen">
-  ${activePage.html || ''}
+<body>
+  <div id="preview-root">
+    ${activePage.html || ''}
+  </div>
   <script>
     ${activePage.js || ''}
   </script>
@@ -909,14 +926,17 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
       if (!href || href.startsWith('http') || href.startsWith('mailto:') || href.startsWith('tel:') || href.startsWith('#')) return;
 
       e.preventDefault();
-      var cleanSlug = href.replace(/^\\//, '').replace(/\\.html$/, '') || 'index';
+      var cleanSlug = href.replace(/^\//, '').replace(/\.html$/, '') || 'index';
       var page = window.__PROJECT_PAGES__.find(function(p) {
         return p.slug === cleanSlug || (cleanSlug === 'index' && p.isHomepage);
       });
 
       if (page) {
         document.title = page.title || page.name;
-        document.body.innerHTML = page.html || '';
+        var userStyles = document.getElementById('studio-user-styles');
+        if (userStyles) userStyles.textContent = page.css || '';
+        var root = document.getElementById('preview-root') || document.body;
+        root.innerHTML = page.html || '';
         window.scrollTo({ top: 0, behavior: 'smooth' });
         if (page.js) {
           try { eval(page.js); } catch(err) { console.error(err); }
