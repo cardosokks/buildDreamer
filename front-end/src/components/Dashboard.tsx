@@ -61,7 +61,11 @@ import {
   PanelLeftOpen,
   Bell,
   UserPlus,
-  UserCheck
+  UserCheck,
+  MonitorSmartphone,
+  Store,
+  UserCircle,
+  Rocket
 } from 'lucide-react';
 
 import { useTheme } from '../context/ThemeContext';
@@ -3920,7 +3924,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
       {/* Create Project Modal */}
       {showCreateModal && (
         <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
-          <div className="w-full max-w-xl bg-[#0f0b18] border border-slate-800 rounded-2xl shadow-2xl p-6 overflow-hidden">
+          <div className="w-full max-w-xl bg-[#0f0b18] border border-slate-800 rounded-2xl shadow-2xl p-6 max-h-[90vh] overflow-y-auto">
             <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
               <FolderPlus className="text-purple-400 w-6 h-6" />
               Criar Novo Site
@@ -4108,7 +4112,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
               {creationMode === 'template' && (
                 <div className="space-y-4">
                   <p className="text-sm text-slate-400">Selecione um template pronto para iniciar o seu projeto:</p>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <button
                       type="button"
                       onClick={() => setSelectedTemplate('saas')}
@@ -4118,11 +4122,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                           : 'border-slate-800 bg-slate-900 hover:border-slate-700'
                       }`}
                     >
-                      <div className="w-full h-24 bg-gradient-to-br from-indigo-900/50 to-purple-900/50 rounded-lg border border-slate-800 flex items-center justify-center mb-1">
-                        <MonitorSmartphone className="w-8 h-8 text-indigo-400" />
+                      <div className="w-full h-28 bg-gradient-to-br from-indigo-900/40 to-purple-900/40 rounded-lg border border-slate-700/50 flex items-center justify-center mb-2 group-hover:border-purple-500/50 transition-colors">
+                        <MonitorSmartphone className="w-10 h-10 text-indigo-400 group-hover:text-indigo-300 transition-colors" />
                       </div>
                       <span className="font-semibold text-white text-sm">Startup & SaaS</span>
-                      <span className="text-[10px] text-slate-400 text-left line-clamp-2">Template moderno com Hero section focada em conversão, features e pricing.</span>
                     </button>
                     <button
                       type="button"
@@ -4133,11 +4136,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                           : 'border-slate-800 bg-slate-900 hover:border-slate-700'
                       }`}
                     >
-                      <div className="w-full h-24 bg-gradient-to-br from-orange-900/50 to-red-900/50 rounded-lg border border-slate-800 flex items-center justify-center mb-1">
-                        <Store className="w-8 h-8 text-orange-400" />
+                      <div className="w-full h-28 bg-gradient-to-br from-orange-900/40 to-red-900/40 rounded-lg border border-slate-700/50 flex items-center justify-center mb-2 group-hover:border-orange-500/50 transition-colors">
+                        <Store className="w-10 h-10 text-orange-400 group-hover:text-orange-300 transition-colors" />
                       </div>
                       <span className="font-semibold text-white text-sm">Negócio Local</span>
-                      <span className="text-[10px] text-slate-400 text-left line-clamp-2">Ideal para clínicas, restaurantes e lojas físicas. Foco em contato e localização.</span>
                     </button>
                     <button
                       type="button"
@@ -4148,11 +4150,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                           : 'border-slate-800 bg-slate-900 hover:border-slate-700'
                       }`}
                     >
-                      <div className="w-full h-24 bg-gradient-to-br from-cyan-900/50 to-blue-900/50 rounded-lg border border-slate-800 flex items-center justify-center mb-1">
-                        <UserCircle className="w-8 h-8 text-cyan-400" />
+                      <div className="w-full h-28 bg-gradient-to-br from-cyan-900/40 to-blue-900/40 rounded-lg border border-slate-700/50 flex items-center justify-center mb-2 group-hover:border-cyan-500/50 transition-colors">
+                        <UserCircle className="w-10 h-10 text-cyan-400 group-hover:text-cyan-300 transition-colors" />
                       </div>
                       <span className="font-semibold text-white text-sm">Portfólio Pessoal</span>
-                      <span className="text-[10px] text-slate-400 text-left line-clamp-2">Apresente seus trabalhos, habilidades e experiências de forma profissional.</span>
                     </button>
                     <button
                       type="button"
@@ -4169,6 +4170,35 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                       <span className="font-semibold text-white text-sm">Landing Page (Vendas)</span>
                       <span className="text-[10px] text-slate-400 text-left line-clamp-2">Página de alta conversão para infoprodutos ou serviços específicos.</span>
                     </button>
+                  </div>
+                  
+                  {/* Template Preview Area */}
+                  <div className="mt-4 p-4 bg-slate-950 rounded-xl border border-slate-800">
+                    <p className="text-xs text-slate-500 mb-2 font-medium uppercase tracking-wider">Pre-visualização:</p>
+                    <div className="w-full h-32 bg-slate-900 rounded-lg border border-slate-800 flex items-center justify-center overflow-hidden relative">
+                      {selectedTemplate === 'saas' && (
+                        <div className="w-full h-full flex flex-col items-center justify-center gap-2 p-2">
+                          <div className="w-3/4 h-4 bg-purple-900/50 rounded" />
+                          <div className="w-1/2 h-2 bg-slate-700 rounded" />
+                          <div className="flex gap-2 mt-2">
+                             <div className="w-8 h-8 bg-indigo-900/50 rounded" />
+                             <div className="w-8 h-8 bg-indigo-900/50 rounded" />
+                          </div>
+                        </div>
+                      )}
+                      {selectedTemplate === 'local' && (
+                        <div className="w-full h-full flex flex-col gap-2 p-3">
+                          <div className="w-full h-8 bg-orange-900/30 rounded flex items-center px-2 text-[10px] text-orange-200">Menu</div>
+                          <div className="flex gap-2">
+                             <div className="w-16 h-16 bg-slate-800 rounded" />
+                             <div className="flex-1 flex flex-col gap-1">
+                               <div className="w-full h-3 bg-slate-700 rounded" />
+                               <div className="w-1/2 h-2 bg-slate-800 rounded" />
+                             </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
                   
                   <div className="mt-4">

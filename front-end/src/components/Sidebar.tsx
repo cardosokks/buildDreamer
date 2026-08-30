@@ -157,6 +157,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
     }
   });
 
+  const loadTemplates = () => {
+    try {
+      const stored = localStorage.getItem('studio_custom_templates');
+      setCustomTemplates(stored ? JSON.parse(stored) : []);
+    } catch {}
+  };
+
   const saveCustomTemplatesToStorage = (list: CustomTemplate[]) => {
     setCustomTemplates(list);
     try {
@@ -602,6 +609,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <Plus className="w-3.5 h-3.5" />
               <span>Novo Template</span>
             </button>
+            <button
+              type="button"
+              onClick={loadTemplates}
+              className="py-1.5 px-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1 cursor-pointer"
+              title="Atualizar lista de templates"
+            >
+              <ArrowDown className="w-3.5 h-3.5" />
+            </button>
 
             {selectedPath && onSaveSelectionAsTemplate && (
               <button
@@ -616,7 +631,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 title="Salvar o elemento selecionado no canvas como um novo template"
               >
                 <Sparkles className="w-3.5 h-3.5 text-pink-400" />
-                <span>Salvar Seleção</span>
               </button>
             )}
           </div>
@@ -651,35 +665,42 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 e.dataTransfer.effectAllowed = 'copyMove';
               }}
               onClick={() => onInsertBlock && onInsertBlock(block.html, block.css)}
-              className="p-3 bg-[#110c1e] hover:bg-[#19122c] border border-slate-850 hover:border-purple-500/60 rounded-xl transition-all group cursor-grab active:cursor-grabbing shadow-sm hover:shadow-[0_0_15px_rgba(168,85,247,0.2)] relative"
+              className="bg-[#110c1e] hover:bg-[#19122c] border border-slate-850 hover:border-purple-500/60 rounded-xl transition-all group cursor-grab active:cursor-grabbing shadow-sm hover:shadow-[0_0_15px_rgba(168,85,247,0.2)] overflow-hidden"
             >
-              <div className="flex items-center justify-between mb-1">
-                <div className="flex items-center gap-2 truncate">
-                  <GripVertical className="w-3.5 h-3.5 text-slate-600 group-hover:text-purple-400 shrink-0" />
-                  <span className="text-xs font-bold text-white group-hover:text-purple-300 transition-colors truncate">
-                    {block.title}
-                  </span>
-                </div>
-                
-                {customTemplates.some(ct => ct.id === block.id) && (
-                  <button
-                    onClick={(e) => handleDeleteCustomTemplate(block.id, e)}
-                    className="p-1 text-slate-500 hover:text-red-400 rounded hover:bg-slate-900 transition-colors"
-                    title="Excluir Template"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </button>
-                )}
+              {/* Preview Area */}
+              <div className="h-20 bg-slate-900 border-b border-slate-800 p-2 overflow-hidden relative">
+                 <div className="opacity-50 transform scale-[0.4] origin-top-left w-[250%] h-[250%] pointer-events-none" dangerouslySetInnerHTML={{ __html: block.html }} />
               </div>
 
-              <div className="flex items-center justify-between text-[10px] text-slate-400 pl-5">
-                <span className="bg-purple-950/60 text-purple-300 border border-purple-500/30 px-1.5 py-0.2 rounded font-mono">
-                  {block.category}
-                </span>
-                <span className="text-slate-500 group-hover:text-purple-400 transition-colors flex items-center gap-1 font-semibold">
-                  <Plus className="w-3 h-3" />
-                  Inserir
-                </span>
+              <div className="p-3">
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-2 truncate">
+                    <GripVertical className="w-3.5 h-3.5 text-slate-600 group-hover:text-purple-400 shrink-0" />
+                    <span className="text-xs font-bold text-white group-hover:text-purple-300 transition-colors truncate">
+                      {block.title}
+                    </span>
+                  </div>
+                  
+                  {customTemplates.some(ct => ct.id === block.id) && (
+                    <button
+                      onClick={(e) => handleDeleteCustomTemplate(block.id, e)}
+                      className="p-1 text-slate-500 hover:text-red-400 rounded hover:bg-slate-900 transition-colors"
+                      title="Excluir Template"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between text-[10px] text-slate-400">
+                  <span className="bg-purple-950/60 text-purple-300 border border-purple-500/30 px-1.5 py-0.2 rounded font-mono">
+                    {block.category}
+                  </span>
+                  <span className="text-slate-500 group-hover:text-purple-400 transition-colors flex items-center gap-1 font-semibold">
+                    <Plus className="w-3 h-3" />
+                    Inserir
+                  </span>
+                </div>
               </div>
             </div>
           ))}
