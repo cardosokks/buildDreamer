@@ -1,5 +1,5 @@
 import { prisma } from '../db';
-import { generateAIResponse } from '../services/gemini';
+import { executeAIRequest } from '../services/aiEngine';
 import { uploadAssetToStorage } from './storageService';
 import { projectJobsQueue } from '../routes/projects';
 import https from 'https';
@@ -98,7 +98,9 @@ async function processPageAssets(
   html: string, 
   baseUrl: string, 
   assetCache: Map<string, string>,
-  userId: string
+  userId?: string,
+  aiProvider?: string,
+  ollamaEndpoint?: string
 ): Promise<string> {
   let rewrittenHtml = html;
   
@@ -416,7 +418,9 @@ export async function startWebsiteScrapeJob(
   jobId: string,
   websiteUrl: string,
   businessName: string,
-  userId: string, 
+  userId?: string,
+  aiProvider?: string,
+  ollamaEndpoint?: string, 
   customProxyUrl?: string
 ) {
   scrapeJobsQueue[jobId] = {
@@ -489,9 +493,22 @@ export async function processCustomRemasterGenerationJob(
   customProxyUrl?: string,
   onProgress?: (status: string, attempt: number, total: number) => void,
   customSkills?: any[],
-  userId: string
+  userId?: string,
+  aiProvider?: string,
+  ollamaEndpoint?: string
 ) {
   try {
+    let resolvedUserId = userId;
+    if (!resolvedUserId) {
+      const proj = await prisma.project.findUnique({ where: { id: projectId } });
+      if (proj && proj.ownerId) {
+        resolvedUserId = proj.ownerId;
+      } else {
+        // Fallback para evitar erro se não encontrar
+        resolvedUserId = 'system';
+      }
+    }
+
     const assetCache = new Map<string, string>();
     const activePages = pagesList.filter(p => p.enabled !== false);
     
@@ -506,7 +523,7 @@ export async function processCustomRemasterGenerationJob(
       
       const sourceHtml = p.html || p.rewrittenHtml || '';
       if (sourceHtml && p.originalUrl) {
-        p.rewrittenHtml = await processPageAssets(sourceHtml, p.originalUrl, assetCache, userId);
+        p.rewrittenHtml = await processPageAssets(sourceHtml, p.originalUrl, assetCache, resolvedUserId!);
       }
       
       // Extrair componentes e Criar página inicial preparada
@@ -577,17 +594,20 @@ export async function processCustomRemasterGenerationJob(
       - IMAGENS: Utilize as URLs das imagens presentes no conteúdo original (já processadas).
     `;
 
-    const homeAiResponse = await generateAIResponse(
+    const homeAiResponse = await executeAIRequest(
       homeAiPrompt,
       { html: homePage.html, css: homePage.css, js: homePage.js },
-      customApiKey,
-      undefined,
-      registeredModels,
-      (model, attempt, total) => {
-        if (onProgress) onProgress(`IA melhorando Home (${model} - ${attempt}/${total})...`, activePages.length + 1, activePages.length * 2);
-      },
-      customProxyUrl,
-      customSkills
+      {
+        provider: (aiProvider as any) || 'gemini',
+        apiKey: customApiKey,
+        registeredModels: registeredModels,
+        proxyUrl: customProxyUrl,
+        ollamaEndpoint: ollamaEndpoint,
+        customSkills: customSkills,
+        onProgress: (info) => {
+          if (onProgress) onProgress(`IA melhorando Home (${info.model || 'modelo'} - 1/1)...`, activePages.length + 1, activePages.length * 2);
+        }
+      }
     );
 
     // Atualizar Home
@@ -638,15 +658,17 @@ export async function processCustomRemasterGenerationJob(
       `;
 
       try {
-        const subAiResponse = await generateAIResponse(
+        const subAiResponse = await executeAIRequest(
           subPrompt,
           { html: sub.html, css: sub.css || globalCss, js: sub.js || globalJs },
-          customApiKey,
-          undefined,
-          registeredModels,
-          undefined,
-          customProxyUrl,
-          customSkills
+          {
+            provider: (aiProvider as any) || 'gemini',
+            apiKey: customApiKey,
+            registeredModels: registeredModels,
+            proxyUrl: customProxyUrl,
+            ollamaEndpoint: ollamaEndpoint,
+            customSkills: customSkills
+          }
         );
 
         await prisma.page.update({
@@ -679,7 +701,9 @@ export async function processWebsiteRemasterJob(
   registeredModels?: string[],
   customProxyUrl?: string,
   onProgress?: (status: string, attempt: number, total: number) => void,
-  customSkills?: any[]
+  customSkills?: any[],
+  aiProvider?: string,
+  ollamaEndpoint?: string
 ) {
   try {
     if (onProgress) onProgress(`Analisando estrutura e páginas do site (${websiteUrl})...`, 1, 4);
@@ -687,11 +711,15 @@ export async function processWebsiteRemasterJob(
     const scrapedPages = await crawlEntireClientWebsite(websiteUrl, 6, customProxyUrl);
     
     let homeText = '';
-    let targetPagesList: Array<{ name: string; slug: string; customPrompt?: string; cleanText?: string }> = [];
+    let homeHtml = '';
+    let homeUrl = '';
+    let targetPagesList: Array<{ name: string; slug: string; customPrompt?: string; cleanText?: string; html?: string; originalUrl?: string }> = [];
 
     if (scrapedPages.length > 1) {
       const homeScraped = scrapedPages.find(p => p.slug === 'index') || scrapedPages[0];
       homeText = homeScraped.cleanText;
+      homeHtml = homeScraped.html;
+      homeUrl = homeScraped.url;
       
       const otherScraped = scrapedPages.filter(p => p !== homeScraped);
       for (const sub of otherScraped) {
@@ -699,13 +727,20 @@ export async function processWebsiteRemasterJob(
           name: sub.name,
           slug: sub.slug,
           customPrompt: `Subpágina original: ${sub.url}`,
-          cleanText: sub.cleanText
+          cleanText: sub.cleanText,
+          html: sub.html,
+          originalUrl: sub.url
         });
       }
     } else {
       homeText = scrapedPages.length === 1 
         ? scrapedPages[0].cleanText 
         : `Empresa ${businessName} (${websiteUrl}): Soluções completas e canais de atendimento.`;
+        
+      if (scrapedPages.length === 1) {
+        homeHtml = scrapedPages[0].html;
+        homeUrl = scrapedPages[0].url;
+      }
 
       targetPagesList = [
         { name: "Serviços", slug: "servicos", customPrompt: "Soluções completas e produtos da empresa" },
@@ -719,7 +754,7 @@ export async function processWebsiteRemasterJob(
       businessName,
       `Site moderno, responsivo e elegante para a empresa ${businessName}`,
       [
-        { name: 'Home', slug: 'index', isHomepage: true, cleanText: homeText },
+        { name: 'Home', slug: 'index', isHomepage: true, cleanText: homeText, html: homeHtml, originalUrl: homeUrl },
         ...targetPagesList
       ],
       { repeatNavbar: true, repeatFooter: true },

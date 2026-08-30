@@ -1,9 +1,38 @@
 import { Router } from 'express';
 import { prisma } from '../db';
 import { authenticateToken, AuthenticatedRequest } from '../middleware/auth';
-import { uploadAssetToStorage } from '../services/storageService';
+import { uploadAssetToStorage, getAssetStream } from '../services/storageService';
 
 const router = Router();
+
+// GET /api/media/files/* - Route to fetch a file from MinIO locally and stream to the browser
+router.get('/files/*', async (req, res) => {
+  try {
+    const objectName = req.params[0];
+    if (!objectName) {
+      return res.status(400).send('Bad Request: Object name is required');
+    }
+    
+    // Configura os headers baseados na extensão do arquivo
+    const ext = objectName.split('.').pop()?.toLowerCase();
+    let contentType = 'application/octet-stream';
+    if (ext === 'png') contentType = 'image/png';
+    else if (ext === 'jpg' || ext === 'jpeg') contentType = 'image/jpeg';
+    else if (ext === 'gif') contentType = 'image/gif';
+    else if (ext === 'svg') contentType = 'image/svg+xml';
+    else if (ext === 'webp') contentType = 'image/webp';
+    else if (ext === 'mp4') contentType = 'video/mp4';
+    
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Cache-Control', 'public, max-age=31536000'); // cache for 1 year
+    
+    const stream = await getAssetStream(objectName);
+    stream.pipe(res);
+  } catch (error: any) {
+    console.error(`[MinIO Proxy Error] Falha ao buscar arquivo ${req.params[0]}:`, error.message);
+    res.status(404).send('Not Found');
+  }
+});
 
 // GET /api/media/status - Verificar status do MinIO
 router.get('/status', async (req, res) => {

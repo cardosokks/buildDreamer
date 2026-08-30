@@ -28,10 +28,11 @@ import {
   HelpCircle,
   RefreshCw,
   Sliders,
-  Laptop
+  Laptop,
+  Download,
+  Upload
 } from 'lucide-react';
 import { API_URL } from '../config';
-import { MinioSettingsPanel } from './MinioSettingsPanel';
 
 export interface AISkill {
   id: string;
@@ -96,7 +97,7 @@ export const DEFAULT_AI_SKILLS: AISkill[] = [
 export const SettingsPage: React.FC = () => {
   const { token, user, login } = useAuth();
   const { theme } = useTheme();
-  const [activeTab, setActiveTab] = useState<'profile' | 'ai' | 'ollama' | 'models' | 'skills' | 'minio'>('ai');
+  const [activeTab, setActiveTab] = useState<'profile' | 'ai' | 'ollama' | 'models' | 'skills' | 'minio' | 'system'>('ai');
   const [loading, setLoading] = useState(false);
   const [savingRemote, setSavingRemote] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -523,18 +524,6 @@ export const SettingsPage: React.FC = () => {
           </button>
 
           <button
-            onClick={() => { setActiveTab('minio'); setSuccessMsg(null); setErrorMsg(null); }}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all whitespace-nowrap ${
-              activeTab === 'minio'
-                ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-600/30'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
-            }`}
-          >
-            <Database className="w-4 h-4 text-emerald-400" />
-            MinIO Storage
-          </button>
-
-          <button
             onClick={() => { setActiveTab('models'); setSuccessMsg(null); setErrorMsg(null); }}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all whitespace-nowrap ${
               activeTab === 'models'
@@ -544,6 +533,18 @@ export const SettingsPage: React.FC = () => {
           >
             <Cpu className="w-4 h-4 text-indigo-400" />
             Modelos de IA
+          </button>
+
+          <button
+            onClick={() => { setActiveTab('system'); setSuccessMsg(null); setErrorMsg(null); }}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all whitespace-nowrap ${
+              activeTab === 'system'
+                ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-600/30'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
+            }`}
+          >
+            <Settings className="w-4 h-4 text-slate-300" />
+            Backup & Sistema
           </button>
 
           <button
@@ -948,8 +949,72 @@ export const SettingsPage: React.FC = () => {
           </div>
         )}
 
-        {activeTab === 'minio' && (
-          <MinioSettingsPanel />
+        {activeTab === 'system' && (
+          <div className="space-y-6">
+            <div className="bg-[#121124] rounded-2xl p-6 md:p-8 border border-purple-500/20 shadow-xl space-y-6">
+              <div>
+                <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                  <Database className="w-5 h-5 text-emerald-400" />
+                  Backup & Restauração do Banco de Dados
+                </h2>
+                <p className="text-sm text-slate-400 mt-1">
+                  Exporte todos os projetos, páginas, leads e configurações para um arquivo JSON. Você pode usá-lo para importar após atualizar o Docker ou Easypanel.
+                </p>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-4">
+                <button
+                  onClick={() => {
+                    const downloadAnchorNode = document.createElement('a');
+                    downloadAnchorNode.setAttribute("href", `${API_URL}/api/settings/backup`);
+                    downloadAnchorNode.setAttribute("download", "builddreamer_backup.json");
+                    document.body.appendChild(downloadAnchorNode);
+                    downloadAnchorNode.click();
+                    downloadAnchorNode.remove();
+                    setSuccessMsg('Download de backup iniciado!');
+                  }}
+                  className="px-6 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold rounded-xl shadow-lg transition-all flex flex-1 justify-center items-center gap-2"
+                >
+                  <Download className="w-4 h-4" />
+                  Exportar Backup Completo
+                </button>
+
+                <label className="px-6 py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold rounded-xl shadow-lg transition-all flex flex-1 justify-center items-center gap-2 cursor-pointer">
+                  <Upload className="w-4 h-4" />
+                  Importar Backup (JSON)
+                  <input 
+                    type="file" 
+                    accept=".json"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      
+                      try {
+                        setLoading(true);
+                        const text = await file.text();
+                        const data = JSON.parse(text);
+                        
+                        const res = await fetch(`${API_URL}/api/settings/restore`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                          body: JSON.stringify(data)
+                        });
+                        
+                        if (!res.ok) throw new Error('Falha ao restaurar banco.');
+                        setSuccessMsg('Backup restaurado com sucesso!');
+                      } catch (err: any) {
+                        setErrorMsg(`Erro: ${err.message}`);
+                      } finally {
+                        setLoading(false);
+                        e.target.value = '';
+                      }
+                    }}
+                  />
+                </label>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* TAB: MODELOS DE IA */}

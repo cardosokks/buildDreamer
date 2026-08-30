@@ -17,6 +17,7 @@ import { leadsRouter } from './backend/routes/leads';
 import { crawlerRouter } from './backend/routes/crawler';
 import { ngrokRouter } from './backend/routes/ngrok';
 import mediaRouter from './backend/routes/media';
+import settingsRouter from './backend/routes/settings';
 import { authenticateToken } from './backend/middleware/auth';
 
 dotenv.config();
@@ -46,13 +47,14 @@ async function startServer() {
   app.use('/api/auth', authRouter);
   app.use('/api/users', authenticateToken, usersRouter);
   app.use('/api/chat', authenticateToken, chatRouter);
-  app.use('/api/media', authenticateToken, mediaRouter);
+  app.use('/api/media', mediaRouter);
   app.use('/api/projects', authenticateToken, projectRouter);
   app.use('/api/export', authenticateToken, exportRouter);
   app.use('/api/ai', authenticateToken, aiRouter);
   app.use('/api/leads', authenticateToken, leadsRouter);
   app.use('/api/crawler', authenticateToken, crawlerRouter);
   app.use('/api/ngrok', authenticateToken, ngrokRouter);
+  app.use('/api/settings', authenticateToken, settingsRouter);
   app.use('/api', authenticateToken, pageRouter);
 
   app.get('/health', (req, res) => {

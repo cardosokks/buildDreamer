@@ -1454,9 +1454,23 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
                 <p className="text-xs text-amber-300/80 max-w-md font-mono mb-4 animate-pulse">
                   {aiJobStatus || 'Gerando estrutura de alta conversão, paleta e seções sob medida...'}
                 </p>
-                <div className="w-48 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                <div className="w-48 h-1.5 bg-slate-800 rounded-full overflow-hidden mb-4">
                   <div className="w-full h-full bg-gradient-to-r from-amber-400 via-rose-400 to-amber-500 animate-pulse" />
                 </div>
+                <button
+                  onClick={() => {
+                    fetch(`${API_URL}/api/projects/${projectId}/cancel`, {
+                      method: 'POST',
+                      headers: { 'Authorization': `Bearer ${token}` }
+                    }).then(() => {
+                      setAiGenerating(false);
+                      setAiJobStatus(null);
+                    });
+                  }}
+                  className="px-3 py-1.5 bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-500/30 rounded-lg text-xs font-bold transition-all cursor-pointer hover:scale-105 active:scale-95"
+                >
+                  Cancelar geração
+                </button>
               </div>
             )}
 

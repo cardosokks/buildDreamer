@@ -85,6 +85,7 @@ interface Project {
   createdAt: string;
   updatedAt: string;
   pages?: { id: string }[];
+  aiJob?: { status: string; currentModel?: string; attempt?: number; total?: number; error?: string } | null;
   crmLead?: { id: string; name: string; company?: string; status?: string; phone?: string; email?: string } | null;
 }
 
@@ -703,8 +704,36 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
   const [visualStyle, setVisualStyle] = useState('');
   const [targetLeadForProject, setTargetLeadForProject] = useState<Lead | null>(null);
 
-  // Rastreamento de projetos sendo gerados pela IA no momento
-  const [generatingProjectJobs, setGeneratingProjectJobs] = useState<Record<string, { status: string; currentModel?: string; attempt?: number; total?: number }>>({});
+  // Rastreamento de projetos sendo gerados pela IA no momento (com persistência no LocalStorage)
+  const [generatingProjectJobs, setGeneratingProjectJobs] = useState<Record<string, { status: string; currentModel?: string; attempt?: number; total?: number }>>(() => {
+    try {
+      const stored = localStorage.getItem('rp_generating_project_jobs');
+      return stored ? JSON.parse(stored) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  const handleCancelAIJob = async (projectId: string) => {
+    try {
+      await fetch(`${API_URL}/api/projects/${projectId}/cancel`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      setGeneratingProjectJobs(prev => {
+        const copy = { ...prev };
+        delete copy[projectId];
+        try {
+          localStorage.setItem('rp_generating_project_jobs', JSON.stringify(copy));
+        } catch { }
+        return copy;
+      });
+      notify.info('Solicitação de cancelamento enviada.', 'Cancelamento');
+      fetchProjects();
+    } catch (e: any) {
+      notify.error(`Falha ao cancelar: ${e.message}`, 'Erro');
+    }
+  };
 
   // Projetos: modo de visualização, ordenação e busca
   const [projectsViewMode, setProjectsViewMode] = useState<'grid' | 'list'>(() => {
@@ -785,6 +814,52 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
       });
       if (!res.ok) throw new Error('Falha ao buscar projetos');
       const data = await safeJson(res);
+
+      // Sincroniza jobs de IA ativos que o backend está processando
+      const activeJobsMap: Record<string, any> = {};
+      if (Array.isArray(data)) {
+        data.forEach((p: any) => {
+          if (p.aiJob && (p.aiJob.status === 'pending' || p.aiJob.status === 'processing')) {
+            activeJobsMap[p.id] = p.aiJob;
+          }
+        });
+      }
+
+      // Consulta lista geral de jobs na fila para garantir que nenhum projeto ativo seja perdido após reload
+      try {
+        const jobsRes = await fetch(`${API_URL}/api/projects/jobs`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (jobsRes.ok) {
+          const allJobs = await safeJson(jobsRes);
+          if (allJobs && typeof allJobs === 'object') {
+            Object.entries(allJobs).forEach(([pId, j]: [string, any]) => {
+              if (j && (j.status === 'pending' || j.status === 'processing')) {
+                activeJobsMap[pId] = j;
+              }
+            });
+          }
+        }
+      } catch { }
+
+      setGeneratingProjectJobs(prev => {
+        const merged = { ...prev, ...activeJobsMap };
+        if (Array.isArray(data)) {
+          Object.keys(merged).forEach(pId => {
+            const proj = data.find((p: any) => p.id === pId);
+            if (!proj) {
+              delete merged[pId];
+            } else if (proj.aiJob?.status === 'completed' || proj.aiJob?.status === 'failed' || proj.aiJob?.status === 'cancelled') {
+              delete merged[pId];
+            }
+          });
+        }
+        try {
+          localStorage.setItem('rp_generating_project_jobs', JSON.stringify(merged));
+        } catch { }
+        return merged;
+      });
+
       // Busca dados de CRM vinculados a cada projeto
       try {
         const crmRes = await fetch(`${API_URL}/api/leads/crm`, {
@@ -862,7 +937,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
           if (!res.ok) continue;
           const job = await safeJson(res);
 
-          if (job.status === 'completed' || job.status === 'failed') {
+          if (job.status === 'completed' || job.status === 'failed' || job.status === 'cancelled') {
             // 🔔 Bell notification for AI site generation
             const proj = projects.find(p => p.id === pId);
             if (job.status === 'completed') {
@@ -873,7 +948,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                 message: `O site "${proj?.name || 'Novo Projeto'}" foi criado pela IA e está pronto para edição.`,
               });
               notify.success(`Site "${proj?.name || 'Novo Projeto'}" gerado! Clique para editar.`, '✨ Criação Completa!');
-            } else {
+            } else if (job.status === 'failed') {
               addBellNotification({
                 type: 'error',
                 emoji: '⚠️',
@@ -884,21 +959,30 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
             setGeneratingProjectJobs(prev => {
               const copy = { ...prev };
               delete copy[pId];
+              try {
+                localStorage.setItem('rp_generating_project_jobs', JSON.stringify(copy));
+              } catch { }
               return copy;
             });
             fetchProjects();
           } else {
-            setGeneratingProjectJobs(prev => ({
-              ...prev,
-              [pId]: job
-            }));
+            setGeneratingProjectJobs(prev => {
+              const updated = {
+                ...prev,
+                [pId]: job
+              };
+              try {
+                localStorage.setItem('rp_generating_project_jobs', JSON.stringify(updated));
+              } catch { }
+              return updated;
+            });
           }
         } catch { }
       }
-    }, 2500);
+    }, 2000);
 
     return () => clearInterval(interval);
-  }, [generatingProjectJobs, token]);
+  }, [generatingProjectJobs, token, projects]);
 
   useEffect(() => {
     fetchProjects();
@@ -1127,7 +1211,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
           'X-Gemini-Key': safeHeader(localStorage.getItem('gemini_api_key') || ''),
           'X-Gemini-Models': safeHeader(JSON.stringify(registeredModelIds)),
           'X-Proxy-Url': safeHeader(localStorage.getItem('ai_proxy_url') || ''),
-          'X-AI-Skills': safeHeader(localStorage.getItem('custom_ai_skills') || '')
+          'X-AI-Skills': safeHeader(localStorage.getItem('custom_ai_skills') || ''),
+          'X-AI-Provider': localStorage.getItem('preferred_ai_provider') || 'gemini',
+          'X-Ollama-Endpoint': localStorage.getItem('ollama_endpoint') || 'http://localhost:11434'
         },
         body: JSON.stringify({
           projectName: remasterBusinessName,
@@ -1190,10 +1276,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
       }
 
       setProjects([newProject, ...projects]);
-      setGeneratingProjectJobs(prev => ({
-        ...prev,
-        [newProject.id]: { status: 'processing', currentModel: 'Gerando Design System e Páginas...' }
-      }));
+      setGeneratingProjectJobs(prev => {
+        const updated = {
+          ...prev,
+          [newProject.id]: { status: 'processing', currentModel: 'Gerando Design System e Páginas...' }
+        };
+        try {
+          localStorage.setItem('rp_generating_project_jobs', JSON.stringify(updated));
+        } catch { }
+        return updated;
+      });
 
       setShowRemasterModal(false);
       setActiveTab('projects');
@@ -1278,7 +1370,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
           'X-Gemini-Key': safeHeader(localStorage.getItem('gemini_api_key') || ''),
           'X-Gemini-Models': safeHeader(JSON.stringify(registeredModelIds)),
           'X-Proxy-Url': safeHeader(localStorage.getItem('ai_proxy_url') || ''),
-          'X-AI-Skills': safeHeader(localStorage.getItem('custom_ai_skills') || '')
+          'X-AI-Skills': safeHeader(localStorage.getItem('custom_ai_skills') || ''),
+          'X-AI-Provider': localStorage.getItem('preferred_ai_provider') || 'gemini',
+          'X-Ollama-Endpoint': localStorage.getItem('ollama_endpoint') || 'http://localhost:11434'
         },
         body: JSON.stringify({
           name: finalName,
@@ -1344,10 +1438,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
 
       // Se for geração com IA, marcamos o projeto como 'em geração' e mantemos o usuário na aba de Projetos para acompanhar o status
       if (creationMode === 'ai') {
-        setGeneratingProjectJobs(prev => ({
-          ...prev,
-          [newProject.id]: { status: 'processing' }
-        }));
+        setGeneratingProjectJobs(prev => {
+          const updated = {
+            ...prev,
+            [newProject.id]: { status: 'processing' }
+          };
+          try {
+            localStorage.setItem('rp_generating_project_jobs', JSON.stringify(updated));
+          } catch { }
+          return updated;
+        });
         setActiveTab('projects');
       } else {
         // Se for do zero ou template tradicional, abre direto o editor
@@ -2428,35 +2528,55 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                       <div
                         key={project.id}
                         onClick={() => {
-                          if (isGenerating) { notify.warning('Aguarde! A IA ainda está finalizando o site.'); return; }
                           onSelectProject(project.id);
                         }}
                         className={`border rounded-2xl p-5 transition-all group flex flex-col justify-between min-h-[200px] shadow-lg animate-in fade-in duration-200 relative ${isGenerating
-                          ? 'bg-[#0f0b18] border-amber-500/50 shadow-[0_0_25px_rgba(229,185,95,0.15)] cursor-not-allowed overflow-hidden'
+                          ? 'bg-[#0f0b18] border-amber-500/50 shadow-[0_0_25px_rgba(229,185,95,0.15)] cursor-pointer overflow-hidden'
                           : theme === 'light'
                             ? 'bg-white border-slate-200 hover:border-purple-400/60 cursor-pointer hover:shadow-purple-100'
                             : 'bg-[#0f0b18] border-slate-800/80 hover:border-purple-500/40 hover:bg-[#130d1e] cursor-pointer hover:shadow-[0_0_20px_rgba(168,85,247,0.08)]'
                           }`}
                       >
                         {isGenerating && (
-                          <div className="absolute inset-0 bg-black/75 backdrop-blur-[2px] z-10 flex flex-col items-center justify-center p-4 text-center rounded-2xl">
-                            <div className="w-10 h-10 rounded-full border-2 border-amber-500/50 p-1 mb-2 animate-spin flex items-center justify-center">
+                          <div 
+                            className="absolute inset-0 bg-black/85 backdrop-blur-[3px] z-10 flex flex-col items-center justify-center p-4 text-center rounded-2xl"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <div className="w-10 h-10 rounded-full border-2 border-amber-500/50 p-1 mb-2 animate-spin flex items-center justify-center bg-amber-950/30">
                               <Sparkles className="w-5 h-5 text-amber-400 animate-pulse" />
                             </div>
-                            <span className="text-xs font-bold text-amber-300 tracking-wide">Construindo com IA...</span>
-                            <span className="text-[10px] text-slate-300 font-mono mt-1 animate-pulse">
-                              {jobInfo?.currentModel ? `${jobInfo.currentModel} (${jobInfo.attempt}/${jobInfo.total})` : 'Estruturando HTML, CSS e Seções'}
+                            <span className="text-xs font-bold text-amber-300 tracking-wide flex items-center gap-1.5">
+                              <Sparkles className="w-3.5 h-3.5 animate-spin text-amber-400" />
+                              Construindo com IA...
                             </span>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                fetch(`${API_URL}/api/projects/${project.id}/cancel`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } })
-                                  .then(() => notify.info('Solicitação de cancelamento enviada.'));
-                              }}
-                              className="mt-4 px-3 py-1 bg-red-500/20 hover:bg-red-500/40 text-red-300 border border-red-500/30 rounded-lg text-[10px] font-bold"
-                            >
-                              Cancelar
-                            </button>
+                            <span className="text-[10px] text-slate-300 font-mono mt-1 animate-pulse max-w-[220px] truncate px-1">
+                              {jobInfo?.currentModel ? `${jobInfo.currentModel} (${jobInfo.attempt || 1}/${jobInfo.total || 1})` : 'Estruturando HTML, CSS e Seções'}
+                            </span>
+                            
+                            <div className="flex items-center gap-2 mt-4">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onSelectProject(project.id);
+                                }}
+                                className="px-3 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-lg text-[11px] font-bold shadow-md shadow-purple-900/30 flex items-center gap-1.5 transition-all cursor-pointer hover:scale-105 active:scale-95"
+                                title="Entrar no editor do projeto agora"
+                              >
+                                <ArrowUpRight className="w-3.5 h-3.5" />
+                                Entrar no projeto
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleCancelAIJob(project.id);
+                                }}
+                                className="px-2.5 py-1.5 bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-500/30 rounded-lg text-[11px] font-bold transition-all cursor-pointer hover:scale-105 active:scale-95 flex items-center gap-1"
+                                title="Cancelar geração"
+                              >
+                                <X className="w-3 h-3" />
+                                Cancelar
+                              </button>
+                            </div>
                           </div>
                         )}
 
@@ -2558,7 +2678,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                       <div
                         key={project.id}
                         onClick={() => {
-                          if (isGenerating) { notify.warning('Aguarde! A IA ainda está finalizando o site.'); return; }
                           onSelectProject(project.id);
                         }}
                         className={`grid grid-cols-[2fr_1fr_auto_auto] gap-4 px-5 py-3.5 items-center transition-all cursor-pointer group ${idx !== filteredProjects.length - 1
@@ -2578,7 +2697,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                                 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
                                 : theme === 'light' ? 'bg-slate-100 text-slate-500 border-slate-200' : 'bg-slate-800 text-slate-400 border-slate-700'
                               }`}>
-                              {isGenerating ? '⚡ IA...' : project.status === 'development' ? 'Dev' : 'Live'}
+                              {isGenerating ? '⚡ Construindo com IA...' : project.status === 'development' ? 'Dev' : 'Live'}
                             </span>
                             {project.crmLead && (
                               <button
@@ -2609,28 +2728,51 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                         </div>
 
                         {/* Ações */}
-                        <div className="flex items-center gap-1 justify-end shrink-0 whitespace-nowrap" onClick={e => e.stopPropagation()}>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); setActiveTab('crm'); }}
-                            className="p-1.5 text-slate-500 hover:text-emerald-400 rounded-lg hover:bg-emerald-950/40 transition-all cursor-pointer"
-                            title={project.crmLead ? `Ver cliente "${project.crmLead.name}" no CRM` : "Ver Funil de Vendas no CRM"}
-                          >
-                            <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
-                          </button>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); openProjectDetailsModal(project); }}
-                            className="p-1.5 text-slate-500 hover:text-purple-300 rounded-lg hover:bg-purple-950/40 transition-all cursor-pointer"
-                            title="Editar"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); handleDeleteProject(project.id, e); }}
-                            className="p-1.5 text-slate-500 hover:text-red-400 rounded-lg hover:bg-red-950/30 transition-all cursor-pointer"
-                            title="Excluir"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                        <div className="flex items-center gap-1.5 justify-end shrink-0 whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                          {isGenerating ? (
+                            <>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); onSelectProject(project.id); }}
+                                className="px-2.5 py-1 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-lg text-[11px] font-bold shadow flex items-center gap-1 transition-all cursor-pointer hover:scale-105 active:scale-95"
+                                title="Entrar no editor do projeto agora"
+                              >
+                                <ArrowUpRight className="w-3.5 h-3.5" />
+                                Entrar no projeto
+                              </button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleCancelAIJob(project.id); }}
+                                className="px-2 py-1 bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-500/30 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer hover:scale-105 active:scale-95"
+                                title="Cancelar geração"
+                              >
+                                <X className="w-3 h-3" />
+                                Cancelar
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setActiveTab('crm'); }}
+                                className="p-1.5 text-slate-500 hover:text-emerald-400 rounded-lg hover:bg-emerald-950/40 transition-all cursor-pointer"
+                                title={project.crmLead ? `Ver cliente "${project.crmLead.name}" no CRM` : "Ver Funil de Vendas no CRM"}
+                              >
+                                <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
+                              </button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); openProjectDetailsModal(project); }}
+                                className="p-1.5 text-slate-500 hover:text-purple-300 rounded-lg hover:bg-purple-950/40 transition-all cursor-pointer"
+                                title="Editar"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleDeleteProject(project.id, e); }}
+                                className="p-1.5 text-slate-500 hover:text-red-400 rounded-lg hover:bg-red-950/30 transition-all cursor-pointer"
+                                title="Excluir"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </>
+                          )}
                         </div>
                       </div>
                     );

@@ -100,6 +100,15 @@ async function ensureBucket(client: Minio.Client, bucket: string): Promise<boole
   }
 }
 
+export async function getAssetStream(objectName: string): Promise<NodeJS.ReadableStream> {
+  const client = getMinioClient();
+  const config = loadConfig();
+  if (!client) {
+    throw new Error('[MinIO] Configuração do MinIO ausente ou inválida.');
+  }
+  return await client.getObject(config.bucket, objectName);
+}
+
 export async function uploadAssetToStorage(
   buffer: Buffer,
   filename: string,
@@ -115,7 +124,6 @@ export async function uploadAssetToStorage(
   }
   
   const bucket = config.bucket;
-  const publicUrlBase = config.publicUrl;
   const projectFolder = projectId ? `projects/${projectId}/` : 'uploads/';
 
   try {
@@ -131,13 +139,8 @@ export async function uploadAssetToStorage(
       'Content-Type': mimeType
     });
     
-    let url = '';
-    if (publicUrlBase) {
-      url = `${publicUrlBase.replace(/\/+$/, '')}/${bucket}/${objectName}`;
-    } else {
-      const protocol = config.useSSL ? 'https' : 'http';
-      url = `${protocol}://${config.endpoint}:${config.port}/${bucket}/${objectName}`;
-    }
+    // Always use our local proxy route so the frontend doesn't need to know MinIO's IP/port
+    const url = `/api/media/files/${objectName}`;
     
     return {
       url,

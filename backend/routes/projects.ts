@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../db';
 import { AuthenticatedRequest } from '../middleware/auth';
-import { generateAIResponse } from '../services/gemini';
+import { executeAIRequest } from '../services/aiEngine';
 
 const router = Router();
 
@@ -29,7 +29,7 @@ async function processAIProjectGeneration(
   customModel?: string, 
   registeredModels?: string[],
   customProxyUrl?: string,
-  customSkills?: any[]
+  customSkills?: any[], aiProvider?: string, ollamaEndpoint?: string
 ) {
   projectJobsQueue[projectId] = { status: 'processing' };
   try {
@@ -39,23 +39,27 @@ async function processAIProjectGeneration(
 
     if (!page) throw new Error("Homepage page not found in project");
 
-    // Invoke Gemini with dynamic attempt updates and proxy
-    const response = await generateAIResponse(
+    // Invoke AI with dynamic attempt updates and proxy
+    const response = await executeAIRequest(
       prompt,
       { html: page.html, css: page.css, js: page.js },
-      customApiKey,
-      customModel,
-      registeredModels,
-      (model, attempt, total) => {
-        projectJobsQueue[projectId] = {
-          status: 'processing',
-          currentModel: model,
-          attempt,
-          total
-        };
-      },
-      customProxyUrl,
-      customSkills
+      {
+        provider: (aiProvider as any) || 'gemini',
+        apiKey: customApiKey,
+        model: customModel,
+        registeredModels: registeredModels,
+        proxyUrl: customProxyUrl,
+        ollamaEndpoint: ollamaEndpoint,
+        customSkills: customSkills,
+        onProgress: (info) => {
+          projectJobsQueue[projectId] = {
+            status: 'processing',
+            currentModel: info.model,
+            attempt: 1,
+            total: 1
+          };
+        }
+      }
     );
 
     // Save final generated code to database
@@ -103,6 +107,20 @@ router.get('/jobs/:projectId/status', async (req: AuthenticatedRequest, res: any
   return res.json(job);
 });
 
+// List all active jobs
+router.get('/jobs', async (req: AuthenticatedRequest, res: any) => {
+  return res.json(projectJobsQueue);
+});
+
+// Cancel Job (alias via /jobs/:projectId/cancel)
+router.post('/jobs/:projectId/cancel', async (req: AuthenticatedRequest, res: any) => {
+  const projectId = req.params.projectId as string;
+  if (projectJobsQueue[projectId]) {
+    projectJobsQueue[projectId].status = 'cancelled';
+  }
+  return res.json({ message: 'Job cancelled successfully' });
+});
+
 // List Projects
 router.get('/', async (req: AuthenticatedRequest, res: any) => {
   try {
@@ -123,7 +141,16 @@ router.get('/', async (req: AuthenticatedRequest, res: any) => {
         }
       }
     });
-    return res.json(projects);
+
+    const enrichedProjects = projects.map(p => {
+      const activeJob = projectJobsQueue[p.id];
+      return {
+        ...p,
+        aiJob: (activeJob && (activeJob.status === 'pending' || activeJob.status === 'processing')) ? activeJob : null
+      };
+    });
+
+    return res.json(enrichedProjects);
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
   }
@@ -247,6 +274,9 @@ router.post('/', async (req: AuthenticatedRequest, res: any) => {
       if (rawSkills) customSkills = JSON.parse(rawSkills);
     } catch {}
 
+    const aiProvider = decodeHeader(req.headers['x-ai-provider'] || req.headers['X-Ai-Provider'] || req.headers['X-AI-Provider']);
+    const ollamaEndpoint = decodeHeader(req.headers['x-ollama-endpoint'] || req.headers['X-Ollama-Endpoint']);
+
     // 1. Caso seja remasterização/melhoria de site existente (analisa páginas e subpáginas)
     if (remasterWebsiteUrl) {
       projectJobsQueue[project.id] = { status: 'pending' };
@@ -265,7 +295,9 @@ router.post('/', async (req: AuthenticatedRequest, res: any) => {
             total
           };
         },
-        customSkills
+        customSkills,
+        aiProvider,
+        ollamaEndpoint
       ).then(() => {
         projectJobsQueue[project.id] = { status: 'completed' };
       }).catch((err) => {
@@ -278,7 +310,7 @@ router.post('/', async (req: AuthenticatedRequest, res: any) => {
       
       // Enqueue job immediately on process memory thread
       projectJobsQueue[project.id] = { status: 'pending' };
-      processAIProjectGeneration(project.id, aiPromptMessage, clientGeminiKey, undefined, registeredModels, clientProxyUrl, customSkills);
+      processAIProjectGeneration(project.id, aiPromptMessage, clientGeminiKey, undefined, registeredModels, clientProxyUrl, customSkills, aiProvider, ollamaEndpoint);
     }
 
     return res.status(201).json(project);

@@ -487,6 +487,9 @@ router.post('/remaster/generate', async (req: AuthenticatedRequest, res: any) =>
     if (rawSkills) {
       try { customSkills = JSON.parse(rawSkills); } catch {}
     }
+    
+    const aiProvider = decodeHeader(req.headers['x-ai-provider']);
+    const ollamaEndpoint = decodeHeader(req.headers['x-ollama-endpoint']);
 
     // 4. Disparar geração em Background
     projectJobsQueue[project.id] = { status: 'pending' };
@@ -508,7 +511,9 @@ router.post('/remaster/generate', async (req: AuthenticatedRequest, res: any) =>
         };
       },
       customSkills,
-      userId
+      userId,
+      aiProvider,
+      ollamaEndpoint
     ).then(() => {
       projectJobsQueue[project.id] = { status: 'completed' };
     }).catch((err) => {
