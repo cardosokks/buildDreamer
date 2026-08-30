@@ -1,12 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../db';
 import { authenticateToken, AuthenticatedRequest } from '../middleware/auth';
-import { 
-  uploadBufferToMinio, 
-  testMinioConnection, 
-  getEffectiveMinioConfig,
-  MinioConfig 
-} from '../services/minioService';
+import { uploadAssetToStorage } from '../services/storageService';
 import fs from 'fs';
 import path from 'path';
 
@@ -42,41 +37,16 @@ async function ensureMediaTable() {
 
 // POST /api/media/minio/test - Testar credenciais e bucket do MinIO
 router.post('/minio/test', async (req: AuthenticatedRequest, res: any) => {
-  try {
-    const { endpoint, port, useSSL, accessKey, secretKey, bucket, publicUrl } = req.body;
-    
-    if (!endpoint || !accessKey || !secretKey || !bucket) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Endpoint, Access Key, Secret Key e Nome do Bucket são obrigatórios.' 
-      });
-    }
-
-    const config: MinioConfig = {
-      endpoint,
-      port: port ? parseInt(port, 10) : 9000,
-      useSSL: !!useSSL,
-      accessKey,
-      secretKey,
-      bucket,
-      publicUrl
-    };
-
-    const result = await testMinioConnection(config);
-    return res.json(result);
-  } catch (error: any) {
-    return res.status(500).json({ success: false, message: error.message });
-  }
+  return res.json({ success: true, message: 'Armazenamento local configurado com sucesso por padrão. Nenhuma conexão externa necessária.' });
 });
 
 // GET /api/media/status - Verificar status de storage ativo
 router.get('/status', (req, res) => {
-  const minioConfig = getEffectiveMinioConfig();
   return res.json({
-    storageType: minioConfig ? 'minio' : 'local',
-    minioConfigured: !!minioConfig,
-    bucket: minioConfig?.bucket || null,
-    endpoint: minioConfig?.endpoint || null
+    storageType: 'local',
+    minioConfigured: false,
+    bucket: null,
+    endpoint: null
   });
 });
 
@@ -98,7 +68,7 @@ router.get('/', authenticateToken, async (req: AuthenticatedRequest, res: any) =
 router.post('/upload', authenticateToken, async (req: AuthenticatedRequest, res: any) => {
   try {
     await ensureMediaTable();
-    const { name, base64Data, mimeType, minioConfig: userMinioConfig } = req.body;
+    const { name, base64Data, mimeType } = req.body;
 
     if (!base64Data) {
       return res.status(400).json({ error: 'Dados da imagem (base64) são obrigatórios.' });
@@ -116,28 +86,9 @@ router.post('/upload', authenticateToken, async (req: AuthenticatedRequest, res:
     const size = buffer.length;
     const effectiveMime = mimeType || 'image/png';
 
-    let publicUrl: string;
-    let storageType = 'local';
-
-    // Tentar upload no MinIO se configurado no servidor ou pelo usuário
-    const minioConfig = getEffectiveMinioConfig(userMinioConfig);
-    if (minioConfig) {
-      try {
-        const minioRes = await uploadBufferToMinio(buffer, filename, effectiveMime, minioConfig);
-        publicUrl = minioRes.url;
-        storageType = 'minio';
-      } catch (minioErr: any) {
-        console.warn('[Media] Falha ao enviar para MinIO, usando fallback local:', minioErr.message);
-        const filePath = path.join(uploadsDir, filename);
-        fs.writeFileSync(filePath, buffer);
-        publicUrl = `/uploads/${filename}`;
-      }
-    } else {
-      // Fallback local
-      const filePath = path.join(uploadsDir, filename);
-      fs.writeFileSync(filePath, buffer);
-      publicUrl = `/uploads/${filename}`;
-    }
+    const uploadRes = await uploadAssetToStorage(buffer, filename, effectiveMime);
+    const publicUrl = uploadRes.url;
+    const storageType = 'local';
 
     const id = `media_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 

@@ -586,8 +586,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                 <label className={`block text-[11px] font-semibold uppercase tracking-wider ${theme === 'light' ? 'text-slate-500' : 'text-slate-400'}`}>Ambiente de Deploy & Armazenamento</label>
                 <div className={`p-3 border rounded-xl flex items-center justify-between ${theme === 'light' ? 'bg-slate-50 border-slate-200' : 'bg-slate-950 border-slate-800'}`}>
                   <div>
-                    <span className={`text-xs font-bold block ${theme === 'light' ? 'text-slate-900' : 'text-white'}`}>Object Storage (MinIO)</span>
-                    <span className="text-[10px] text-slate-500">Armazenamento de assets e arquivos na nuvem</span>
+                    <span className={`text-xs font-bold block ${theme === 'light' ? 'text-slate-900' : 'text-white'}`}>Local Storage</span>
+                    <span className="text-[10px] text-slate-500">Armazenamento interno ativado por padrão</span>
                   </div>
                   <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${theme === 'light' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : 'bg-emerald-950/60 border border-emerald-500/30 text-emerald-400'}`}>
                     Ativo

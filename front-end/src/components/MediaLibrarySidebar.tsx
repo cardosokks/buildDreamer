@@ -67,24 +67,6 @@ export const MediaLibrarySidebar: React.FC<MediaLibrarySidebarProps> = ({
       reader.onload = async () => {
         const base64Data = reader.result as string;
         
-        // Obter credenciais salvas do MinIO se configuradas
-        const minioEndpoint = localStorage.getItem('minio_endpoint');
-        const minioAccessKey = localStorage.getItem('minio_access_key');
-        const minioSecretKey = localStorage.getItem('minio_secret_key');
-        const minioBucket = localStorage.getItem('minio_bucket');
-        const minioPort = localStorage.getItem('minio_port');
-        const minioUseSSL = localStorage.getItem('minio_use_ssl') === 'true';
-        const minioPublicUrl = localStorage.getItem('minio_public_url');
-
-        const minioConfig = (minioEndpoint && minioAccessKey && minioSecretKey) ? {
-          endpoint: minioEndpoint,
-          accessKey: minioAccessKey,
-          secretKey: minioSecretKey,
-          bucket: minioBucket || 'builddreamer-assets',
-          port: minioPort ? parseInt(minioPort, 10) : 12000,
-          useSSL: minioUseSSL,
-          publicUrl: minioPublicUrl || undefined
-        } : undefined;
 
         const res = await fetch(`${API_URL}/api/media/upload`, {
           method: 'POST',
@@ -96,7 +78,6 @@ export const MediaLibrarySidebar: React.FC<MediaLibrarySidebarProps> = ({
             name: file.name,
             mimeType: file.type,
             base64Data,
-            minioConfig
           })
         });
 

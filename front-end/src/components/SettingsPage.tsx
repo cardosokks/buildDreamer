@@ -28,10 +28,9 @@ import {
   HelpCircle,
   RefreshCw,
   Sliders,
-  Laptop,
-  DownloadCloud
+  Laptop
 } from 'lucide-react';
-import { API_URL, safeJson } from '../config';
+import { API_URL } from '../config';
 
 export interface AISkill {
   id: string;
@@ -96,7 +95,7 @@ export const DEFAULT_AI_SKILLS: AISkill[] = [
 export const SettingsPage: React.FC = () => {
   const { token, user, login } = useAuth();
   const { theme } = useTheme();
-  const [activeTab, setActiveTab] = useState<'profile' | 'ai' | 'ollama' | 'minio' | 'models' | 'skills'>('ai');
+  const [activeTab, setActiveTab] = useState<'profile' | 'ai' | 'ollama' | 'models' | 'skills'>('ai');
   const [loading, setLoading] = useState(false);
   const [savingRemote, setSavingRemote] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -123,20 +122,7 @@ export const SettingsPage: React.FC = () => {
     return val === null ? true : val === 'true';
   });
   const [testingOllama, setTestingOllama] = useState(false);
-  const [fetchingGeminiModels, setFetchingGeminiModels] = useState(false);
-  const [fetchingOllamaModels, setFetchingOllamaModels] = useState(false);
   const [ollamaStatus, setOllamaStatus] = useState<{ connected: boolean; message: string; models: any[] } | null>(null);
-
-  // MinIO / S3 Settings
-  const [minioEndpoint, setMinioEndpoint] = useState(localStorage.getItem('minio_endpoint') || '');
-  const [minioPort, setMinioPort] = useState(localStorage.getItem('minio_port') || '12000');
-  const [minioUseSSL, setMinioUseSSL] = useState<boolean>(localStorage.getItem('minio_use_ssl') === 'true');
-  const [minioAccessKey, setMinioAccessKey] = useState(localStorage.getItem('minio_access_key') || '');
-  const [minioSecretKey, setMinioSecretKey] = useState(localStorage.getItem('minio_secret_key') || '');
-  const [minioBucket, setMinioBucket] = useState(localStorage.getItem('minio_bucket') || 'builddreamer-assets');
-  const [minioPublicUrl, setMinioPublicUrl] = useState(localStorage.getItem('minio_public_url') || '');
-  const [testingMinio, setTestingMinio] = useState(false);
-  const [minioStatus, setMinioStatus] = useState<{ success: boolean; message: string; buckets?: string[] } | null>(null);
 
   // Preferências de Interface / Navbar Size
   const [navbarSize, setNavbarSize] = useState<'compact' | 'normal' | 'large'>(() => {
@@ -152,30 +138,14 @@ export const SettingsPage: React.FC = () => {
     const stored = localStorage.getItem('custom_gemini_models');
     if (stored) {
       try {
-        let parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          // Migração: substitui IDs inválidos (gemini-2.5-*) por válidos (gemini-2.0-*)
-          let changed = false;
-          parsed = parsed.map((m: any) => {
-            if (m.id === 'gemini-2.5-flash') {
-              changed = true;
-              return { ...m, id: 'gemini-2.0-flash', name: m.name.replace('2.5', '2.0') };
-            }
-            if (m.id === 'gemini-2.5-pro') {
-              changed = true;
-              return { ...m, id: 'gemini-1.5-pro', name: m.name.replace('2.5', '1.5') };
-            }
-            return m;
-          });
-          if (changed) localStorage.setItem('custom_gemini_models', JSON.stringify(parsed));
-          return parsed;
-        }
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       } catch {}
     }
     return [
-      { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash (Recomendado / Mais Rápido)' },
-      { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash' },
-      { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro (Alta Precisão)' }
+      { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash (Recomendado / Mais Rápido)' },
+      { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash' },
+      { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro (Alta Precisão)' }
     ];
   };
 
@@ -266,7 +236,7 @@ export const SettingsPage: React.FC = () => {
         body: JSON.stringify(payload)
       });
       if (!res.ok) {
-        const err = await safeJson(res);
+        const err = await res.json();
         throw new Error(err.error || 'Falha ao salvar no banco');
       }
     } catch (e: any) {
@@ -360,82 +330,6 @@ export const SettingsPage: React.FC = () => {
     }
   };
 
-  const handleFetchGeminiModels = async () => {
-    if (!geminiKey && !localStorage.getItem('gemini_api_key')) {
-      setErrorMsg('Configure sua chave API do Gemini antes de buscar os modelos.');
-      return;
-    }
-    setFetchingGeminiModels(true);
-    setSuccessMsg(null);
-    setErrorMsg(null);
-    try {
-      const res = await fetch(`${API_URL}/api/ai/gemini/models`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'x-gemini-key': geminiKey || localStorage.getItem('gemini_api_key') || '',
-          'x-ai-proxy-url': btoa(proxyUrl || localStorage.getItem('ai_proxy_url') || '')
-        }
-      });
-      const data = await res.json();
-      if (data.success && data.models) {
-        const fetchedModels = data.models.map((m: any) => ({
-          id: m.id,
-          name: m.name
-        }));
-        
-        // Mescla com os existentes para não perder nomes amigáveis customizados
-        const existingMap = new Map(models.map(m => [m.id, m.name]));
-        const mergedModels = fetchedModels.map((m: any) => ({
-          id: m.id,
-          name: existingMap.has(m.id) ? existingMap.get(m.id)! : m.name
-        }));
-
-        setModels(mergedModels);
-        localStorage.setItem('custom_gemini_models', JSON.stringify(mergedModels));
-        await saveToDatabase({ customAiModels: mergedModels });
-        setSuccessMsg(`Lista de modelos Gemini atualizada com sucesso! (${mergedModels.length} modelos encontrados)`);
-      } else {
-        throw new Error(data.message || 'Falha ao buscar modelos Gemini');
-      }
-    } catch (err: any) {
-      setErrorMsg(`Erro ao buscar modelos do Gemini: ${err.message}`);
-    } finally {
-      setFetchingGeminiModels(false);
-    }
-  };
-
-  const handleFetchOllamaModels = async () => {
-    setFetchingOllamaModels(true);
-    setSuccessMsg(null);
-    setErrorMsg(null);
-    try {
-      const res = await fetch(`${API_URL}/api/ai/ollama/models?endpoint=${encodeURIComponent(ollamaEndpoint)}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      const data = await res.json();
-      setOllamaStatus({
-        connected: data.connected,
-        message: data.connected ? 'Modelos do Ollama atualizados com sucesso!' : 'Não foi possível conectar ao Ollama.',
-        models: data.models || []
-      });
-      
-      if (data.connected && data.models && data.models.length > 0) {
-        setSuccessMsg(`Lista de modelos Ollama sincronizada! (${data.models.length} modelos locais detectados)`);
-        if (!ollamaModel || !data.models.some((m: any) => m.name === ollamaModel)) {
-          setOllamaModel(data.models[0].name);
-        }
-      } else if (!data.connected) {
-        throw new Error('Certifique-se de que o Ollama está rodando e o endpoint está correto.');
-      }
-    } catch (err: any) {
-      setErrorMsg(`Erro ao sincronizar Ollama: ${err.message}`);
-    } finally {
-      setFetchingOllamaModels(false);
-    }
-  };
-
   const handleSaveOllamaSettings = (e: React.FormEvent) => {
     e.preventDefault();
     localStorage.setItem('ollama_endpoint', ollamaEndpoint);
@@ -445,50 +339,6 @@ export const SettingsPage: React.FC = () => {
       localStorage.setItem('preferred_ai_provider', 'ollama');
     }
     setSuccessMsg('Configurações do Ollama salvas com sucesso!');
-  };
-
-  const handleTestMinio = async () => {
-    setTestingMinio(true);
-    setMinioStatus(null);
-    try {
-      const res = await fetch(`${API_URL}/api/media/minio/test`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          endpoint: minioEndpoint,
-          port: minioPort,
-          useSSL: minioUseSSL,
-          accessKey: minioAccessKey,
-          secretKey: minioSecretKey,
-          bucket: minioBucket,
-          publicUrl: minioPublicUrl
-        })
-      });
-      const data = await safeJson(res);
-      setMinioStatus(data);
-    } catch (err: any) {
-      setMinioStatus({
-        success: false,
-        message: `Erro ao testar MinIO: ${err.message}`
-      });
-    } finally {
-      setTestingMinio(false);
-    }
-  };
-
-  const handleSaveMinioSettings = (e: React.FormEvent) => {
-    e.preventDefault();
-    localStorage.setItem('minio_endpoint', minioEndpoint);
-    localStorage.setItem('minio_port', minioPort);
-    localStorage.setItem('minio_use_ssl', String(minioUseSSL));
-    localStorage.setItem('minio_access_key', minioAccessKey);
-    localStorage.setItem('minio_secret_key', minioSecretKey);
-    localStorage.setItem('minio_bucket', minioBucket);
-    localStorage.setItem('minio_public_url', minioPublicUrl);
-    setSuccessMsg('Configurações do MinIO salvas no navegador e prontas para uso!');
   };
 
   const handleAddModel = async (e: React.FormEvent) => {
@@ -599,7 +449,6 @@ export const SettingsPage: React.FC = () => {
                 )}
               </h1>
               <p className="text-sm text-slate-400">
-                Gerencie provedores de IA (Gemini & Ollama Local), MinIO Storage, Modelos e Design Engine
               </p>
             </div>
           </div>
@@ -657,18 +506,6 @@ export const SettingsPage: React.FC = () => {
           >
             <Laptop className="w-4 h-4 text-cyan-400" />
             Ollama (PC Fraco / Local)
-          </button>
-
-          <button
-            onClick={() => { setActiveTab('minio'); setSuccessMsg(null); setErrorMsg(null); }}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all whitespace-nowrap ${
-              activeTab === 'minio'
-                ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-600/30'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
-            }`}
-          >
-            <HardDrive className="w-4 h-4 text-pink-400" />
-            MinIO S3 Storage
           </button>
 
           <button
@@ -897,17 +734,7 @@ export const SettingsPage: React.FC = () => {
                   className="px-4 py-2 rounded-xl bg-cyan-950/60 border border-cyan-500/40 text-cyan-300 hover:bg-cyan-900/60 text-xs font-semibold flex items-center gap-2 transition-all self-start md:self-auto"
                 >
                   {testingOllama ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-                  Testar Conexão
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleFetchOllamaModels}
-                  disabled={fetchingOllamaModels}
-                  className="px-4 py-2 rounded-xl bg-indigo-950/60 border border-indigo-500/40 text-indigo-300 hover:bg-indigo-900/60 text-xs font-semibold flex items-center gap-2 transition-all self-start md:self-auto"
-                >
-                  {fetchingOllamaModels ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <DownloadCloud className="w-3.5 h-3.5" />}
-                  Atualizar Lista de Modelos
+                  Testar Conexão Ollama
                 </button>
               </div>
 
@@ -1043,174 +870,6 @@ export const SettingsPage: React.FC = () => {
           </form>
         )}
 
-        {/* TAB: MINIO STORAGE */}
-        {activeTab === 'minio' && (
-          <form onSubmit={handleSaveMinioSettings} className="space-y-6">
-            <div className="bg-[#121124] rounded-2xl p-6 md:p-8 border border-purple-500/20 shadow-xl space-y-6">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div>
-                  <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                    <HardDrive className="w-5 h-5 text-pink-400" />
-                    Armazenamento de Imagens e Ativos — MinIO / S3 Object Storage
-                  </h2>
-                  <p className="text-xs text-slate-400 mt-1">
-                    Conecte sua instância do MinIO para armazenar fotos, logomarcas, assets de páginas e snapshots de forma escalável e com CDN.
-                  </p>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleTestMinio}
-                  disabled={testingMinio}
-                  className="px-4 py-2 rounded-xl bg-pink-950/60 border border-pink-500/40 text-pink-300 hover:bg-pink-900/60 text-xs font-semibold flex items-center gap-2 transition-all self-start md:self-auto"
-                >
-                  {testingMinio ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Server className="w-3.5 h-3.5" />}
-                  Testar Conexão MinIO & Criar Bucket
-                </button>
-              </div>
-
-              {/* Status do Teste MinIO */}
-              {minioStatus && (
-                <div className={`p-4 rounded-xl text-xs flex items-start gap-3 border ${
-                  minioStatus.success 
-                    ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-300' 
-                    : 'bg-rose-950/40 border-rose-500/40 text-rose-300'
-                }`}>
-                  {minioStatus.success ? (
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
-                  ) : (
-                    <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0 mt-0.5" />
-                  )}
-                  <div className="space-y-1">
-                    <p className="font-semibold">{minioStatus.message}</p>
-                    {minioStatus.buckets && minioStatus.buckets.length > 0 && (
-                      <p className="text-slate-400">
-                        Buckets no servidor: {minioStatus.buckets.join(', ')}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
-                    Endpoint MinIO (Host ou IP)
-                  </label>
-                  <input
-                    type="text"
-                    value={minioEndpoint}
-                    onChange={(e) => setMinioEndpoint(e.target.value)}
-                    placeholder="localhost ou minio.meudominio.com"
-                    className="w-full bg-[#0a0a0d] border border-purple-500/20 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-pink-500 font-mono"
-                  />
-                  <p className="text-[11px] text-slate-500">
-                    Apenas o hostname ou IP (sem http:// ou https://).
-                  </p>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
-                    Porta do MinIO
-                  </label>
-                  <input
-                    type="number"
-                    value={minioPort}
-                    onChange={(e) => setMinioPort(e.target.value)}
-                    placeholder="9000"
-                    className="w-full bg-[#0a0a0d] border border-purple-500/20 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-pink-500 font-mono"
-                  />
-                  <p className="text-[11px] text-slate-500">
-                    Porta da API S3 do MinIO (geralmente 9000 ou 443 para HTTPS).
-                  </p>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
-                    Access Key (Root User)
-                  </label>
-                  <input
-                    type="text"
-                    value={minioAccessKey}
-                    onChange={(e) => setMinioAccessKey(e.target.value)}
-                    placeholder="minioadmin"
-                    className="w-full bg-[#0a0a0d] border border-purple-500/20 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-pink-500 font-mono"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
-                    Secret Key (Root Password)
-                  </label>
-                  <input
-                    type="password"
-                    value={minioSecretKey}
-                    onChange={(e) => setMinioSecretKey(e.target.value)}
-                    placeholder="minioadminpassword"
-                    className="w-full bg-[#0a0a0d] border border-purple-500/20 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-pink-500 font-mono"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
-                    Nome do Bucket para o Projeto
-                  </label>
-                  <input
-                    type="text"
-                    value={minioBucket}
-                    onChange={(e) => setMinioBucket(e.target.value)}
-                    placeholder="builddreamer-assets"
-                    className="w-full bg-[#0a0a0d] border border-purple-500/20 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-pink-500 font-mono"
-                  />
-                  <p className="text-[11px] text-slate-500">
-                    O bucket será criado automaticamente se ainda não existir.
-                  </p>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
-                    URL Pública / CDN Customizada (Opcional)
-                  </label>
-                  <input
-                    type="text"
-                    value={minioPublicUrl}
-                    onChange={(e) => setMinioPublicUrl(e.target.value)}
-                    placeholder="https://cdn.meudominio.com"
-                    className="w-full bg-[#0a0a0d] border border-purple-500/20 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-pink-500 font-mono"
-                  />
-                </div>
-              </div>
-
-              {/* SSL Checkbox */}
-              <div className="p-4 rounded-xl bg-slate-900/60 border border-purple-500/20 flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <span className="font-bold text-sm text-white">Utilizar SSL / HTTPS</span>
-                  <p className="text-xs text-slate-400">Ative se o seu MinIO possui certificado SSL ou está atrás de proxy seguro.</p>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={minioUseSSL}
-                    onChange={(e) => setMinioUseSSL(e.target.checked)}
-                    className="sr-only peer"
-                  />
-                  <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-pink-500"></div>
-                </label>
-              </div>
-
-              <div className="pt-4 flex justify-end">
-                <button
-                  type="submit"
-                  className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-500 hover:to-purple-500 text-white font-semibold text-sm shadow-lg shadow-pink-600/30 flex items-center gap-2 transition-all"
-                >
-                  <Save className="w-4 h-4" />
-                  Salvar Credenciais MinIO
-                </button>
-              </div>
-            </div>
-          </form>
-        )}
-
         {/* TAB: SKILLS DE IA & DESIGN */}
         {activeTab === 'skills' && (
           <div className="space-y-6">
@@ -1279,26 +938,14 @@ export const SettingsPage: React.FC = () => {
         {activeTab === 'models' && (
           <div className="space-y-6">
             <div className="bg-[#121124] rounded-2xl p-6 md:p-8 border border-purple-500/20 shadow-xl space-y-6">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div>
-                  <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                    <Cpu className="w-5 h-5 text-indigo-400" />
-                    Modelos de IA & Ordem de Fallback
-                  </h2>
-                  <p className="text-xs text-slate-400 mt-1">
-                    Gerencie a lista de modelos candidatos. Se um modelo estiver sobrecarregado ou atingir quota, o sistema tenta o próximo automaticamente.
-                  </p>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleFetchGeminiModels}
-                  disabled={fetchingGeminiModels}
-                  className="px-4 py-2 rounded-xl bg-purple-950/60 border border-purple-500/40 text-purple-300 hover:bg-purple-900/60 text-xs font-semibold flex items-center gap-2 transition-all self-start md:self-auto"
-                >
-                  {fetchingGeminiModels ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-                  Atualizar da API do Gemini
-                </button>
+              <div>
+                <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                  <Cpu className="w-5 h-5 text-indigo-400" />
+                  Modelos de IA & Ordem de Fallback
+                </h2>
+                <p className="text-xs text-slate-400 mt-1">
+                  Gerencie a lista de modelos candidatos. Se um modelo estiver sobrecarregado ou atingir quota, o sistema tenta o próximo automaticamente.
+                </p>
               </div>
 
               <div className="space-y-3">
@@ -1335,7 +982,7 @@ export const SettingsPage: React.FC = () => {
                     type="text"
                     value={newModelId}
                     onChange={(e) => setNewModelId(e.target.value)}
-                    placeholder="ID do Modelo (ex: gemini-2.0-flash)"
+                    placeholder="ID do Modelo (ex: gemini-2.5-flash)"
                     className="bg-[#0a0a0d] border border-purple-500/20 rounded-xl px-4 py-2.5 text-sm text-white font-mono"
                   />
                   <input

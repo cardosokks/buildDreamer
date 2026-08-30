@@ -231,8 +231,8 @@ router.get('/ollama/models', async (req, res) => {
 // GET /api/ai/gemini/models - Listar modelos diretamente da API do Google
 router.get('/gemini/models', async (req, res) => {
   try {
-    const customApiKey = req.headers['x-gemini-key'] as string || undefined;
-    const customProxyUrl = req.headers['x-ai-proxy-url'] as string || undefined;
+    const customApiKey = decodeHeader(req.headers['x-gemini-key']) || undefined;
+    const customProxyUrl = decodeHeader(req.headers['x-ai-proxy-url']) || undefined;
     
     const models = await listGeminiModels(customApiKey, customProxyUrl);
     
@@ -261,9 +261,9 @@ router.post('/modify-stream', async (req: AuthenticatedRequest, res: any) => {
     }
 
     const provider = (req.headers['x-ai-provider'] as any) || req.body.provider || 'gemini';
-    const customApiKey = req.headers['x-gemini-key'] as string || undefined;
-    const customModel = req.headers['x-gemini-model'] as string || req.body.model || undefined;
-    const ollamaEndpoint = req.headers['x-ollama-endpoint'] as string || req.body.ollamaEndpoint || undefined;
+    const customApiKey = decodeHeader(req.headers['x-gemini-key']) || undefined;
+    const customModel = decodeHeader(req.headers['x-gemini-model']) || req.body.model || undefined;
+    const ollamaEndpoint = decodeHeader(req.headers['x-ollama-endpoint']) || req.body.ollamaEndpoint || undefined;
     const isLowSpec = lowSpecMode !== undefined ? !!lowSpecMode : req.headers['x-low-spec-mode'] === 'true';
     
     // Modelos alternativos registrados
@@ -279,7 +279,7 @@ router.post('/modify-stream', async (req: AuthenticatedRequest, res: any) => {
 
     // Proxy customizado
     let customProxyUrl: string | undefined;
-    const rawProxy = req.headers['x-ai-proxy-url'] as string;
+    const rawProxy = decodeHeader(req.headers['x-ai-proxy-url']);
     if (rawProxy) {
       customProxyUrl = decodeHeader(rawProxy) || undefined;
     }
@@ -345,9 +345,9 @@ router.post('/generate-page', async (req: AuthenticatedRequest, res: any) => {
     }
 
     const provider = (req.headers['x-ai-provider'] as any) || 'gemini';
-    const customApiKey = req.headers['x-gemini-key'] as string || undefined;
-    const customModel = req.headers['x-gemini-model'] as string || undefined;
-    const ollamaEndpoint = req.headers['x-ollama-endpoint'] as string || undefined;
+    const customApiKey = decodeHeader(req.headers['x-gemini-key']) || undefined;
+    const customModel = decodeHeader(req.headers['x-gemini-model']) || undefined;
+    const ollamaEndpoint = decodeHeader(req.headers['x-ollama-endpoint']) || undefined;
 
     const result = await executeAIRequest(
       `Crie uma página completa de alta conversão e design ultra moderno com o tema: ${prompt}`,
@@ -401,8 +401,8 @@ router.post(['/scrape-url', '/remaster/scrape'], async (req: AuthenticatedReques
       return res.status(400).json({ error: 'Informe uma URL ou o código HTML do site existente para remasterização.' });
     }
 
-    const customApiKey = req.headers['x-gemini-key'] as string || undefined;
-    const customModel = req.headers['x-gemini-model'] as string || undefined;
+    const customApiKey = decodeHeader(req.headers['x-gemini-key']) || undefined;
+    const customModel = decodeHeader(req.headers['x-gemini-model']) || undefined;
 
     const jobId = `scrape_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 

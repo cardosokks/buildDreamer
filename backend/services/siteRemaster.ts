@@ -1,6 +1,6 @@
 import { prisma } from '../db';
 import { generateAIResponse } from '../services/gemini';
-import { uploadAssetToStorage } from './minioService';
+import { uploadAssetToStorage } from './storageService';
 import https from 'https';
 import http from 'http';
 import crypto from 'crypto';
