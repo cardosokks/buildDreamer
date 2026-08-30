@@ -88,7 +88,7 @@ router.post('/upload', authenticateToken, async (req: AuthenticatedRequest, res:
 
     const uploadRes = await uploadAssetToStorage(buffer, filename, effectiveMime);
     const publicUrl = uploadRes.url;
-    const storageType = 'local';
+    const storageType = uploadRes.isMinio ? 'minio' : 'local';
 
     const id = `media_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 

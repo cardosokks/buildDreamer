@@ -688,6 +688,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
   const [newProjectName, setNewProjectName] = useState('');
   const [newProjectDesc, setNewProjectDesc] = useState('');
   const [creationMode, setCreationMode] = useState<'scratch' | 'template' | 'ai' | 'zip'>('scratch');
+  const [selectedTemplate, setSelectedTemplate] = useState<string>('saas');
   const [creating, setCreating] = useState(false);
   const [selectedZipBase64, setSelectedZipBase64] = useState<string | null>(null);
   const [selectedZipName, setSelectedZipName] = useState<string>('');
@@ -1279,6 +1280,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
           name: finalName,
           description: finalDesc,
           isAIPrompt: creationMode === 'ai',
+          templateType: creationMode === 'template' ? selectedTemplate : undefined,
           leadId: targetLeadForProject?.id || undefined
         })
       });
@@ -4104,8 +4106,81 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
               )}
 
               {creationMode === 'template' && (
-                <div className="p-4 bg-purple-500/10 border border-purple-500/20 rounded-xl text-xs text-purple-300">
-                  ⚠️ Os templates padrão serão carregados como ponto de partida contendo a estrutura da homepage.
+                <div className="space-y-4">
+                  <p className="text-sm text-slate-400">Selecione um template pronto para iniciar o seu projeto:</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedTemplate('saas')}
+                      className={`p-3 flex flex-col items-start gap-2 border rounded-xl transition-all cursor-pointer ${
+                        selectedTemplate === 'saas' 
+                          ? 'border-purple-500 bg-purple-900/20 shadow-[0_0_15px_rgba(168,85,247,0.15)]' 
+                          : 'border-slate-800 bg-slate-900 hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="w-full h-24 bg-gradient-to-br from-indigo-900/50 to-purple-900/50 rounded-lg border border-slate-800 flex items-center justify-center mb-1">
+                        <MonitorSmartphone className="w-8 h-8 text-indigo-400" />
+                      </div>
+                      <span className="font-semibold text-white text-sm">Startup & SaaS</span>
+                      <span className="text-[10px] text-slate-400 text-left line-clamp-2">Template moderno com Hero section focada em conversão, features e pricing.</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedTemplate('local')}
+                      className={`p-3 flex flex-col items-start gap-2 border rounded-xl transition-all cursor-pointer ${
+                        selectedTemplate === 'local' 
+                          ? 'border-purple-500 bg-purple-900/20 shadow-[0_0_15px_rgba(168,85,247,0.15)]' 
+                          : 'border-slate-800 bg-slate-900 hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="w-full h-24 bg-gradient-to-br from-orange-900/50 to-red-900/50 rounded-lg border border-slate-800 flex items-center justify-center mb-1">
+                        <Store className="w-8 h-8 text-orange-400" />
+                      </div>
+                      <span className="font-semibold text-white text-sm">Negócio Local</span>
+                      <span className="text-[10px] text-slate-400 text-left line-clamp-2">Ideal para clínicas, restaurantes e lojas físicas. Foco em contato e localização.</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedTemplate('portfolio')}
+                      className={`p-3 flex flex-col items-start gap-2 border rounded-xl transition-all cursor-pointer ${
+                        selectedTemplate === 'portfolio' 
+                          ? 'border-purple-500 bg-purple-900/20 shadow-[0_0_15px_rgba(168,85,247,0.15)]' 
+                          : 'border-slate-800 bg-slate-900 hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="w-full h-24 bg-gradient-to-br from-cyan-900/50 to-blue-900/50 rounded-lg border border-slate-800 flex items-center justify-center mb-1">
+                        <UserCircle className="w-8 h-8 text-cyan-400" />
+                      </div>
+                      <span className="font-semibold text-white text-sm">Portfólio Pessoal</span>
+                      <span className="text-[10px] text-slate-400 text-left line-clamp-2">Apresente seus trabalhos, habilidades e experiências de forma profissional.</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedTemplate('landing')}
+                      className={`p-3 flex flex-col items-start gap-2 border rounded-xl transition-all cursor-pointer ${
+                        selectedTemplate === 'landing' 
+                          ? 'border-purple-500 bg-purple-900/20 shadow-[0_0_15px_rgba(168,85,247,0.15)]' 
+                          : 'border-slate-800 bg-slate-900 hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="w-full h-24 bg-gradient-to-br from-pink-900/50 to-rose-900/50 rounded-lg border border-slate-800 flex items-center justify-center mb-1">
+                        <Rocket className="w-8 h-8 text-pink-400" />
+                      </div>
+                      <span className="font-semibold text-white text-sm">Landing Page (Vendas)</span>
+                      <span className="text-[10px] text-slate-400 text-left line-clamp-2">Página de alta conversão para infoprodutos ou serviços específicos.</span>
+                    </button>
+                  </div>
+                  
+                  <div className="mt-4">
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-slate-455 mb-2">Nome do Projeto</label>
+                    <input
+                      type="text"
+                      placeholder="Meu Site Incrível"
+                      value={newProjectName}
+                      onChange={(e) => setNewProjectName(e.target.value)}
+                      className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500/50 text-sm text-white placeholder-slate-700"
+                    />
+                  </div>
                 </div>
               )}
 

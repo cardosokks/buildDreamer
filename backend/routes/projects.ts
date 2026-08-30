@@ -130,16 +130,37 @@ router.get('/', async (req: AuthenticatedRequest, res: any) => {
 });
 
 import { processWebsiteRemasterJob } from '../services/siteRemaster';
+import { templates } from '../data/templates';
 
 // Create Project
 router.post('/', async (req: AuthenticatedRequest, res: any) => {
   try {
-    const { name, description, isAIPrompt, remasterWebsiteUrl, leadId } = req.body;
+    const { name, description, isAIPrompt, templateType, remasterWebsiteUrl, leadId } = req.body;
     if (!name) {
       return res.status(400).json({ error: 'Project name is required' });
     }
 
     const userId = req.userId as string;
+    
+    let initialHtml = `<div class="min-h-screen bg-slate-900 text-white flex flex-col justify-center items-center">
+  <h1 class="text-4xl font-bold mb-4">Gerando site profissional...</h1>
+  <p class="text-slate-400">Por favor, aguarde alguns instantes enquanto a IA constrói o mockup completo.</p>
+</div>`;
+    let initialCss = 'body { margin: 0; font-family: sans-serif; }';
+    let initialJs = '';
+
+    if (templateType && templates[templateType as keyof typeof templates]) {
+      const template = templates[templateType as keyof typeof templates];
+      initialHtml = template.html;
+      initialCss = template.css;
+      initialJs = template.js;
+    } else if (!isAIPrompt && !remasterWebsiteUrl) {
+      initialHtml = `<div class="min-h-screen bg-white text-slate-900 flex flex-col justify-center items-center">
+  <h1 class="text-4xl font-bold mb-4">Bem-vindo ao ${name}</h1>
+  <p class="text-slate-500">Comece a editar o seu site adicionando novos elementos.</p>
+</div>`;
+    }
+
     const project = await prisma.project.create({
       data: {
         name,
@@ -156,12 +177,9 @@ router.post('/', async (req: AuthenticatedRequest, res: any) => {
             slug: 'index',
             title: 'Home',
             isHomepage: true,
-            html: `<div class="min-h-screen bg-slate-900 text-white flex flex-col justify-center items-center">
-  <h1 class="text-4xl font-bold mb-4">Gerando site profissional...</h1>
-  <p class="text-slate-400">Por favor, aguarde alguns instantes enquanto a IA constrói o mockup completo.</p>
-</div>`,
-            css: 'body { margin: 0; font-family: sans-serif; }',
-            js: ''
+            html: initialHtml,
+            css: initialCss,
+            js: initialJs
           }
         }
       },

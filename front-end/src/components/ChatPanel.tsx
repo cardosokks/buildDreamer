@@ -124,6 +124,17 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   }, [projectId, pageId]);
 
   const [availableModels, setAvailableModels] = useState<Array<{ id: string; name: string }>>(() => {
+    const preferredProvider = localStorage.getItem('preferred_ai_provider') || 'gemini';
+    if (preferredProvider === 'ollama') {
+      const stored = localStorage.getItem('ollama_models');
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        } catch {}
+      }
+      return [{ id: 'qwen2.5-coder:1.5b', name: 'Qwen 2.5 Coder (1.5B)' }];
+    }
     const stored = localStorage.getItem('custom_gemini_models');
     if (stored) {
       try {
@@ -154,6 +165,20 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   });
 
   const [selectedModel, setSelectedModel] = useState<string>(() => {
+    const preferredProvider = localStorage.getItem('preferred_ai_provider') || 'gemini';
+    if (preferredProvider === 'ollama') {
+      const savedOllama = localStorage.getItem('ollama_selected_model') || localStorage.getItem('last_selected_ai_model');
+      if (savedOllama) return savedOllama;
+      
+      const stored = localStorage.getItem('ollama_models');
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          if (parsed.length > 0) return parsed[0].id;
+        } catch {}
+      }
+      return 'qwen2.5-coder:1.5b';
+    }
     let savedLastModel = localStorage.getItem('last_selected_ai_model');
     if (savedLastModel === 'gemini-2.5-flash') savedLastModel = 'gemini-2.0-flash';
     if (savedLastModel === 'gemini-2.5-pro') savedLastModel = 'gemini-1.5-pro';
@@ -176,11 +201,36 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     setSelectedModel(modelId);
     try {
       localStorage.setItem('last_selected_ai_model', modelId);
+      const preferredProvider = localStorage.getItem('preferred_ai_provider');
+      if (preferredProvider === 'ollama') {
+        localStorage.setItem('ollama_selected_model', modelId);
+      }
     } catch {}
   };
 
   useEffect(() => {
     const loadStoredModels = () => {
+      const preferredProvider = localStorage.getItem('preferred_ai_provider') || 'gemini';
+      
+      if (preferredProvider === 'ollama') {
+        const stored = localStorage.getItem('ollama_models');
+        if (stored) {
+          try {
+            const parsed = JSON.parse(stored);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setAvailableModels(parsed);
+              const savedLastModel = localStorage.getItem('ollama_selected_model') || localStorage.getItem('last_selected_ai_model');
+              if (savedLastModel && parsed.some((m: any) => m.id === savedLastModel)) {
+                setSelectedModel(savedLastModel);
+              } else {
+                setSelectedModel(parsed[0].id);
+              }
+              return;
+            }
+          } catch {}
+        }
+      }
+      
       const stored = localStorage.getItem('custom_gemini_models');
       if (stored) {
         try {

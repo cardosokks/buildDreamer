@@ -318,6 +318,7 @@ export const SettingsPage: React.FC = () => {
         if (!ollamaModel || !data.models.some((m: any) => m.name === ollamaModel)) {
           setOllamaModel(data.models[0].name);
         }
+        localStorage.setItem('ollama_models', JSON.stringify(data.models.map((m: any) => ({ id: m.name, name: m.name }))));
       }
     } catch (err: any) {
       setOllamaStatus({
