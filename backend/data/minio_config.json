@@ -1,0 +1,9 @@
+{
+  "endpoint": "",
+  "port": "9000",
+  "useSSL": false,
+  "accessKey": "",
+  "secretKey": "",
+  "bucket": "builddreamer-assets",
+  "publicUrl": ""
+}

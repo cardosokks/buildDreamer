@@ -31,6 +31,7 @@ import {
   Laptop
 } from 'lucide-react';
 import { API_URL } from '../config';
+import { MinioSettingsPanel } from './MinioSettingsPanel';
 
 export interface AISkill {
   id: string;
@@ -95,7 +96,7 @@ export const DEFAULT_AI_SKILLS: AISkill[] = [
 export const SettingsPage: React.FC = () => {
   const { token, user, login } = useAuth();
   const { theme } = useTheme();
-  const [activeTab, setActiveTab] = useState<'profile' | 'ai' | 'ollama' | 'models' | 'skills'>('ai');
+  const [activeTab, setActiveTab] = useState<'profile' | 'ai' | 'ollama' | 'models' | 'skills' | 'minio'>('ai');
   const [loading, setLoading] = useState(false);
   const [savingRemote, setSavingRemote] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -522,6 +523,18 @@ export const SettingsPage: React.FC = () => {
           </button>
 
           <button
+            onClick={() => { setActiveTab('minio'); setSuccessMsg(null); setErrorMsg(null); }}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all whitespace-nowrap ${
+              activeTab === 'minio'
+                ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-600/30'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
+            }`}
+          >
+            <Database className="w-4 h-4 text-emerald-400" />
+            MinIO Storage
+          </button>
+
+          <button
             onClick={() => { setActiveTab('models'); setSuccessMsg(null); setErrorMsg(null); }}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all whitespace-nowrap ${
               activeTab === 'models'
@@ -933,6 +946,10 @@ export const SettingsPage: React.FC = () => {
               </div>
             </div>
           </div>
+        )}
+
+        {activeTab === 'minio' && (
+          <MinioSettingsPanel />
         )}
 
         {/* TAB: MODELOS DE IA */}

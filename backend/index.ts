@@ -15,6 +15,7 @@ import { leadsRouter } from './routes/leads';
 import { crawlerRouter } from './routes/crawler';
 import { ngrokRouter } from './routes/ngrok';
 import mediaRouter from './routes/media';
+import settingsRouter from './routes/settings';
 import { authenticateToken } from './middleware/auth';
 import path from 'path';
 
@@ -42,6 +43,7 @@ app.use('/api/auth', authRouter);
 app.use('/api/users', authenticateToken, usersRouter);
 app.use('/api/chat', authenticateToken, chatRouter);
 app.use('/api/media', authenticateToken, mediaRouter);
+app.use('/api/settings', authenticateToken, settingsRouter);
 app.use('/api/projects', authenticateToken, projectRouter);
 app.use('/api/export', authenticateToken, exportRouter);
 app.use('/api/ai', authenticateToken, aiRouter);

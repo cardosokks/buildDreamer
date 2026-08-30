@@ -5,22 +5,51 @@ import * as Minio from 'minio';
 let minioClient: Minio.Client | null = null;
 let bucketEnsured = false;
 
+function loadConfig() {
+  const envConfig = {
+    endpoint: process.env.MINIO_ENDPOINT,
+    port: process.env.MINIO_PORT || '9000',
+    useSSL: process.env.MINIO_USE_SSL === 'true',
+    accessKey: process.env.MINIO_ACCESS_KEY,
+    secretKey: process.env.MINIO_SECRET_KEY,
+    bucket: process.env.MINIO_BUCKET || 'builddreamer-assets',
+    publicUrl: process.env.MINIO_PUBLIC_URL || ''
+  };
+
+  const configPath = path.join(process.cwd(), 'backend', 'data', 'minio_config.json');
+  if (fs.existsSync(configPath)) {
+    try {
+      const fileConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      if (fileConfig.endpoint) {
+        return {
+          endpoint: fileConfig.endpoint,
+          port: fileConfig.port || envConfig.port,
+          useSSL: fileConfig.useSSL || envConfig.useSSL,
+          accessKey: fileConfig.accessKey || envConfig.accessKey,
+          secretKey: fileConfig.secretKey || envConfig.secretKey,
+          bucket: fileConfig.bucket || envConfig.bucket,
+          publicUrl: fileConfig.publicUrl || envConfig.publicUrl
+        };
+      }
+    } catch (e) {
+      console.error('[MinIO] Erro ao ler config file:', e);
+    }
+  }
+  return envConfig;
+}
+
 function getMinioClient(): Minio.Client | null {
   if (minioClient) return minioClient;
-
-  const endpoint = process.env.MINIO_ENDPOINT;
-  const accessKey = process.env.MINIO_ACCESS_KEY;
-  const secretKey = process.env.MINIO_SECRET_KEY;
   
-  if (!endpoint || !accessKey || !secretKey) {
+  const config = loadConfig();
+  
+  if (!config.endpoint || !config.accessKey || !config.secretKey) {
     return null;
   }
 
-  const portStr = process.env.MINIO_PORT || '9000';
-  const useSSL = process.env.MINIO_USE_SSL === 'true';
-
-  let cleanEndpoint = endpoint.replace(/^https?:\/\//i, '').replace(/\/+$/, '');
-  let port = parseInt(portStr, 10);
+  const useSSL = config.useSSL;
+  let cleanEndpoint = config.endpoint.replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+  let port = parseInt(config.port, 10);
   if (isNaN(port)) {
     port = useSSL ? 443 : 80;
   }
@@ -30,8 +59,8 @@ function getMinioClient(): Minio.Client | null {
       endPoint: cleanEndpoint,
       port,
       useSSL,
-      accessKey,
-      secretKey
+      accessKey: config.accessKey,
+      secretKey: config.secretKey
     });
     return minioClient;
   } catch (error) {
@@ -79,12 +108,14 @@ export async function uploadAssetToStorage(
 ): Promise<{ url: string; size: number; key: string; isMinio: boolean }> {
   
   const client = getMinioClient();
+  const config = loadConfig();
+  
   if (!client) {
     throw new Error('[MinIO] Configuração do MinIO ausente ou inválida.');
   }
   
-  const bucket = process.env.MINIO_BUCKET || 'builddreamer-assets';
-  const publicUrlBase = process.env.MINIO_PUBLIC_URL || '';
+  const bucket = config.bucket;
+  const publicUrlBase = config.publicUrl;
   const projectFolder = projectId ? `projects/${projectId}/` : 'uploads/';
 
   try {
@@ -104,10 +135,8 @@ export async function uploadAssetToStorage(
     if (publicUrlBase) {
       url = `${publicUrlBase.replace(/\/+$/, '')}/${bucket}/${objectName}`;
     } else {
-      const endpoint = process.env.MINIO_ENDPOINT || '';
-      const port = process.env.MINIO_PORT || '9000';
-      const protocol = process.env.MINIO_USE_SSL === 'true' ? 'https' : 'http';
-      url = `${protocol}://${endpoint}:${port}/${bucket}/${objectName}`;
+      const protocol = config.useSSL ? 'https' : 'http';
+      url = `${protocol}://${config.endpoint}:${config.port}/${bucket}/${objectName}`;
     }
     
     return {
