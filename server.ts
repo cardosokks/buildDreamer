@@ -18,6 +18,8 @@ import { crawlerRouter } from './backend/routes/crawler';
 import { ngrokRouter } from './backend/routes/ngrok';
 import mediaRouter from './backend/routes/media';
 import settingsRouter from './backend/routes/settings';
+import productRouter from './backend/routes/products';
+import salesRouter from './backend/routes/sales';
 import { authenticateToken } from './backend/middleware/auth';
 
 dotenv.config();
@@ -55,6 +57,8 @@ async function startServer() {
   app.use('/api/crawler', authenticateToken, crawlerRouter);
   app.use('/api/ngrok', authenticateToken, ngrokRouter);
   app.use('/api/settings', authenticateToken, settingsRouter);
+  app.use('/api/products', authenticateToken, productRouter);
+  app.use('/api/sales', authenticateToken, salesRouter);
   app.use('/api', authenticateToken, pageRouter);
 
   app.get('/health', (req, res) => {

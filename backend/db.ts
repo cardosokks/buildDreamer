@@ -114,6 +114,27 @@ interface MockVersion {
   createdAt: Date;
 }
 
+interface MockProduct {
+  id: string;
+  name: string;
+  price: number;
+  siteUrl?: string | null;
+  projectId?: string | null;
+  userId: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+interface MockSale {
+  id: string;
+  leadId: string;
+  productId?: string | null;
+  productName: string;
+  amount: number;
+  userId: string;
+  createdAt: Date;
+}
+
 class InMemoryDatabase {
   users: Map<string, MockUser> = new Map();
   leads: Map<string, MockLead> = new Map();
@@ -124,6 +145,8 @@ class InMemoryDatabase {
   messages: Map<string, MockMessage> = new Map();
   medias: Map<string, MockMedia> = new Map();
   assets: Map<string, any> = new Map();
+  products: Map<string, MockProduct> = new Map();
+  sales: Map<string, MockSale> = new Map();
 
   private dbPath = path.join(process.cwd(), 'backend', 'data', 'db.json');
 
@@ -144,6 +167,18 @@ class InMemoryDatabase {
         this.versions = new Map(Object.entries(data.versions));
         this.messages = new Map(Object.entries(data.messages));
         this.assets = new Map(Object.entries(data.assets || {}));
+        this.products = new Map(
+          Object.entries(data.products || {}).map(([id, p]: [string, any]) => [
+            id, 
+            { ...p, createdAt: new Date(p.createdAt), updatedAt: new Date(p.updatedAt) }
+          ])
+        );
+        this.sales = new Map(
+          Object.entries(data.sales || {}).map(([id, s]: [string, any]) => [
+            id, 
+            { ...s, createdAt: new Date(s.createdAt) }
+          ])
+        );
       } catch (err) {
         console.error('Failed to load DB, starting fresh:', err);
       }
@@ -161,6 +196,8 @@ class InMemoryDatabase {
       versions: Object.fromEntries(this.versions),
       messages: Object.fromEntries(this.messages),
       assets: Object.fromEntries(this.assets),
+      products: Object.fromEntries(this.products),
+      sales: Object.fromEntries(this.sales),
     };
     fs.writeFileSync(this.dbPath, JSON.stringify(data, null, 2));
   }
@@ -461,6 +498,89 @@ class InMemoryDatabase {
     }
   };
 
+  product = {
+    findMany: async ({ where }: { where?: any } = {}) => {
+      let list = Array.from(this.products.values());
+      if (where?.userId) list = list.filter(p => p.userId === where.userId);
+      return list.map(p => ({ ...p }));
+    },
+    findUnique: async ({ where }: { where: { id: string } }) => {
+      const p = this.products.get(where.id);
+      return p ? { ...p } : null;
+    },
+    create: async ({ data }: { data: any }) => {
+      const id = `prod_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+      const now = new Date();
+      const product: MockProduct = {
+        id,
+        name: data.name,
+        price: Number(data.price),
+        siteUrl: data.siteUrl || null,
+        projectId: data.projectId || null,
+        userId: data.userId,
+        createdAt: now,
+        updatedAt: now
+      };
+      this.products.set(id, product);
+      this.save();
+      return { ...product };
+    },
+    update: async ({ where, data }: { where: { id: string }; data: any }) => {
+      const p = this.products.get(where.id);
+      if (!p) throw new Error('Product not found');
+      Object.assign(p, data, { updatedAt: new Date() });
+      this.save();
+      return { ...p };
+    },
+    delete: async ({ where }: { where: { id: string } }) => {
+      const p = this.products.get(where.id);
+      if (p) this.products.delete(where.id);
+      this.save();
+      return p || { id: where.id };
+    }
+  };
+
+  sale = {
+    findMany: async ({ where, include }: { where?: any; include?: any } = {}) => {
+      let list = Array.from(this.sales.values());
+      if (where?.userId) list = list.filter(s => s.userId === where.userId);
+      if (where?.leadId) list = list.filter(s => s.leadId === where.leadId);
+      if (where?.createdAt) {
+        if (where.createdAt.gte) list = list.filter(s => s.createdAt >= where.createdAt.gte);
+        if (where.createdAt.lte) list = list.filter(s => s.createdAt <= where.createdAt.lte);
+      }
+      
+      const results = list.map(s => {
+        const copy: any = { ...s };
+        if (include?.lead) {
+          copy.lead = this.leads.get(s.leadId);
+        }
+        if (include?.product && s.productId) {
+          copy.product = this.products.get(s.productId);
+        }
+        return copy;
+      });
+
+      results.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      return results;
+    },
+    create: async ({ data }: { data: any }) => {
+      const id = `sale_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+      const sale: MockSale = {
+        id,
+        leadId: data.leadId,
+        productId: data.productId || null,
+        productName: data.productName,
+        amount: Number(data.amount),
+        userId: data.userId,
+        createdAt: new Date()
+      };
+      this.sales.set(id, sale);
+      this.save();
+      return { ...sale };
+    }
+  };
+
   projectMember = {
     findFirst: async ({ where }: { where: { projectId?: string; userId?: string; role?: string } }) => {
       for (const m of this.projectMembers.values()) {
@@ -602,6 +722,18 @@ class InMemoryDatabase {
       for (const l of this.leads.values()) {
         if (where?.id && l.id !== where.id) continue;
         if (where?.userId && l.userId !== where.userId) continue;
+        if (where?.name && l.name !== where.name) continue;
+        
+        if (where?.OR && Array.isArray(where.OR)) {
+          const matchesOr = where.OR.some((cond: any) => {
+            return Object.entries(cond).every(([key, val]) => {
+              if (val === undefined) return true;
+              return (l as any)[key] === val;
+            });
+          });
+          if (!matchesOr) continue;
+        }
+        
         return { ...l };
       }
       return null;
@@ -635,7 +767,15 @@ class InMemoryDatabase {
     update: async ({ where, data }: { where: { id: string }; data: any }) => {
       const lead = this.leads.get(where.id);
       if (!lead) throw new Error('Lead not found');
-      Object.assign(lead, data, { updatedAt: new Date() });
+
+      const updateData = { ...data };
+      if (updateData.dealValue && typeof updateData.dealValue === 'object' && updateData.dealValue.increment) {
+        lead.dealValue = (lead.dealValue || 0) + Number(updateData.dealValue.increment);
+        delete updateData.dealValue;
+      }
+
+      Object.assign(lead, updateData, { updatedAt: new Date() });
+      this.save();
       return { ...lead };
     },
     delete: async ({ where }: { where: { id: string } }) => {

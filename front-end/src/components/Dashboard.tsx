@@ -662,43 +662,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
     setShowPresetListModal(false);
   };
 
-  // Cadastrar Lead Salvo no CRM no Funil de Vendas como "Novo Lead"
-  const handleCadastrarLeadNoCRM = async (lead: Lead) => {
-    try {
-      const res = await fetch(`${API_URL}/api/leads/crm`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          name: lead.name,
-          company: lead.category || 'Comércio Local',
-          phone: lead.phone || null,
-          website: lead.website || null,
-          address: lead.address || null,
-          dealValue: 1500,
-          status: 'PROSPECT',
-          notes: 'Cadastrado a partir dos Leads Salvos'
-        })
-      });
-      const data = await res.json();
-      if (res.ok && data.lead) {
-        notify.success(`"${lead.name}" foi cadastrado no CRM como Novo Lead!`, 'CRM Atualizado');
-        addBellNotification({
-          type: 'success',
-          emoji: '🤝',
-          title: 'Lead Adicionado ao CRM',
-          message: `"${lead.name}" foi inserido no funil de vendas na etapa Novo Lead.`
-        });
-      } else {
-        throw new Error(data.error || 'Erro ao cadastrar lead no CRM');
-      }
-    } catch (err: any) {
-      notify.error(err.message || 'Erro ao cadastrar lead no CRM', 'Erro');
-    }
-  };
-
   // Settings modal state
   const [showSettings, setShowSettings] = useState(false);
 
@@ -1057,10 +1020,22 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
         const data = await crawlerRes.json();
         if (data.leads && Array.isArray(data.leads)) {
           setHasMoreCrawlerLeads(data.hasMore !== false);
-          setLeadsList(data.leads.map((l: any) => ({
+          const mappedLeads = data.leads.map((l: any) => ({
             ...l,
             needsWebsite: l.hasWebsite === false || !l.website
-          })));
+          }));
+          setLeadsList(mappedLeads);
+          
+          // AUTO-SAVE TO CRM
+          fetch(`${API_URL}/api/leads/bulk`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ leads: mappedLeads })
+          }).catch(err => console.warn('Falha no salvamento automático:', err));
+
           return;
         }
       }
@@ -3265,15 +3240,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                                               {isSaved ? <BookmarkCheck className="w-4 h-4 fill-yellow-400" /> : <Bookmark className="w-4 h-4" />}
                                             </button>
 
-                                            {/* Botão: Gerar Site Normal */}
-                                            <button
-                                              onClick={() => handleCreateProjectFromLead(lead)}
-                                              className="p-2 bg-indigo-600/20 hover:bg-indigo-600 border border-indigo-500/40 text-indigo-300 hover:text-white rounded-xl transition-all shadow-sm cursor-pointer"
-                                              title="Gerar Site Completo para este Estabelecimento"
-                                            >
-                                              <Layout className="w-4 h-4" />
-                                            </button>
-
                                             {/* Botão: Melhorar com IA (Apenas se o cliente tiver website) */}
                                             {lead.website && (
                                               <button
@@ -3632,15 +3598,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
 
                                     <td className="py-3.5 px-4 text-right whitespace-nowrap shrink-0">
                                       <div className="flex items-center justify-end gap-1 flex-nowrap shrink-0 whitespace-nowrap">
-                                        {/* Botão Cadastrar no CRM (Novo Lead) */}
-                                        <button
-                                          onClick={() => handleCadastrarLeadNoCRM(lead)}
-                                          className="p-1.5 bg-emerald-600/20 hover:bg-emerald-600/40 border border-emerald-500/40 text-emerald-400 rounded-lg transition-all cursor-pointer"
-                                          title="Cadastrar no CRM (Novo Lead / Prospect)"
-                                        >
-                                          <UserPlus className="w-3.5 h-3.5" />
-                                        </button>
-
                                         <a
                                           href={mapsSearchUrl}
                                           target="_blank"
@@ -3753,13 +3710,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                             <div className="mt-4 pt-4 border-t border-slate-850/80 flex items-center justify-between gap-2 flex-wrap">
                               <span className="text-[10px] text-slate-500 font-mono">Salvo na Lista</span>
                               <div className="flex items-center gap-1.5 flex-nowrap shrink-0 whitespace-nowrap">
-                                <button
-                                  onClick={() => handleCadastrarLeadNoCRM(lead)}
-                                  className="p-2 bg-emerald-600/20 hover:bg-emerald-600/40 border border-emerald-500/40 text-emerald-400 rounded-xl transition-all shadow-sm cursor-pointer"
-                                  title="Cadastrar no CRM (Novo Lead / Prospect)"
-                                >
-                                  <UserPlus className="w-4 h-4" />
-                                </button>
                                 <a
                                   href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${lead.name} ${lead.address || lead.city || ''}`)}`}
                                   target="_blank"

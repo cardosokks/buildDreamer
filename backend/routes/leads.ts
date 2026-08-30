@@ -1,13 +1,13 @@
 import express from 'express';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../db';
+import { AuthenticatedRequest } from '../middleware/auth';
 
 const router = express.Router();
-const prisma = new PrismaClient();
 
 // Get all leads for the user
-router.get('/', async (req: any, res) => {
+router.get('/', async (req: AuthenticatedRequest, res) => {
   try {
-    const userId = req.user.id;
+    const userId = req.userId;
     const leads = await prisma.lead.findMany({
       where: { userId },
       orderBy: { createdAt: 'desc' }
@@ -20,9 +20,9 @@ router.get('/', async (req: any, res) => {
 });
 
 // Create a new lead
-router.post('/', async (req: any, res) => {
+router.post('/', async (req: AuthenticatedRequest, res) => {
   try {
-    const userId = req.user.id;
+    const userId = req.userId;
     const { name, company, phone, email, website, address, status, dealValue, notes, origin, tags } = req.body;
 
     if (!name) {
@@ -53,10 +53,60 @@ router.post('/', async (req: any, res) => {
   }
 });
 
-// Update a lead
-router.put('/:id', async (req: any, res) => {
+// Bulk create leads
+router.post('/bulk', async (req: AuthenticatedRequest, res) => {
   try {
-    const userId = req.user.id;
+    const userId = req.userId;
+    const { leads } = req.body;
+
+    if (!Array.isArray(leads)) {
+      return res.status(400).json({ error: 'Lista de leads é obrigatória.' });
+    }
+
+    const createdLeads = [];
+    for (const leadData of leads) {
+      // Check for existing lead to avoid duplicates
+      const existing = await prisma.lead.findFirst({
+        where: {
+          userId,
+          name: leadData.name,
+          OR: [
+            { phone: leadData.phone || undefined },
+            { website: leadData.website || undefined }
+          ]
+        }
+      });
+
+      if (!existing) {
+        const lead = await prisma.lead.create({
+          data: {
+            name: leadData.name,
+            company: leadData.company || leadData.category || 'Comércio Local',
+            phone: leadData.phone || null,
+            email: leadData.email || null,
+            website: leadData.website || null,
+            address: leadData.address || null,
+            status: 'PROSPECT',
+            dealValue: 0,
+            origin: 'SEARCH',
+            userId
+          }
+        });
+        createdLeads.push(lead);
+      }
+    }
+
+    return res.json({ count: createdLeads.length, message: 'Leads processados com sucesso.' });
+  } catch (error) {
+    console.error('Error bulk creating leads:', error);
+    return res.status(500).json({ error: 'Erro ao processar leads em massa.' });
+  }
+});
+
+// Update a lead
+router.put('/:id', async (req: AuthenticatedRequest, res) => {
+  try {
+    const userId = req.userId;
     const { id } = req.params;
     const { name, company, phone, email, website, address, status, dealValue, notes, origin, tags, projectId } = req.body;
 
@@ -94,9 +144,9 @@ router.put('/:id', async (req: any, res) => {
 });
 
 // Delete a lead
-router.delete('/:id', async (req: any, res) => {
+router.delete('/:id', async (req: AuthenticatedRequest, res) => {
   try {
-    const userId = req.user.id;
+    const userId = req.userId;
     const { id } = req.params;
 
     const lead = await prisma.lead.findFirst({
@@ -122,9 +172,9 @@ router.delete('/:id', async (req: any, res) => {
 });
 
 // Bulk action (e.g. status update)
-router.post('/bulk-status', async (req: any, res) => {
+router.post('/bulk-status', async (req: AuthenticatedRequest, res) => {
   try {
-    const userId = req.user.id;
+    const userId = req.userId;
     const { leadIds, status } = req.body;
 
     if (!Array.isArray(leadIds) || !status) {
