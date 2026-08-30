@@ -268,6 +268,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
     customPrompt: string;
     cleanText: string;
     html?: string;
+    css?: string;
+    js?: string;
     media?: string[];
     rewrittenHtml?: string;
     isHomepage: boolean;
@@ -1160,6 +1162,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
               : `Apresentação detalhada com tópicos visuais, benefícios claros, cards ilustrativos e chamadas para ação focadas em ${p.name}.`,
             cleanText: p.cleanText || '',
             html: p.html || '',
+            css: p.css || '',
+            js: p.js || '',
             media: p.media || [],
             rewrittenHtml: p.rewrittenHtml || '',
             isHomepage: !!p.isHomepage,
@@ -4705,15 +4709,26 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                                 </div>
                               )}
 
-                              {/* DOM Excerpt */}
+                              {/* Código Extraído (HTML, CSS, JS) */}
                               <div className="space-y-1.5">
                                 <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-tight">
                                   <FileCode className="w-3 h-3 text-indigo-400" />
-                                  Estrutura de Conteúdo (DOM)
+                                  Código Extraído da Página (HTML, CSS e JS)
                                 </div>
-                                <div className={`p-2 rounded-lg border ${theme === 'light' ? 'bg-slate-50 border-slate-200' : 'bg-slate-900/50 border-slate-800/50'}`}>
-                                  <p className={`text-[10px] leading-tight italic line-clamp-2 ${theme === 'light' ? 'text-slate-500' : 'text-slate-500'}`}>
-                                    {page.cleanText || "Nenhum texto estrutural detectado."}
+                                <div className={`p-2.5 rounded-lg border space-y-2 ${theme === 'light' ? 'bg-slate-50 border-slate-200' : 'bg-slate-900/50 border-slate-800/50'}`}>
+                                  <div className="flex flex-wrap items-center gap-2 text-[10px] font-mono">
+                                    <span className="px-2 py-0.5 rounded bg-amber-500/10 text-amber-500 border border-amber-500/20 font-semibold">
+                                      HTML ({page.html ? `${Math.round(page.html.length / 1024 * 10) / 10} KB` : 'Padrão'})
+                                    </span>
+                                    <span className="px-2 py-0.5 rounded bg-sky-500/10 text-sky-400 border border-sky-500/20 font-semibold">
+                                      CSS ({page.css ? `${(page.css.match(/\/\* === FILE:/g) || []).length || 1} arquivo(s)` : 'Sem CSS'})
+                                    </span>
+                                    <span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-semibold">
+                                      JS ({page.js ? `${(page.js.match(/\/\* === FILE:/g) || []).length || 1} script(s)` : 'Sem JS'})
+                                    </span>
+                                  </div>
+                                  <p className={`text-[10px] leading-tight font-mono line-clamp-2 ${theme === 'light' ? 'text-slate-600' : 'text-slate-400'}`}>
+                                    {page.html ? page.html.replace(/<[^>]+>/g, ' ').slice(0, 150) + '...' : (page.cleanText || "Nenhum código extraído detectado.")}
                                   </p>
                                 </div>
                               </div>

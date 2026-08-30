@@ -103,10 +103,22 @@ async function ensureBucket(client: Minio.Client, bucket: string): Promise<boole
 export async function getAssetStream(objectName: string): Promise<NodeJS.ReadableStream> {
   const client = getMinioClient();
   const config = loadConfig();
-  if (!client) {
-    throw new Error('[MinIO] Configuração do MinIO ausente ou inválida.');
+  if (client) {
+    try {
+      return await client.getObject(config.bucket, objectName);
+    } catch (err) {
+      console.warn(`[MinIO] getObject falhou para ${objectName}, tentando fallback local:`, err);
+    }
   }
-  return await client.getObject(config.bucket, objectName);
+
+  // Fallback para armazenamento de arquivo local
+  const cleanPath = objectName.replace(/^uploads\//, '');
+  const localFilePath = path.join(process.cwd(), 'backend', 'data', 'uploads', cleanPath);
+  if (fs.existsSync(localFilePath)) {
+    return fs.createReadStream(localFilePath);
+  }
+
+  throw new Error(`[Storage] Arquivo ${objectName} não encontrado no MinIO nem no disco local.`);
 }
 
 export async function uploadAssetToStorage(
@@ -115,41 +127,47 @@ export async function uploadAssetToStorage(
   mimeType: string,
   projectId?: string
 ): Promise<{ url: string; size: number; key: string; isMinio: boolean }> {
-  
   const client = getMinioClient();
   const config = loadConfig();
-  
-  if (!client) {
-    throw new Error('[MinIO] Configuração do MinIO ausente ou inválida.');
-  }
-  
-  const bucket = config.bucket;
+  const safeFilename = `${Date.now()}_${filename.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
   const projectFolder = projectId ? `projects/${projectId}/` : 'uploads/';
+  const objectName = `${projectFolder}${safeFilename}`;
 
-  try {
-    const isReady = await ensureBucket(client, bucket);
-    if (!isReady) {
-      throw new Error('[MinIO] Falha ao preparar o bucket.');
+  if (client) {
+    try {
+      const isReady = await ensureBucket(client, config.bucket);
+      if (isReady) {
+        await client.putObject(config.bucket, objectName, buffer, buffer.length, {
+          'Content-Type': mimeType
+        });
+        const url = `/api/media/files/${objectName}`;
+        return {
+          url,
+          size: buffer.length,
+          key: objectName,
+          isMinio: true
+        };
+      }
+    } catch (error: any) {
+      console.warn(`[MinIO] Upload no MinIO falhou (${error.message}), aplicando fallback local.`);
     }
-    
-    const safeFilename = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
-    const objectName = `${projectFolder}${safeFilename}`;
-    
-    await client.putObject(bucket, objectName, buffer, buffer.length, {
-      'Content-Type': mimeType
-    });
-    
-    // Always use our local proxy route so the frontend doesn't need to know MinIO's IP/port
-    const url = `/api/media/files/${objectName}`;
-    
-    return {
-      url,
-      size: buffer.length,
-      key: objectName,
-      isMinio: true
-    };
-  } catch (error: any) {
-    console.error(`[MinIO] Upload falhou: ${error.message}`);
-    throw new Error(`[MinIO] Falha no upload: ${error.message}`);
   }
+
+  // Fallback local caso MinIO não esteja ativo ou dê erro
+  const localDir = path.join(process.cwd(), 'backend', 'data', 'uploads');
+  if (!fs.existsSync(localDir)) {
+    fs.mkdirSync(localDir, { recursive: true });
+  }
+
+  const localPath = path.join(localDir, safeFilename);
+  fs.writeFileSync(localPath, buffer);
+
+  const localUrl = `/api/media/files/uploads/${safeFilename}`;
+
+  return {
+    url: localUrl,
+    size: buffer.length,
+    key: `uploads/${safeFilename}`,
+    isMinio: false
+  };
 }

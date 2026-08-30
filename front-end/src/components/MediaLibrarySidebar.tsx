@@ -63,32 +63,39 @@ export const MediaLibrarySidebar: React.FC<MediaLibrarySidebarProps> = ({
 
     setUploading(true);
     try {
-      const reader = new FileReader();
-      reader.onload = async () => {
-        const base64Data = reader.result as string;
-        
+      const base64Data = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = (err) => reject(err);
+        reader.readAsDataURL(file);
+      });
 
-        const res = await fetch(`${API_URL}/api/media/upload`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({
-            name: file.name,
-            mimeType: file.type,
-            base64Data,
-          })
-        });
+      const res = await fetch(`${API_URL}/api/media/upload`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          name: file.name,
+          mimeType: file.type,
+          base64Data,
+        })
+      });
 
-        if (!res.ok) throw new Error('Falha no envio da imagem');
-        const data = await res.json();
-        if (data.media) {
-          setMediaList(prev => [data.media, ...prev]);
-        }
-      };
-      reader.readAsDataURL(file);
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Falha no envio da imagem');
+      }
+
+      const data = await res.json();
+      if (data.media) {
+        setMediaList(prev => [data.media, ...prev]);
+        const fullUrl = resolveFullImageUrl(data.media.url);
+        if (onSelectImage) onSelectImage(fullUrl);
+      }
     } catch (err: any) {
+      console.error('Erro no upload de mídia MinIO:', err);
       alert(err.message || 'Erro ao enviar imagem.');
     } finally {
       setUploading(false);

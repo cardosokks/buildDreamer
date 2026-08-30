@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Settings,
   ChevronDown,
@@ -22,8 +22,13 @@ import {
   Tag,
   Trash2,
   Copy,
-  Edit3
+  Edit3,
+  Upload,
+  Image as ImageIcon,
+  Loader2
 } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { API_URL } from '../config';
 
 const rgbToHex = (color: string): string => {
   if (!color || color === 'transparent' || color.startsWith('#')) return color;
@@ -81,6 +86,7 @@ interface PropertiesPanelProps {
     ogImage?: string;
   };
   onPageSeoChange?: (key: 'title' | 'description' | 'ogImage', value: string) => void;
+  onOpenMediaGallery?: () => void;
 }
 
 const Section: React.FC<{ title: string; icon: React.ReactNode; children: React.ReactNode; defaultOpen?: boolean }> = ({
@@ -211,6 +217,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   onSaveSelectionAsTemplate,
   pageSeo,
   onPageSeoChange,
+  onOpenMediaGallery,
 }) => {
   const [panelTab, setPanelTab] = useState<'layers' | 'styles' | 'attrs' | 'seo'>('layers');
   const [newClassInput, setNewClassInput] = useState('');
@@ -368,6 +375,66 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         </div>
       );
     });
+  };
+
+  const { token } = useAuth();
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const srcFileInputRef = useRef<HTMLInputElement>(null);
+  const ogFileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImageFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, target: 'src' | 'ogImage') => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      alert('Por favor, selecione apenas arquivos de imagem.');
+      return;
+    }
+
+    setUploadingImage(true);
+    try {
+      const base64Data = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = (err) => reject(err);
+        reader.readAsDataURL(file);
+      });
+
+      const res = await fetch(`${API_URL}/api/media/upload`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          name: file.name,
+          mimeType: file.type,
+          base64Data
+        })
+      });
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || 'Falha no envio da imagem');
+      }
+
+      const data = await res.json();
+      if (data.media?.url) {
+        const base = (API_URL || window.location.origin).replace(/\/$/, '');
+        const fullUrl = data.media.url.startsWith('http') ? data.media.url : `${base}${data.media.url.startsWith('/') ? '' : '/'}${data.media.url}`;
+        if (target === 'src') {
+          onAttrChange('src', fullUrl);
+        } else if (target === 'ogImage') {
+          setLocalSeoOgImage(fullUrl);
+          if (onPageSeoChange) onPageSeoChange('ogImage', fullUrl);
+        }
+      }
+    } catch (err: any) {
+      alert(err.message || 'Erro ao enviar imagem.');
+    } finally {
+      setUploadingImage(false);
+      if (e.target) e.target.value = '';
+    }
   };
 
   // SEO Local States with Debounce to prevent lag/freezing
@@ -532,16 +599,44 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               Compartilhamento WhatsApp / Redes (OG)
             </span>
             <Label>URL da Imagem de Prévia (og:image)</Label>
-            <input
-              type="text"
-              placeholder="https://exemplo.com/banner-social.jpg"
-              value={localSeoOgImage}
-              onChange={(e) => {
-                setLocalSeoOgImage(e.target.value);
-                if (onPageSeoChange) onPageSeoChange('ogImage', e.target.value);
-              }}
-              className={inputCls}
-            />
+            <div className="flex items-center gap-1.5">
+              <input
+                type="text"
+                placeholder="https://exemplo.com/banner-social.jpg"
+                value={localSeoOgImage}
+                onChange={(e) => {
+                  setLocalSeoOgImage(e.target.value);
+                  if (onPageSeoChange) onPageSeoChange('ogImage', e.target.value);
+                }}
+                className={inputCls}
+              />
+              <input
+                type="file"
+                ref={ogFileInputRef}
+                onChange={e => handleImageFileUpload(e, 'ogImage')}
+                accept="image/*"
+                className="hidden"
+              />
+              <button
+                type="button"
+                onClick={() => ogFileInputRef.current?.click()}
+                disabled={uploadingImage}
+                className="p-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition-colors shrink-0 cursor-pointer disabled:opacity-50"
+                title="Upload Imagem OG via MinIO"
+              >
+                {uploadingImage ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+              </button>
+              {onOpenMediaGallery && (
+                <button
+                  type="button"
+                  onClick={onOpenMediaGallery}
+                  className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition-colors shrink-0 border border-slate-700 cursor-pointer"
+                  title="Selecionar da Galeria de Mídias MinIO"
+                >
+                  <ImageIcon className="w-3.5 h-3.5 text-cyan-400" />
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Live SERP Google Card Preview */}
@@ -633,9 +728,12 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           )}
 
           {isImage && (
-            <div className="space-y-2">
+            <div className="space-y-3 p-3 bg-purple-950/20 border border-purple-500/20 rounded-xl">
               <div>
-                <Label>URL da Imagem (src)</Label>
+                <div className="flex items-center justify-between mb-1">
+                  <Label>URL da Imagem (src)</Label>
+                  <span className="text-[9px] text-purple-400 font-bold uppercase tracking-wider">MinIO / API</span>
+                </div>
                 <input
                   type="text"
                   placeholder="https://exemplo.com/foto.jpg"
@@ -644,6 +742,40 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                   className={inputCls}
                 />
               </div>
+
+              {/* Upload direto para MinIO e atalho para galeria */}
+              <div className="flex items-center gap-1.5 pt-0.5">
+                <input
+                  type="file"
+                  ref={srcFileInputRef}
+                  onChange={e => handleImageFileUpload(e, 'src')}
+                  accept="image/*"
+                  className="hidden"
+                />
+                <button
+                  type="button"
+                  onClick={() => srcFileInputRef.current?.click()}
+                  disabled={uploadingImage}
+                  className="flex-1 py-1.5 px-2 bg-purple-600 hover:bg-purple-500 text-white text-[10px] font-bold rounded-lg transition-colors flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 shadow-sm"
+                  title="Upload de imagem via API MinIO"
+                >
+                  {uploadingImage ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}
+                  <span>Upload (MinIO)</span>
+                </button>
+
+                {onOpenMediaGallery && (
+                  <button
+                    type="button"
+                    onClick={onOpenMediaGallery}
+                    className="flex-1 py-1.5 px-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] font-bold rounded-lg transition-colors flex items-center justify-center gap-1.5 cursor-pointer border border-slate-700 shadow-sm"
+                    title="Abrir Galeria de Mídias"
+                  >
+                    <ImageIcon className="w-3 h-3 text-cyan-400" />
+                    <span>Galeria</span>
+                  </button>
+                )}
+              </div>
+
               <div>
                 <Label>Texto Alternativo (alt)</Label>
                 <input

@@ -1570,6 +1570,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
               ogImage: ''
             }}
             onPageSeoChange={handlePageSeoChange}
+            onOpenMediaGallery={() => setActiveLeftSidebar('media')}
           />
           )}
         </div>

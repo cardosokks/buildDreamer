@@ -6,7 +6,8 @@ import {
   scrapeJobsQueue, 
   startWebsiteScrapeJob, 
   processCustomRemasterGenerationJob,
-  detectMedia
+  detectMedia,
+  extractAndBundlePageComponents
 } from '../services/siteRemaster';
 import { projectJobsQueue } from './projects';
 import { prisma } from '../db';
@@ -408,7 +409,10 @@ router.post(['/scrape-url', '/remaster/scrape'], async (req: AuthenticatedReques
     const jobId = `scrape_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
     if (rawHtml) {
-      // Inicia com scraping virtual do HTML informado
+      // Inicia com scraping virtual do HTML informado extraindo HTML, CSS e JS completos
+      const targetBaseUrl = targetUrl || 'http://localhost';
+      const code = await extractAndBundlePageComponents(rawHtml, targetBaseUrl);
+
       scrapeJobsQueue[jobId] = {
         status: 'completed',
         websiteUrl: targetUrl || 'HTML Direto',
@@ -417,15 +421,17 @@ router.post(['/scrape-url', '/remaster/scrape'], async (req: AuthenticatedReques
           {
             name: 'Home',
             slug: 'index',
-            url: targetUrl || 'http://localhost',
+            url: targetBaseUrl,
             cleanText: rawHtml.replace(/<[^>]+>/g, ' ').slice(0, 3000),
-            html: rawHtml,
-            media: detectMedia(rawHtml, targetUrl || 'http://localhost'),
+            html: code.html || rawHtml,
+            css: [rawCss || '', code.css || ''].filter(Boolean).join('\n\n'),
+            js: code.js || '',
+            media: detectMedia(rawHtml, targetBaseUrl),
             excerpt: rawHtml.replace(/<[^>]+>/g, ' ').slice(0, 180) + '...',
             isHomepage: true
           }
         ],
-        progressMessage: 'HTML recebido com sucesso.'
+        progressMessage: 'HTML recebido e código original (HTML, CSS e JS) extraído com sucesso.'
       };
     } else {
       startWebsiteScrapeJob(

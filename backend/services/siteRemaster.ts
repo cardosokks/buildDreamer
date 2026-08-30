@@ -184,37 +184,174 @@ async function processPageAssets(
 }
 
 /**
- * Separa HTML, CSS e JS de um conteúdo HTML bruto
+ * Resolve URLs relativas dentro de um código CSS contra uma URL de origem
  */
-export function extractCodeComponents(html: string): { html: string; css: string; js: string } {
+function resolveCssUrls(cssText: string, cssBaseUrl: string): string {
+  if (!cssText || !cssBaseUrl) return cssText || '';
+  return cssText.replace(/url\(['"]?([^)'"]+)['"]?\)/gi, (match, urlVal) => {
+    if (!urlVal || urlVal.startsWith('data:') || urlVal.startsWith('http://') || urlVal.startsWith('https://') || urlVal.startsWith('//')) {
+      return match;
+    }
+    try {
+      const resolved = new URL(urlVal, cssBaseUrl).href;
+      return `url("${resolved}")`;
+    } catch {
+      return match;
+    }
+  });
+}
+
+/**
+ * Separa e organiza HTML, CSS e JS de um conteúdo HTML bruto
+ * Resolvendo URLs relativas de CSS, JS e mídias contra a URL base da página original do cliente
+ */
+export function extractCodeComponents(html: string, baseUrl?: string): { html: string; css: string; js: string } {
   let processedHtml = html || '';
   let css = '';
   let js = '';
 
-  // Extrair <style>
+  // 1. Resolver URLs relativas de mídias/links no HTML se houver baseUrl
+  if (baseUrl) {
+    try {
+      processedHtml = processedHtml.replace(
+        /(src|poster|data-src|data-bg|background)=["']([^"']+)["']/gi,
+        (match, attr, val) => {
+          if (!val || val.startsWith('data:') || val.startsWith('http://') || val.startsWith('https://') || val.startsWith('//') || val.startsWith('javascript:') || val.startsWith('#')) {
+            return match;
+          }
+          try {
+            return `${attr}="${new URL(val, baseUrl).href}"`;
+          } catch {
+            return match;
+          }
+        }
+      );
+
+      processedHtml = resolveCssUrls(processedHtml, baseUrl);
+    } catch (e) {
+      console.warn('[extractCodeComponents] Erro ao resolver URLs:', e);
+    }
+  }
+
+  // 2. Extrair e processar <style>
   const styleRegex = /<style\b[^>]*>([\s\S]*?)<\/style>/gi;
-  processedHtml = processedHtml.replace(styleRegex, (match, content) => {
-    css += content + '\n';
-    return '';
+  const styleMatches = [...processedHtml.matchAll(styleRegex)];
+  processedHtml = processedHtml.replace(styleRegex, '');
+
+  styleMatches.forEach((m, idx) => {
+    const content = m[1];
+    if (content && content.trim()) {
+      let cssContent = content.trim();
+      if (baseUrl) {
+        cssContent = resolveCssUrls(cssContent, baseUrl);
+      }
+      const fileName = styleMatches.length === 1 ? 'main.css' : `style-${idx + 1}.css`;
+      css += `/* === FILE: ${fileName} === */\n` + cssContent + '\n\n';
+    }
   });
 
-  // Extrair <script>
-  const scriptRegex = /<script\b[^>]*>([\s\S]*?)<\/script>/gi;
-  processedHtml = processedHtml.replace(scriptRegex, (match, content) => {
-    js += content + '\n';
-    return '';
-  });
-
-  // Extrair <link rel="stylesheet">
+  // 3. Extrair e processar <link rel="stylesheet">
   const linkCssRegex = /<link\b[^>]*rel=["']stylesheet["'][^>]*href=["']([^"']+)["'][^>]*>/gi;
   processedHtml = processedHtml.replace(linkCssRegex, (match, href) => {
-    if (href && !href.includes('fonts.googleapis.com')) {
-      css = `@import url("${href}");\n` + css;
+    if (href) {
+      let resolvedHref = href;
+      if (baseUrl && !href.startsWith('http://') && !href.startsWith('https://') && !href.startsWith('//')) {
+        try {
+          resolvedHref = new URL(href, baseUrl).href;
+        } catch {}
+      }
+      if (!resolvedHref.includes('fonts.googleapis.com')) {
+        const urlFileName = resolvedHref.split('/').pop()?.split('?')[0] || 'external.css';
+        css = `/* === FILE: ${urlFileName} === */\n@import url("${resolvedHref}");\n\n` + css;
+      }
     }
     return '';
   });
 
-  return { html: processedHtml.trim(), css: css.trim(), js: js.trim() };
+  // 4. Extrair e tratar <script>
+  const scriptRegex = /<script\b([^>]*)>([\s\S]*?)<\/script>/gi;
+  const scriptMatches = [...processedHtml.matchAll(scriptRegex)];
+  let scriptInlineIndex = 1;
+
+  processedHtml = processedHtml.replace(scriptRegex, (match, attrs, content) => {
+    const srcMatch = attrs.match(/src=["']([^"']+)["']/i);
+    if (srcMatch && srcMatch[1]) {
+      let scriptSrc = srcMatch[1];
+      if (baseUrl && !scriptSrc.startsWith('http://') && !scriptSrc.startsWith('https://') && !scriptSrc.startsWith('//')) {
+        try {
+          scriptSrc = new URL(scriptSrc, baseUrl).href;
+        } catch {}
+      }
+      return `<script src="${scriptSrc}"></script>`;
+    } else if (content && content.trim()) {
+      const fileName = scriptMatches.length === 1 ? 'main.js' : `script-${scriptInlineIndex++}.js`;
+      js += `/* === FILE: ${fileName} === */\n` + content.trim() + '\n\n';
+      return '';
+    }
+    return '';
+  });
+
+  // 5. Extrair o corpo do documento <body> se existir para manter a estrutura HTML limpa no editor
+  let finalHtml = processedHtml;
+  const bodyMatch = processedHtml.match(/<body\b[^>]*>([\s\S]*?)<\/body>/i);
+  if (bodyMatch && bodyMatch[1]) {
+    finalHtml = bodyMatch[1];
+  } else {
+    finalHtml = finalHtml
+      .replace(/<!DOCTYPE[^>]*>/gi, '')
+      .replace(/<html\b[^>]*>/gi, '')
+      .replace(/<\/html>/gi, '')
+      .replace(/<head\b[^>]*>[\s\S]*?<\/head>/gi, '')
+      .replace(/<body\b[^>]*>/gi, '')
+      .replace(/<\/body>/gi, '');
+  }
+
+  return { html: finalHtml.trim(), css: css.trim(), js: js.trim() };
+}
+
+/**
+ * Função assíncrona que extrai e baixa stylesheets externos para embutir o CSS completo da página original
+ */
+export async function extractAndBundlePageComponents(
+  rawHtml: string, 
+  pageUrl?: string, 
+  proxyUrl?: string
+): Promise<{ html: string; css: string; js: string }> {
+  const baseExtracted = extractCodeComponents(rawHtml, pageUrl);
+  let accumulatedCss = baseExtracted.css;
+
+  if (pageUrl) {
+    try {
+      const linkCssRegex = /<link\b[^>]*rel=["']stylesheet["'][^>]*href=["']([^"']+)["'][^>]*>/gi;
+      const linkMatches = [...rawHtml.matchAll(linkCssRegex)];
+
+      for (let i = 0; i < linkMatches.length; i++) {
+        const rawHref = linkMatches[i][1];
+        if (!rawHref || rawHref.includes('fonts.googleapis.com')) continue;
+
+        try {
+          const absoluteCssUrl = new URL(rawHref, pageUrl).href;
+          const cssContent = await resilientFetchPage(absoluteCssUrl, proxyUrl);
+
+          if (cssContent && cssContent.length > 20 && !cssContent.trim().startsWith('<')) {
+            const resolvedCss = resolveCssUrls(cssContent, absoluteCssUrl);
+            const fileName = absoluteCssUrl.split('/').pop()?.split('?')[0] || `stylesheet-${i + 1}.css`;
+            accumulatedCss += `\n/* === FILE: ${fileName} === */\n` + resolvedCss + '\n\n';
+          }
+        } catch (cssErr) {
+          console.warn(`[Site Remaster] Não foi possível baixar CSS externo de ${rawHref}:`, (cssErr as Error).message);
+        }
+      }
+    } catch (e) {
+      console.warn('[Site Remaster] Erro ao agrupar CSSs externos:', e);
+    }
+  }
+
+  return {
+    html: baseExtracted.html,
+    css: accumulatedCss.trim(),
+    js: baseExtracted.js
+  };
 }
 function resolveInternalUrl(base: string, relative: string): string | null {
   try {
@@ -411,6 +548,8 @@ export const scrapeJobsQueue: Record<string, {
     url: string;
     cleanText: string;
     html?: string;
+    css?: string;
+    js?: string;
     media?: string[];
     rewrittenHtml?: string;
     excerpt: string;
@@ -448,23 +587,29 @@ export async function startWebsiteScrapeJob(
       throw new Error('Não foi possível acessar o site ou nenhuma página foi encontrada.');
     }
 
-    const pagesToReturn = scraped.map(p => ({
-      name: p.name,
-      slug: p.slug,
-      url: p.url,
-      cleanText: p.cleanText,
-      html: p.html, // DOM original para preview
-      media: detectMedia(p.html, p.url), // Lista de mídias detectadas
-      excerpt: p.cleanText.slice(0, 180) + '...',
-      isHomepage: p.slug === 'index'
-    }));
+    const pagesToReturn = [];
+    for (const p of scraped) {
+      const code = await extractAndBundlePageComponents(p.html, p.url, customProxyUrl);
+      pagesToReturn.push({
+        name: p.name,
+        slug: p.slug,
+        url: p.url,
+        cleanText: p.cleanText,
+        html: code.html || p.html,
+        css: code.css || '',
+        js: code.js || '',
+        media: detectMedia(p.html, p.url),
+        excerpt: p.cleanText.slice(0, 180) + '...',
+        isHomepage: p.slug === 'index'
+      });
+    }
 
     scrapeJobsQueue[jobId] = {
       status: 'completed',
       websiteUrl,
       businessName,
       discoveredPages: pagesToReturn,
-      progressMessage: `Mapeamento concluído! ${pagesToReturn.length} páginas encontradas. Revise as mídias abaixo.`
+      progressMessage: `Mapeamento e extração de HTML, CSS e JS concluídos! ${pagesToReturn.length} páginas importadas.`
     };
   } catch (err: any) {
     console.error(`Erro no Scrape Job ${jobId}:`, err);
@@ -493,6 +638,8 @@ export async function processCustomRemasterGenerationJob(
     customPrompt?: string;
     cleanText?: string;
     html?: string;
+    css?: string;
+    js?: string;
     rewrittenHtml?: string;
     isHomepage?: boolean;
     enabled?: boolean;
@@ -527,7 +674,7 @@ export async function processCustomRemasterGenerationJob(
     const modelLabel = customModel || (aiProvider === 'ollama' ? 'qwen2.5-coder:1.5b' : 'gemini-2.5-flash');
 
     // 1. PROCESSAR ATIVOS E PREPARAR CONTEÚDO DE TODAS AS PÁGINAS
-    if (onProgress) onProgress(`Baixando mídias e extraindo conteúdo (${totalPages} páginas)...`, 0, totalPages * 2);
+    if (onProgress) onProgress(`Baixando mídias e extraindo código completo HTML/CSS/JS (${totalPages} páginas)...`, 0, totalPages * 2);
     
     const preparedPages = [];
     for (let i = 0; i < totalPages; i++) {
@@ -545,12 +692,13 @@ export async function processCustomRemasterGenerationJob(
         }
       }
       
-      // Extrair componentes (HTML, CSS e JS) preservando o HTML completo da página original do cliente
+      // Extrair e agrupar código (HTML, CSS e JS) preservando a página original do cliente
       const rawHtmlToUse = p.rewrittenHtml || p.html || p.cleanText || '';
-      const context = extractCodeComponents(rawHtmlToUse);
+      const context = await extractAndBundlePageComponents(rawHtmlToUse, targetOriginalUrl, customProxyUrl);
+      
       const finalHtml = context.html || rawHtmlToUse;
-      const finalCss = context.css || '';
-      const finalJs = context.js || '';
+      const finalCss = [p.css || '', context.css || ''].filter(Boolean).join('\n\n');
+      const finalJs = [p.js || '', context.js || ''].filter(Boolean).join('\n\n');
 
       const createdPage = await prisma.page.create({
         data: {
