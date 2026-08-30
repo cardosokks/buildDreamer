@@ -1,6 +1,7 @@
 import { prisma } from '../db';
 import { generateAIResponse } from '../services/gemini';
 import { uploadAssetToStorage } from './storageService';
+import { projectJobsQueue } from '../routes/projects';
 import https from 'https';
 import http from 'http';
 import crypto from 'crypto';
@@ -91,17 +92,18 @@ async function downloadAsset(url: string): Promise<{ buffer: Buffer; contentType
 }
 
 /**
- * Processa e hospeda mídias/ativos de uma página
+ * Detecta e substitui mídias em um HTML de forma robusta
  */
 async function processPageAssets(
   html: string, 
   baseUrl: string, 
-  assetCache: Map<string, string>
+  assetCache: Map<string, string>,
+  userId: string
 ): Promise<string> {
   let rewrittenHtml = html;
   
-  // Regex para encontrar URLs de imagens, vídeos, scripts e links
-  const assetRegex = /(src|href|poster)=["']([^"'#?]+(\.(png|jpe?g|gif|svg|webp|mp4|webm|css|js|woff2?))(\?[^"']*)?)["']/gi;
+  // Regex aprimorada para capturar src, href, poster, data-src, etc.
+  const assetRegex = /(src|href|poster|data-src|data-bg)=["']([^"'#?]+(\.(png|jpe?g|gif|svg|webp|mp4|webm|css|js|woff2?))(\?[^"']*)?)["']/gi;
   
   const matches = [...html.matchAll(assetRegex)];
   
@@ -112,7 +114,6 @@ async function processPageAssets(
     try {
       const fullUrl = new URL(originalUrl, baseUrl).href;
       
-      // Se já processamos essa URL, usa o cache
       if (assetCache.has(fullUrl)) {
         rewrittenHtml = rewrittenHtml.replace(originalUrl, assetCache.get(fullUrl)!);
         continue;
@@ -121,9 +122,21 @@ async function processPageAssets(
       console.log(`[Remaster] Baixando asset: ${fullUrl}`);
       const { buffer, contentType } = await downloadAsset(fullUrl);
       
-      const fileName = fullUrl.split('/').pop()?.split('?')[0] || `asset_${crypto.randomBytes(4).toString('hex')}`;
+      const fileName = `${crypto.randomBytes(4).toString('hex')}_${fullUrl.split('/').pop()?.split('?')[0] || 'asset'}`;
       const uploadRes = await uploadAssetToStorage(buffer, fileName, contentType);
       
+      // Registrar no banco
+      await prisma.$executeRawUnsafe(
+        `INSERT INTO "Media" ("id", "name", "url", "size", "mimeType", "storage", "userId", "createdAt") VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)`,
+        `media_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        fileName,
+        uploadRes.url,
+        uploadRes.size,
+        contentType,
+        uploadRes.isMinio ? 'minio' : 'local',
+        userId
+      );
+
       assetCache.set(fullUrl, uploadRes.url);
       rewrittenHtml = rewrittenHtml.split(originalUrl).join(uploadRes.url);
     } catch (err) {
@@ -131,12 +144,14 @@ async function processPageAssets(
     }
   }
 
-  // Processar background-images no style inline
-  const bgRegex = /url\(["']?([^"'#?]+(\.(png|jpe?g|gif|svg|webp))(\?[^"']*)?)["']?\)/gi;
+  // Regex para background-images no estilo inline ou tags <style>
+  const bgRegex = /url\(['"]?([^)'"]+)['"]?\)/gi;
   const bgMatches = [...rewrittenHtml.matchAll(bgRegex)];
   
   for (const match of bgMatches) {
     const originalUrl = match[1];
+    if (originalUrl.startsWith('data:')) continue; // Ignora base64
+    
     try {
       const fullUrl = new URL(originalUrl, baseUrl).href;
       if (assetCache.has(fullUrl)) {
@@ -144,19 +159,52 @@ async function processPageAssets(
         continue;
       }
       const { buffer, contentType } = await downloadAsset(fullUrl);
-      const fileName = fullUrl.split('/').pop()?.split('?')[0] || `bg_${crypto.randomBytes(4).toString('hex')}`;
+      const fileName = `bg_${crypto.randomBytes(4).toString('hex')}_${fullUrl.split('/').pop()?.split('?')[0] || 'bg'}`;
       const uploadRes = await uploadAssetToStorage(buffer, fileName, contentType);
+      
+      // Registrar no banco
+      await prisma.$executeRawUnsafe(
+        `INSERT INTO "Media" ("id", "name", "url", "size", "mimeType", "storage", "userId", "createdAt") VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)`,
+        `media_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        fileName,
+        uploadRes.url,
+        uploadRes.size,
+        contentType,
+        uploadRes.isMinio ? 'minio' : 'local',
+        userId
+      );
+
       assetCache.set(fullUrl, uploadRes.url);
       rewrittenHtml = rewrittenHtml.split(originalUrl).join(uploadRes.url);
     } catch (err) {}
   }
-
   return rewrittenHtml;
 }
 
 /**
- * Normaliza e resolve URLs internas de um site
+ * Separa HTML, CSS e JS de um conteúdo HTML bruto
  */
+function extractCodeComponents(html: string): { html: string; css: string; js: string } {
+  let processedHtml = html;
+  let css = '';
+  let js = '';
+
+  // Extrair <style>
+  const styleRegex = /<style\b[^>]*>([\s\S]*?)<\/style>/gi;
+  processedHtml = processedHtml.replace(styleRegex, (match, content) => {
+    css += content + '\n';
+    return '';
+  });
+
+  // Extrair <script>
+  const scriptRegex = /<script\b[^>]*>([\s\S]*?)<\/script>/gi;
+  processedHtml = processedHtml.replace(scriptRegex, (match, content) => {
+    js += content + '\n';
+    return '';
+  });
+
+  return { html: processedHtml.trim(), css: css.trim(), js: js.trim() };
+}
 function resolveInternalUrl(base: string, relative: string): string | null {
   try {
     const baseUrlObj = new URL(base);
@@ -440,26 +488,46 @@ export async function processCustomRemasterGenerationJob(
   registeredModels?: string[],
   customProxyUrl?: string,
   onProgress?: (status: string, attempt: number, total: number) => void,
-  customSkills?: any[]
+  customSkills?: any[],
+  userId: string
 ) {
   try {
     const assetCache = new Map<string, string>();
     const activePages = pagesList.filter(p => p.enabled !== false);
     
-    // 1. PROCESSAR ATIVOS DE TODAS AS PÁGINAS (UPLOAD PARA O SISTEMA DE MÍDIAS)
-    if (onProgress) onProgress(`Baixando e processando mídias do site original...`, 0, activePages.length);
+    // 1. PROCESSAR ATIVOS E PREPARAR CONTEÚDO DE TODAS AS PÁGINAS
+    if (onProgress) onProgress(`Baixando mídias e preparando páginas...`, 0, activePages.length * 2);
+    
+    const preparedPages = [];
     for (let i = 0; i < activePages.length; i++) {
+      if (projectJobsQueue[projectId]?.status === 'cancelled') throw new Error('Job cancelled');
       const p = activePages[i];
-      if (onProgress) onProgress(`Processando mídias da página: ${p.name}...`, i + 1, activePages.length);
+      if (onProgress) onProgress(`Processando página: ${p.name}...`, i + 1, activePages.length * 2);
       
       const sourceHtml = p.html || p.rewrittenHtml || '';
       if (sourceHtml && p.originalUrl) {
-        p.rewrittenHtml = await processPageAssets(sourceHtml, p.originalUrl, assetCache);
+        p.rewrittenHtml = await processPageAssets(sourceHtml, p.originalUrl, assetCache, userId);
       }
+      
+      // Extrair componentes e Criar página inicial preparada
+      const context = extractCodeComponents(p.rewrittenHtml || p.cleanText || '');
+      const createdPage = await prisma.page.create({
+        data: {
+          projectId,
+          name: p.name,
+          slug: p.slug,
+          isHomepage: p.isHomepage || false,
+          html: context.html,
+          css: context.css,
+          js: context.js
+        }
+      });
+      
+      preparedPages.push({ ...p, ...context, dbId: createdPage.id });
     }
 
-    let homePage = activePages.find(p => p.isHomepage || p.slug === 'index') || activePages[0];
-    const subPages = activePages.filter(p => p !== homePage);
+    let homePage = preparedPages.find(p => p.isHomepage || p.slug === 'index') || preparedPages[0];
+    const subPages = preparedPages.filter(p => p !== homePage);
 
     // Mapeamento dos Links Universais de Navegação
     const allNavigationRoutes = [
@@ -468,8 +536,8 @@ export async function processCustomRemasterGenerationJob(
     ];
     const navigationLinksText = allNavigationRoutes.map(r => `- "${r.name}" -> href="${r.href}"`).join('\n');
 
-    // 1. GERAR A HOME E CRIAR OS COMPONENTES UNIVERSAIS (Navbar e Footer)
-    if (onProgress) onProgress(`IA criando arquitetura da Home e Design System Universal...`, 1, subPages.length + 1);
+    // 2. GERAR MELHORIAS (ETAPA DE IA)
+    if (onProgress) onProgress(`IA melhorando Home...`, activePages.length + 1, activePages.length * 2);
 
     const homeAiPrompt = `
       Você é o Arquiteto Frontend Líder e Designer Master.
@@ -486,8 +554,17 @@ export async function processCustomRemasterGenerationJob(
       """
 
       ESTRUTURA E CONTEÚDO ORIGINAL (USE COMO REFERÊNCIA ÚNICA):
+      HTML:
       """
-      ${homePage.rewrittenHtml || homePage.cleanText || ''}
+      ${homePage.html}
+      """
+      CSS:
+      """
+      ${homePage.css}
+      """
+      JS:
+      """
+      ${homePage.js}
       """
 
       MAPA DE NAVEGAÇÃO (NAVBAR):
@@ -497,32 +574,29 @@ export async function processCustomRemasterGenerationJob(
       - NAVBAR GLOBAL: Crie uma <header class="sticky top-0 z-50 ..."> rica e responsiva.
       - FOOTER GLOBAL: Crie um <footer class="border-t ..."> elegante.
       - SEM SCRIPTS/STYLES: Retorne apenas HTML no campo "html", CSS no "css" e JS no "js".
-      - IMAGENS: Utilize as URLs das imagens presentes no conteúdo original.
+      - IMAGENS: Utilize as URLs das imagens presentes no conteúdo original (já processadas).
     `;
 
     const homeAiResponse = await generateAIResponse(
       homeAiPrompt,
-      { html: '', css: '', js: '' },
+      { html: homePage.html, css: homePage.css, js: homePage.js },
       customApiKey,
       undefined,
       registeredModels,
       (model, attempt, total) => {
-        if (onProgress) onProgress(`IA gerando Home (${model} - ${attempt}/${total})...`, 1, subPages.length + 1);
+        if (onProgress) onProgress(`IA melhorando Home (${model} - ${attempt}/${total})...`, activePages.length + 1, activePages.length * 2);
       },
       customProxyUrl,
       customSkills
     );
 
-    // Salvar Home
-    await prisma.page.create({
+    // Atualizar Home
+    await prisma.page.update({
+      where: { id: homePage.dbId },
       data: {
-        projectId,
-        name: homePage.name,
-        slug: homePage.slug,
-        isHomepage: true,
-        html: homeAiResponse.html || '<div>Home</div>',
-        css: homeAiResponse.css || '',
-        js: homeAiResponse.js || ''
+        html: homeAiResponse.html || homePage.html,
+        css: homeAiResponse.css || homePage.css,
+        js: homeAiResponse.js || homePage.js
       }
     });
 
@@ -532,15 +606,26 @@ export async function processCustomRemasterGenerationJob(
 
     // 4. GERAR SUBPÁGINAS
     for (let idx = 0; idx < subPages.length; idx++) {
+      if (projectJobsQueue[projectId]?.status === 'cancelled') throw new Error('Job cancelled');
       const sub = subPages[idx];
+      
       const subPrompt = `
         Você é o Engenheiro Frontend do site "${businessName}".
         Subpágina: "${sub.name}" (${sub.slug}).
 
         OBJETIVO: Design premium, consistência com a Home e padronização para o editor.
         CONTEÚDO ORIGINAL:
+        HTML:
         """
-        ${sub.rewrittenHtml || sub.cleanText || ''}
+        ${sub.html}
+        """
+        CSS:
+        """
+        ${sub.css}
+        """
+        JS:
+        """
+        ${sub.js}
         """
 
         ${sharedComponents.repeatNavbar ? `NAVBAR GERADA NA HOME:\n${navbarHtml}` : ''}
@@ -555,7 +640,7 @@ export async function processCustomRemasterGenerationJob(
       try {
         const subAiResponse = await generateAIResponse(
           subPrompt,
-          { html: '', css: globalCss, js: globalJs },
+          { html: sub.html, css: sub.css || globalCss, js: sub.js || globalJs },
           customApiKey,
           undefined,
           registeredModels,
@@ -564,13 +649,10 @@ export async function processCustomRemasterGenerationJob(
           customSkills
         );
 
-        await prisma.page.create({
+        await prisma.page.update({
+          where: { id: sub.dbId },
           data: {
-            projectId,
-            name: sub.name,
-            slug: sub.slug,
-            isHomepage: false,
-            html: subAiResponse.html || '<div>Subpágina</div>',
+            html: subAiResponse.html || sub.html,
             css: subAiResponse.css || globalCss,
             js: subAiResponse.js || globalJs
           }
@@ -578,7 +660,7 @@ export async function processCustomRemasterGenerationJob(
       } catch (e) {}
     }
 
-    if (onProgress) onProgress(`Site remasterizado com sucesso!`, 100, 100);
+    if (onProgress) onProgress(`Site remasterizado com sucesso!`, activePages.length * 2, activePages.length * 2);
     return projectId;
   } catch (err: any) {
     console.error("Erro no processCustomRemasterGenerationJob:", err);

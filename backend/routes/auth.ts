@@ -225,6 +225,18 @@ router.put('/settings', authenticateToken, async (req: AuthenticatedRequest, res
   }
 });
 
+// Refresh Token
+router.post('/refresh', authenticateToken, async (req: AuthenticatedRequest, res: any) => {
+  try {
+    const userId = req.userId;
+    const role = req.userRole;
+    const token = jwt.sign({ userId, role }, JWT_SECRET, { expiresIn: '7d' });
+    return res.json({ token });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
 // Server Time Endpoint – retorna o horário atual do servidor para sincronização no cliente
 router.get('/time', (req: any, res: any) => {
   return res.json({ time: new Date().toISOString(), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone });

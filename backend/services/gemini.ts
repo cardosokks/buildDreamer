@@ -237,8 +237,13 @@ export const generateAIResponse = async (
         candidateModels.unshift(sanitizedCustom);
       }
     }
+    
+    // Prioriza modelos flash para evitar erros de cota
+    if (!candidateModels.includes('gemini-1.5-flash')) candidateModels.unshift('gemini-1.5-flash');
+    if (!candidateModels.includes('gemini-1.5-flash-latest')) candidateModels.unshift('gemini-1.5-flash-latest');
+    
     // Garante que sempre haja modelos estáveis de fallback
-    if (!candidateModels.includes('gemini-1.5-flash-latest')) candidateModels.push('gemini-1.5-flash-latest');
+    if (!candidateModels.includes('gemini-1.5-flash-8b')) candidateModels.push('gemini-1.5-flash-8b');
     if (!candidateModels.includes('gemini-1.5-flash')) candidateModels.push('gemini-1.5-flash');
     if (!candidateModels.includes('gemini-1.5-flash-8b')) candidateModels.push('gemini-1.5-flash-8b');
     if (!candidateModels.includes('gemini-1.5-pro-latest')) candidateModels.push('gemini-1.5-pro-latest');

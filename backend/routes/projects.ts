@@ -14,7 +14,7 @@ const decodeHeader = (val: string | string[] | undefined): string => {
 };
 
 export const projectJobsQueue: Record<string, { 
-  status: 'pending' | 'processing' | 'completed' | 'failed'; 
+  status: 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled'; 
   currentModel?: string;
   attempt?: number;
   total?: number;
@@ -281,10 +281,23 @@ router.post('/', async (req: AuthenticatedRequest, res: any) => {
   }
 });
 
+// Cancel Job
+router.post('/:id/cancel', async (req: AuthenticatedRequest, res: any) => {
+  const projectId = req.params.id as string;
+  if (projectJobsQueue[projectId]) {
+    projectJobsQueue[projectId].status = 'cancelled';
+  }
+  return res.json({ message: 'Job cancelled successfully' });
+});
+
+// List all active jobs
+router.get('/jobs', async (req: AuthenticatedRequest, res: any) => {
+  return res.json(projectJobsQueue);
+});
+
 // Get Project Details & Pages
 router.get('/:id', async (req: AuthenticatedRequest, res: any) => {
   try {
-    const id = req.params.id as string;
     const userId = req.userId as string;
     const project = await prisma.project.findFirst({
       where: {
@@ -374,9 +387,15 @@ router.delete('/:id', async (req: AuthenticatedRequest, res: any) => {
       delete projectJobsQueue[id];
     }
 
+    // Exclusão explícita de dependências
+    await prisma.page.deleteMany({ where: { projectId: id } });
+    await prisma.projectMember.deleteMany({ where: { projectId: id } });
+    // Nota: A versão/assets devem ser deletados aqui se não estiverem em cascata no esquema
+    
     await prisma.project.delete({ where: { id } });
     return res.json({ message: 'Project deleted successfully' });
   } catch (error: any) {
+    console.error('Erro ao deletar projeto:', error);
     return res.status(500).json({ error: error.message });
   }
 });

@@ -1,4 +1,6 @@
 import { Pool } from 'pg';
+import fs from 'fs';
+import path from 'path';
 
 interface MockUser {
   id: string;
@@ -120,6 +122,44 @@ class InMemoryDatabase {
   medias: Map<string, MockMedia> = new Map();
   versions: Map<string, MockVersion> = new Map();
   messages: Map<string, MockMessage> = new Map();
+
+  private dbPath = path.join(process.cwd(), 'backend', 'data', 'db.json');
+
+  constructor() {
+    this.load();
+  }
+
+  private load() {
+    if (fs.existsSync(this.dbPath)) {
+      try {
+        const data = JSON.parse(fs.readFileSync(this.dbPath, 'utf8'));
+        this.users = new Map(Object.entries(data.users));
+        this.leads = new Map(Object.entries(data.leads));
+        this.projects = new Map(Object.entries(data.projects));
+        this.projectMembers = new Map(Object.entries(data.projectMembers));
+        this.pages = new Map(Object.entries(data.pages));
+        this.medias = new Map(Object.entries(data.medias));
+        this.versions = new Map(Object.entries(data.versions));
+        this.messages = new Map(Object.entries(data.messages));
+      } catch (err) {
+        console.error('Failed to load DB, starting fresh:', err);
+      }
+    }
+  }
+
+  private save() {
+    const data = {
+      users: Object.fromEntries(this.users),
+      leads: Object.fromEntries(this.leads),
+      projects: Object.fromEntries(this.projects),
+      projectMembers: Object.fromEntries(this.projectMembers),
+      pages: Object.fromEntries(this.pages),
+      medias: Object.fromEntries(this.medias),
+      versions: Object.fromEntries(this.versions),
+      messages: Object.fromEntries(this.messages),
+    };
+    fs.writeFileSync(this.dbPath, JSON.stringify(data, null, 2));
+  }
 
   user = {
     findMany: async ({ where, orderBy }: { where?: any; orderBy?: any } = {}) => {
@@ -772,12 +812,14 @@ class InMemoryDatabase {
         userId,
         createdAt: new Date()
       });
+      this.save();
       return 1;
     }
 
     if (s.includes('DELETE FROM "Media" WHERE "id" = $1')) {
       const id = params[0];
       this.medias.delete(id);
+      this.save();
       return 1;
     }
 

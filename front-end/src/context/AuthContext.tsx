@@ -62,6 +62,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(newUser);
   };
 
+  const refreshToken = async () => {
+    if (!token) return;
+    try {
+      const API_URL = import.meta.env.VITE_API_URL || '';
+      const res = await fetch(`${API_URL}/api/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        login(data.token, user!);
+      }
+    } catch {}
+  };
+
+  useEffect(() => {
+    if (!token) return;
+    const interval = setInterval(refreshToken, 1000 * 60 * 60); // refresh hourly
+    return () => clearInterval(interval);
+  }, [token]);
+
   const logout = () => {
     localStorage.removeItem('auth_token');
     localStorage.removeItem('auth_user');

@@ -2447,6 +2447,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                             <span className="text-[10px] text-slate-300 font-mono mt-1 animate-pulse">
                               {jobInfo?.currentModel ? `${jobInfo.currentModel} (${jobInfo.attempt}/${jobInfo.total})` : 'Estruturando HTML, CSS e Seções'}
                             </span>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                fetch(`${API_URL}/api/projects/${project.id}/cancel`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } })
+                                  .then(() => notify.info('Solicitação de cancelamento enviada.'));
+                              }}
+                              className="mt-4 px-3 py-1 bg-red-500/20 hover:bg-red-500/40 text-red-300 border border-red-500/30 rounded-lg text-[10px] font-bold"
+                            >
+                              Cancelar
+                            </button>
                           </div>
                         )}
 
