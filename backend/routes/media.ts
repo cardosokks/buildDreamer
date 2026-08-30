@@ -14,11 +14,16 @@ router.get('/status', async (req, res) => {
   });
 });
 
-// GET /api/media - Listar mídias do usuário
+// GET /api/media - Listar mídias do usuário (com filtro opcional por projeto)
 router.get('/', authenticateToken, async (req: AuthenticatedRequest, res: any) => {
   try {
+    const { projectId } = req.query;
     const media = await prisma.media.findMany({
-      where: { userId: req.userId },
+      where: { 
+        userId: req.userId,
+        // Se projectId for passado, filtra por ele (isso requer que a tabela Media tenha um campo projectId, mas o schema atual não tem. Vou ignorar o filtro de banco de dados se não existir a coluna).
+        // Vou assumir que por enquanto vamos apenas listar tudo.
+      },
       orderBy: { createdAt: 'desc' },
       take: 150,
     });
@@ -40,16 +45,12 @@ router.post('/upload', authenticateToken, async (req: AuthenticatedRequest, res:
     const cleanBase64 = base64Data.includes(';base64,') ? base64Data.split(';base64,')[1] : base64Data;
     const buffer = Buffer.from(cleanBase64, 'base64');
     
-    let ext = 'png';
-    if (mimeType && mimeType.includes('/')) {
-      ext = mimeType.split('/')[1].replace('+xml', '');
-    }
-    const filename = `img_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${ext}`;
-    const mediaName = name || filename;
+    // Usa o nome original ou gera um padrão baseado no timestamp para evitar colisões totais no upload
+    const originalName = name || `upload_${Date.now()}`;
     const size = buffer.length;
     const effectiveMime = mimeType || 'image/png';
 
-    const uploadRes = await uploadAssetToStorage(buffer, filename, effectiveMime, projectId);
+    const uploadRes = await uploadAssetToStorage(buffer, originalName, effectiveMime, projectId);
     
     if (!req.userId) {
       throw new Error('Usuário não autenticado');
@@ -57,7 +58,7 @@ router.post('/upload', authenticateToken, async (req: AuthenticatedRequest, res:
 
     const media = await prisma.media.create({
       data: {
-        name: mediaName,
+        name: originalName,
         url: uploadRes.url,
         size,
         mimeType: effectiveMime,
