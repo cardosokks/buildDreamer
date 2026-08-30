@@ -29,7 +29,7 @@ const requireAdmin = async (req: AuthenticatedRequest, res: any, next: any) => {
 };
 
 // GET /api/users - Listar todos os usuários do sistema
-router.get('/', authenticateToken, async (req: AuthenticatedRequest, res: any) => {
+router.get('/', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res: any) => {
   try {
     const users: any[] = await prisma.$queryRawUnsafe(
       `SELECT "id", "email", "name", "role", "createdAt" FROM "User" ORDER BY "createdAt" DESC`

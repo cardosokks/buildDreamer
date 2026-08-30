@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
-export type UserRole = 'ADMIN' | 'USER';
+export type UserRole = 'ADMIN' | 'USER' | 'SUPER_ADMIN' | 'EDITOR' | 'VIEWER' | 'SUPPORT';
 
 export interface User {
   id: string;
@@ -69,7 +69,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(null);
   };
 
-  const isAdmin = user?.role === 'ADMIN';
+  const isAdmin = user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN';
 
   return (
     <AuthContext.Provider value={{ user, token, login, logout, isAuthenticated: !!token, isAdmin, loading }}>

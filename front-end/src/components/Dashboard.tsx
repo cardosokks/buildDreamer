@@ -121,7 +121,7 @@ interface DashboardProps {
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', onTabChange, onSelectProject }) => {
-  const { token, logout, user } = useAuth();
+  const { token, logout, user, isAdmin } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const notify = useNotification();
   const [projects, setProjects] = useState<Project[]>([]);
@@ -395,6 +395,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
       localStorage.setItem('rp_sidebar_hidden', JSON.stringify(sidebarHidden));
     } catch { }
   }, [sidebarHidden]);
+
+  useEffect(() => {
+    if (activeTab === 'users' && !isAdmin && user) {
+      setActiveTab('general');
+    }
+  }, [activeTab, isAdmin, user]);
 
   // Listener para redimensionar barra lateral com drag do mouse
   useEffect(() => {
@@ -1917,21 +1923,23 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                 <div className="border-t border-transparent my-2" />
               )}
 
-              <button
-                onClick={() => setActiveTab('users')}
-                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2 py-2.5' : 'gap-3 px-3.5 py-2.5'} rounded-xl text-xs font-semibold transition-all cursor-pointer ${activeTab === 'users'
-                  ? theme === 'light'
-                    ? 'bg-purple-50 text-purple-700 font-bold'
-                    : 'bg-slate-800 text-white font-bold border border-purple-500/30'
-                  : theme === 'light'
-                    ? 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                    : 'text-slate-400 hover:bg-slate-900/60 hover:text-slate-200'
-                  }`}
-                title="Painel Admin & Usuários"
-              >
-                <Users className="w-4 h-4 text-purple-400 shrink-0" />
-                {!sidebarCollapsed && <span className="truncate flex-1 text-left">Usuários & Admin</span>}
-              </button>
+              {isAdmin && (
+                <button
+                  onClick={() => setActiveTab('users')}
+                  className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2 py-2.5' : 'gap-3 px-3.5 py-2.5'} rounded-xl text-xs font-semibold transition-all cursor-pointer ${activeTab === 'users'
+                    ? theme === 'light'
+                      ? 'bg-purple-50 text-purple-700 font-bold'
+                      : 'bg-slate-800 text-white font-bold border border-purple-500/30'
+                    : theme === 'light'
+                      ? 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                      : 'text-slate-400 hover:bg-slate-900/60 hover:text-slate-200'
+                    }`}
+                  title="Painel Admin & Usuários"
+                >
+                  <Users className="w-4 h-4 text-purple-400 shrink-0" />
+                  {!sidebarCollapsed && <span className="truncate flex-1 text-left">Usuários & Admin</span>}
+                </button>
+              )}
 
               <button
                 onClick={() => setActiveTab('settings')}
@@ -3615,7 +3623,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                 </div>
               )}
             </div>
-          ) : activeTab === 'users' ? (
+          ) : (activeTab === 'users' && isAdmin) ? (
             <UserManagementPanel />
           ) : activeTab === 'settings' ? (
             /* PÁGINA NATIVA DE CONFIGURAÇÕES DO SISTEMA */

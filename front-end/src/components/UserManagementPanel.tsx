@@ -13,8 +13,20 @@ interface SystemUser {
 }
 
 export const UserManagementPanel: React.FC = () => {
-  const { token, user: currentUser } = useAuth();
+  const { token, user: currentUser, isAdmin } = useAuth();
   const { success, error, notify } = useNotification();
+
+  if (!isAdmin) {
+    return (
+      <div className="flex flex-col items-center justify-center p-12 text-center animate-fade-in">
+        <AlertTriangle className="w-16 h-16 text-amber-500 mb-4 opacity-50" />
+        <h2 className="text-2xl font-bold text-white mb-2">Acesso Restrito</h2>
+        <p className="text-slate-400 max-w-md mx-auto">
+          Apenas administradores podem gerenciar usuários e permissões do sistema.
+        </p>
+      </div>
+    );
+  }
 
   const [users, setUsers] = useState<SystemUser[]>([]);
   const [loading, setLoading] = useState(true);
