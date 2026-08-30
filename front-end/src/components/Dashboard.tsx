@@ -2119,7 +2119,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                     Online & Ativo
                   </p>
                   <span className="text-[11px] text-zinc-600 font-mono mt-2 block">
-                    Porta 3000 • Docker
+                    Porta 12002 • Docker
                   </span>
                 </div>
               </div>

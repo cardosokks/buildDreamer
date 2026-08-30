@@ -33,7 +33,7 @@
         ],
         "ports": [
           {
-            "published": 3000,
+            "published": 12002,
             "target": 3000,
             "protocol": "tcp"
           }
@@ -72,12 +72,12 @@
         ],
         "ports": [
           {
-            "published": 9000,
+            "published": 12000,
             "target": 9000,
             "protocol": "tcp"
           },
           {
-            "published": 9001,
+            "published": 12001,
             "target": 9001,
             "protocol": "tcp"
           }
@@ -135,7 +135,7 @@
         ],
         "ports": [
           {
-            "published": 11434,
+            "published": 12004,
             "target": 11434,
             "protocol": "tcp"
           }
