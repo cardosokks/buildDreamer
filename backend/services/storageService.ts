@@ -22,13 +22,13 @@ function loadConfig() {
       const fileConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
       if (fileConfig.endpoint) {
         return {
-          endpoint: fileConfig.endpoint,
-          port: fileConfig.port || envConfig.port,
-          useSSL: fileConfig.useSSL || envConfig.useSSL,
-          accessKey: fileConfig.accessKey || envConfig.accessKey,
-          secretKey: fileConfig.secretKey || envConfig.secretKey,
-          bucket: fileConfig.bucket || envConfig.bucket,
-          publicUrl: fileConfig.publicUrl || envConfig.publicUrl
+          endpoint: envConfig.endpoint || fileConfig.endpoint,
+          port: envConfig.port || fileConfig.port,
+          useSSL: envConfig.useSSL !== undefined ? envConfig.useSSL : fileConfig.useSSL,
+          accessKey: envConfig.accessKey || fileConfig.accessKey,
+          secretKey: envConfig.secretKey || fileConfig.secretKey,
+          bucket: envConfig.bucket || fileConfig.bucket,
+          publicUrl: envConfig.publicUrl || fileConfig.publicUrl
         };
       }
     } catch (e) {
