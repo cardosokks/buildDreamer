@@ -66,7 +66,7 @@ async function ensureBucket(client: Minio.Client, bucket: string): Promise<boole
     bucketEnsured = true;
     return true;
   } catch (err: any) {
-    console.error('[MinIO] Erro ao garantir bucket:', err.message);
+    console.error('[MinIO] Erro ao garantir bucket. Detalhes:', err);
     return false;
   }
 }
