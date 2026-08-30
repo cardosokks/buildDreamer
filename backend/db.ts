@@ -84,6 +84,7 @@ interface MockMedia {
   size: number;
   mimeType: string;
   userId: string;
+  storage?: string;
   createdAt: Date;
 }
 
@@ -119,9 +120,9 @@ class InMemoryDatabase {
   projects: Map<string, MockProject> = new Map();
   projectMembers: Map<string, MockProjectMember> = new Map();
   pages: Map<string, MockPage> = new Map();
-  medias: Map<string, MockMedia> = new Map();
   versions: Map<string, MockVersion> = new Map();
   messages: Map<string, MockMessage> = new Map();
+  medias: Map<string, MockMedia> = new Map();
 
   private dbPath = path.join(process.cwd(), 'backend', 'data', 'db.json');
 
@@ -595,6 +596,37 @@ class InMemoryDatabase {
       const lead = this.leads.get(where.id);
       if (lead) this.leads.delete(where.id);
       return lead || { id: where.id };
+    }
+  };
+
+  media = {
+    findMany: async ({ where }: { where: any }) => {
+      return Array.from(this.medias.values()).filter(m => m.userId === where.userId);
+    },
+    create: async ({ data }: { data: any }) => {
+      const id = `media_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+      const media: MockMedia = {
+        id,
+        name: data.name,
+        url: data.url,
+        size: data.size,
+        mimeType: data.mimeType,
+        userId: data.userId,
+        storage: data.storage,
+        createdAt: new Date()
+      };
+      this.medias.set(id, media);
+      this.save();
+      return { ...media };
+    },
+    delete: async ({ where }: { where: { id: string } }) => {
+      const m = this.medias.get(where.id);
+      if (m) {
+        this.medias.delete(where.id);
+        this.save();
+        return { ...m };
+      }
+      return null;
     }
   };
 

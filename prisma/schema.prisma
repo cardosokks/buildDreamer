@@ -114,6 +114,7 @@ model Media {
   mimeType  String   @default("image/png")
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  storage   String?  @default("minio")
   createdAt DateTime @default(now())
 }
 
