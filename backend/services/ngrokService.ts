@@ -50,9 +50,19 @@ export async function startSystemNgrokTunnelJob(customAuthtoken?: string, target
   lastError = null;
 
   // Alvos ordenados por prioridade (produção Docker -> local Nginx 80 -> local backend 5000)
+  const appPort = process.env.PORT || '3000';
   const candidateTargets = targetOverride 
     ? [targetOverride] 
-    : [process.env.NGROK_TARGET || 'http://frontend:80', 'http://127.0.0.1:80', 'http://127.0.0.1:5000', '5000'];
+    : [
+        process.env.NGROK_TARGET || `http://127.0.0.1:${appPort}`,
+        `http://127.0.0.1:${appPort}`,
+        appPort, // Tenta apenas o número da porta
+        `http://localhost:${appPort}`,
+        'http://frontend:80', 
+        'http://127.0.0.1:80', 
+        'http://127.0.0.1:5000', 
+        '5000'
+      ];
 
   // Executa o processo de conexão
   (async () => {

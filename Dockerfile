@@ -19,6 +19,9 @@ RUN npm run build
 # Production runtime stage
 FROM node:20-alpine AS runner
 
+# Add libc6-compat for native dependencies like @ngrok/ngrok
+RUN apk add --no-cache libc6-compat
+
 WORKDIR /app
 
 ENV NODE_ENV=production
