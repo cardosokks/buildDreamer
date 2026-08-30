@@ -5,7 +5,6 @@ import { Server } from 'socket.io';
 import dotenv from 'dotenv';
 import morgan from 'morgan';
 import path from 'path';
-import { createServer as createViteServer } from 'vite';
 
 import { authRouter } from './backend/routes/auth';
 import { usersRouter } from './backend/routes/users';
@@ -98,6 +97,7 @@ async function startServer() {
 
   // Vite middleware in dev, static files in production
   if (process.env.NODE_ENV !== 'production') {
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa'
