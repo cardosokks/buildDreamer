@@ -174,6 +174,114 @@ export const SettingsPage: React.FC = () => {
   const [newSkillSnippet, setNewSkillSnippet] = useState('');
   const [editingSkillId, setEditingSkillId] = useState<string | null>(null);
 
+  // MinIO Config & Storage State
+  const [minioEndpoint, setMinioEndpoint] = useState('');
+  const [minioPort, setMinioPort] = useState('9000');
+  const [minioUseSSL, setMinioUseSSL] = useState(false);
+  const [minioAccessKey, setMinioAccessKey] = useState('');
+  const [minioSecretKey, setMinioSecretKey] = useState('');
+  const [minioBucket, setMinioBucket] = useState('builddreamer-assets');
+  const [minioPublicUrl, setMinioPublicUrl] = useState('');
+  const [minioStatus, setMinioStatus] = useState<{ storageType: string; minioConfigured: boolean; minioAvailable: boolean; bucket: string } | null>(null);
+  const [testingMinio, setTestingMinio] = useState(false);
+  const [minioTestResult, setMinioTestResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  const fetchMinioConfig = async () => {
+    if (!token) return;
+    try {
+      const [statusRes, configRes] = await Promise.all([
+        fetch(`${API_URL}/api/media/status`),
+        fetch(`${API_URL}/api/media/config`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+      ]);
+      if (statusRes.ok) {
+        const s = await statusRes.json();
+        setMinioStatus(s);
+      }
+      if (configRes.ok) {
+        const c = await configRes.json();
+        if (c.config) {
+          setMinioEndpoint(c.config.endpoint || '');
+          setMinioPort(c.config.port || '9000');
+          setMinioUseSSL(!!c.config.useSSL);
+          setMinioAccessKey(c.config.accessKey || '');
+          setMinioSecretKey(c.config.secretKey || '');
+          setMinioBucket(c.config.bucket || 'builddreamer-assets');
+          setMinioPublicUrl(c.config.publicUrl || '');
+        }
+      }
+    } catch (e) {
+      console.warn('Erro ao carregar configurações do MinIO:', e);
+    }
+  };
+
+  const handleTestMinioConnection = async () => {
+    if (!token) return;
+    setTestingMinio(true);
+    setMinioTestResult(null);
+    try {
+      const res = await fetch(`${API_URL}/api/media/test-connection`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          endpoint: minioEndpoint,
+          port: minioPort,
+          useSSL: minioUseSSL,
+          accessKey: minioAccessKey,
+          secretKey: minioSecretKey,
+          bucket: minioBucket,
+          publicUrl: minioPublicUrl
+        })
+      });
+      const data = await res.json();
+      setMinioTestResult(data);
+      if (data.success) {
+        fetchMinioConfig();
+      }
+    } catch (err: any) {
+      setMinioTestResult({ success: false, message: `Erro ao testar conexão: ${err.message}` });
+    } finally {
+      setTestingMinio(false);
+    }
+  };
+
+  const handleSaveMinioConfig = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!token) return;
+    setLoading(true);
+    setSuccessMsg(null);
+    setErrorMsg(null);
+    try {
+      const res = await fetch(`${API_URL}/api/media/config`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          endpoint: minioEndpoint,
+          port: minioPort,
+          useSSL: minioUseSSL,
+          accessKey: minioAccessKey,
+          secretKey: minioSecretKey,
+          bucket: minioBucket,
+          publicUrl: minioPublicUrl
+        })
+      });
+      if (!res.ok) throw new Error('Falha ao salvar configurações do MinIO.');
+      setSuccessMsg('Configurações do MinIO salvas com sucesso!');
+      fetchMinioConfig();
+    } catch (err: any) {
+      setErrorMsg(`Erro: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Sincronizar configurações do Banco de Dados ao carregar a página
   useEffect(() => {
     if (!token) return;
@@ -222,6 +330,7 @@ export const SettingsPage: React.FC = () => {
       }
     };
     loadUserSettingsFromDatabase();
+    fetchMinioConfig();
   }, [token]);
 
   // Função central para persistir qualquer alteração no Banco de Dados
@@ -533,6 +642,18 @@ export const SettingsPage: React.FC = () => {
           >
             <Cpu className="w-4 h-4 text-indigo-400" />
             Modelos de IA
+          </button>
+
+          <button
+            onClick={() => { setActiveTab('minio'); setSuccessMsg(null); setErrorMsg(null); fetchMinioConfig(); }}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all whitespace-nowrap ${
+              activeTab === 'minio'
+                ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-600/30'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
+            }`}
+          >
+            <HardDrive className="w-4 h-4 text-emerald-400" />
+            MinIO & Armazenamento
           </button>
 
           <button
@@ -1082,6 +1203,193 @@ export const SettingsPage: React.FC = () => {
                 >
                   <Plus className="w-4 h-4" /> Adicionar Modelo
                 </button>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* TAB: MINIO & ARMAZENAMENTO */}
+        {activeTab === 'minio' && (
+          <div className="space-y-6">
+            <div className="bg-[#121124] rounded-2xl p-6 md:p-8 border border-purple-500/20 shadow-xl space-y-6">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-purple-500/15">
+                <div>
+                  <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                    <HardDrive className="w-5 h-5 text-emerald-400" />
+                    Armazenamento MinIO / S3 Compatível
+                  </h2>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Configure seu servidor MinIO ou S3 para armazenar permanentemente imagens e mídias geradas ou extraídas via IA.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-slate-400">Status do Armazenamento:</span>
+                  {minioStatus?.minioAvailable ? (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 bg-emerald-950 text-emerald-400 border border-emerald-500/30 rounded-full">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+                      MinIO Ativo ({minioStatus?.storageType})
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 bg-amber-950 text-amber-400 border border-amber-500/30 rounded-full" title="Armazenando em backend/data/uploads local">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                      Local (Fallback)
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {minioStatus && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="bg-slate-900/40 p-4 border border-purple-500/10 rounded-xl space-y-1">
+                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Engine Ativa</span>
+                    <p className="text-sm font-semibold text-white font-mono">{minioStatus.storageType === 'minio' ? 'MinIO Object Storage' : 'Disco Local (Fallback)'}</p>
+                  </div>
+                  <div className="bg-slate-900/40 p-4 border border-purple-500/10 rounded-xl space-y-1">
+                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Status Config</span>
+                    <p className="text-sm font-semibold text-white">{minioStatus.minioConfigured ? 'Configurado' : 'Não Configurado'}</p>
+                  </div>
+                  <div className="bg-slate-900/40 p-4 border border-purple-500/10 rounded-xl space-y-1">
+                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Bucket em Uso</span>
+                    <p className="text-sm font-semibold text-white font-mono">{minioStatus.bucket || 'Nenhum'}</p>
+                  </div>
+                </div>
+              )}
+
+              <form onSubmit={handleSaveMinioConfig} className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1">
+                      Endpoint / Host
+                    </label>
+                    <input
+                      type="text"
+                      value={minioEndpoint}
+                      onChange={(e) => setMinioEndpoint(e.target.value)}
+                      placeholder="ex: play.min.io ou localhost ou ip"
+                      className="w-full bg-[#0a0a0d] border border-purple-500/20 rounded-xl px-4 py-2.5 text-sm text-white font-mono placeholder:text-slate-600 focus:outline-none focus:border-purple-500"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Porta</label>
+                      <input
+                        type="text"
+                        value={minioPort}
+                        onChange={(e) => setMinioPort(e.target.value)}
+                        placeholder="9000"
+                        className="w-full bg-[#0a0a0d] border border-purple-500/20 rounded-xl px-4 py-2.5 text-sm text-white font-mono placeholder:text-slate-600 focus:outline-none focus:border-purple-500"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Segurança (SSL)</label>
+                      <div className="h-[46px] flex items-center">
+                        <label className="relative flex items-center cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={minioUseSSL}
+                            onChange={(e) => setMinioUseSSL(e.target.checked)}
+                            className="sr-only peer"
+                          />
+                          <div className="w-11 h-6 bg-slate-800 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-slate-300 after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                          <span className="ml-3 text-xs text-slate-300">Usar SSL (HTTPS)</span>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Access Key (Usuário)</label>
+                    <input
+                      type="text"
+                      value={minioAccessKey}
+                      onChange={(e) => setMinioAccessKey(e.target.value)}
+                      placeholder="ex: minioadmin"
+                      className="w-full bg-[#0a0a0d] border border-purple-500/20 rounded-xl px-4 py-2.5 text-sm text-white font-mono placeholder:text-slate-600 focus:outline-none focus:border-purple-500"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Secret Key (Senha)</label>
+                    <input
+                      type="password"
+                      value={minioSecretKey}
+                      onChange={(e) => setMinioSecretKey(e.target.value)}
+                      placeholder="••••••••••••••••"
+                      className="w-full bg-[#0a0a0d] border border-purple-500/20 rounded-xl px-4 py-2.5 text-sm text-white font-mono placeholder:text-slate-600 focus:outline-none focus:border-purple-500"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Nome do Bucket</label>
+                    <input
+                      type="text"
+                      value={minioBucket}
+                      onChange={(e) => setMinioBucket(e.target.value)}
+                      placeholder="builddreamer-assets"
+                      className="w-full bg-[#0a0a0d] border border-purple-500/20 rounded-xl px-4 py-2.5 text-sm text-white font-mono placeholder:text-slate-600 focus:outline-none focus:border-purple-500"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Prefix URL Público (Opcional)</label>
+                    <input
+                      type="text"
+                      value={minioPublicUrl}
+                      onChange={(e) => setMinioPublicUrl(e.target.value)}
+                      placeholder="ex: https://cdn.seusite.com/bucket"
+                      className="w-full bg-[#0a0a0d] border border-purple-500/20 rounded-xl px-4 py-2.5 text-sm text-white font-mono placeholder:text-slate-600 focus:outline-none focus:border-purple-500"
+                    />
+                  </div>
+                </div>
+
+                {minioTestResult && (
+                  <div className={`p-4 rounded-xl border ${
+                    minioTestResult.success 
+                      ? 'bg-emerald-950/20 border-emerald-500/30 text-emerald-300' 
+                      : 'bg-rose-950/20 border-rose-500/30 text-rose-300'
+                  } text-xs flex items-start gap-2.5`}>
+                    {minioTestResult.success ? (
+                      <CheckCircle2 className="w-4.5 h-4.5 shrink-0 text-emerald-400" />
+                    ) : (
+                      <AlertCircle className="w-4.5 h-4.5 shrink-0 text-rose-400" />
+                    )}
+                    <div>
+                      <span className="font-bold">{minioTestResult.success ? 'Conexão Pronta!' : 'Erro de Conexão'}</span>
+                      <p className="mt-0.5 opacity-90 leading-relaxed">{minioTestResult.message}</p>
+                    </div>
+                  </div>
+                )}
+
+                <div className="pt-4 border-t border-purple-500/10 flex flex-col sm:flex-row gap-3 justify-end">
+                  <button
+                    type="button"
+                    disabled={testingMinio}
+                    onClick={handleTestMinioConnection}
+                    className="px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-800 text-sm font-semibold flex items-center justify-center gap-2 cursor-pointer transition-all disabled:opacity-50"
+                  >
+                    {testingMinio ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Testando...
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="w-4 h-4" />
+                        Testar Conexão
+                      </>
+                    )}
+                  </button>
+
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="px-6 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-semibold text-sm shadow-lg shadow-purple-600/30 flex items-center justify-center gap-2 cursor-pointer transition-all disabled:opacity-50"
+                  >
+                    <Save className="w-4 h-4" />
+                    Salvar Configurações
+                  </button>
+                </div>
               </form>
             </div>
           </div>

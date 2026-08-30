@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Editor from '@monaco-editor/react';
 import { Save, Plus, Trash2, FileCode, Code, FileText } from 'lucide-react';
+import { useNotification } from '../context/NotificationContext';
 
 interface CodeFile {
   id: string;
@@ -77,6 +78,7 @@ function serializeCodeFiles(files: CodeFile[]): string {
 }
 
 export const CodeEditor: React.FC<CodeEditorProps> = ({ html, css, js, onChange }) => {
+  const notify = useNotification();
   const [localHtml, setLocalHtml] = useState<string>(html);
   const [cssFiles, setCssFiles] = useState<CodeFile[]>([]);
   const [jsFiles, setJsFiles] = useState<CodeFile[]>([]);
@@ -165,7 +167,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({ html, css, js, onChange 
     e.stopPropagation();
     const files = type === 'css' ? cssFiles : jsFiles;
     if (files.length <= 1) {
-      alert(`Não é possível excluir o único arquivo de ${type.toUpperCase()}.`);
+      notify.warning(`Não é possível excluir o único arquivo de ${type.toUpperCase()}.`, 'Arquivo Único');
       return;
     }
 

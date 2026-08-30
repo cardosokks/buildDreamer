@@ -92,6 +92,78 @@ async function downloadAsset(url: string): Promise<{ buffer: Buffer; contentType
 }
 
 /**
+ * Auxiliar para registrar mídia e asset baixados no banco de dados de forma robusta e segura.
+ */
+async function registerDownloadedMedia(
+  fileName: string,
+  url: string,
+  size: number,
+  contentType: string,
+  isMinio: boolean,
+  userId?: string,
+  projectId?: string
+) {
+  // 1. Resolve userId se estiver vazio
+  let resolvedUserId = userId;
+  if (!resolvedUserId && projectId) {
+    try {
+      const member = await prisma.projectMember.findFirst({
+        where: { projectId }
+      });
+      if (member) resolvedUserId = member.userId;
+    } catch (_) {}
+  }
+  if (!resolvedUserId) {
+    try {
+      const firstUser = await prisma.user.findFirst();
+      if (firstUser) resolvedUserId = firstUser.id;
+    } catch (_) {}
+  }
+
+  // 2. Registrar no model Media (sem coluna inexistente projectId)
+  if (resolvedUserId) {
+    try {
+      await prisma.media.create({
+        data: {
+          id: `media_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          name: fileName,
+          url,
+          size,
+          mimeType: contentType,
+          storage: isMinio ? 'minio' : 'local',
+          userId: resolvedUserId
+        }
+      });
+    } catch (e) {
+      console.warn('[Remaster] Erro ao registrar mídia na tabela Media:', e);
+    }
+  }
+
+  // 3. Registrar como Asset do projeto se tiver projectId
+  if (projectId) {
+    try {
+      let assetType = 'image';
+      const lowerMime = contentType.toLowerCase();
+      if (lowerMime.includes('video')) assetType = 'video';
+      else if (lowerMime.includes('font') || fileName.endsWith('.woff') || fileName.endsWith('.woff2') || fileName.endsWith('.ttf') || fileName.endsWith('.otf')) assetType = 'font';
+      else if (lowerMime.includes('icon') || fileName.endsWith('.ico')) assetType = 'icon';
+
+      await prisma.asset.create({
+        data: {
+          id: `asset_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          name: fileName,
+          type: assetType,
+          url,
+          projectId
+        }
+      });
+    } catch (e) {
+      console.warn('[Remaster] Erro ao registrar asset do projeto:', e);
+    }
+  }
+}
+
+/**
  * Detecta e substitui mídias em um HTML de forma robusta e as salva no banco/armazenamento
  */
 async function processPageAssets(
@@ -126,19 +198,17 @@ async function processPageAssets(
       const { buffer, contentType } = await downloadAsset(fullUrl);
       
       const fileName = `${crypto.randomBytes(4).toString('hex')}_${fullUrl.split('/').pop()?.split('?')[0] || 'asset'}`;
-      const uploadRes = await uploadAssetToStorage(buffer, fileName, contentType);
+      const uploadRes = await uploadAssetToStorage(buffer, fileName, contentType, projectId);
       
-      // Registrar no banco
-      await prisma.$executeRawUnsafe(
-        `INSERT INTO "Media" ("id", "name", "url", "size", "mimeType", "storage", "userId", "projectId", "createdAt") VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)`,
-        `media_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      // Registrar no banco de dados com segurança
+      await registerDownloadedMedia(
         fileName,
         uploadRes.url,
         uploadRes.size,
         contentType,
-        uploadRes.isMinio ? 'minio' : 'local',
-        userId || null,
-        projectId || null
+        uploadRes.isMinio,
+        userId,
+        projectId
       );
 
       assetCache.set(fullUrl, uploadRes.url);
@@ -164,19 +234,17 @@ async function processPageAssets(
       }
       const { buffer, contentType } = await downloadAsset(fullUrl);
       const fileName = `bg_${crypto.randomBytes(4).toString('hex')}_${fullUrl.split('/').pop()?.split('?')[0] || 'bg'}`;
-      const uploadRes = await uploadAssetToStorage(buffer, fileName, contentType);
+      const uploadRes = await uploadAssetToStorage(buffer, fileName, contentType, projectId);
       
-      // Registrar no banco
-      await prisma.$executeRawUnsafe(
-        `INSERT INTO "Media" ("id", "name", "url", "size", "mimeType", "storage", "userId", "projectId", "createdAt") VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)`,
-        `media_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      // Registrar no banco de dados com segurança
+      await registerDownloadedMedia(
         fileName,
         uploadRes.url,
         uploadRes.size,
         contentType,
-        uploadRes.isMinio ? 'minio' : 'local',
-        userId || null,
-        projectId || null
+        uploadRes.isMinio,
+        userId,
+        projectId
       );
 
       assetCache.set(fullUrl, uploadRes.url);

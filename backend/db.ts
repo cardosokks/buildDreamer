@@ -123,6 +123,7 @@ class InMemoryDatabase {
   versions: Map<string, MockVersion> = new Map();
   messages: Map<string, MockMessage> = new Map();
   medias: Map<string, MockMedia> = new Map();
+  assets: Map<string, any> = new Map();
 
   private dbPath = path.join(process.cwd(), 'backend', 'data', 'db.json');
 
@@ -142,6 +143,7 @@ class InMemoryDatabase {
         this.medias = new Map(Object.entries(data.medias));
         this.versions = new Map(Object.entries(data.versions));
         this.messages = new Map(Object.entries(data.messages));
+        this.assets = new Map(Object.entries(data.assets || {}));
       } catch (err) {
         console.error('Failed to load DB, starting fresh:', err);
       }
@@ -158,6 +160,7 @@ class InMemoryDatabase {
       medias: Object.fromEntries(this.medias),
       versions: Object.fromEntries(this.versions),
       messages: Object.fromEntries(this.messages),
+      assets: Object.fromEntries(this.assets),
     };
     fs.writeFileSync(this.dbPath, JSON.stringify(data, null, 2));
   }
@@ -639,6 +642,17 @@ class InMemoryDatabase {
       const lead = this.leads.get(where.id);
       if (lead) this.leads.delete(where.id);
       return lead || { id: where.id };
+    },
+    updateMany: async ({ where, data }: { where: { projectId: string }; data: any }) => {
+      let count = 0;
+      for (const lead of this.leads.values()) {
+        if (lead.projectId === where.projectId) {
+          Object.assign(lead, data, { updatedAt: new Date() });
+          count++;
+        }
+      }
+      this.save();
+      return { count };
     }
   };
 
@@ -686,6 +700,38 @@ class InMemoryDatabase {
       };
       this.versions.set(id, version);
       return { ...version };
+    },
+    deleteMany: async ({ where }: { where: { projectId: string } }) => {
+      let count = 0;
+      for (const [id, ver] of Array.from(this.versions.entries())) {
+        if (ver.projectId === where.projectId) {
+          this.versions.delete(id);
+          count++;
+        }
+      }
+      this.save();
+      return { count };
+    }
+  };
+
+  asset = {
+    create: async ({ data }: { data: any }) => {
+      const id = `ast_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+      const asset = { id, ...data, createdAt: new Date() };
+      this.assets.set(id, asset);
+      this.save();
+      return asset;
+    },
+    deleteMany: async ({ where }: { where: { projectId: string } }) => {
+      let count = 0;
+      for (const [id, ast] of Array.from(this.assets.entries())) {
+        if (ast.projectId === where.projectId) {
+          this.assets.delete(id);
+          count++;
+        }
+      }
+      this.save();
+      return { count };
     }
   };
 

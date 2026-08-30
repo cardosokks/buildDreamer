@@ -12,6 +12,7 @@ import {
 import { projectJobsQueue } from './projects';
 import { prisma } from '../db';
 import { AuthenticatedRequest } from '../middleware/auth';
+import { aiQueueManager } from '../services/aiQueueManager';
 
 const router = Router();
 
@@ -297,29 +298,38 @@ router.post('/modify-stream', async (req: AuthenticatedRequest, res: any) => {
       } catch {}
     }
 
-    const jobId = `chat_job_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
-    aiChatJobsQueue[jobId] = { 
-      status: 'pending', 
-      currentModel: customModel || (provider === 'ollama' ? 'qwen2.5-coder:1.5b' : 'gemini-2.0-flash'),
-      provider,
-      pageId 
-    };
-
-    // Dispara em background
-    processAIChatJob(jobId, prompt, pageId, !!applyToAll, {
-      provider,
-      apiKey: customApiKey,
-      model: customModel,
-      registeredModels,
-      proxyUrl: customProxyUrl,
-      ollamaEndpoint,
-      lowSpecMode: isLowSpec,
-      customSkills,
-      targetPageIds: Array.isArray(targetPageIds) ? targetPageIds : undefined,
-      attachedFiles: Array.isArray(attachedFiles) ? attachedFiles : undefined
+    // Busca o projeto correspondente à página
+    const page = await prisma.page.findUnique({
+      where: { id: pageId },
+      select: { projectId: true }
     });
 
-    return res.status(202).json({ jobId, status: 'pending' });
+    if (!page) {
+      return res.status(404).json({ error: 'Página não encontrada' });
+    }
+
+    // Cria e enfileira a tarefa na fila centralizada do projeto
+    const job = aiQueueManager.enqueue(
+      page.projectId,
+      'chat_edit',
+      prompt,
+      pageId,
+      {
+        applyToAll: !!applyToAll,
+        targetPageIds: Array.isArray(targetPageIds) ? targetPageIds : undefined,
+        attachedFiles: Array.isArray(attachedFiles) ? attachedFiles : undefined,
+        lowSpecMode: isLowSpec,
+        provider,
+        apiKey: customApiKey,
+        model: customModel,
+        registeredModels,
+        proxyUrl: customProxyUrl,
+        ollamaEndpoint,
+        customSkills
+      }
+    );
+
+    return res.status(202).json({ jobId: job.id, status: 'pending' });
   } catch (error: any) {
     console.error('Error starting AI Chat job:', error);
     return res.status(500).json({ error: error.message });
@@ -329,6 +339,23 @@ router.post('/modify-stream', async (req: AuthenticatedRequest, res: any) => {
 // GET /api/ai/chat-job/:jobId - Polling do status do chat AI
 router.get('/chat-job/:jobId', (req, res: any) => {
   const { jobId } = req.params;
+
+  // 1. Tentar encontrar no gerenciador centralizado de filas do projeto
+  const queueJob = aiQueueManager.getItemStatusGlobally(jobId);
+  if (queueJob) {
+    return res.json({
+      status: queueJob.status,
+      currentModel: queueJob.currentModel,
+      provider: queueJob.options?.provider || 'gemini',
+      scope: queueJob.scope || 'single',
+      pageId: queueJob.pageId,
+      projectId: queueJob.projectId,
+      result: queueJob.result,
+      error: queueJob.error
+    });
+  }
+
+  // 2. Fallback para fila legado em memória
   const job = aiChatJobsQueue[jobId];
 
   if (!job) {
@@ -566,40 +593,12 @@ router.post('/page/remaster', async (req: AuthenticatedRequest, res: any) => {
     const customModel = decodeHeader(req.headers['x-ai-model'] || req.headers['x-ollama-model']);
     const ollamaEndpoint = decodeHeader(req.headers['x-ollama-endpoint']);
 
-    const remasterPrompt = `
-      Você é o Arquiteto Frontend Master.
-      Estamos aprimorando o design e layout da página "${page.name}" (${page.slug}).
-
-      DIRETRIZ DE MELHORIA DO USUÁRIO:
-      """
-      ${customPrompt || 'Melhore o layout e estilo com Tailwind CSS de forma moderna, elegante e responsiva.'}
-      """
-
-      HTML ORIGINAL DA PÁGINA:
-      """
-      ${page.html}
-      """
-
-      CSS ORIGINAL:
-      """
-      ${page.css}
-      """
-
-      JS ORIGINAL:
-      """
-      ${page.js}
-      """
-
-      REGRAS OBRIGATÓRIAS E INEGOCIÁVEIS:
-      1. NÃO REFAÇA DO ZERO E NÃO INVENTE TEXTOS FAKE. Mantenha integralmente todas as frases originais, slogans, títulos, parágrafos, contatos, telefones e mídias.
-      2. MANTENHA TODAS AS IMAGENS E MÍDIAS: Preserve fielmente as tags <img src="..."> e URLs de imagem.
-      3. DESIGN PREMIUM COM TAILWIND CSS: Reestruture as seções em um layout moderno, responsivo e limpo.
-      4. RETORNO LIMPO: Retorne apenas HTML em "html", CSS em "css" e JS em "js".
-    `;
-
-    const aiResponse = await executeAIRequest(
-      remasterPrompt,
-      { html: page.html, css: page.css || '', js: page.js || '' },
+    // Cria e enfileira a tarefa de remasterização na fila do projeto correspondente
+    const job = aiQueueManager.enqueue(
+      page.projectId,
+      'page_remaster',
+      customPrompt || 'Melhore o layout e estilo com Tailwind CSS de forma moderna, elegante e responsiva.',
+      pageId,
       {
         provider: (aiProvider as any) || 'gemini',
         apiKey: customApiKey,
@@ -609,27 +608,73 @@ router.post('/page/remaster', async (req: AuthenticatedRequest, res: any) => {
       }
     );
 
-    const updatedHtml = aiResponse.html || page.html;
-    const updatedCss = aiResponse.css || page.css;
-    const updatedJs = aiResponse.js || page.js;
-
-    const updatedPage = await prisma.page.update({
-      where: { id: pageId },
-      data: {
-        html: updatedHtml,
-        css: updatedCss,
-        js: updatedJs
-      }
-    });
-
     return res.json({
-      message: 'Página remasterizada com sucesso!',
-      page: updatedPage
+      message: 'Remasterização adicionada à fila com sucesso!',
+      queued: true,
+      jobId: job.id
     });
   } catch (error: any) {
     console.error('Erro na remasterização da página:', error);
     return res.status(500).json({ error: error.message });
   }
+});
+
+// GET /api/ai/jobs/active - Obter job ativo para a página ou projeto
+router.get('/jobs/active', async (req: AuthenticatedRequest, res: any) => {
+  const { pageId, projectId } = req.query as { pageId?: string; projectId?: string };
+  const activeJob = aiQueueManager.getActiveJob(projectId, pageId);
+  
+  if (activeJob) {
+    return res.json({
+      jobId: activeJob.id,
+      status: activeJob.status,
+      currentModel: activeJob.currentModel,
+      projectId: activeJob.projectId,
+      pageId: activeJob.pageId
+    });
+  }
+  return res.json(null);
+});
+
+// GET /api/ai/jobs/:jobId/status - Obter status de um job de IA
+router.get('/jobs/:jobId/status', async (req: AuthenticatedRequest, res: any) => {
+  const { jobId } = req.params;
+  const queueJob = aiQueueManager.getItemStatusGlobally(jobId);
+  
+  if (queueJob) {
+    return res.json({
+      status: queueJob.status,
+      currentModel: queueJob.currentModel,
+      provider: queueJob.options?.provider || 'gemini',
+      scope: queueJob.scope || 'single',
+      pageId: queueJob.pageId,
+      projectId: queueJob.projectId,
+      result: queueJob.result,
+      error: queueJob.error
+    });
+  }
+  return res.status(404).json({ error: 'Job não encontrado.' });
+});
+
+// GET /api/ai/queue/:projectId - Obter toda a fila de um projeto
+router.get('/queue/:projectId', async (req: AuthenticatedRequest, res: any) => {
+  const { projectId } = req.params;
+  const queue = aiQueueManager.getQueueList(projectId);
+  return res.json({ success: true, queue });
+});
+
+// POST /api/ai/queue/:projectId/clear - Limpar histórico de tarefas concluídas/falhas/canceladas
+router.post('/queue/:projectId/clear', async (req: AuthenticatedRequest, res: any) => {
+  const { projectId } = req.params;
+  aiQueueManager.clearQueue(projectId);
+  return res.json({ success: true, message: 'Fila limpa com sucesso!' });
+});
+
+// POST /api/ai/queue/:projectId/cancel/:itemId - Cancelar uma tarefa pendente ou em execução
+router.post('/queue/:projectId/cancel/:itemId', async (req: AuthenticatedRequest, res: any) => {
+  const { projectId, itemId } = req.params;
+  aiQueueManager.cancelItem(projectId, itemId);
+  return res.json({ success: true, message: 'Tarefa cancelada com sucesso!' });
 });
 
 export { router as aiRouter };

@@ -55,6 +55,7 @@ interface Page {
   js: string;
   seoTitle?: string;
   seoDescription?: string;
+  seoOgImage?: string;
   isHomepage: boolean;
 }
 
@@ -99,6 +100,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
   const [hoverPath, setHoverPath] = useState<string | null>(null);
   const [selectedStyles, setSelectedStyles] = useState<Record<string, string>>({});
   const [selectedAttrs, setSelectedAttrs] = useState<Record<string, string>>({});
+  const [mediaGalleryTarget, setMediaGalleryTarget] = useState<'src' | 'ogImage' | null>(null);
 
   // Layout Panels (Persistência no LocalStorage)
   const [activeLeftSidebar, setActiveLeftSidebar] = useState<'dom' | 'media' | null>(() => {
@@ -669,7 +671,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
     const root = doc.getElementById('canvas-root') || doc.body;
     const el = getElementByPath(root, selectedPath);
     if (!el) {
-      alert('Elemento selecionado não foi encontrado no documento.');
+      notify.warning('Elemento selecionado não foi encontrado no documento.', 'Não Encontrado');
       return;
     }
 
@@ -687,9 +689,9 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
       const list = stored ? JSON.parse(stored) : [];
       list.unshift(newTemplate);
       localStorage.setItem('studio_custom_templates', JSON.stringify(list));
-      alert(`Template "${newTemplate.title}" salvo com sucesso na biblioteca!`);
+      notify.success(`Template "${newTemplate.title}" salvo com sucesso na biblioteca!`, 'Salvo com Sucesso');
     } catch {
-      alert('Erro ao salvar template localmente.');
+      notify.error('Erro ao salvar template localmente.', 'Erro ao Salvar');
     }
   };
 
@@ -700,6 +702,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
       const updateData: any = {};
       if (key === 'title') updateData.seoTitle = value;
       if (key === 'description') updateData.seoDescription = value;
+      if (key === 'ogImage') updateData.seoOgImage = value;
 
       await fetch(`${API_URL}/api/pages/${activePage.id}`, {
         method: 'PUT',
@@ -712,7 +715,10 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
 
       setProject(prev => prev ? {
         ...prev,
-        pages: prev.pages.map(p => p.id === activePage.id ? { ...p, [key === 'title' ? 'seoTitle' : 'seoDescription']: value } : p)
+        pages: prev.pages.map(p => p.id === activePage.id ? { 
+          ...p, 
+          [key === 'title' ? 'seoTitle' : key === 'description' ? 'seoDescription' : 'seoOgImage']: value 
+        } : p)
       } : null);
     } catch (e) {
       console.error("Erro ao salvar SEO:", e);
@@ -821,7 +827,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
       a.remove();
     } catch (e) {
       console.error(e);
-      alert('Erro ao gerar pacote de exportação ZIP.');
+      notify.error('Erro ao gerar pacote de exportação ZIP.', 'Exportar Projeto');
     } finally {
       setDownloadingZip(false);
     }
@@ -835,7 +841,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
     if (!file || !project) return;
 
     if (!file.name.endsWith('.zip')) {
-      alert('Selecione um arquivo .zip válido.');
+      notify.warning('Selecione um arquivo .zip válido.', 'Formato do Arquivo');
       return;
     }
 
@@ -861,12 +867,12 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
           throw new Error(errData.error || 'Falha ao importar arquivo ZIP.');
         }
 
-        alert('Arquivo ZIP importado com sucesso para este projeto!');
+        notify.success('Arquivo ZIP importado com sucesso para este projeto!', 'Projeto Importado');
         fetchProjectDetails();
       };
       reader.readAsDataURL(file);
     } catch (err: any) {
-      alert(err.message || 'Erro ao processar o arquivo ZIP.');
+      notify.error(err.message || 'Erro ao processar o arquivo ZIP.', 'Erro no Processamento');
     } finally {
       setImportingZip(false);
       if (zipFileInputRef.current) zipFileInputRef.current.value = '';
@@ -909,17 +915,20 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
       }
 
       const data = await safeJson(res);
-      if (data.page) {
+      if (data.queued) {
+        notify.success('Tarefa de remasterização enviada para a fila sequencial do projeto!', 'Adicionado à Fila');
+        setShowChat(true); // Abre o chat copilot para o usuário acompanhar o progresso em tempo real
+      } else if (data.page) {
         setProject(prev => prev ? {
           ...prev,
           pages: prev.pages.map(p => p.id === data.page.id ? data.page : p)
         } : null);
+        notify.success('Página remasterizada com sucesso mantendo todas as mídias e frases!', 'Página Remasterizada');
       }
 
       setShowRemasterPageModal(false);
-      alert('Página remasterizada com sucesso mantendo todas as mídias e frases!');
     } catch (err: any) {
-      alert(`Erro ao remasterizar: ${err.message}`);
+      notify.error(`Erro ao remasterizar: ${err.message}`, 'Falha de Remasterização');
     } finally {
       setRemasteringPage(false);
     }
@@ -1430,8 +1439,22 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
         {/* Left Sidebar 2 (Banco de Imagens & Uploads) */}
         {activeLeftSidebar === 'media' && (
           <MediaLibrarySidebar
-            onClose={() => setActiveLeftSidebar(null)}
-            onInsertImageToCanvas={(url, name) => {
+            onClose={() => {
+              setActiveLeftSidebar(null);
+              setMediaGalleryTarget(null);
+            }}
+            onSelectImage={mediaGalleryTarget ? (url) => {
+              if (mediaGalleryTarget === 'ogImage') {
+                handlePageSeoChange('ogImage', url);
+                notify.success('Imagem de prévia (OG Image) atualizada com sucesso!', 'SEO Atualizado');
+              } else if (mediaGalleryTarget === 'src') {
+                handleAttrChange('src', url);
+                notify.success('Imagem alterada no elemento selecionado!', 'Mídia Atualizada');
+              }
+              setMediaGalleryTarget(null);
+              setActiveLeftSidebar(null);
+            } : undefined}
+            onInsertImageToCanvas={!mediaGalleryTarget ? (url, name) => {
               if (!activePage) return;
 
               // Se houver um elemento selecionado no canvas
@@ -1468,7 +1491,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
               const imgHtml = `<img src="${url}" alt="${name}" class="w-full h-auto max-w-full rounded-xl shadow-md my-4" />`;
               handleInsertBlock(imgHtml);
               notify.success(`Imagem "${name}" adicionada ao site!`, 'Mídia Inserida');
-            }}
+            } : undefined}
           />
         )}
 
@@ -1634,10 +1657,13 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
             pageSeo={{
               title: activePage?.seoTitle || activePage?.name || '',
               description: activePage?.seoDescription || '',
-              ogImage: ''
+              ogImage: activePage?.seoOgImage || ''
             }}
             onPageSeoChange={handlePageSeoChange}
-            onOpenMediaGallery={() => setActiveLeftSidebar('media')}
+            onOpenMediaGallery={(target) => {
+              setMediaGalleryTarget(target || null);
+              setActiveLeftSidebar('media');
+            }}
           />
           )}
         </div>

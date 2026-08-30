@@ -12,11 +12,11 @@ const requireAdmin = async (req: AuthenticatedRequest, res: any, next: any) => {
       return res.status(401).json({ error: 'Não autenticado' });
     }
 
-    const rows: any[] = await prisma.$queryRawUnsafe(
-      `SELECT "role" FROM "User" WHERE "id" = $1 LIMIT 1`,
-      req.userId
-    );
-    const role = rows && rows[0] && rows[0].role ? rows[0].role : 'USER';
+    const user = await prisma.user.findUnique({
+      where: { id: req.userId },
+      select: { role: true }
+    });
+    const role = user?.role || 'USER';
 
     if (role !== 'ADMIN' && role !== 'SUPER_ADMIN') {
       return res.status(403).json({ error: 'Acesso negado. Apenas administradores podem gerenciar usuários.' });
@@ -31,9 +31,10 @@ const requireAdmin = async (req: AuthenticatedRequest, res: any, next: any) => {
 // GET /api/users - Listar todos os usuários do sistema
 router.get('/', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res: any) => {
   try {
-    const users: any[] = await prisma.$queryRawUnsafe(
-      `SELECT "id", "email", "name", "role", "createdAt" FROM "User" ORDER BY "createdAt" DESC`
-    );
+    const users = await prisma.user.findMany({
+      select: { id: true, email: true, name: true, role: true, createdAt: true },
+      orderBy: { createdAt: 'desc' }
+    });
 
     // Contagem de projetos por usuário se aplicável
     const safeUsers = users.map(u => ({
@@ -77,12 +78,6 @@ router.post('/', authenticateToken, requireAdmin, async (req: AuthenticatedReque
         role: assignedRole
       }
     });
-
-    await prisma.$executeRawUnsafe(
-      `UPDATE "User" SET "role" = $1 WHERE "id" = $2`,
-      assignedRole,
-      newUser.id
-    );
 
     return res.status(201).json({
       message: 'Usuário criado com sucesso!',
@@ -128,10 +123,10 @@ router.put('/:id', authenticateToken, requireAdmin, async (req: AuthenticatedReq
     if (role !== undefined && validRoles.includes(role)) {
       // Se for rebaixar a si próprio de ADMIN, verificar se há outros ADMINs
       if (id === req.userId && role !== 'ADMIN') {
-        const adminUsers: any[] = await prisma.$queryRawUnsafe(
-          `SELECT "id" FROM "User" WHERE "role" = 'ADMIN'`
-        );
-        if (adminUsers.length <= 1) {
+        const adminCount = await prisma.user.count({
+          where: { role: 'ADMIN' }
+        });
+        if (adminCount <= 1) {
           return res.status(400).json({ error: 'Você não pode remover seu próprio privilégio de ADMIN pois é o único administrador do sistema.' });
         }
       }
@@ -146,10 +141,6 @@ router.put('/:id', authenticateToken, requireAdmin, async (req: AuthenticatedReq
       where: { id },
       data: updateData
     });
-
-    if (updateData.role) {
-      await prisma.$executeRawUnsafe(`UPDATE "User" SET "role" = $1 WHERE "id" = $2`, updateData.role, id);
-    }
 
     return res.json({
       message: 'Usuário atualizado com sucesso!',
@@ -208,7 +199,6 @@ router.delete('/:id', authenticateToken, requireAdmin, async (req: Authenticated
     }
 
     await prisma.user.delete({ where: { id } });
-    await prisma.$executeRawUnsafe(`DELETE FROM "User" WHERE "id" = $1`, id);
 
     return res.json({ message: 'Usuário excluído com sucesso!' });
   } catch (error: any) {

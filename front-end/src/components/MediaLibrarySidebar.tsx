@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Image as ImageIcon, Upload, Trash2, Plus, Copy, Check, Search, Loader2, X, RefreshCw } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { API_URL } from '../config';
+import { useNotification } from '../context/NotificationContext';
 
 export interface MediaItem {
   id: string;
@@ -24,6 +25,7 @@ export const MediaLibrarySidebar: React.FC<MediaLibrarySidebarProps> = ({
   onInsertImageToCanvas
 }) => {
   const { token } = useAuth();
+  const notify = useNotification();
   const [mediaList, setMediaList] = useState<MediaItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -57,7 +59,7 @@ export const MediaLibrarySidebar: React.FC<MediaLibrarySidebarProps> = ({
     if (!file) return;
 
     if (!file.type.startsWith('image/')) {
-      alert('Por favor, selecione apenas arquivos de imagem.');
+      notify.warning('Por favor, selecione apenas arquivos de imagem.', 'Tipo de Arquivo');
       return;
     }
 
@@ -96,7 +98,7 @@ export const MediaLibrarySidebar: React.FC<MediaLibrarySidebarProps> = ({
       }
     } catch (err: any) {
       console.error('Erro no upload de mídia MinIO:', err);
-      alert(err.message || 'Erro ao enviar imagem.');
+      notify.error(err.message || 'Erro ao enviar imagem.', 'Erro de Upload');
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';

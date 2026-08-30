@@ -1,0 +1,9 @@
+{
+  "endpoint": "c3e1-2804-1874-a00a-e200-249f-f52f-f5f5-60d7.ngrok-free.app",
+  "port": "443",
+  "useSSL": true,
+  "accessKey": "cardosokks",
+  "secretKey": "123456789",
+  "bucket": "builddreamer-minio",
+  "publicUrl": "https://c3e1-2804-1874-a00a-e200-249f-f52f-f5f5-60d7.ngrok-free.app"
+}

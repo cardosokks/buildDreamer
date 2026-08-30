@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { API_URL } from '../config';
+import { useNotification } from '../context/NotificationContext';
 
 const rgbToHex = (color: string): string => {
   if (!color || color === 'transparent' || color.startsWith('#')) return color;
@@ -86,7 +87,7 @@ interface PropertiesPanelProps {
     ogImage?: string;
   };
   onPageSeoChange?: (key: 'title' | 'description' | 'ogImage', value: string) => void;
-  onOpenMediaGallery?: () => void;
+  onOpenMediaGallery?: (target?: 'src' | 'ogImage') => void;
 }
 
 const Section: React.FC<{ title: string; icon: React.ReactNode; children: React.ReactNode; defaultOpen?: boolean }> = ({
@@ -219,6 +220,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   onPageSeoChange,
   onOpenMediaGallery,
 }) => {
+  const notify = useNotification();
   const [panelTab, setPanelTab] = useState<'layers' | 'styles' | 'attrs' | 'seo'>('layers');
   const [newClassInput, setNewClassInput] = useState('');
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set(['0', '1', '2', '3', '0.0', '1.0']));
@@ -387,7 +389,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     if (!file) return;
 
     if (!file.type.startsWith('image/')) {
-      alert('Por favor, selecione apenas arquivos de imagem.');
+      notify.warning('Por favor, selecione apenas arquivos de imagem.', 'Tipo de Arquivo');
       return;
     }
 
@@ -430,7 +432,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         }
       }
     } catch (err: any) {
-      alert(err.message || 'Erro ao enviar imagem.');
+      notify.error(err.message || 'Erro ao enviar imagem.', 'Erro de Upload');
     } finally {
       setUploadingImage(false);
       if (e.target) e.target.value = '';
@@ -629,7 +631,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               {onOpenMediaGallery && (
                 <button
                   type="button"
-                  onClick={onOpenMediaGallery}
+                  onClick={() => onOpenMediaGallery('ogImage')}
                   className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition-colors shrink-0 border border-slate-700 cursor-pointer"
                   title="Selecionar da Galeria de Mídias MinIO"
                 >
@@ -766,7 +768,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                 {onOpenMediaGallery && (
                   <button
                     type="button"
-                    onClick={onOpenMediaGallery}
+                    onClick={() => onOpenMediaGallery('src')}
                     className="flex-1 py-1.5 px-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] font-bold rounded-lg transition-colors flex items-center justify-center gap-1.5 cursor-pointer border border-slate-700 shadow-sm"
                     title="Abrir Galeria de Mídias"
                   >

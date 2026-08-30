@@ -1,7 +1,9 @@
 import { Router } from 'express';
 import { prisma } from '../db';
 import { authenticateToken, AuthenticatedRequest } from '../middleware/auth';
-import { uploadAssetToStorage, getAssetStream, isMinioAvailable } from '../services/storageService';
+import { uploadAssetToStorage, getAssetStream, isMinioAvailable, saveMinioConfig, testMinioConnection, loadConfig } from '../services/storageService';
+import fs from 'fs';
+import path from 'path';
 
 const router = Router();
 
@@ -37,12 +39,74 @@ router.get('/files/*', async (req, res) => {
 // GET /api/media/status - Verificar status do MinIO
 router.get('/status', async (req, res) => {
   const minioActive = isMinioAvailable();
+  const config = loadConfig();
+  const configPath = path.join(process.cwd(), 'backend', 'data', 'minio_config.json');
+  let hasConfig = false;
+  if (fs.existsSync(configPath)) {
+    try {
+      const cfg = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      hasConfig = !!cfg.endpoint;
+    } catch {}
+  }
   return res.json({
     storageType: minioActive ? 'minio' : 'local',
-    minioConfigured: !!(process.env.MINIO_ENDPOINT && process.env.MINIO_ACCESS_KEY),
+    minioConfigured: hasConfig || !!(process.env.MINIO_ENDPOINT && process.env.MINIO_ACCESS_KEY),
     minioAvailable: minioActive,
-    bucket: process.env.MINIO_BUCKET
+    bucket: config.bucket
   });
+});
+
+// GET /api/media/config - Obter configurações do MinIO
+router.get('/config', authenticateToken, async (req, res) => {
+  const configPath = path.join(process.cwd(), 'backend', 'data', 'minio_config.json');
+  let config = {
+    endpoint: process.env.MINIO_ENDPOINT || '',
+    port: process.env.MINIO_PORT || '9000',
+    useSSL: process.env.MINIO_USE_SSL === 'true',
+    accessKey: process.env.MINIO_ACCESS_KEY || '',
+    secretKey: process.env.MINIO_SECRET_KEY || '',
+    bucket: process.env.MINIO_BUCKET || 'builddreamer-assets',
+    publicUrl: process.env.MINIO_PUBLIC_URL || ''
+  };
+
+  if (fs.existsSync(configPath)) {
+    try {
+      const fileConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      config = { ...config, ...fileConfig };
+    } catch {}
+  }
+
+  return res.json({ config, isAvailable: isMinioAvailable() });
+});
+
+// POST /api/media/config - Salvar configurações do MinIO
+router.post('/config', authenticateToken, async (req, res) => {
+  try {
+    const { endpoint, port, useSSL, accessKey, secretKey, bucket, publicUrl } = req.body;
+    const configToSave = {
+      endpoint: endpoint || '',
+      port: port || '9000',
+      useSSL: !!useSSL,
+      accessKey: accessKey || '',
+      secretKey: secretKey || '',
+      bucket: bucket || 'builddreamer-assets',
+      publicUrl: publicUrl || ''
+    };
+    saveMinioConfig(configToSave);
+    return res.json({ message: 'Configurações do MinIO salvas com sucesso!', isAvailable: isMinioAvailable() });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/media/test-connection - Testar conexão com MinIO
+router.post('/test-connection', authenticateToken, async (req, res) => {
+  try {
+    const result = await testMinioConnection(req.body);
+    return res.json(result);
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
 });
 
 // GET /api/media - Listar mídias do usuário (com filtro opcional por projeto)
@@ -123,6 +187,39 @@ router.delete('/:id', authenticateToken, async (req: AuthenticatedRequest, res: 
     return res.json({ success: true, id });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /api/media/files/* - Servir arquivos (Proxy para MinIO ou Local)
+router.get('/files/*', async (req, res) => {
+  try {
+    const objectName = req.params[0];
+    const stream = await getAssetStream(objectName);
+    
+    // Tenta inferir o content-type pela extensão
+    const ext = path.extname(objectName).toLowerCase();
+    const mimeTypes: { [key: string]: string } = {
+      '.png': 'image/png',
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.gif': 'image/gif',
+      '.webp': 'image/webp',
+      '.svg': 'image/svg+xml',
+      '.mp4': 'video/mp4',
+      '.pdf': 'application/pdf'
+    };
+    
+    if (mimeTypes[ext]) {
+      res.setHeader('Content-Type', mimeTypes[ext]);
+    }
+    
+    // Cache de 1 dia para mídias
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    
+    (stream as any).pipe(res);
+  } catch (error: any) {
+    console.error(`[Media Proxy] Erro ao servir ${req.params[0]}:`, error.message);
+    res.status(404).send('Arquivo não encontrado');
   }
 });
 

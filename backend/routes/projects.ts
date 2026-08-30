@@ -219,32 +219,36 @@ router.post('/', async (req: AuthenticatedRequest, res: any) => {
       }
     });
 
-    // Se um leadId foi fornecido, vincula o projeto diretamente ao lead no CRM
+    // Se um leadId foi fornecido, vincula o projeto diretamente ao lead no CRM com segurança via Prisma Client
     if (leadId) {
       try {
-        await prisma.$executeRawUnsafe(`
-          UPDATE "Lead" SET "projectId" = $1 WHERE "id" = $2 AND "userId" = $3
-        `, project.id, leadId, userId);
+        await prisma.lead.update({
+          where: { id: leadId, userId },
+          data: { projectId: project.id }
+        });
       } catch (leadLinkErr) {
         console.warn('Erro ao vincular lead ao projeto recém-criado:', leadLinkErr);
       }
     }
 
-    // Busca configurações salvas no banco de dados do usuário como fallback prioritário
+    // Busca configurações salvas no banco de dados do usuário como fallback prioritário via Prisma Client
     let dbGeminiKey: string | undefined;
     let dbProxyUrl: string | undefined;
     let dbCustomModels: string[] | undefined;
     let dbCustomSkills: any[] | undefined;
 
     try {
-      const userRows: any[] = await prisma.$queryRawUnsafe(`
-        SELECT "geminiApiKey", "aiProxyUrl", "customAiModels", "customAiSkills" 
-        FROM "User" 
-        WHERE "id" = $1 LIMIT 1;
-      `, userId);
+      const userSettings = await prisma.user.findUnique({
+        where: { id: userId },
+        select: {
+          geminiApiKey: true,
+          aiProxyUrl: true,
+          customAiModels: true,
+          customAiSkills: true,
+        }
+      });
 
-      if (userRows && userRows.length > 0) {
-        const userSettings = userRows[0];
+      if (userSettings) {
         dbGeminiKey = userSettings.geminiApiKey || undefined;
         dbProxyUrl = userSettings.aiProxyUrl || undefined;
         if (userSettings.customAiModels) {
@@ -443,18 +447,40 @@ router.delete('/:id', async (req: AuthenticatedRequest, res: any) => {
       delete projectJobsQueue[id];
     }
 
-    // Exclusão explícita de dependências
-    if (typeof (prisma.page as any)?.deleteMany === 'function') {
+    // Exclusão explícita de dependências para evitar violações de chave estrangeira (FK)
+    try {
       await prisma.page.deleteMany({ where: { projectId: id } });
+    } catch (e) {
+      console.warn('[Delete Project] Erro ao deletar páginas:', e);
     }
-    if (typeof (prisma.projectMember as any)?.deleteMany === 'function') {
+
+    try {
       await prisma.projectMember.deleteMany({ where: { projectId: id } });
+    } catch (e) {
+      console.warn('[Delete Project] Erro ao deletar membros do projeto:', e);
+    }
+
+    try {
+      await prisma.version.deleteMany({ where: { projectId: id } });
+    } catch (e) {
+      console.warn('[Delete Project] Erro ao deletar versões:', e);
+    }
+
+    try {
+      await prisma.asset.deleteMany({ where: { projectId: id } });
+    } catch (e) {
+      console.warn('[Delete Project] Erro ao deletar assets:', e);
     }
     
-    // Desvincula leads no CRM vinculados ao projeto
+    // Desvincula leads no CRM vinculados ao projeto de forma segura com Prisma
     try {
-      await prisma.$executeRawUnsafe(`UPDATE "Lead" SET "projectId" = NULL WHERE "projectId" = $1`, id);
-    } catch (_) {}
+      await prisma.lead.updateMany({
+        where: { projectId: id },
+        data: { projectId: null }
+      });
+    } catch (e) {
+      console.warn('[Delete Project] Erro ao desvincular leads:', e);
+    }
 
     await prisma.project.delete({ where: { id } });
     return res.json({ message: 'Projeto excluído com sucesso' });

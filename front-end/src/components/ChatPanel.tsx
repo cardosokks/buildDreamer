@@ -39,6 +39,7 @@ interface Message {
   isError?: boolean;
   failedPrompt?: string;
   attachedFiles?: AttachedFile[];
+  id?: string;
 }
 
 export const ChatPanel: React.FC<ChatPanelProps> = ({ 
@@ -76,6 +77,78 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   const [activeJobModel, setActiveJobModel] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const activePollRef = useRef<any>(null);
+  
+  // Fila de tarefas de IA do projeto
+  const [projectQueue, setProjectQueue] = useState<any[]>([]);
+
+  // Buscar fila de IA do projeto periodicamente
+  useEffect(() => {
+    if (!token || !projectId) return;
+
+    const fetchQueue = async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/ai/queue/${projectId}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && Array.isArray(data.queue)) {
+            setProjectQueue(data.queue);
+          }
+        }
+      } catch (err) {
+        console.warn("Erro ao buscar fila de IA do projeto:", err);
+      }
+    };
+
+    fetchQueue();
+    const interval = setInterval(fetchQueue, 3000);
+    return () => clearInterval(interval);
+  }, [projectId, token]);
+
+  // Capturar e monitorar automaticamente tarefas ativas na fila
+  useEffect(() => {
+    if (loading || !projectQueue || projectQueue.length === 0) return;
+
+    // Encontra a primeira tarefa pendente ou em processamento relacionada a este projeto
+    const activeJob = projectQueue.find(job => job.status === 'pending' || job.status === 'processing');
+    if (activeJob) {
+      setLoading(true);
+      if (activeJob.currentModel) setActiveJobModel(activeJob.currentModel);
+      startPollingJob(activeJob.id, activeJob.pageId || pageId, activeJob.prompt);
+    }
+  }, [projectQueue, loading, pageId]);
+
+  const handleCancelQueueItem = async (itemId: string) => {
+    try {
+      const res = await fetch(`${API_URL}/api/ai/queue/${projectId}/cancel/${itemId}`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        setProjectQueue(prev => prev.map(i => i.id === itemId ? { ...i, status: 'cancelled' } : i));
+        if (activePollRef.current) clearInterval(activePollRef.current);
+        setLoading(false);
+        setActiveJobModel(null);
+      }
+    } catch (e) {
+      console.error("Erro ao cancelar tarefa da fila:", e);
+    }
+  };
+
+  const handleClearCompletedQueue = async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/ai/queue/${projectId}/clear`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        setProjectQueue(prev => prev.filter(i => i.status === 'pending' || i.status === 'processing'));
+      }
+    } catch (e) {
+      console.error("Erro ao limpar fila:", e);
+    }
+  };
 
   const handleCopyMessageText = (text: string, idx: number) => {
     if (!text) return;
@@ -308,6 +381,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
           const jobData = await statusRes.json();
           if (jobData.currentModel) setActiveJobModel(jobData.currentModel);
 
+          const storageKeyToUse = projectId ? `chat_history_proj_${projectId}` : `chat_history_${targetPageId}`;
+
           if (jobData.status === 'completed' && jobData.result) {
             if (activePollRef.current) clearInterval(activePollRef.current);
             setLoading(false);
@@ -321,15 +396,18 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
               js: jobData.result.js,
               modelUsed: jobData.result._usedModel || jobData.currentModel || selectedModel,
               applied: true,
-              scope: jobData.scope
+              scope: jobData.scope,
+              id: jobId
             };
 
-            const freshStored = localStorage.getItem(`chat_history_${targetPageId}`);
+            const freshStored = localStorage.getItem(storageKeyToUse);
             const freshMessages: Message[] = freshStored ? JSON.parse(freshStored) : [];
-            const finalMessages = [...freshMessages, assistantMessage];
-
-            localStorage.setItem(`chat_history_${targetPageId}`, JSON.stringify(finalMessages));
-            setMessages(finalMessages);
+            
+            if (!freshMessages.some(m => m.id === jobId)) {
+              const finalMessages = [...freshMessages, assistantMessage];
+              localStorage.setItem(storageKeyToUse, JSON.stringify(finalMessages));
+              setMessages(finalMessages);
+            }
 
             // Se a alteração foi em todas as páginas, recarrega o projeto inteiro
             if (jobData.scope === 'all' && onReloadAllPages) {
@@ -349,14 +427,35 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
               role: 'assistant', 
               text: `Erro: ${jobData.error || 'Falha ao processar alterações com IA.'}`,
               isError: true,
-              failedPrompt: promptSent || lastUserPrompt
+              failedPrompt: promptSent || lastUserPrompt,
+              id: jobId
             };
-            const freshStored = localStorage.getItem(`chat_history_${targetPageId}`);
+            const freshStored = localStorage.getItem(storageKeyToUse);
             const freshMessages: Message[] = freshStored ? JSON.parse(freshStored) : [];
-            const finalMessages = [...freshMessages, errorMessage];
+            
+            if (!freshMessages.some(m => m.id === jobId)) {
+              const finalMessages = [...freshMessages, errorMessage];
+              localStorage.setItem(storageKeyToUse, JSON.stringify(finalMessages));
+              setMessages(finalMessages);
+            }
+          } else if (jobData.status === 'cancelled') {
+            if (activePollRef.current) clearInterval(activePollRef.current);
+            setLoading(false);
+            setActiveJobModel(null);
 
-            localStorage.setItem(`chat_history_${targetPageId}`, JSON.stringify(finalMessages));
-            setMessages(finalMessages);
+            const cancelMessage: Message = { 
+              role: 'assistant', 
+              text: `Tarefa cancelada pelo usuário.`,
+              id: jobId
+            };
+            const freshStored = localStorage.getItem(storageKeyToUse);
+            const freshMessages: Message[] = freshStored ? JSON.parse(freshStored) : [];
+            
+            if (!freshMessages.some(m => m.id === jobId)) {
+              const finalMessages = [...freshMessages, cancelMessage];
+              localStorage.setItem(storageKeyToUse, JSON.stringify(finalMessages));
+              setMessages(finalMessages);
+            }
           }
         }
       } catch (pollErr) {
@@ -778,6 +877,78 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
             </div>
           </div>
         ))}
+
+        {/* Fila de Atividades da IA */}
+        {projectQueue.length > 0 && projectQueue.some(item => item.status === 'pending' || item.status === 'processing') && (
+          <div className="bg-slate-900/60 rounded-xl p-3 border border-purple-500/20 space-y-2 mt-4 animate-in slide-in-from-bottom-2 duration-200">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5 text-[10px] font-bold text-purple-300 uppercase tracking-wider">
+                <Layers className="w-3.5 h-3.5 text-purple-400" />
+                <span>Fila de IA ({projectQueue.filter(item => item.status === 'pending' || item.status === 'processing').length})</span>
+              </div>
+              <button
+                type="button"
+                onClick={handleClearCompletedQueue}
+                className="text-[9px] text-slate-500 hover:text-slate-300 font-semibold cursor-pointer"
+              >
+                Limpar Concluídas
+              </button>
+            </div>
+            
+            <div className="space-y-1.5 max-h-40 overflow-y-auto">
+              {projectQueue.map((item, qIdx) => {
+                if (item.status !== 'pending' && item.status !== 'processing') return null;
+                const isProcessing = item.status === 'processing';
+                
+                return (
+                  <div
+                    key={item.id}
+                    className={`p-2.5 rounded-lg border text-[11px] flex items-center justify-between gap-3 ${
+                      isProcessing
+                        ? 'bg-purple-950/20 border-purple-500/40'
+                        : 'bg-slate-950/40 border-slate-850'
+                    }`}
+                  >
+                    <div className="flex-1 space-y-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className={`w-1.5 h-1.5 rounded-full ${isProcessing ? 'bg-amber-400 animate-pulse' : 'bg-slate-500'}`} />
+                        <span className="font-bold text-slate-200 truncate block">
+                          {item.type === 'page_remaster' ? 'Remasterização' : 'Ajuste de Chat'}
+                        </span>
+                        <span className="text-[9px] px-1 bg-slate-800 text-slate-400 rounded font-mono shrink-0">
+                          #{qIdx + 1}
+                        </span>
+                      </div>
+                      
+                      <p className="text-slate-300 truncate font-medium">{item.prompt}</p>
+                      
+                      {isProcessing && item.currentModel && (
+                        <p className="text-[9px] text-purple-400 font-mono truncate">{item.currentModel}</p>
+                      )}
+                    </div>
+                    
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {isProcessing ? (
+                        <Loader2 className="w-3.5 h-3.5 text-purple-400 animate-spin" />
+                      ) : (
+                        <span className="text-[9px] text-slate-500 font-semibold">Aguardando</span>
+                      )}
+                      
+                      <button
+                        type="button"
+                        onClick={() => handleCancelQueueItem(item.id)}
+                        className="p-1 rounded bg-slate-950 hover:bg-red-950 text-slate-500 hover:text-red-400 border border-slate-800 transition-colors cursor-pointer"
+                        title="Cancelar tarefa"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {loading && (
           <div className="flex items-start gap-2 animate-in fade-in">

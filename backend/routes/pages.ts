@@ -53,7 +53,7 @@ router.post(['/projects/:projectId/pages', '/pages'], async (req: AuthenticatedR
 router.put('/pages/:id', async (req: AuthenticatedRequest, res: any) => {
   try {
     const id = req.params.id as string;
-    const { name, slug, title, description, html, css, js, seoTitle, seoDescription, isHomepage } = req.body;
+    const { name, slug, title, description, html, css, js, seoTitle, seoDescription, seoOgImage, isHomepage } = req.body;
 
     const page = await prisma.page.findUnique({
       where: { id },
@@ -87,6 +87,7 @@ router.put('/pages/:id', async (req: AuthenticatedRequest, res: any) => {
         description: description !== undefined ? description : page.description,
         seoTitle: seoTitle !== undefined ? seoTitle : page.seoTitle,
         seoDescription: seoDescription !== undefined ? seoDescription : page.seoDescription,
+        seoOgImage: seoOgImage !== undefined ? seoOgImage : (page.seoOgImage || null),
         html: html !== undefined ? html : page.html,
         css: css !== undefined ? css : page.css,
         js: js !== undefined ? js : page.js,

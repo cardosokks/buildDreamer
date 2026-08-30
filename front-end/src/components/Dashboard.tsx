@@ -136,6 +136,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [leadsSubTab, setLeadsSubTab] = useState<'search' | 'saved'>('search');
+  const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
+
   const [isTeamChatOpen, setIsTeamChatOpen] = useState(false);
 
   const [activeTab, setActiveTabState] = useState<'general' | 'projects' | 'crm' | 'leads' | 'saved-leads' | 'presets' | 'settings' | 'users'>(() => {
@@ -149,6 +152,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
   });
 
   const setActiveTab = (tab: 'general' | 'projects' | 'crm' | 'leads' | 'saved-leads' | 'presets' | 'settings' | 'users') => {
+    if (tab === 'saved-leads') {
+      setActiveTabState('leads');
+      setLeadsSubTab('saved');
+      if (onTabChange) onTabChange('leads');
+      try {
+        localStorage.setItem('rp_dashboard_active_tab', 'leads');
+      } catch { }
+      return;
+    }
     setActiveTabState(tab);
     if (onTabChange) onTabChange(tab);
     try {
@@ -191,7 +203,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
   const handleToggleNgrok = async () => {
     const customToken = localStorage.getItem('ngrok_authtoken') || '';
     if (!ngrokOnline && !customToken) {
-      alert('Para ligar o Ngrok, configure seu "Ngrok Authtoken" nas Configurações.');
+      notify.warning('Para ligar o Ngrok, configure seu "Ngrok Authtoken" nas Configurações.', 'Configuração Necessária');
       setShowSettings(true);
       return;
     }
@@ -226,7 +238,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
       }
     } catch (err: any) {
       setNgrokStatus('error');
-      alert(`Falha no Ngrok: ${err.message}`);
+      notify.error(`Falha no Ngrok: ${err.message}`, 'Erro Ngrok');
     } finally {
       // Polling rápido para acompanhar a conclusão do job
       setTimeout(checkNgrokStatus, 600);
@@ -539,7 +551,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
   const handleAddManualLead = (e: React.FormEvent) => {
     e.preventDefault();
     if (!manualLeadName.trim()) {
-      alert('O nome do estabelecimento é obrigatório.');
+      notify.warning('O nome do estabelecimento é obrigatório.', 'Nome Obrigatório');
       return;
     }
 
@@ -1066,7 +1078,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
       const data = await safeJson(res);
       setLeadsList(data.leads || []);
     } catch (err: any) {
-      alert(err.message);
+      notify.error(err.message, 'Erro de Busca');
     } finally {
       setLoadingLeads(false);
     }
@@ -1087,7 +1099,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
   const handleStartRemasterFlow = async (leadOrUrl: { name: string; website: string } | Lead) => {
     const targetUrl = leadOrUrl.website;
     if (!targetUrl) {
-      alert('Nenhum website cadastrado para este estabelecimento.');
+      notify.warning('Nenhum website cadastrado para este estabelecimento.', 'Website Necessário');
       return;
     }
 
@@ -1191,7 +1203,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
   const handleExecuteCustomRemaster = async () => {
     const activePages = remasterPages.filter(p => p.enabled);
     if (activePages.length === 0) {
-      alert('Selecione ao menos 1 página para ser gerada.');
+      notify.warning('Selecione ao menos 1 página para ser gerada.', 'Página Necessária');
       return;
     }
 
@@ -1306,7 +1318,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
       setActiveTab('projects');
       fetchProjects();
     } catch (err: any) {
-      alert(err.message);
+      notify.error(err.message, 'Erro de Remasterização');
     } finally {
       setGeneratingRemaster(false);
     }
@@ -1319,7 +1331,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
     try {
       if (creationMode === 'zip') {
         if (!selectedZipBase64) {
-          alert('Por favor, selecione um arquivo .zip para importar.');
+          notify.warning('Por favor, selecione um arquivo .zip para importar.', 'Importar ZIP');
           setCreating(false);
           return;
         }
@@ -1494,9 +1506,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
     }
   };
 
-  const handleDeleteProject = async (id: string, e?: React.MouseEvent) => {
+  const handleDeleteProject = (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    if (!confirm('Deseja realmente deletar este projeto? Esta ação é irreversível.')) return;
+    const proj = projects.find(p => p.id === id);
+    if (proj) {
+      setProjectToDelete(proj);
+    }
+  };
+
+  const confirmDeleteProject = async () => {
+    if (!projectToDelete) return;
+    const id = projectToDelete.id;
 
     try {
       const res = await fetch(`${API_URL}/api/projects/${id}`, {
@@ -1509,7 +1529,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
         const errData = await res.json().catch(() => ({}));
         throw new Error(errData.error || 'Falha ao deletar projeto');
       }
-      const deletedProject = projects.find(p => p.id === id);
       setProjects(prev => prev.filter(p => p.id !== id));
       if (selectedProjectDetails?.id === id) {
         setSelectedProjectDetails(null);
@@ -1520,10 +1539,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
         type: 'warning',
         emoji: '🗑️',
         title: 'Projeto excluído',
-        message: `"${deletedProject?.name || 'Projeto'}" foi removido permanentemente.`,
+        message: `"${projectToDelete.name}" foi removido permanentemente.`,
       });
     } catch (err: any) {
       notify.error(err.message || 'Erro ao excluir projeto', 'Falha');
+    } finally {
+      setProjectToDelete(null);
     }
   };
 
@@ -2025,7 +2046,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
               )}
 
               <button
-                onClick={() => setActiveTab('leads')}
+                onClick={() => {
+                  setActiveTab('leads');
+                }}
                 className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2 py-2.5' : 'gap-3 px-3.5 py-2.5'} rounded-xl text-xs font-semibold transition-all cursor-pointer ${activeTab === 'leads'
                   ? theme === 'light'
                     ? 'bg-indigo-50 text-indigo-700 font-bold'
@@ -2034,44 +2057,21 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                     ? 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                     : 'text-slate-400 hover:bg-slate-900/60 hover:text-slate-200'
                   }`}
-                title="Buscador de Clientes"
+                title="Buscador & Clientes Salvos"
               >
                 <Users className="w-4 h-4 text-slate-400 shrink-0" />
-                {!sidebarCollapsed && <span className="truncate">Buscador de Clientes</span>}
-              </button>
-
-              <button
-                onClick={() => setActiveTab('saved-leads')}
-                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2 py-2.5 relative' : 'gap-3 px-3.5 py-2.5'} rounded-xl text-xs font-semibold transition-all cursor-pointer ${activeTab === 'saved-leads'
-                  ? theme === 'light'
-                    ? 'bg-slate-100 text-slate-900 font-bold border border-slate-200'
-                    : 'bg-zinc-800/60 text-zinc-200 border border-zinc-700/50 font-bold'
-                  : theme === 'light'
-                    ? 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                    : 'text-zinc-400 hover:bg-zinc-900/60 hover:text-slate-200'
-                  }`}
-                title={`Leads Salvos (${savedLeads.length})`}
-              >
-                <Bookmark className="w-4 h-4 text-slate-400 shrink-0" />
                 {!sidebarCollapsed ? (
-                  <>
-                    <span className="truncate flex-1 text-left">Leads Salvos</span>
-                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${theme === 'light' ? 'bg-slate-200 text-slate-700' : 'bg-zinc-800 text-zinc-400 border border-zinc-700'}`}>
-                      {savedLeads.length}
-                    </span>
-                  </>
-                ) : savedLeads.length > 0 && (
-                  <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-zinc-500" />
-                )}
+                  <div className="flex items-center justify-between w-full min-w-0">
+                    <span className="truncate pr-1">Buscador & Clientes</span>
+                  </div>
+                ) : null}
               </button>
-
-
 
               {/* Seção 4: Configurações & Conta */}
               {!sidebarCollapsed ? (
                 <div className={`pt-4 pb-1 px-3 text-[10px] font-bold uppercase tracking-wider ${theme === 'light' ? 'text-slate-400' : 'text-slate-500'
                   }`}>
-                  Geral
+                  Configurações
                 </div>
               ) : (
                 <div className="border-t border-transparent my-2" />
@@ -2812,408 +2812,36 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                 </div>
               )}
             </div>
-          ) : activeTab === 'saved-leads' ? (
-            /* LEADS SALVOS SUBMENU TAB */
-            <div className="max-w-6xl mx-auto space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
-                    <Bookmark className="w-5 h-5 text-yellow-400" />
-                    Leads Salvos ({savedLeads.length})
-                  </h2>
-                  <p className="text-xs text-slate-400">Potenciais clientes favoritados para abordagem e propostas.</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setShowManualLeadModal(true)}
-                    className="px-3 py-1.5 bg-yellow-500 hover:bg-yellow-400 text-slate-950 font-bold rounded-xl text-xs transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    Novo Lead
-                  </button>
-                  <button
-                    onClick={() => setActiveTab('leads')}
-                    className="px-3 py-1.5 bg-purple-700 hover:bg-purple-600 text-white font-semibold rounded-xl text-xs transition-all flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <Search className="w-3.5 h-3.5" />
-                    Buscar Leads
-                  </button>
-                </div>
-              </div>
-
-              {savedLeads.length === 0 ? (
-                <div className="p-16 bg-[#0f0b18] border border-slate-850 rounded-2xl text-center space-y-3">
-                  <Bookmark className="w-12 h-12 text-slate-600 mx-auto" />
-                  <h3 className="text-base font-bold text-white">Nenhum lead salvo no momento</h3>
-                  <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                    Navegue até o <strong>Buscador de Clientes</strong>, faça buscas e clique no ícone de salvar em qualquer estabelecimento para adicioná-lo aqui.
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {/* Barra Superior da Listagem de Salvos: Contador e Alternador de Layout */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#0f0b18] border border-slate-850 px-4 py-3 rounded-2xl text-xs">
-                    <div className="flex items-center gap-2 text-slate-400">
-                      <span>Exibindo <strong>{Math.min((savedCurrentPage - 1) * savedPerPage + 1, savedLeads.length)}</strong>–<strong>{Math.min(savedCurrentPage * savedPerPage, savedLeads.length)}</strong> de <strong>{savedLeads.length}</strong> leads favoritados</span>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                      {/* Itens por página */}
-                      <div className="flex items-center gap-1.5 text-slate-400">
-                        <span>Por página:</span>
-                        <select
-                          value={savedPerPage}
-                          onChange={(e) => {
-                            setSavedPerPage(Number(e.target.value));
-                            setSavedCurrentPage(1);
-                          }}
-                          className="bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-white text-xs focus:outline-none"
-                        >
-                          <option value={10}>10</option>
-                          <option value={20}>20</option>
-                          <option value={30}>30</option>
-                          <option value={50}>50</option>
-                        </select>
-                      </div>
-
-                      {/* Alternador Tabela / Cards */}
-                      <div className="flex items-center bg-slate-950 border border-slate-800 rounded-xl p-0.5">
-                        <button
-                          type="button"
-                          onClick={() => setSavedViewMode('table')}
-                          className={`px-2.5 py-1 rounded-lg transition-all ${savedViewMode === 'table' ? 'bg-purple-700 text-white font-bold' : 'text-slate-400 hover:text-white'
-                            }`}
-                          title="Visualização em Lista Compacta"
-                        >
-                          Lista
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setSavedViewMode('cards')}
-                          className={`px-2.5 py-1 rounded-lg transition-all ${savedViewMode === 'cards' ? 'bg-purple-700 text-white font-bold' : 'text-slate-400 hover:text-white'
-                            }`}
-                          title="Visualização em Cards"
-                        >
-                          Cards
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Renderização em Lista Compacta / Tabela para Leads Salvos */}
-                  {savedViewMode === 'table' ? (
-                    <div className="bg-[#0f0b18] border border-yellow-500/20 rounded-2xl overflow-hidden shadow-xl">
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-left border-collapse">
-                          <thead>
-                            <tr className="border-b border-slate-850 bg-slate-950/60 text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                              <th className="py-3.5 px-4">Estabelecimento / Categoria</th>
-                              <th className="py-3.5 px-4">Endereço</th>
-                              <th className="py-3.5 px-4">Contato & Presença</th>
-                              <th className="py-3.5 px-4 text-center">Nota</th>
-                              <th className="py-3.5 px-4 text-right whitespace-nowrap shrink-0">Ações</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-850/60 text-xs">
-                            {savedLeads
-                              .slice((savedCurrentPage - 1) * savedPerPage, savedCurrentPage * savedPerPage)
-                              .map(lead => {
-                                const mapsSearchUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${lead.name} ${lead.address || lead.city || ''}`)}`;
-
-                                return (
-                                  <tr key={lead.id} className="hover:bg-slate-900/40 transition-colors">
-                                    <td className="py-3.5 px-4">
-                                      <div className="font-bold text-white text-sm flex items-center gap-2">
-                                        <span className="truncate max-w-[220px]" title={lead.name}>{lead.name}</span>
-                                        <BookmarkCheck className="w-3.5 h-3.5 text-yellow-400 fill-yellow-400 shrink-0" />
-                                      </div>
-                                      {lead.category && (
-                                        <span className="text-[10px] text-yellow-400 font-mono mt-0.5 block">{lead.category}</span>
-                                      )}
-                                    </td>
-
-                                    <td className="py-3.5 px-4 text-slate-300 max-w-[260px]">
-                                      <div className="flex items-start gap-1.5">
-                                        <MapPin className="w-3.5 h-3.5 text-pink-400 shrink-0 mt-0.5" />
-                                        <span className="line-clamp-2 text-xs text-slate-300" title={lead.address}>
-                                          {lead.address || `${lead.city || ''} - ${lead.state || ''}`}
-                                        </span>
-                                      </div>
-                                    </td>
-
-                                    <td className="py-3.5 px-4">
-                                      <div className="space-y-1">
-                                        <div className="flex items-center gap-1.5 text-slate-300 font-mono text-xs">
-                                          <Phone className="w-3 h-3 text-indigo-400 shrink-0" />
-                                          <span>{lead.phone}</span>
-                                        </div>
-                                        <div>
-                                          {lead.website ? (
-                                            <a
-                                              href={lead.website}
-                                              target="_blank"
-                                              rel="noopener noreferrer"
-                                              className="text-[11px] text-cyan-400 hover:underline flex items-center gap-1 truncate max-w-[180px]"
-                                              title={lead.website}
-                                            >
-                                              <Globe className="w-3 h-3 shrink-0" />
-                                              <span className="truncate">{lead.website.replace(/^https?:\/\//, '')}</span>
-                                            </a>
-                                          ) : (
-                                            <span className="text-[10px] font-bold text-red-400 bg-red-950/40 border border-red-500/20 px-1.5 py-0.5 rounded">
-                                              Sem Website
-                                            </span>
-                                          )}
-                                        </div>
-                                      </div>
-                                    </td>
-
-                                    <td className="py-3.5 px-4 text-center">
-                                      <span className="inline-flex items-center gap-1 bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 px-2 py-0.5 rounded-lg text-xs font-bold">
-                                        <Star className="w-3 h-3 fill-yellow-400" />
-                                        {lead.rating}
-                                      </span>
-                                    </td>
-
-                                    <td className="py-3.5 px-4 text-right whitespace-nowrap shrink-0">
-                                      <div className="flex items-center justify-end gap-1 flex-nowrap shrink-0 whitespace-nowrap">
-                                        {/* Botão Cadastrar no CRM (Novo Lead) */}
-                                        <button
-                                          onClick={() => handleCadastrarLeadNoCRM(lead)}
-                                          className="p-1.5 bg-emerald-600/20 hover:bg-emerald-600/40 border border-emerald-500/40 text-emerald-400 rounded-lg transition-all cursor-pointer"
-                                          title="Cadastrar no CRM (Novo Lead / Prospect)"
-                                        >
-                                          <UserPlus className="w-3.5 h-3.5" />
-                                        </button>
-
-                                        <a
-                                          href={mapsSearchUrl}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className="p-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-pink-500/40 text-pink-400 rounded-lg transition-all"
-                                          title="Ver no Google Maps"
-                                        >
-                                          <MapPin className="w-3.5 h-3.5" />
-                                        </a>
-
-                                        {/* Botão WhatsApp */}
-                                        {lead.whatsappUrl && (
-                                          <a
-                                            href={lead.whatsappUrl}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="p-1.5 bg-emerald-600/20 hover:bg-emerald-600/40 border border-emerald-500/40 text-emerald-400 rounded-lg transition-all"
-                                            title="Conversar no WhatsApp"
-                                          >
-                                            <Phone className="w-3.5 h-3.5" />
-                                          </a>
-                                        )}
-
-                                        {/* Botão Favoritar / Remover dos Salvos */}
-                                        <button
-                                          onClick={() => handleToggleSaveLead(lead)}
-                                          className="p-1.5 bg-yellow-500/20 border border-yellow-500/40 text-yellow-300 hover:text-red-400 rounded-lg transition-all cursor-pointer"
-                                          title="Remover dos salvos"
-                                        >
-                                          <BookmarkCheck className="w-3.5 h-3.5 fill-yellow-400" />
-                                        </button>
-
-                                        {/* Botão: Gerar Site */}
-                                        <button
-                                          onClick={() => handleCreateProjectFromLead(lead)}
-                                          className="p-1.5 bg-indigo-600/30 hover:bg-indigo-600 border border-indigo-500/40 text-indigo-200 hover:text-white rounded-lg transition-all shadow-sm cursor-pointer"
-                                          title="Gerar Site Profissional para este Cliente"
-                                        >
-                                          <Layout className="w-3.5 h-3.5" />
-                                        </button>
-
-                                        {/* Botão: Melhorar com IA (Apenas se tiver website) */}
-                                        {lead.website && (
-                                          <button
-                                            onClick={() => handleStartRemasterFlow(lead)}
-                                            className="p-1.5 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white rounded-lg transition-all shadow-md shadow-purple-600/20 cursor-pointer"
-                                            title="Melhorar com IA (Remasterizar subpáginas)"
-                                          >
-                                            <Sparkles className="w-3.5 h-3.5" />
-                                          </button>
-                                        )}
-                                      </div>
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  ) : (
-                    /* Renderização em Cards para Leads Salvos */
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {savedLeads
-                        .slice((savedCurrentPage - 1) * savedPerPage, savedCurrentPage * savedPerPage)
-                        .map(lead => (
-                          <div
-                            key={lead.id}
-                            className="bg-[#0f0b18] border border-yellow-500/20 rounded-2xl p-5 flex flex-col justify-between hover:border-yellow-500/40 transition-all shadow-md"
-                          >
-                            <div className="space-y-2">
-                              <div className="flex items-start justify-between gap-3">
-                                <div>
-                                  <h3 className="font-bold text-white text-base leading-tight">{lead.name}</h3>
-                                  {lead.category && (
-                                    <span className="text-[10px] text-yellow-400 font-mono">{lead.category}</span>
-                                  )}
-                                </div>
-                                <button
-                                  onClick={() => handleToggleSaveLead(lead)}
-                                  className="p-1 text-yellow-400 hover:text-red-400 transition-colors cursor-pointer"
-                                  title="Remover dos salvos"
-                                >
-                                  <BookmarkCheck className="w-5 h-5 fill-yellow-400" />
-                                </button>
-                              </div>
-
-                              <p className="text-xs text-slate-400 flex items-center gap-1.5">
-                                <MapPin className="w-3.5 h-3.5 text-pink-400 shrink-0" />
-                                <span className="line-clamp-1">{lead.address}</span>
-                              </p>
-
-                              <p className="text-xs text-slate-400 flex items-center gap-1.5">
-                                <Phone className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-                                <span>{lead.phone}</span>
-                              </p>
-
-                              <p className="text-xs flex items-center gap-1.5">
-                                <Globe className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-                                {lead.website ? (
-                                  <a href={lead.website} target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline line-clamp-1">
-                                    {lead.website}
-                                  </a>
-                                ) : (
-                                  <span className="text-red-400 font-semibold uppercase tracking-wider text-[10px] bg-red-950/30 border border-red-500/25 px-1.5 py-0.5 rounded">Sem Website (Oportunidade!)</span>
-                                )}
-                              </p>
-                            </div>
-
-                            <div className="mt-4 pt-4 border-t border-slate-850/80 flex items-center justify-between gap-2 flex-wrap">
-                              <span className="text-[10px] text-slate-500 font-mono">Salvo na Lista</span>
-                              <div className="flex items-center gap-1.5 flex-nowrap shrink-0 whitespace-nowrap">
-                                <button
-                                  onClick={() => handleCadastrarLeadNoCRM(lead)}
-                                  className="p-2 bg-emerald-600/20 hover:bg-emerald-600/40 border border-emerald-500/40 text-emerald-400 rounded-xl transition-all shadow-sm cursor-pointer"
-                                  title="Cadastrar no CRM (Novo Lead / Prospect)"
-                                >
-                                  <UserPlus className="w-4 h-4" />
-                                </button>
-                                <a
-                                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${lead.name} ${lead.address || lead.city || ''}`)}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="p-2 bg-slate-900 hover:bg-pink-950/40 border border-slate-800 hover:border-pink-500/40 text-pink-400 rounded-xl transition-all shadow-sm"
-                                  title="Ver no Google Maps"
-                                >
-                                  <MapPin className="w-4 h-4" />
-                                </a>
-                                {lead.whatsappUrl && (
-                                  <a
-                                    href={lead.whatsappUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="p-2 bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-500/40 text-emerald-400 rounded-xl transition-all shadow-sm"
-                                    title="Conversar no WhatsApp"
-                                  >
-                                    <Phone className="w-4 h-4" />
-                                  </a>
-                                )}
-                                <button
-                                  onClick={() => handleCreateProjectFromLead(lead)}
-                                  className="p-2 bg-indigo-600/20 hover:bg-indigo-600 border border-indigo-500/40 text-indigo-300 hover:text-white rounded-xl transition-all shadow-sm cursor-pointer"
-                                  title="Gerar Site com IA para este Cliente"
-                                >
-                                  <Layout className="w-4 h-4" />
-                                </button>
-                                {lead.website && (
-                                  <button
-                                    onClick={() => handleStartRemasterFlow(lead)}
-                                    className="p-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white rounded-xl transition-all shadow-md hover:shadow-purple-500/30 cursor-pointer"
-                                    title="Melhorar com IA: Analisar páginas e recriar com IA"
-                                  >
-                                    <Sparkles className="w-4 h-4" />
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                    </div>
-                  )}
-
-                  {/* Paginação para Leads Salvos */}
-                  {Math.ceil(savedLeads.length / savedPerPage) > 1 && (
-                    <div className="flex items-center justify-center gap-2 pt-4">
-                      <button
-                        onClick={() => setSavedCurrentPage(p => Math.max(p - 1, 1))}
-                        disabled={savedCurrentPage === 1}
-                        className="px-3.5 py-2 bg-[#0f0b18] border border-slate-800 hover:border-purple-500/40 text-xs font-semibold text-slate-300 hover:text-white rounded-xl disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-                      >
-                        Anterior
-                      </button>
-
-                      <div className="flex items-center gap-1">
-                        {Array.from({ length: Math.ceil(savedLeads.length / savedPerPage) }, (_, i) => i + 1).map(page => (
-                          <button
-                            key={page}
-                            onClick={() => setSavedCurrentPage(page)}
-                            className={`w-8 h-8 rounded-xl text-xs font-bold transition-all ${savedCurrentPage === page
-                              ? 'bg-purple-700 text-white shadow-[0_0_10px_rgba(168,85,247,0.4)]'
-                              : 'bg-[#0f0b18] border border-slate-850 text-slate-400 hover:text-white'
-                              }`}
-                          >
-                            {page}
-                          </button>
-                        ))}
-                      </div>
-
-                      <button
-                        onClick={() => setSavedCurrentPage(p => Math.min(p + 1, Math.ceil(savedLeads.length / savedPerPage)))}
-                        disabled={savedCurrentPage === Math.ceil(savedLeads.length / savedPerPage)}
-                        className="px-3.5 py-2 bg-[#0f0b18] border border-slate-800 hover:border-purple-500/40 text-xs font-semibold text-slate-300 hover:text-white rounded-xl disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-                      >
-                        Próxima
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
           ) : activeTab === 'crm' ? (
             /* CRM DE VENDAS DE SITES */
             <CRMManager
               onOpenRemasterModal={(lead) => handleStartRemasterFlow(lead as any)}
               onOpenProject={(projId) => onSelectProject(projId)}
+              onStartCreateFlow={(lead) => handleCreateProjectFromLead(lead as any)}
               projects={projects}
             />
           ) : activeTab === 'leads' ? (
-            /* BUSCAR CLIENTES */
+            /* BUSCAR CLIENTES & LEADS SALVOS (UNIFIED WINDOW) */
             <div className="max-w-6xl mx-auto space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <h2 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
-                    <Users className="w-5 h-5 text-pink-400" />
-                    Buscador de Clientes & Leads
+                    <Users className="w-5 h-5 text-indigo-400" />
+                    Buscador & Gestor de Clientes
                   </h2>
-                  <p className="text-xs text-slate-400">Encontre empresas locais sem site para oferecer seus serviços.</p>
+                  <p className="text-xs text-slate-400">Encontre empresas locais sem site e gerencie seus leads favoritados.</p>
                 </div>
 
-                {/* Botões rápidos de atalho */}
                 <div className="flex items-center gap-2 flex-wrap">
-                  <button
-                    onClick={() => setActiveTab('saved-leads')}
-                    className="px-3 py-1.5 bg-yellow-500/10 hover:bg-yellow-500/20 border border-yellow-500/30 text-yellow-300 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <Bookmark className="w-3.5 h-3.5" />
-                    Salvos ({savedLeads.length})
-                  </button>
+                  {leadsSubTab === 'saved' && (
+                    <button
+                      onClick={() => setShowManualLeadModal(true)}
+                      className="px-3 py-1.5 bg-yellow-500 hover:bg-yellow-400 text-slate-950 font-bold rounded-xl text-xs transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Novo Lead Manual
+                    </button>
+                  )}
                   <button
                     onClick={() => setShowPresetListModal(true)}
                     className="px-3 py-1.5 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
@@ -3224,7 +2852,35 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                 </div>
               </div>
 
-              {/* Formulário de Busca Avançada Segmentada */}
+              {/* Sub-Tabs Selector */}
+              <div className="flex border-b border-slate-800 gap-1">
+                <button
+                  onClick={() => setLeadsSubTab('search')}
+                  className={`px-4 py-2 text-xs font-bold border-b-2 transition-all flex items-center gap-1.5 cursor-pointer ${
+                    leadsSubTab === 'search'
+                      ? 'border-indigo-500 text-indigo-400 font-bold'
+                      : 'border-transparent text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Search className="w-3.5 h-3.5" />
+                  Buscar Novos Clientes
+                </button>
+                <button
+                  onClick={() => setLeadsSubTab('saved')}
+                  className={`px-4 py-2 text-xs font-bold border-b-2 transition-all flex items-center gap-1.5 cursor-pointer ${
+                    leadsSubTab === 'saved'
+                      ? 'border-yellow-500 text-yellow-400 font-bold'
+                      : 'border-transparent text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Bookmark className="w-3.5 h-3.5" />
+                  Clientes Salvos ({savedLeads.length})
+                </button>
+              </div>
+
+              {leadsSubTab === 'search' ? (
+                <>
+                  {/* Formulário de Busca Avançada Segmentada */}
               <form onSubmit={handleSearchLeads} className="bg-[#0f0b18] border border-slate-850 rounded-2xl p-5 shadow-xl space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
                   <div className="md:col-span-4 relative">
@@ -3836,6 +3492,356 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                   })()}
                 </div>
               )}
+            </>
+          ) : (
+            /* SEÇÃO DE LEADS SALVOS (UNIFIED WINDOW) */
+            <>
+              {savedLeads.length === 0 ? (
+                <div className="p-16 bg-[#0f0b18] border border-slate-850 rounded-2xl text-center space-y-3">
+                  <Bookmark className="w-12 h-12 text-slate-600 mx-auto" />
+                  <h3 className="text-base font-bold text-white">Nenhum lead salvo no momento</h3>
+                  <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                    Altere para a aba <strong>Buscar Novos Clientes</strong> acima, faça buscas e clique no ícone de salvar em qualquer estabelecimento para adicioná-lo aqui.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Barra Superior da Listagem de Salvos: Contador e Alternador de Layout */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#0f0b18] border border-slate-850 px-4 py-3 rounded-2xl text-xs">
+                    <div className="flex items-center gap-2 text-slate-400">
+                      <span>Exibindo <strong>{Math.min((savedCurrentPage - 1) * savedPerPage + 1, savedLeads.length)}</strong>–<strong>{Math.min(savedCurrentPage * savedPerPage, savedLeads.length)}</strong> de <strong>{savedLeads.length}</strong> leads favoritados</span>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      {/* Itens por página */}
+                      <div className="flex items-center gap-1.5 text-slate-400">
+                        <span>Por página:</span>
+                        <select
+                          value={savedPerPage}
+                          onChange={(e) => {
+                            setSavedPerPage(Number(e.target.value));
+                            setSavedCurrentPage(1);
+                          }}
+                          className="bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-white text-xs focus:outline-none"
+                        >
+                          <option value={10}>10</option>
+                          <option value={20}>20</option>
+                          <option value={30}>30</option>
+                          <option value={50}>50</option>
+                        </select>
+                      </div>
+
+                      {/* Alternador Tabela / Cards */}
+                      <div className="flex items-center bg-slate-950 border border-slate-800 rounded-xl p-0.5">
+                        <button
+                          type="button"
+                          onClick={() => setSavedViewMode('table')}
+                          className={`px-2.5 py-1 rounded-lg transition-all ${savedViewMode === 'table' ? 'bg-purple-700 text-white font-bold' : 'text-slate-400 hover:text-white'
+                            }`}
+                          title="Visualização em Lista Compacta"
+                        >
+                          Lista
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSavedViewMode('cards')}
+                          className={`px-2.5 py-1 rounded-lg transition-all ${savedViewMode === 'cards' ? 'bg-purple-700 text-white font-bold' : 'text-slate-400 hover:text-white'
+                            }`}
+                          title="Visualização em Cards"
+                        >
+                          Cards
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Renderização em Lista Compacta / Tabela para Leads Salvos */}
+                  {savedViewMode === 'table' ? (
+                    <div className="bg-[#0f0b18] border border-slate-850 rounded-2xl overflow-hidden shadow-xl">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse">
+                          <thead>
+                            <tr className="border-b border-slate-850 bg-slate-950/60 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                              <th className="py-3.5 px-4">Estabelecimento / Categoria</th>
+                              <th className="py-3.5 px-4">Endereço</th>
+                              <th className="py-3.5 px-4">Contato & Presença</th>
+                              <th className="py-3.5 px-4 text-center">Nota</th>
+                              <th className="py-3.5 px-4 text-right whitespace-nowrap shrink-0">Ações</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-850/60 text-xs">
+                            {savedLeads
+                              .slice((savedCurrentPage - 1) * savedPerPage, savedCurrentPage * savedPerPage)
+                              .map(lead => {
+                                const mapsSearchUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${lead.name} ${lead.address || lead.city || ''}`)}`;
+
+                                return (
+                                  <tr key={lead.id} className="hover:bg-slate-900/40 transition-colors">
+                                    <td className="py-3.5 px-4">
+                                      <div className="font-bold text-white text-sm flex items-center gap-2">
+                                        <span className="truncate max-w-[220px]" title={lead.name}>{lead.name}</span>
+                                        <BookmarkCheck className="w-3.5 h-3.5 text-yellow-400 fill-yellow-400 shrink-0" />
+                                      </div>
+                                      {lead.category && (
+                                        <span className="text-[10px] text-yellow-400 font-mono mt-0.5 block">{lead.category}</span>
+                                      )}
+                                    </td>
+
+                                    <td className="py-3.5 px-4 text-slate-300 max-w-[260px]">
+                                      <div className="flex items-start gap-1.5">
+                                        <MapPin className="w-3.5 h-3.5 text-pink-400 shrink-0 mt-0.5" />
+                                        <span className="line-clamp-2 text-xs text-slate-300" title={lead.address}>
+                                          {lead.address || `${lead.city || ''} - ${lead.state || ''}`}
+                                        </span>
+                                      </div>
+                                    </td>
+
+                                    <td className="py-3.5 px-4">
+                                      <div className="space-y-1">
+                                        <div className="flex items-center gap-1.5 text-slate-300 font-mono text-xs">
+                                          <Phone className="w-3 h-3 text-indigo-400 shrink-0" />
+                                          <span>{lead.phone}</span>
+                                        </div>
+                                        <div>
+                                          {lead.website ? (
+                                            <a
+                                              href={lead.website}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="text-[11px] text-cyan-400 hover:underline flex items-center gap-1 truncate max-w-[180px]"
+                                              title={lead.website}
+                                            >
+                                              <Globe className="w-3 h-3 shrink-0" />
+                                              <span className="truncate">{lead.website.replace(/^https?:\/\//, '')}</span>
+                                            </a>
+                                          ) : (
+                                            <span className="text-[10px] font-bold text-red-400 bg-red-950/40 border border-red-500/20 px-1.5 py-0.5 rounded">
+                                              Sem Website
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </td>
+
+                                    <td className="py-3.5 px-4 text-center">
+                                      <span className="inline-flex items-center gap-1 bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 px-2 py-0.5 rounded-lg text-xs font-bold">
+                                        <Star className="w-3 h-3 fill-yellow-400" />
+                                        {lead.rating}
+                                      </span>
+                                    </td>
+
+                                    <td className="py-3.5 px-4 text-right whitespace-nowrap shrink-0">
+                                      <div className="flex items-center justify-end gap-1 flex-nowrap shrink-0 whitespace-nowrap">
+                                        {/* Botão Cadastrar no CRM (Novo Lead) */}
+                                        <button
+                                          onClick={() => handleCadastrarLeadNoCRM(lead)}
+                                          className="p-1.5 bg-emerald-600/20 hover:bg-emerald-600/40 border border-emerald-500/40 text-emerald-400 rounded-lg transition-all cursor-pointer"
+                                          title="Cadastrar no CRM (Novo Lead / Prospect)"
+                                        >
+                                          <UserPlus className="w-3.5 h-3.5" />
+                                        </button>
+
+                                        <a
+                                          href={mapsSearchUrl}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="p-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-pink-500/40 text-pink-400 rounded-lg transition-all"
+                                          title="Ver no Google Maps"
+                                        >
+                                          <MapPin className="w-3.5 h-3.5" />
+                                        </a>
+
+                                        {/* Botão WhatsApp */}
+                                        {lead.whatsappUrl && (
+                                          <a
+                                            href={lead.whatsappUrl}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="p-1.5 bg-emerald-600/20 hover:bg-emerald-600/40 border border-emerald-500/40 text-emerald-400 rounded-lg transition-all"
+                                            title="Conversar no WhatsApp"
+                                          >
+                                            <Phone className="w-3.5 h-3.5" />
+                                          </a>
+                                        )}
+
+                                        {/* Botão Favoritar / Remover dos Salvos */}
+                                        <button
+                                          onClick={() => handleToggleSaveLead(lead)}
+                                          className="p-1.5 bg-yellow-500/20 border border-yellow-500/40 text-yellow-300 hover:text-red-400 rounded-lg transition-all cursor-pointer"
+                                          title="Remover dos salvos"
+                                        >
+                                          <BookmarkCheck className="w-3.5 h-3.5 fill-yellow-400" />
+                                        </button>
+
+                                        {/* Botão: Gerar Site */}
+                                        <button
+                                          onClick={() => handleCreateProjectFromLead(lead)}
+                                          className="p-1.5 bg-indigo-600/30 hover:bg-indigo-600 border border-indigo-500/40 text-indigo-200 hover:text-white rounded-lg transition-all shadow-sm cursor-pointer"
+                                          title="Gerar Site Profissional para este Cliente"
+                                        >
+                                          <Layout className="w-3.5 h-3.5" />
+                                        </button>
+
+                                        {/* Botão: Melhorar com IA (Apenas se tiver website) */}
+                                        {lead.website && (
+                                          <button
+                                            onClick={() => handleStartRemasterFlow(lead)}
+                                            className="p-1.5 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white rounded-lg transition-all shadow-md shadow-purple-600/20 cursor-pointer"
+                                            title="Melhorar com IA (Remasterizar subpáginas)"
+                                          >
+                                            <Sparkles className="w-3.5 h-3.5" />
+                                          </button>
+                                        )}
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ) : (
+                    /* Renderização em Cards para Leads Salvos */
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {savedLeads
+                        .slice((savedCurrentPage - 1) * savedPerPage, savedCurrentPage * savedPerPage)
+                        .map(lead => (
+                          <div
+                            key={lead.id}
+                            className="bg-[#0f0b18] border border-slate-850 rounded-2xl p-5 flex flex-col justify-between hover:border-slate-850 transition-all shadow-md"
+                          >
+                            <div className="space-y-2">
+                              <div className="flex items-start justify-between gap-3">
+                                <div>
+                                  <h3 className="font-bold text-white text-base leading-tight">{lead.name}</h3>
+                                  {lead.category && (
+                                    <span className="text-[10px] text-yellow-400 font-mono">{lead.category}</span>
+                                  )}
+                                </div>
+                                <button
+                                  onClick={() => handleToggleSaveLead(lead)}
+                                  className="p-1 text-yellow-400 hover:text-red-400 transition-colors cursor-pointer"
+                                  title="Remover dos salvos"
+                                >
+                                  <BookmarkCheck className="w-5 h-5 fill-yellow-400" />
+                                </button>
+                              </div>
+
+                              <p className="text-xs text-slate-400 flex items-center gap-1.5">
+                                <MapPin className="w-3.5 h-3.5 text-pink-400 shrink-0" />
+                                <span className="line-clamp-1">{lead.address}</span>
+                              </p>
+
+                              <p className="text-xs text-slate-400 flex items-center gap-1.5">
+                                <Phone className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                                <span>{lead.phone}</span>
+                              </p>
+
+                              <p className="text-xs flex items-center gap-1.5">
+                                <Globe className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                                {lead.website ? (
+                                  <a href={lead.website} target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline line-clamp-1">
+                                    {lead.website}
+                                  </a>
+                                ) : (
+                                  <span className="text-red-400 font-semibold uppercase tracking-wider text-[10px] bg-red-950/30 border border-red-500/25 px-1.5 py-0.5 rounded">Sem Website (Oportunidade!)</span>
+                                )}
+                              </p>
+                            </div>
+
+                            <div className="mt-4 pt-4 border-t border-slate-850/80 flex items-center justify-between gap-2 flex-wrap">
+                              <span className="text-[10px] text-slate-500 font-mono">Salvo na Lista</span>
+                              <div className="flex items-center gap-1.5 flex-nowrap shrink-0 whitespace-nowrap">
+                                <button
+                                  onClick={() => handleCadastrarLeadNoCRM(lead)}
+                                  className="p-2 bg-emerald-600/20 hover:bg-emerald-600/40 border border-emerald-500/40 text-emerald-400 rounded-xl transition-all shadow-sm cursor-pointer"
+                                  title="Cadastrar no CRM (Novo Lead / Prospect)"
+                                >
+                                  <UserPlus className="w-4 h-4" />
+                                </button>
+                                <a
+                                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${lead.name} ${lead.address || lead.city || ''}`)}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="p-2 bg-slate-900 hover:bg-pink-950/40 border border-slate-800 hover:border-pink-500/40 text-pink-400 rounded-xl transition-all shadow-sm"
+                                  title="Ver no Google Maps"
+                                >
+                                  <MapPin className="w-4 h-4" />
+                                </a>
+                                {lead.whatsappUrl && (
+                                  <a
+                                    href={lead.whatsappUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="p-2 bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-500/40 text-emerald-400 rounded-xl transition-all shadow-sm"
+                                    title="Conversar no WhatsApp"
+                                  >
+                                    <Phone className="w-4 h-4" />
+                                  </a>
+                                )}
+                                <button
+                                  onClick={() => handleCreateProjectFromLead(lead)}
+                                  className="p-2 bg-indigo-600/20 hover:bg-indigo-600 border border-indigo-500/40 text-indigo-300 hover:text-white rounded-xl transition-all shadow-sm cursor-pointer"
+                                  title="Gerar Site com IA para este Cliente"
+                                >
+                                  <Layout className="w-4 h-4" />
+                                </button>
+                                {lead.website && (
+                                  <button
+                                    onClick={() => handleStartRemasterFlow(lead)}
+                                    className="p-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white rounded-xl transition-all shadow-md hover:shadow-purple-500/30 cursor-pointer"
+                                    title="Melhorar com IA: Analisar páginas e recriar com IA"
+                                  >
+                                    <Sparkles className="w-4 h-4" />
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  )}
+
+                  {/* Paginação para Leads Salvos */}
+                  {Math.ceil(savedLeads.length / savedPerPage) > 1 && (
+                    <div className="flex items-center justify-center gap-2 pt-4">
+                      <button
+                        onClick={() => setSavedCurrentPage(p => Math.max(p - 1, 1))}
+                        disabled={savedCurrentPage === 1}
+                        className="px-3.5 py-2 bg-[#0f0b18] border border-slate-800 hover:border-purple-500/40 text-xs font-semibold text-slate-300 hover:text-white rounded-xl disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                      >
+                        Anterior
+                      </button>
+
+                      <div className="flex items-center gap-1">
+                        {Array.from({ length: Math.ceil(savedLeads.length / savedPerPage) }, (_, i) => i + 1).map(page => (
+                          <button
+                            key={page}
+                            onClick={() => setSavedCurrentPage(page)}
+                            className={`w-8 h-8 rounded-xl text-xs font-bold transition-all ${savedCurrentPage === page
+                              ? 'bg-purple-700 text-white shadow-[0_0_10px_rgba(168,85,247,0.4)]'
+                              : 'bg-[#0f0b18] border border-slate-850 text-slate-400 hover:text-white'
+                              }`}
+                          >
+                            {page}
+                          </button>
+                        ))}
+                      </div>
+
+                      <button
+                        onClick={() => setSavedCurrentPage(p => Math.min(p + 1, Math.ceil(savedLeads.length / savedPerPage)))}
+                        disabled={savedCurrentPage === Math.ceil(savedLeads.length / savedPerPage)}
+                        className="px-3.5 py-2 bg-[#0f0b18] border border-slate-800 hover:border-purple-500/40 text-xs font-semibold text-slate-300 hover:text-white rounded-xl disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                      >
+                        Próxima
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
+          )}
             </div>
           ) : (activeTab === 'users' && isAdmin) ? (
             <UserManagementPanel />
@@ -4163,7 +4169,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                           const file = e.target.files?.[0];
                           if (!file) return;
                           if (!file.name.endsWith('.zip')) {
-                            alert('Selecione um arquivo .zip');
+                            notify.warning('Selecione um arquivo .zip', 'Formato de Arquivo');
                             return;
                           }
                           setSelectedZipName(file.name);
@@ -5147,6 +5153,65 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
           <span className="text-[10px]">Ajustes</span>
         </button>
       </nav>
+
+      {/* Modal Customizado de Confirmação de Exclusão de Projeto */}
+      {projectToDelete && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+          <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-6 space-y-4 animate-in zoom-in-95 duration-200 text-slate-100">
+            <div className="flex items-center gap-3 text-red-400">
+              <div className="p-2 bg-red-950/50 rounded-xl border border-red-500/30">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-100">Excluir Projeto</h3>
+                <p className="text-[11px] text-slate-400 font-medium">Esta ação é irreversível!</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Você tem certeza de que deseja excluir o projeto <strong className="text-white font-bold">"{projectToDelete.name}"</strong>?
+              Isso removerá permanentemente todas as suas {projectToDelete.pages?.length || 1} página(s), mídias e versões associadas.
+            </p>
+
+            {projectToDelete.crmLead ? (
+              <div className="p-3 bg-amber-950/25 border border-amber-500/30 rounded-xl space-y-1.5">
+                <span className="flex items-center gap-1.5 text-[10px] font-bold text-amber-300 uppercase tracking-wider">
+                  <UserCheck className="w-3.5 h-3.5 text-amber-400" />
+                  Desvinculação de Cliente Detectada
+                </span>
+                <p className="text-[11px] text-slate-300 leading-relaxed">
+                  O cliente/lead <strong className="text-white font-semibold">{projectToDelete.crmLead.name}</strong>
+                  {projectToDelete.crmLead.company && ` (${projectToDelete.crmLead.company})`} está atualmente vinculado a este site. 
+                  Ele será desvinculado com total segurança antes da exclusão permanente do projeto.
+                </p>
+              </div>
+            ) : (
+              <div className="p-3 bg-slate-850 border border-slate-800 rounded-xl">
+                <p className="text-[11px] text-slate-400 leading-relaxed">
+                  Nenhum cliente do CRM está vinculado a este projeto. Nenhuma alteração em contatos externos ocorrerá.
+                </p>
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setProjectToDelete(null)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteProject}
+                className="px-5 py-2 bg-red-600 hover:bg-red-500 active:bg-red-700 text-white font-bold rounded-xl text-xs shadow-lg shadow-red-600/20 transition-all cursor-pointer"
+              >
+                Confirmar Exclusão
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
