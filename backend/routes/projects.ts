@@ -216,11 +216,17 @@ router.post('/', async (req: AuthenticatedRequest, res: any) => {
         const userSettings = userRows[0];
         dbGeminiKey = userSettings.geminiApiKey || undefined;
         dbProxyUrl = userSettings.aiProxyUrl || undefined;
-        if (userSettings.customAiModels && Array.isArray(userSettings.customAiModels)) {
-          dbCustomModels = (userSettings.customAiModels as any[]).map(m => typeof m === 'string' ? m : m.id);
+        if (userSettings.customAiModels) {
+          const parsedModels = typeof userSettings.customAiModels === 'string' ? JSON.parse(userSettings.customAiModels) : userSettings.customAiModels;
+          if (Array.isArray(parsedModels)) {
+            dbCustomModels = (parsedModels as any[]).map(m => typeof m === 'string' ? m : m.id);
+          }
         }
-        if (userSettings.customAiSkills && Array.isArray(userSettings.customAiSkills)) {
-          dbCustomSkills = userSettings.customAiSkills as any[];
+        if (userSettings.customAiSkills) {
+          const parsedSkills = typeof userSettings.customAiSkills === 'string' ? JSON.parse(userSettings.customAiSkills) : userSettings.customAiSkills;
+          if (Array.isArray(parsedSkills)) {
+            dbCustomSkills = parsedSkills as any[];
+          }
         }
       }
     } catch (e) {
@@ -299,6 +305,7 @@ router.get('/jobs', async (req: AuthenticatedRequest, res: any) => {
 router.get('/:id', async (req: AuthenticatedRequest, res: any) => {
   try {
     const userId = req.userId as string;
+    const id = req.params.id as string;
     const project = await prisma.project.findFirst({
       where: {
         id,

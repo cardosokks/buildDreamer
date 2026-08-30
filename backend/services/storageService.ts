@@ -74,60 +74,50 @@ async function ensureBucket(client: Minio.Client, bucket: string): Promise<boole
 export async function uploadAssetToStorage(
   buffer: Buffer,
   filename: string,
-  mimeType: string
+  mimeType: string,
+  projectId?: string
 ): Promise<{ url: string; size: number; key: string; isMinio: boolean }> {
   
   const client = getMinioClient();
+  if (!client) {
+    throw new Error('[MinIO] Configuração do MinIO ausente ou inválida.');
+  }
+  
   const bucket = process.env.MINIO_BUCKET || 'builddreamer-assets';
   const publicUrlBase = process.env.MINIO_PUBLIC_URL || '';
+  const projectFolder = projectId ? `projects/${projectId}/` : 'uploads/';
 
-  if (client) {
-    try {
-      const isReady = await ensureBucket(client, bucket);
-      if (isReady) {
-        const safeFilename = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
-        const objectName = `uploads/${Date.now()}_${safeFilename}`;
-        
-        await client.putObject(bucket, objectName, buffer, buffer.length, {
-          'Content-Type': mimeType
-        });
-        
-        let url = '';
-        if (publicUrlBase) {
-          url = `${publicUrlBase.replace(/\/+$/, '')}/${bucket}/${objectName}`;
-        } else {
-          const endpoint = process.env.MINIO_ENDPOINT || '';
-          const port = process.env.MINIO_PORT || '9000';
-          const protocol = process.env.MINIO_USE_SSL === 'true' ? 'https' : 'http';
-          url = `${protocol}://${endpoint}:${port}/${bucket}/${objectName}`;
-        }
-        
-        return {
-          url,
-          size: buffer.length,
-          key: objectName,
-          isMinio: true
-        };
-      }
-    } catch (error: any) {
-      console.warn(`[MinIO] Upload falhou (${error.message}). Usando fallback local.`);
+  try {
+    const isReady = await ensureBucket(client, bucket);
+    if (!isReady) {
+      throw new Error('[MinIO] Falha ao preparar o bucket.');
     }
+    
+    const safeFilename = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const objectName = `${projectFolder}${Date.now()}_${safeFilename}`;
+    
+    await client.putObject(bucket, objectName, buffer, buffer.length, {
+      'Content-Type': mimeType
+    });
+    
+    let url = '';
+    if (publicUrlBase) {
+      url = `${publicUrlBase.replace(/\/+$/, '')}/${bucket}/${objectName}`;
+    } else {
+      const endpoint = process.env.MINIO_ENDPOINT || '';
+      const port = process.env.MINIO_PORT || '9000';
+      const protocol = process.env.MINIO_USE_SSL === 'true' ? 'https' : 'http';
+      url = `${protocol}://${endpoint}:${port}/${bucket}/${objectName}`;
+    }
+    
+    return {
+      url,
+      size: buffer.length,
+      key: objectName,
+      isMinio: true
+    };
+  } catch (error: any) {
+    console.error(`[MinIO] Upload falhou: ${error.message}`);
+    throw new Error(`[MinIO] Falha no upload: ${error.message}`);
   }
-
-  // Fallback local
-  const uploadsDir = path.join(process.cwd(), 'front-end', 'public', 'uploads');
-  if (!fs.existsSync(uploadsDir)) {
-    fs.mkdirSync(uploadsDir, { recursive: true });
-  }
-  
-  const localFileName = `${Date.now()}_${filename.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
-  const filePath = path.join(uploadsDir, localFileName);
-  fs.writeFileSync(filePath, buffer);
-  
-  return {
-    url: `/uploads/${localFileName}`,
-    size: buffer.length,
-    key: localFileName,
-    isMinio: false
-  };
 }

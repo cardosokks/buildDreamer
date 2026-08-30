@@ -13,28 +13,6 @@ if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
-let mediaTableChecked = false;
-async function ensureMediaTable() {
-  if (mediaTableChecked) return;
-  try {
-    await prisma.$executeRawUnsafe(`
-      CREATE TABLE IF NOT EXISTS "Media" (
-        "id" TEXT PRIMARY KEY,
-        "name" TEXT NOT NULL,
-        "url" TEXT NOT NULL,
-        "size" INTEGER,
-        "mimeType" TEXT,
-        "storage" TEXT DEFAULT 'local',
-        "userId" TEXT NOT NULL,
-        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-    mediaTableChecked = true;
-  } catch (err) {
-    console.error('Error ensuring Media table:', err);
-  }
-}
-
 // POST /api/media/minio/test - Testar credenciais e bucket do MinIO
 router.post('/minio/test', async (req: AuthenticatedRequest, res: any) => {
   return res.json({ success: true, message: 'Armazenamento local configurado com sucesso por padrão. Nenhuma conexão externa necessária.' });
@@ -53,12 +31,12 @@ router.get('/status', (req, res) => {
 // GET /api/media - Listar mídias do usuário
 router.get('/', authenticateToken, async (req: AuthenticatedRequest, res: any) => {
   try {
-    await ensureMediaTable();
-    const rows: any[] = await prisma.$queryRawUnsafe(
-      `SELECT * FROM "Media" WHERE "userId" = $1 ORDER BY "createdAt" DESC LIMIT 150`,
-      req.userId
-    );
-    return res.json({ media: rows || [] });
+    const media = await prisma.media.findMany({
+      where: { userId: req.userId },
+      orderBy: { createdAt: 'desc' },
+      take: 150,
+    });
+    return res.json({ media });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
   }
@@ -67,8 +45,7 @@ router.get('/', authenticateToken, async (req: AuthenticatedRequest, res: any) =
 // POST /api/media/upload - Upload de imagem (Base64) com suporte MinIO & Local
 router.post('/upload', authenticateToken, async (req: AuthenticatedRequest, res: any) => {
   try {
-    await ensureMediaTable();
-    const { name, base64Data, mimeType } = req.body;
+    const { name, base64Data, mimeType, projectId } = req.body;
 
     if (!base64Data) {
       return res.status(400).json({ error: 'Dados da imagem (base64) são obrigatórios.' });
@@ -86,20 +63,16 @@ router.post('/upload', authenticateToken, async (req: AuthenticatedRequest, res:
     const size = buffer.length;
     const effectiveMime = mimeType || 'image/png';
 
-    const uploadRes = await uploadAssetToStorage(buffer, filename, effectiveMime);
+    const uploadRes = await uploadAssetToStorage(buffer, filename, effectiveMime, projectId);
     const publicUrl = uploadRes.url;
     const storageType = uploadRes.isMinio ? 'minio' : 'local';
 
-    const id = `media_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    if (!req.userId) {
+      throw new Error('Usuário não autenticado');
+    }
 
-    await prisma.$executeRawUnsafe(
-      `INSERT INTO "Media" ("id", "name", "url", "size", "mimeType", "storage", "userId", "createdAt") VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())`,
-      id, mediaName, publicUrl, size, effectiveMime, storageType, req.userId
-    );
-
-    return res.status(201).json({
-      media: {
-        id,
+    const media = await prisma.media.create({
+      data: {
         name: mediaName,
         url: publicUrl,
         size,
@@ -108,7 +81,10 @@ router.post('/upload', authenticateToken, async (req: AuthenticatedRequest, res:
         userId: req.userId
       }
     });
+
+    return res.status(201).json({ media });
   } catch (error: any) {
+    console.error('Error in /api/media/upload:', error);
     return res.status(500).json({ error: error.message });
   }
 });
@@ -116,16 +92,13 @@ router.post('/upload', authenticateToken, async (req: AuthenticatedRequest, res:
 // DELETE /api/media/:id - Excluir imagem da biblioteca
 router.delete('/:id', authenticateToken, async (req: AuthenticatedRequest, res: any) => {
   try {
-    await ensureMediaTable();
     const { id } = req.params;
 
-    const rows: any[] = await prisma.$queryRawUnsafe(
-      `SELECT * FROM "Media" WHERE "id" = $1 AND "userId" = $2`,
-      id, req.userId
-    );
+    const media = await prisma.media.findFirst({
+      where: { id, userId: req.userId }
+    });
 
-    if (rows && rows.length > 0) {
-      const media = rows[0];
+    if (media) {
       if (media.url && media.url.startsWith('/uploads/')) {
         const filename = media.url.replace('/uploads/', '');
         const filePath = path.join(uploadsDir, filename);
@@ -133,12 +106,11 @@ router.delete('/:id', authenticateToken, async (req: AuthenticatedRequest, res: 
           try { fs.unlinkSync(filePath); } catch {}
         }
       }
+      
+      await prisma.media.delete({
+        where: { id }
+      });
     }
-
-    await prisma.$executeRawUnsafe(
-      `DELETE FROM "Media" WHERE "id" = $1 AND "userId" = $2`,
-      id, req.userId
-    );
 
     return res.json({ success: true, id });
   } catch (error: any) {

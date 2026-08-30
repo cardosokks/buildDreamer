@@ -140,6 +140,18 @@ router.get('/settings', authenticateToken, async (req: AuthenticatedRequest, res
     }
 
     const user = rows[0];
+    
+    // Parse JSON strings to objects
+    ['customAiSkills', 'customAiModels', 'savedLeads', 'filterPresets'].forEach(field => {
+      if (user[field] && typeof user[field] === 'string') {
+        try {
+          user[field] = JSON.parse(user[field]);
+        } catch (e) {
+          console.error(`Error parsing ${field}:`, e);
+        }
+      }
+    });
+
     return res.json({ settings: user });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });

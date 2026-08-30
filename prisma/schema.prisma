@@ -17,13 +17,14 @@ model User {
   openaiApiKey    String?
   aiProxyUrl      String?
   ngrokAuthToken  String?
-  customAiSkills  Json?
-  customAiModels  Json?
-  savedLeads      Json?
-  filterPresets   Json?
+  customAiSkills  String?
+  customAiModels  String?
+  savedLeads      String?
+  filterPresets   String?
   projects        ProjectMember[]
   crmLeads        Lead[]
   medias          Media[]
+  blogPosts       BlogPost[]
   createdAt       DateTime        @default(now())
 }
 
@@ -40,7 +41,7 @@ model Lead {
   status          String          @default("PROSPECT") // PROSPECT, CONTACTED, PROPOSAL_SENT, IN_NEGOTIATION, WON, LOST
   notes           String?
   origin          String?         @default("MANUAL") // SEARCH, MANUAL, IMPORT
-  tags            String[]        @default([])
+  tags            String          @default("")
   lastContactDate DateTime?
   userId          String
   user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -120,7 +121,7 @@ model Version {
   id          String   @id @default(uuid())
   name        String
   description String?
-  snapshot    Json     // Estado completo das páginas e arquivos do projeto
+  snapshot    String     // Estado completo das páginas e arquivos do projeto
   projectId   String
   project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   createdAt   DateTime @default(now())

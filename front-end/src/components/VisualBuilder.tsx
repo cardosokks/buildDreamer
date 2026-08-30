@@ -232,11 +232,14 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
     fetchProjectDetails();
   }, [projectId]);
 
-  const activePage = project?.pages.find(p => p.id === activePageId);
+  const activePage = project?.pages.find(p => p.id === activePageId) || (project?.pages && project.pages.length > 0 ? project.pages[0] : null);
 
   useEffect(() => {
     activePageRef.current = activePage || null;
-  }, [activePage]);
+    if (activePage && activePage.id !== activePageId) {
+      setActivePageId(activePage.id);
+    }
+  }, [activePage, activePageId]);
 
   // Push Snapshot to Undo Stack
   const pushHistorySnapshot = useCallback((description: string) => {
