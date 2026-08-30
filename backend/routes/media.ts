@@ -2,29 +2,15 @@ import { Router } from 'express';
 import { prisma } from '../db';
 import { authenticateToken, AuthenticatedRequest } from '../middleware/auth';
 import { uploadAssetToStorage } from '../services/storageService';
-import fs from 'fs';
-import path from 'path';
 
 const router = Router();
 
-// Local fallback uploads directory
-const uploadsDir = path.join(process.cwd(), 'front-end', 'public', 'uploads');
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
-
-// POST /api/media/minio/test - Testar credenciais e bucket do MinIO
-router.post('/minio/test', async (req: AuthenticatedRequest, res: any) => {
-  return res.json({ success: true, message: 'Armazenamento local configurado com sucesso por padrão. Nenhuma conexão externa necessária.' });
-});
-
-// GET /api/media/status - Verificar status de storage ativo
-router.get('/status', (req, res) => {
+// GET /api/media/status - Verificar status do MinIO
+router.get('/status', async (req, res) => {
   return res.json({
-    storageType: 'local',
-    minioConfigured: false,
-    bucket: null,
-    endpoint: null
+    storageType: 'minio',
+    minioConfigured: !!(process.env.MINIO_ENDPOINT && process.env.MINIO_ACCESS_KEY),
+    bucket: process.env.MINIO_BUCKET
   });
 });
 
@@ -42,7 +28,7 @@ router.get('/', authenticateToken, async (req: AuthenticatedRequest, res: any) =
   }
 });
 
-// POST /api/media/upload - Upload de imagem (Base64) com suporte MinIO & Local
+// POST /api/media/upload - Upload de imagem (Base64) para MinIO
 router.post('/upload', authenticateToken, async (req: AuthenticatedRequest, res: any) => {
   try {
     const { name, base64Data, mimeType, projectId } = req.body;
@@ -64,9 +50,7 @@ router.post('/upload', authenticateToken, async (req: AuthenticatedRequest, res:
     const effectiveMime = mimeType || 'image/png';
 
     const uploadRes = await uploadAssetToStorage(buffer, filename, effectiveMime, projectId);
-    const publicUrl = uploadRes.url;
-    const storageType = uploadRes.isMinio ? 'minio' : 'local';
-
+    
     if (!req.userId) {
       throw new Error('Usuário não autenticado');
     }
@@ -74,10 +58,10 @@ router.post('/upload', authenticateToken, async (req: AuthenticatedRequest, res:
     const media = await prisma.media.create({
       data: {
         name: mediaName,
-        url: publicUrl,
+        url: uploadRes.url,
         size,
         mimeType: effectiveMime,
-        storage: storageType,
+        storage: 'minio',
         userId: req.userId
       }
     });
@@ -89,7 +73,7 @@ router.post('/upload', authenticateToken, async (req: AuthenticatedRequest, res:
   }
 });
 
-// DELETE /api/media/:id - Excluir imagem da biblioteca
+// DELETE /api/media/:id - Excluir imagem
 router.delete('/:id', authenticateToken, async (req: AuthenticatedRequest, res: any) => {
   try {
     const { id } = req.params;
@@ -99,14 +83,6 @@ router.delete('/:id', authenticateToken, async (req: AuthenticatedRequest, res: 
     });
 
     if (media) {
-      if (media.url && media.url.startsWith('/uploads/')) {
-        const filename = media.url.replace('/uploads/', '');
-        const filePath = path.join(uploadsDir, filename);
-        if (fs.existsSync(filePath)) {
-          try { fs.unlinkSync(filePath); } catch {}
-        }
-      }
-      
       await prisma.media.delete({
         where: { id }
       });
