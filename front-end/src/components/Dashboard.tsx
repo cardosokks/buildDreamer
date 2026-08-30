@@ -1494,8 +1494,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
     }
   };
 
-  const handleDeleteProject = async (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleDeleteProject = async (id: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
     if (!confirm('Deseja realmente deletar este projeto? Esta ação é irreversível.')) return;
 
     try {
@@ -1505,9 +1505,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
           'Authorization': `Bearer ${token}`
         }
       });
-      if (!res.ok) throw new Error('Falha ao deletar projeto');
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'Falha ao deletar projeto');
+      }
       const deletedProject = projects.find(p => p.id === id);
-      setProjects(projects.filter(p => p.id !== id));
+      setProjects(prev => prev.filter(p => p.id !== id));
+      if (selectedProjectDetails?.id === id) {
+        setSelectedProjectDetails(null);
+        setShowProjectModal(false);
+      }
       notify.success('Projeto excluído com sucesso.', 'Projeto Excluído');
       addBellNotification({
         type: 'warning',
@@ -5052,17 +5059,29 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
 
               {/* Modal Footer */}
               <div className="pt-4 border-t border-slate-850 flex items-center justify-between gap-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowProjectModal(false);
-                    onSelectProject(selectedProjectDetails.id);
-                  }}
-                  className="px-4 py-2.5 bg-purple-950/60 hover:bg-purple-900/80 border border-purple-500/40 text-purple-300 rounded-xl text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5"
-                >
-                  <ArrowUpRight className="w-4 h-4" />
-                  Abrir no Editor Visual
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowProjectModal(false);
+                      onSelectProject(selectedProjectDetails.id);
+                    }}
+                    className="px-3.5 py-2.5 bg-purple-950/60 hover:bg-purple-900/80 border border-purple-500/40 text-purple-300 rounded-xl text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5"
+                  >
+                    <ArrowUpRight className="w-4 h-4" />
+                    Abrir no Editor Visual
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={(e) => handleDeleteProject(selectedProjectDetails.id, e)}
+                    className="px-3.5 py-2.5 bg-red-950/40 hover:bg-red-900/60 border border-red-500/30 text-red-300 rounded-xl text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5"
+                    title="Excluir este projeto"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                    Excluir
+                  </button>
+                </div>
 
                 <div className="flex items-center gap-2">
                   <button

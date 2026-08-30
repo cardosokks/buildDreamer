@@ -4,6 +4,32 @@ import * as Minio from 'minio';
 
 let minioClient: Minio.Client | null = null;
 let bucketEnsured = false;
+let minioOfflineUntil = 0;
+
+function isNetworkError(err: any): boolean {
+  if (!err) return false;
+  const msg = (err.message || err.code || '').toString();
+  return (
+    msg.includes('ECONNREFUSED') ||
+    msg.includes('ENOTFOUND') ||
+    msg.includes('ETIMEDOUT') ||
+    msg.includes('EHOSTUNREACH') ||
+    msg.includes('socket hang up') ||
+    err.code === 'ECONNREFUSED' ||
+    err.code === 'ENOTFOUND'
+  );
+}
+
+export function isMinioAvailable(): boolean {
+  if (Date.now() < minioOfflineUntil) return false;
+  const client = getMinioClient();
+  return client !== null;
+}
+
+function markMinioOffline() {
+  minioOfflineUntil = Date.now() + 60000;
+  bucketEnsured = false;
+}
 
 function loadConfig() {
   const envConfig = {
@@ -71,43 +97,77 @@ function getMinioClient(): Minio.Client | null {
 
 async function ensureBucket(client: Minio.Client, bucket: string): Promise<boolean> {
   if (bucketEnsured) return true;
+  if (!isMinioAvailable()) return false;
+
   try {
-    const exists = await client.bucketExists(bucket).catch(() => false);
+    let exists = false;
+    try {
+      exists = await client.bucketExists(bucket);
+    } catch (err: any) {
+      if (isNetworkError(err)) {
+        markMinioOffline();
+        console.warn(`[MinIO] Servidor MinIO indisponível (${err.message || err.code}). Usando armazenamento local em disco.`);
+        return false;
+      }
+      exists = false;
+    }
+
     if (!exists) {
-      await client.makeBucket(bucket, 'us-east-1');
-      // Tenta setar política pública
-      const readPolicy = JSON.stringify({
-        Version: '2012-10-17',
-        Statement: [
-          {
-            Sid: 'PublicRead',
-            Effect: 'Allow',
-            Principal: '*',
-            Action: ['s3:GetObject'],
-            Resource: [`arn:aws:s3:::${bucket}/*`]
-          }
-        ]
-      });
-      await client.setBucketPolicy(bucket, readPolicy).catch(err => {
-        console.warn(`[MinIO] Falha ao configurar bucket policy pública: ${err.message}`);
-      });
+      try {
+        await client.makeBucket(bucket, 'us-east-1');
+        const readPolicy = JSON.stringify({
+          Version: '2012-10-17',
+          Statement: [
+            {
+              Sid: 'PublicRead',
+              Effect: 'Allow',
+              Principal: '*',
+              Action: ['s3:GetObject'],
+              Resource: [`arn:aws:s3:::${bucket}/*`]
+            }
+          ]
+        });
+        await client.setBucketPolicy(bucket, readPolicy).catch(err => {
+          console.warn(`[MinIO] Falha ao configurar bucket policy pública: ${err.message}`);
+        });
+      } catch (err: any) {
+        if (isNetworkError(err)) {
+          markMinioOffline();
+          console.warn(`[MinIO] Servidor MinIO indisponível ao criar bucket (${err.message}). Usando armazenamento local.`);
+          return false;
+        }
+        console.warn(`[MinIO] Erro ao criar bucket "${bucket}":`, err.message || err);
+        return false;
+      }
     }
     bucketEnsured = true;
     return true;
   } catch (err: any) {
-    console.error('[MinIO] Erro ao garantir bucket. Detalhes:', err);
+    if (isNetworkError(err)) {
+      markMinioOffline();
+      console.warn(`[MinIO] Servidor MinIO indisponível. Usando armazenamento local.`);
+    } else {
+      console.warn('[MinIO] Erro ao verificar/garantir bucket:', err.message || err);
+    }
     return false;
   }
 }
 
 export async function getAssetStream(objectName: string): Promise<NodeJS.ReadableStream> {
-  const client = getMinioClient();
-  const config = loadConfig();
-  if (client) {
-    try {
-      return await client.getObject(config.bucket, objectName);
-    } catch (err) {
-      console.warn(`[MinIO] getObject falhou para ${objectName}, tentando fallback local:`, err);
+  if (isMinioAvailable()) {
+    const client = getMinioClient();
+    const config = loadConfig();
+    if (client) {
+      try {
+        return await client.getObject(config.bucket, objectName);
+      } catch (err: any) {
+        if (isNetworkError(err)) {
+          markMinioOffline();
+          console.warn(`[MinIO] MinIO desconectou ao ler ${objectName}. Aplicando fallback local.`);
+        } else {
+          console.warn(`[MinIO] getObject falhou para ${objectName}, tentando fallback local:`, err.message || err);
+        }
+      }
     }
   }
 
@@ -127,29 +187,37 @@ export async function uploadAssetToStorage(
   mimeType: string,
   projectId?: string
 ): Promise<{ url: string; size: number; key: string; isMinio: boolean }> {
-  const client = getMinioClient();
-  const config = loadConfig();
   const safeFilename = `${Date.now()}_${filename.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
   const projectFolder = projectId ? `projects/${projectId}/` : 'uploads/';
   const objectName = `${projectFolder}${safeFilename}`;
 
-  if (client) {
-    try {
-      const isReady = await ensureBucket(client, config.bucket);
-      if (isReady) {
-        await client.putObject(config.bucket, objectName, buffer, buffer.length, {
-          'Content-Type': mimeType
-        });
-        const url = `/api/media/files/${objectName}`;
-        return {
-          url,
-          size: buffer.length,
-          key: objectName,
-          isMinio: true
-        };
+  if (isMinioAvailable()) {
+    const client = getMinioClient();
+    const config = loadConfig();
+
+    if (client) {
+      try {
+        const isReady = await ensureBucket(client, config.bucket);
+        if (isReady) {
+          await client.putObject(config.bucket, objectName, buffer, buffer.length, {
+            'Content-Type': mimeType
+          });
+          const url = `/api/media/files/${objectName}`;
+          return {
+            url,
+            size: buffer.length,
+            key: objectName,
+            isMinio: true
+          };
+        }
+      } catch (error: any) {
+        if (isNetworkError(error)) {
+          markMinioOffline();
+          console.warn(`[MinIO] Upload falhou devido à indisponibilidade de rede (${error.message}). Aplicando fallback local.`);
+        } else {
+          console.warn(`[MinIO] Upload no MinIO falhou (${error.message}), aplicando fallback local.`);
+        }
       }
-    } catch (error: any) {
-      console.warn(`[MinIO] Upload no MinIO falhou (${error.message}), aplicando fallback local.`);
     }
   }
 

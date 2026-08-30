@@ -92,19 +92,20 @@ async function downloadAsset(url: string): Promise<{ buffer: Buffer; contentType
 }
 
 /**
- * Detecta e substitui mídias em um HTML de forma robusta
+ * Detecta e substitui mídias em um HTML de forma robusta e as salva no banco/armazenamento
  */
 async function processPageAssets(
   html: string, 
   baseUrl: string, 
   assetCache: Map<string, string>,
   userId?: string,
+  projectId?: string,
   aiProvider?: string,
   ollamaEndpoint?: string
 ): Promise<string> {
   let rewrittenHtml = html;
   
-  // Regex aprimorada para capturar src, href, poster, data-src, etc.
+  // Regex aprimorada para capturar src, href, poster, data-src, data-bg, etc.
   const assetRegex = /(src|href|poster|data-src|data-bg)=["']([^"'#?]+(\.(png|jpe?g|gif|svg|webp|mp4|webm|css|js|woff2?))(\?[^"']*)?)["']/gi;
   
   const matches = [...html.matchAll(assetRegex)];
@@ -121,7 +122,7 @@ async function processPageAssets(
         continue;
       }
 
-      console.log(`[Remaster] Baixando asset: ${fullUrl}`);
+      console.log(`[Remaster] Baixando e salvando asset: ${fullUrl}`);
       const { buffer, contentType } = await downloadAsset(fullUrl);
       
       const fileName = `${crypto.randomBytes(4).toString('hex')}_${fullUrl.split('/').pop()?.split('?')[0] || 'asset'}`;
@@ -129,14 +130,15 @@ async function processPageAssets(
       
       // Registrar no banco
       await prisma.$executeRawUnsafe(
-        `INSERT INTO "Media" ("id", "name", "url", "size", "mimeType", "storage", "userId", "createdAt") VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)`,
+        `INSERT INTO "Media" ("id", "name", "url", "size", "mimeType", "storage", "userId", "projectId", "createdAt") VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)`,
         `media_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
         fileName,
         uploadRes.url,
         uploadRes.size,
         contentType,
         uploadRes.isMinio ? 'minio' : 'local',
-        userId
+        userId || null,
+        projectId || null
       );
 
       assetCache.set(fullUrl, uploadRes.url);
@@ -166,14 +168,15 @@ async function processPageAssets(
       
       // Registrar no banco
       await prisma.$executeRawUnsafe(
-        `INSERT INTO "Media" ("id", "name", "url", "size", "mimeType", "storage", "userId", "createdAt") VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)`,
+        `INSERT INTO "Media" ("id", "name", "url", "size", "mimeType", "storage", "userId", "projectId", "createdAt") VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)`,
         `media_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
         fileName,
         uploadRes.url,
         uploadRes.size,
         contentType,
         uploadRes.isMinio ? 'minio' : 'local',
-        userId
+        userId || null,
+        projectId || null
       );
 
       assetCache.set(fullUrl, uploadRes.url);
@@ -588,17 +591,33 @@ export async function startWebsiteScrapeJob(
     }
 
     const pagesToReturn = [];
-    for (const p of scraped) {
+    const assetCache = new Map<string, string>();
+
+    for (let i = 0; i < scraped.length; i++) {
+      const p = scraped[i];
+      if (scrapeJobsQueue[jobId]) {
+        scrapeJobsQueue[jobId].progressMessage = `Processando mídias e código da página (${i + 1}/${scraped.length}): ${p.name}...`;
+      }
       const code = await extractAndBundlePageComponents(p.html, p.url, customProxyUrl);
+      let rawHtml = code.html || p.html;
+
+      try {
+        rawHtml = await processPageAssets(rawHtml, p.url, assetCache, userId);
+      } catch (assetErr) {
+        console.warn(`[ScrapeJob] Não foi possível reescrever mídias de ${p.name}:`, assetErr);
+      }
+
+      const localMedia = detectMedia(rawHtml, p.url);
+
       pagesToReturn.push({
         name: p.name,
         slug: p.slug,
         url: p.url,
         cleanText: p.cleanText,
-        html: code.html || p.html,
+        html: rawHtml,
         css: code.css || '',
         js: code.js || '',
-        media: detectMedia(p.html, p.url),
+        media: localMedia,
         excerpt: p.cleanText.slice(0, 180) + '...',
         isHomepage: p.slug === 'index'
       });
@@ -686,7 +705,7 @@ export async function processCustomRemasterGenerationJob(
       const sourceHtml = p.html || p.rewrittenHtml || '';
       if (sourceHtml && targetOriginalUrl) {
         try {
-          p.rewrittenHtml = await processPageAssets(sourceHtml, targetOriginalUrl, assetCache, resolvedUserId!);
+          p.rewrittenHtml = await processPageAssets(sourceHtml, targetOriginalUrl, assetCache, resolvedUserId!, projectId);
         } catch (assetErr) {
           console.warn(`[Remaster] Não foi possível reescrever mídias da página ${p.name}:`, assetErr);
         }

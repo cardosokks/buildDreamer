@@ -541,4 +541,95 @@ router.post('/remaster/generate', async (req: AuthenticatedRequest, res: any) =>
   }
 });
 
+// Remasterizar uma única página com IA (preservando frases e imagens)
+router.post('/page/remaster', async (req: AuthenticatedRequest, res: any) => {
+  try {
+    const { pageId, customPrompt } = req.body;
+    const userId = req.userId as string;
+
+    if (!pageId) {
+      return res.status(400).json({ error: 'ID da página é obrigatório.' });
+    }
+
+    const page = await prisma.page.findUnique({
+      where: { id: pageId },
+      include: { project: true }
+    });
+
+    if (!page) {
+      return res.status(404).json({ error: 'Página não encontrada.' });
+    }
+
+    const customApiKey = decodeHeader(req.headers['x-gemini-key']);
+    const customProxyUrl = decodeHeader(req.headers['x-proxy-url']);
+    const aiProvider = decodeHeader(req.headers['x-ai-provider']);
+    const customModel = decodeHeader(req.headers['x-ai-model'] || req.headers['x-ollama-model']);
+    const ollamaEndpoint = decodeHeader(req.headers['x-ollama-endpoint']);
+
+    const remasterPrompt = `
+      Você é o Arquiteto Frontend Master.
+      Estamos aprimorando o design e layout da página "${page.name}" (${page.slug}).
+
+      DIRETRIZ DE MELHORIA DO USUÁRIO:
+      """
+      ${customPrompt || 'Melhore o layout e estilo com Tailwind CSS de forma moderna, elegante e responsiva.'}
+      """
+
+      HTML ORIGINAL DA PÁGINA:
+      """
+      ${page.html}
+      """
+
+      CSS ORIGINAL:
+      """
+      ${page.css}
+      """
+
+      JS ORIGINAL:
+      """
+      ${page.js}
+      """
+
+      REGRAS OBRIGATÓRIAS E INEGOCIÁVEIS:
+      1. NÃO REFAÇA DO ZERO E NÃO INVENTE TEXTOS FAKE. Mantenha integralmente todas as frases originais, slogans, títulos, parágrafos, contatos, telefones e mídias.
+      2. MANTENHA TODAS AS IMAGENS E MÍDIAS: Preserve fielmente as tags <img src="..."> e URLs de imagem.
+      3. DESIGN PREMIUM COM TAILWIND CSS: Reestruture as seções em um layout moderno, responsivo e limpo.
+      4. RETORNO LIMPO: Retorne apenas HTML em "html", CSS em "css" e JS em "js".
+    `;
+
+    const aiResponse = await executeAIRequest(
+      remasterPrompt,
+      { html: page.html, css: page.css || '', js: page.js || '' },
+      {
+        provider: (aiProvider as any) || 'gemini',
+        apiKey: customApiKey,
+        model: customModel,
+        proxyUrl: customProxyUrl,
+        ollamaEndpoint: ollamaEndpoint
+      }
+    );
+
+    const updatedHtml = aiResponse.html || page.html;
+    const updatedCss = aiResponse.css || page.css;
+    const updatedJs = aiResponse.js || page.js;
+
+    const updatedPage = await prisma.page.update({
+      where: { id: pageId },
+      data: {
+        html: updatedHtml,
+        css: updatedCss,
+        js: updatedJs
+      }
+    });
+
+    return res.json({
+      message: 'Página remasterizada com sucesso!',
+      page: updatedPage
+    });
+  } catch (error: any) {
+    console.error('Erro na remasterização da página:', error);
+    return res.status(500).json({ error: error.message });
+  }
+});
+
 export { router as aiRouter };

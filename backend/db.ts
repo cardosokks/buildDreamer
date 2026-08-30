@@ -428,13 +428,33 @@ class InMemoryDatabase {
       const proj = this.projects.get(where.id);
       if (!proj) return { id: where.id };
       this.projects.delete(where.id);
-      for (const [mid, m] of this.projectMembers.entries()) {
+      for (const [mid, m] of Array.from(this.projectMembers.entries())) {
         if (m.projectId === where.id) this.projectMembers.delete(mid);
       }
-      for (const [pid, p] of this.pages.entries()) {
+      for (const [pid, p] of Array.from(this.pages.entries())) {
         if (p.projectId === where.id) this.pages.delete(pid);
       }
+      for (const [lid, l] of Array.from(this.leads.entries())) {
+        if (l.projectId === where.id) l.projectId = null;
+      }
+      this.save();
       return { ...proj };
+    },
+    deleteMany: async ({ where }: { where?: any } = {}) => {
+      let count = 0;
+      for (const [id, proj] of Array.from(this.projects.entries())) {
+        if (where?.id && proj.id !== where.id) continue;
+        this.projects.delete(id);
+        for (const [mid, m] of Array.from(this.projectMembers.entries())) {
+          if (m.projectId === id) this.projectMembers.delete(mid);
+        }
+        for (const [pid, p] of Array.from(this.pages.entries())) {
+          if (p.projectId === id) this.pages.delete(pid);
+        }
+        count++;
+      }
+      this.save();
+      return { count };
     }
   };
 
@@ -459,7 +479,19 @@ class InMemoryDatabase {
       const id = `mem_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
       const member = { id, ...data };
       this.projectMembers.set(id, member);
+      this.save();
       return { ...member };
+    },
+    deleteMany: async ({ where }: { where?: any } = {}) => {
+      let count = 0;
+      for (const [mid, m] of Array.from(this.projectMembers.entries())) {
+        if (where?.projectId && m.projectId !== where.projectId) continue;
+        if (where?.userId && m.userId !== where.userId) continue;
+        this.projectMembers.delete(mid);
+        count++;
+      }
+      this.save();
+      return { count };
     }
   };
 
@@ -541,7 +573,18 @@ class InMemoryDatabase {
     delete: async ({ where }: { where: { id: string } }) => {
       const page = this.pages.get(where.id);
       if (page) this.pages.delete(where.id);
+      this.save();
       return page || { id: where.id };
+    },
+    deleteMany: async ({ where }: { where?: any } = {}) => {
+      let count = 0;
+      for (const [pid, p] of Array.from(this.pages.entries())) {
+        if (where?.projectId && p.projectId !== where.projectId) continue;
+        this.pages.delete(pid);
+        count++;
+      }
+      this.save();
+      return { count };
     }
   };
 

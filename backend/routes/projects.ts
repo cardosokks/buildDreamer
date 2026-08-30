@@ -418,16 +418,24 @@ router.delete('/:id', async (req: AuthenticatedRequest, res: any) => {
     const id = req.params.id as string;
     const userId = req.userId as string;
 
-    const membership = await prisma.projectMember.findFirst({
-      where: {
-        projectId: id,
-        userId: userId,
-        role: 'OWNER'
-      }
+    const project = await prisma.project.findUnique({
+      where: { id }
     });
 
-    if (!membership) {
-      return res.status(403).json({ error: 'Only the project owner can delete this project' });
+    if (!project) {
+      return res.status(404).json({ error: 'Projeto não encontrado' });
+    }
+
+    // Verifica membros
+    const members = await prisma.projectMember.findMany({
+      where: { projectId: id }
+    });
+
+    if (members && members.length > 0) {
+      const isMember = members.some(m => m.userId === userId);
+      if (!isMember) {
+        return res.status(403).json({ error: 'Você não tem permissão para excluir este projeto' });
+      }
     }
 
     // Cancela jobs de IA ativos na fila para este projeto
@@ -436,15 +444,23 @@ router.delete('/:id', async (req: AuthenticatedRequest, res: any) => {
     }
 
     // Exclusão explícita de dependências
-    await prisma.page.deleteMany({ where: { projectId: id } });
-    await prisma.projectMember.deleteMany({ where: { projectId: id } });
-    // Nota: A versão/assets devem ser deletados aqui se não estiverem em cascata no esquema
+    if (typeof (prisma.page as any)?.deleteMany === 'function') {
+      await prisma.page.deleteMany({ where: { projectId: id } });
+    }
+    if (typeof (prisma.projectMember as any)?.deleteMany === 'function') {
+      await prisma.projectMember.deleteMany({ where: { projectId: id } });
+    }
     
+    // Desvincula leads no CRM vinculados ao projeto
+    try {
+      await prisma.$executeRawUnsafe(`UPDATE "Lead" SET "projectId" = NULL WHERE "projectId" = $1`, id);
+    } catch (_) {}
+
     await prisma.project.delete({ where: { id } });
-    return res.json({ message: 'Project deleted successfully' });
+    return res.json({ message: 'Projeto excluído com sucesso' });
   } catch (error: any) {
     console.error('Erro ao deletar projeto:', error);
-    return res.status(500).json({ error: error.message });
+    return res.status(500).json({ error: error.message || 'Falha ao excluir projeto' });
   }
 });
 

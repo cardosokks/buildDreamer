@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../db';
 import { authenticateToken, AuthenticatedRequest } from '../middleware/auth';
-import { uploadAssetToStorage, getAssetStream } from '../services/storageService';
+import { uploadAssetToStorage, getAssetStream, isMinioAvailable } from '../services/storageService';
 
 const router = Router();
 
@@ -36,9 +36,11 @@ router.get('/files/*', async (req, res) => {
 
 // GET /api/media/status - Verificar status do MinIO
 router.get('/status', async (req, res) => {
+  const minioActive = isMinioAvailable();
   return res.json({
-    storageType: 'minio',
+    storageType: minioActive ? 'minio' : 'local',
     minioConfigured: !!(process.env.MINIO_ENDPOINT && process.env.MINIO_ACCESS_KEY),
+    minioAvailable: minioActive,
     bucket: process.env.MINIO_BUCKET
   });
 });
@@ -91,7 +93,7 @@ router.post('/upload', authenticateToken, async (req: AuthenticatedRequest, res:
         url: uploadRes.url,
         size,
         mimeType: effectiveMime,
-        storage: 'minio',
+        storage: uploadRes.isMinio ? 'minio' : 'local',
         userId: req.userId
       }
     });

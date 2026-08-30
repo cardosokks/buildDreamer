@@ -2,26 +2,24 @@ import { Router } from 'express';
 import { prisma } from '../db';
 import { AuthenticatedRequest } from '../middleware/auth';
 import JSZip from 'jszip';
+import path from 'path';
+import fs from 'fs';
 
 const router = Router();
 
 /**
  * Normaliza links internos nas páginas HTML para funcionarem em qualquer hospedagem estática
- * Converte href="/servicos" ou href="/pages/servicos" ou href="servicos" para o caminho estático correto
  */
 function normalizeHtmlLinks(html: string, isHome: boolean, allPages: Array<{ slug: string; isHomepage: boolean }>): string {
   if (!html) return '';
 
   return html.replace(/href=["']([^"'#?]+)["']/gi, (match, href) => {
-    // Ignora links externos, âncoras e protocolos
     if (href.startsWith('http://') || href.startsWith('https://') || href.startsWith('mailto:') || href.startsWith('tel:') || href.startsWith('#')) {
       return match;
     }
 
-    // Extrai o slug do link
     const cleanHref = href.replace(/^\//, '').replace(/^pages\//, '').replace(/\.html$/, '') || 'index';
     
-    // Procura a página correspondente
     const targetPage = allPages.find(p => p.slug === cleanHref || (cleanHref === 'index' && p.isHomepage));
     if (!targetPage) return match;
 
@@ -33,7 +31,7 @@ function normalizeHtmlLinks(html: string, isHome: boolean, allPages: Array<{ slu
   });
 }
 
-// Export Project as ZIP containing all pages static files (HTML, CSS, JS) and Dockerfile
+// Export Project as ZIP containing all pages static files (HTML, CSS, JS, ASSETS) and Dockerfile
 router.get('/:projectId', async (req: AuthenticatedRequest, res: any) => {
   try {
     const projectId = req.params.projectId as string;
@@ -59,6 +57,7 @@ router.get('/:projectId', async (req: AuthenticatedRequest, res: any) => {
     const includePages = req.query.pages === undefined ? true : req.query.pages === 'true';
     const includeCss = req.query.css === undefined ? true : req.query.css === 'true';
     const includeJs = req.query.js === undefined ? true : req.query.js === 'true';
+    const includeAssets = req.query.assets === undefined ? true : req.query.assets === 'true';
     const includeDocker = req.query.docker === undefined ? true : req.query.docker === 'true';
     const includeReadme = req.query.readme === undefined ? true : req.query.readme === 'true';
 
@@ -66,23 +65,63 @@ router.get('/:projectId', async (req: AuthenticatedRequest, res: any) => {
 
     const cssFolder = includeCss ? zip.folder("css") : null;
     const jsFolder = includeJs ? zip.folder("js") : null;
+    const assetsFolder = includeAssets ? zip.folder("assets") : null;
+
+    const uploadsDir = path.join(process.cwd(), 'backend', 'data', 'uploads');
+    const uploadsDirAlt = path.join(process.cwd(), 'data', 'uploads');
+
+    const bundledAssets = new Set<string>();
+
+    // Função auxiliar para coletar e empacotar mídias do HTML/CSS
+    const processMediaInContent = (content: string): string => {
+      if (!content || !includeAssets || !assetsFolder) return content;
+
+      let rewritten = content;
+      // Captura links do tipo /api/media/files/<filename> ou http(s)://.../api/media/files/<filename> ou /data/uploads/<filename>
+      const mediaRegex = /(?:https?:\/\/[^\s"'()]+)?(?:\/api\/media\/files\/|\/data\/uploads\/)([a-zA-Z0-9_\-\.]+)/gi;
+      const matches = [...content.matchAll(mediaRegex)];
+
+      for (const match of matches) {
+        const fullMatch = match[0];
+        const filename = match[1];
+
+        // Tenta localizar o arquivo de mídia no servidor
+        let filePath = path.join(uploadsDir, filename);
+        if (!fs.existsSync(filePath)) {
+          filePath = path.join(uploadsDirAlt, filename);
+        }
+
+        if (fs.existsSync(filePath) && !bundledAssets.has(filename)) {
+          try {
+            const fileBuf = fs.readFileSync(filePath);
+            assetsFolder.file(filename, fileBuf);
+            bundledAssets.add(filename);
+          } catch (e) {
+            console.warn(`[Export] Não foi possível ler arquivo de mídia ${filename}:`, e);
+          }
+        }
+
+        if (bundledAssets.has(filename) || fs.existsSync(filePath)) {
+          rewritten = rewritten.split(fullMatch).join(`assets/${filename}`);
+        }
+      }
+
+      return rewritten;
+    };
     
-    // Add pages and assets
+    // Process pages and assets
     project.pages.forEach(page => {
       const isHome = page.isHomepage;
-      
-      // Arquitetura plana recomendada para static hosts: index.html na raiz e sobre.html, contato.html também na raiz
-      // Isso garante links diretos sem erros de roteamento de subdiretório
       const filename = isHome ? "index.html" : `${page.slug}.html`;
       
-      // Paths for CSS and JS outputs
       const cssFilename = `${page.slug}.css`;
       const jsFilename = `${page.slug}.js`;
 
-      // Normaliza os links no HTML desta página
-      const normalizedPageHtml = normalizeHtmlLinks(page.html, isHome, project.pages);
+      let normalizedPageHtml = normalizeHtmlLinks(page.html, isHome, project.pages);
+      normalizedPageHtml = processMediaInContent(normalizedPageHtml);
 
-      // Static index.html boilerplate to bind page files
+      let processedCss = processMediaInContent(page.css || '');
+
       const htmlContent = `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -120,24 +159,23 @@ router.get('/:projectId', async (req: AuthenticatedRequest, res: any) => {
         zip.file(filename, htmlContent);
       }
       if (includeCss && cssFolder) {
-        cssFolder.file(cssFilename, page.css || '');
+        cssFolder.file(cssFilename, processedCss);
       }
       if (includeJs && jsFolder) {
         jsFolder.file(jsFilename, page.js || '');
       }
     });
 
-    // Add general configuration files
     if (includeReadme) {
-      zip.file("README.md", `# ${project.name}\n\nSite exportado do construtor de sites Real Premise / AI Website Builder.\n\n## Estrutura dos Arquivos:\n- \`index.html\`: Página Principal (Home)\n- \`*.html\`: Demais páginas do site na raiz para funcionamento direto em qualquer servidor Web (Nginx, Apache, Vercel, Netlify, cPanel, S3, etc.)\n- \`css/\`: Folhas de estilo adicionais\n- \`js/\`: Scripts interativos\n`);
+      zip.file("README.md", `# ${project.name}\n\nSite exportado do construtor de sites Real Premise / AI Website Builder.\n\n## Estrutura dos Arquivos:\n- \`index.html\`: Página Principal (Home)\n- \`*.html\`: Demais páginas do site na raiz\n- \`assets/\`: Mídias e imagens originais do site\n- \`css/\`: Folhas de estilo adicionais\n- \`js/\`: Scripts interativos\n`);
     }
     
-    // Add Docker support inside ZIP
     if (includeDocker) {
       zip.file("Dockerfile", `FROM nginx:alpine
 COPY *.html /usr/share/nginx/html/
 ${includeCss ? 'COPY css/ /usr/share/nginx/html/css/' : ''}
 ${includeJs ? 'COPY js/ /usr/share/nginx/html/js/' : ''}
+${includeAssets && bundledAssets.size > 0 ? 'COPY assets/ /usr/share/nginx/html/assets/' : ''}
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]`);
 
@@ -149,10 +187,8 @@ services:
       - "8080:80"`);
     }
 
-    // Generate zip content buffer
     const content = await zip.generateAsync({ type: "nodebuffer" });
 
-    // Set headers to download
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', `attachment; filename=project-${project.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.zip`);
     return res.send(content);

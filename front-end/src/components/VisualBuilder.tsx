@@ -32,7 +32,9 @@ import {
   ChevronDown,
   Loader2,
   Upload,
-  Image as ImageIcon
+  Image as ImageIcon,
+  CheckCircle,
+  X
 } from 'lucide-react';
 import { Sidebar } from './Sidebar';
 import type { ElementNode } from './Sidebar';
@@ -155,6 +157,9 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
   // Modais & Menus
   const [showCodeModal, setShowCodeModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
+  const [showRemasterPageModal, setShowRemasterPageModal] = useState(false);
+  const [pageRemasterPrompt, setPageRemasterPrompt] = useState('Aprimore o design e layout desta página com Tailwind CSS mantendo estritamente todas as frases, textos e mídias originais.');
+  const [remasteringPage, setRemasteringPage] = useState(false);
   const [showProjectMenuDropdown, setShowProjectMenuDropdown] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
   const [activeExportTab, setActiveExportTab] = useState<'html' | 'css' | 'js'>('html');
@@ -868,6 +873,58 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
     }
   };
 
+  const handleRemasterPage = async () => {
+    if (!activePage) return;
+    setRemasteringPage(true);
+    try {
+      const preferredProvider = localStorage.getItem('preferred_ai_provider') || 'gemini';
+      const selectedModel = preferredProvider === 'ollama' 
+        ? (localStorage.getItem('ollama_selected_model') || 'qwen2.5-coder:1.5b')
+        : (localStorage.getItem('last_selected_ai_model') || '');
+
+      const safeHeader = (val: string) => {
+        try { return btoa(unescape(encodeURIComponent(val))); } catch { return ''; }
+      };
+
+      const res = await fetch(`${API_URL}/api/ai/page/remaster`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'X-Gemini-Key': safeHeader(localStorage.getItem('gemini_api_key') || ''),
+          'X-Proxy-Url': safeHeader(localStorage.getItem('ai_proxy_url') || ''),
+          'X-AI-Provider': preferredProvider,
+          'X-AI-Model': safeHeader(selectedModel),
+          'X-Ollama-Endpoint': localStorage.getItem('ollama_endpoint') || 'http://localhost:11434'
+        },
+        body: JSON.stringify({
+          pageId: activePage.id,
+          customPrompt: pageRemasterPrompt
+        })
+      });
+
+      if (!res.ok) {
+        const err = await safeJson(res);
+        throw new Error(err.error || 'Falha ao remasterizar página com IA.');
+      }
+
+      const data = await safeJson(res);
+      if (data.page) {
+        setProject(prev => prev ? {
+          ...prev,
+          pages: prev.pages.map(p => p.id === data.page.id ? data.page : p)
+        } : null);
+      }
+
+      setShowRemasterPageModal(false);
+      alert('Página remasterizada com sucesso mantendo todas as mídias e frases!');
+    } catch (err: any) {
+      alert(`Erro ao remasterizar: ${err.message}`);
+    } finally {
+      setRemasteringPage(false);
+    }
+  };
+
   const getFullHtmlDocument = () => {
     if (!activePage) return '';
     return `<!DOCTYPE html>
@@ -1094,6 +1151,16 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
             title="AI Copilot Studio"
           >
             <MessageSquare className="w-4 h-4" />
+          </button>
+
+          {/* Botão Remasterizar esta Página com IA */}
+          <button
+            onClick={() => setShowRemasterPageModal(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white text-xs font-bold shadow-md shadow-purple-600/30 transition-all cursor-pointer"
+            title="Melhorar design desta página com IA (Mantendo textos e mídias)"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-yellow-300 animate-pulse" />
+            <span className="hidden sm:inline">Melhorar com IA</span>
           </button>
 
           {/* Botão Unificado de Preview (Local + Ngrok) */}
@@ -1776,6 +1843,81 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
                   </button>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Modal de Remasterização / Melhoria de Página com IA */}
+      {showRemasterPageModal && activePage && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-slate-950 border border-purple-500/30 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl animate-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-purple-500/20 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-purple-600/20 text-purple-400 rounded-xl border border-purple-500/30">
+                  <Sparkles className="w-5 h-5 text-purple-300" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-white text-sm">Melhorar / Remasterizar Página com IA</h3>
+                  <p className="text-xs text-slate-400 font-mono">Página: {activePage.name} ({activePage.slug}.html)</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowRemasterPageModal(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-3 bg-purple-950/20 border border-purple-500/30 rounded-xl space-y-1 text-xs text-slate-300">
+              <span className="font-bold text-purple-300 flex items-center gap-1.5">
+                <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+                Preservação Integral de Conteúdo e Mídias
+              </span>
+              <p className="text-[11px] leading-relaxed text-slate-400">
+                A IA reestrutura o layout e o design com Tailwind CSS sem alterar os textos, frases e imagens do seu cliente.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
+                Diretriz do Design (Opcional)
+              </label>
+              <textarea
+                rows={3}
+                value={pageRemasterPrompt}
+                onChange={e => setPageRemasterPrompt(e.target.value)}
+                placeholder="Descreva o estilo, tom de cores ou destaques desejados..."
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-xs text-white focus:border-purple-500 focus:outline-none leading-relaxed"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowRemasterPageModal(false)}
+                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-slate-300 rounded-xl text-xs font-semibold"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={remasteringPage}
+                onClick={handleRemasterPage}
+                className="px-5 py-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-purple-600/30 flex items-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                {remasteringPage ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Melhorando Página com IA...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4 text-yellow-300" />
+                    Executar Remasterização
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </div>
