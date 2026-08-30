@@ -1,7 +1,9 @@
 import { prisma } from '../db';
 import { generateAIResponse } from '../services/gemini';
+import { uploadAssetToStorage } from './minioService';
 import https from 'https';
 import http from 'http';
+import crypto from 'crypto';
 
 interface ScrapedPage {
   url: string;
@@ -9,6 +11,147 @@ interface ScrapedPage {
   name: string;
   html: string;
   cleanText: string;
+  media?: string[]; // Lista de URLs de mídias detectadas
+  originalHtml?: string;
+  rewrittenHtml?: string;
+}
+
+/**
+ * Detecta mídias em um HTML
+ */
+function detectMedia(html: string, baseUrl: string): string[] {
+  const mediaUrls = new Set<string>();
+  const assetRegex = /(src|poster|href)=["']([^"'#?]+(\.(png|jpe?g|gif|svg|webp|mp4|webm)))(\?[^"']*)?["']/gi;
+  const matches = html.matchAll(assetRegex);
+  
+  for (const match of matches) {
+    try {
+      const fullUrl = new URL(match[2], baseUrl).href;
+      mediaUrls.add(fullUrl);
+    } catch (e) {}
+  }
+  
+  // Background images
+  const bgRegex = /url\(["']?([^"'#?]+(\.(png|jpe?g|gif|svg|webp)))(\?[^"']*)?["']?\)/gi;
+  const bgMatches = html.matchAll(bgRegex);
+  for (const match of bgMatches) {
+    try {
+      const fullUrl = new URL(match[1], baseUrl).href;
+      mediaUrls.add(fullUrl);
+    } catch (e) {}
+  }
+
+  return Array.from(mediaUrls);
+}
+
+/**
+ * Baixa um recurso binário de uma URL
+ */
+async function downloadAsset(url: string): Promise<{ buffer: Buffer; contentType: string }> {
+  return new Promise((resolve, reject) => {
+    const isHttps = url.startsWith('https');
+    const client = isHttps ? https : http;
+
+    const req = client.get(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+      },
+      rejectUnauthorized: false,
+      timeout: 15000
+    }, (res) => {
+      if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        let redirectUrl = res.headers.location;
+        if (!redirectUrl.startsWith('http')) {
+          const u = new URL(url);
+          redirectUrl = `${u.origin}${redirectUrl}`;
+        }
+        return downloadAsset(redirectUrl).then(resolve).catch(reject);
+      }
+
+      if (res.statusCode !== 200) {
+        return reject(new Error(`Falha ao baixar asset: ${res.statusCode}`));
+      }
+
+      const chunks: any[] = [];
+      res.on('data', chunk => chunks.push(chunk));
+      res.on('end', () => {
+        resolve({
+          buffer: Buffer.concat(chunks),
+          contentType: res.headers['content-type'] || 'application/octet-stream'
+        });
+      });
+    });
+
+    req.on('error', reject);
+    req.on('timeout', () => {
+      req.destroy();
+      reject(new Error('Timeout ao baixar asset'));
+    });
+  });
+}
+
+/**
+ * Processa e hospeda mídias/ativos de uma página
+ */
+async function processPageAssets(
+  html: string, 
+  baseUrl: string, 
+  assetCache: Map<string, string>
+): Promise<string> {
+  let rewrittenHtml = html;
+  
+  // Regex para encontrar URLs de imagens, vídeos, scripts e links
+  const assetRegex = /(src|href|poster)=["']([^"'#?]+(\.(png|jpe?g|gif|svg|webp|mp4|webm|css|js|woff2?))(\?[^"']*)?)["']/gi;
+  
+  const matches = [...html.matchAll(assetRegex)];
+  
+  for (const match of matches) {
+    const attribute = match[1];
+    const originalUrl = match[2];
+    
+    try {
+      const fullUrl = new URL(originalUrl, baseUrl).href;
+      
+      // Se já processamos essa URL, usa o cache
+      if (assetCache.has(fullUrl)) {
+        rewrittenHtml = rewrittenHtml.replace(originalUrl, assetCache.get(fullUrl)!);
+        continue;
+      }
+
+      console.log(`[Remaster] Baixando asset: ${fullUrl}`);
+      const { buffer, contentType } = await downloadAsset(fullUrl);
+      
+      const fileName = fullUrl.split('/').pop()?.split('?')[0] || `asset_${crypto.randomBytes(4).toString('hex')}`;
+      const uploadRes = await uploadAssetToStorage(buffer, fileName, contentType);
+      
+      assetCache.set(fullUrl, uploadRes.url);
+      rewrittenHtml = rewrittenHtml.split(originalUrl).join(uploadRes.url);
+    } catch (err) {
+      console.warn(`[Remaster] Erro ao processar asset ${originalUrl}:`, (err as Error).message);
+    }
+  }
+
+  // Processar background-images no style inline
+  const bgRegex = /url\(["']?([^"'#?]+(\.(png|jpe?g|gif|svg|webp))(\?[^"']*)?)["']?\)/gi;
+  const bgMatches = [...rewrittenHtml.matchAll(bgRegex)];
+  
+  for (const match of bgMatches) {
+    const originalUrl = match[1];
+    try {
+      const fullUrl = new URL(originalUrl, baseUrl).href;
+      if (assetCache.has(fullUrl)) {
+        rewrittenHtml = rewrittenHtml.split(originalUrl).join(assetCache.get(fullUrl)!);
+        continue;
+      }
+      const { buffer, contentType } = await downloadAsset(fullUrl);
+      const fileName = fullUrl.split('/').pop()?.split('?')[0] || `bg_${crypto.randomBytes(4).toString('hex')}`;
+      const uploadRes = await uploadAssetToStorage(buffer, fileName, contentType);
+      assetCache.set(fullUrl, uploadRes.url);
+      rewrittenHtml = rewrittenHtml.split(originalUrl).join(uploadRes.url);
+    } catch (err) {}
+  }
+
+  return rewrittenHtml;
 }
 
 /**
@@ -202,11 +345,15 @@ export const scrapeJobsQueue: Record<string, {
   status: 'pending' | 'scraping' | 'completed' | 'failed';
   websiteUrl: string;
   businessName: string;
+  projectId?: string; // Adicionado ID do projeto original
   discoveredPages: Array<{
     name: string;
     slug: string;
     url: string;
     cleanText: string;
+    html?: string;
+    media?: string[];
+    rewrittenHtml?: string;
     excerpt: string;
     isHomepage: boolean;
   }>;
@@ -221,6 +368,7 @@ export async function startWebsiteScrapeJob(
   jobId: string,
   websiteUrl: string,
   businessName: string,
+  userId: string, 
   customProxyUrl?: string
 ) {
   scrapeJobsQueue[jobId] = {
@@ -228,80 +376,34 @@ export async function startWebsiteScrapeJob(
     websiteUrl,
     businessName,
     discoveredPages: [],
-    progressMessage: `Conectando e descobrindo páginas de ${websiteUrl}...`
+    progressMessage: `Conectando e mapeando páginas de ${websiteUrl}...`
   };
 
   try {
-    const scraped = await crawlEntireClientWebsite(websiteUrl, 8, customProxyUrl);
+    // 1. MAPEAMENTO DE PÁGINAS E DETECÇÃO DE MÍDIAS (FASE 1: PREVIEW)
+    const scraped = await crawlEntireClientWebsite(websiteUrl, 10, customProxyUrl);
 
-    let pagesToReturn: Array<{
-      name: string;
-      slug: string;
-      url: string;
-      cleanText: string;
-      excerpt: string;
-      isHomepage: boolean;
-    }> = [];
-
-    if (scraped.length > 0) {
-      pagesToReturn = scraped.map(p => ({
-        name: p.name,
-        slug: p.slug,
-        url: p.url,
-        cleanText: p.cleanText,
-        excerpt: p.cleanText.slice(0, 180) + '...',
-        isHomepage: p.slug === 'index'
-      }));
-
-      // Se a Home não estiver explícita, marca a primeira como Home
-      if (!pagesToReturn.some(p => p.isHomepage)) {
-        pagesToReturn[0].isHomepage = true;
-        pagesToReturn[0].slug = 'index';
-      }
-    } else {
-      // Fallback inteligente caso o crawler não consiga acessar diretamente (ex: Cloudflare restrito)
-      pagesToReturn = [
-        {
-          name: 'Home',
-          slug: 'index',
-          url: websiteUrl,
-          cleanText: `Página principal de ${businessName}. Apresentação da empresa, proposta de valor e diferenciais.`,
-          excerpt: `Apresentação institucional e serviços principais de ${businessName}...`,
-          isHomepage: true
-        },
-        {
-          name: 'Serviços',
-          slug: 'servicos',
-          url: `${websiteUrl}/servicos`,
-          cleanText: `Catálogo completo de soluções e serviços prestados por ${businessName}.`,
-          excerpt: `Produtos e soluções com especificações e benefícios...`,
-          isHomepage: false
-        },
-        {
-          name: 'Sobre Nós',
-          slug: 'sobre',
-          url: `${websiteUrl}/sobre`,
-          cleanText: `História, missão, visão e autoridade de ${businessName} no mercado.`,
-          excerpt: `História e autoridade no mercado...`,
-          isHomepage: false
-        },
-        {
-          name: 'Contato',
-          slug: 'contato',
-          url: `${websiteUrl}/contato`,
-          cleanText: `Formulário de atendimento, WhatsApp, localização e telefones de ${businessName}.`,
-          excerpt: `Canais de atendimento direto e localização...`,
-          isHomepage: false
-        }
-      ];
+    if (scraped.length === 0) {
+      throw new Error('Não foi possível acessar o site ou nenhuma página foi encontrada.');
     }
+
+    const pagesToReturn = scraped.map(p => ({
+      name: p.name,
+      slug: p.slug,
+      url: p.url,
+      cleanText: p.cleanText,
+      html: p.html, // DOM original para preview
+      media: detectMedia(p.html, p.url), // Lista de mídias detectadas
+      excerpt: p.cleanText.slice(0, 180) + '...',
+      isHomepage: p.slug === 'index'
+    }));
 
     scrapeJobsQueue[jobId] = {
       status: 'completed',
       websiteUrl,
       businessName,
       discoveredPages: pagesToReturn,
-      progressMessage: `Extração concluída com sucesso! ${pagesToReturn.length} páginas mapeadas.`
+      progressMessage: `Mapeamento concluído! ${pagesToReturn.length} páginas encontradas. Revise as mídias abaixo.`
     };
   } catch (err: any) {
     console.error(`Erro no Scrape Job ${jobId}:`, err);
@@ -310,7 +412,7 @@ export async function startWebsiteScrapeJob(
       websiteUrl,
       businessName,
       discoveredPages: [],
-      error: err.message || 'Falha ao raspar páginas do site.'
+      error: err.message || 'Falha ao clonar o site original.'
     };
   }
 }
@@ -320,21 +422,20 @@ export async function startWebsiteScrapeJob(
  */
 export async function processCustomRemasterGenerationJob(
   projectId: string,
-  projectName: string,
+  businessName: string,
   globalPrompt: string,
-  pages: Array<{
+  pagesList: Array<{
     name: string;
     slug: string;
     originalUrl?: string;
     customPrompt?: string;
     cleanText?: string;
+    html?: string;
+    rewrittenHtml?: string;
     isHomepage?: boolean;
     enabled?: boolean;
   }>,
-  sharedComponents: {
-    repeatNavbar: boolean;
-    repeatFooter: boolean;
-  },
+  sharedComponents: { repeatNavbar: boolean; repeatFooter: boolean },
   customApiKey?: string,
   registeredModels?: string[],
   customProxyUrl?: string,
@@ -342,8 +443,20 @@ export async function processCustomRemasterGenerationJob(
   customSkills?: any[]
 ) {
   try {
-    const activePages = pages.filter(p => p.enabled !== false);
-    if (activePages.length === 0) throw new Error('Nenhuma página selecionada para geração.');
+    const assetCache = new Map<string, string>();
+    const activePages = pagesList.filter(p => p.enabled !== false);
+    
+    // 1. PROCESSAR ATIVOS DE TODAS AS PÁGINAS (UPLOAD PARA O SISTEMA DE MÍDIAS)
+    if (onProgress) onProgress(`Baixando e processando mídias do site original...`, 0, activePages.length);
+    for (let i = 0; i < activePages.length; i++) {
+      const p = activePages[i];
+      if (onProgress) onProgress(`Processando mídias da página: ${p.name}...`, i + 1, activePages.length);
+      
+      const sourceHtml = p.html || p.rewrittenHtml || '';
+      if (sourceHtml && p.originalUrl) {
+        p.rewrittenHtml = await processPageAssets(sourceHtml, p.originalUrl, assetCache);
+      }
+    }
 
     let homePage = activePages.find(p => p.isHomepage || p.slug === 'index') || activePages[0];
     const subPages = activePages.filter(p => p !== homePage);
@@ -359,31 +472,32 @@ export async function processCustomRemasterGenerationJob(
     if (onProgress) onProgress(`IA criando arquitetura da Home e Design System Universal...`, 1, subPages.length + 1);
 
     const homeAiPrompt = `
-      Você é o Arquiteto Frontend Líder e Designer Master do Visual Builder.
-      Estamos remasterizando o site da empresa "${projectName}".
+      Você é o Arquiteto Frontend Líder e Designer Master.
+      Estamos remasterizando o site "${businessName}".
 
-      DIRETRIZ VISUAL GLOBAL (APLICA-SE A TODO O SITE):
-      """
-      ${globalPrompt || 'Design de altíssimo luxo, moderna paleta, tipografia impecável, foco em conversão e interações fluidas.'}
-      """
+      OBJETIVO: 
+      1. Melhorar o design drasticamente usando Tailwind CSS premium.
+      2. PADRONIZAR O CORPO: Retorne uma estrutura limpa de seções que seja compatível com um editor visual.
+      3. MANTER O CONTEÚDO: Preserve fielmente todos os textos, títulos e mídias originais.
 
-      PROMPT ESPECÍFICO DA HOME:
+      DIRETRIZ VISUAL:
       """
-      ${homePage.customPrompt || 'Hero Section impactante com CTA duplo, estatísticas, seção de serviços em destaque, depoimentos e formulário.'}
-      """
-
-      CONTEÚDO EXTRAÍDO DO SITE ORIGINAL:
-      """
-      ${homePage.cleanText || `Empresa ${projectName}: soluções completas e autoridade.`}
+      ${globalPrompt || 'Design de altíssimo luxo, moderno, limpo e focado em conversão.'}
       """
 
-      MAPA DE NAVEGAÇÃO OBRIGATÓRIO PARA A NAVBAR (LINKS PARA TODAS AS PÁGINAS DO SITE):
+      ESTRUTURA E CONTEÚDO ORIGINAL (USE COMO REFERÊNCIA ÚNICA):
+      """
+      ${homePage.rewrittenHtml || homePage.cleanText || ''}
+      """
+
+      MAPA DE NAVEGAÇÃO (NAVBAR):
       ${navigationLinksText}
 
-      REGRAS CRÍTICAS DE COMPONENTES REUTILIZÁVEIS:
-      1. Crie uma <header class="sticky top-0 z-50 ..."> com uma NAVBAR rica, responsiva, com a logo "${projectName}" e os links acima.
-      2. Crie um <footer class="border-t ..."> elegante no final da página com os mesmos links de navegação e copyright.
-      3. SEPARAÇÃO ESTRITA: Retorne HTML sem <style> nem <script>. Todo CSS no campo "css" e JS no campo "js".
+      REGRAS CRÍTICAS:
+      - NAVBAR GLOBAL: Crie uma <header class="sticky top-0 z-50 ..."> rica e responsiva.
+      - FOOTER GLOBAL: Crie um <footer class="border-t ..."> elegante.
+      - SEM SCRIPTS/STYLES: Retorne apenas HTML no campo "html", CSS no "css" e JS no "js".
+      - IMAGENS: Utilize as URLs das imagens presentes no conteúdo original.
     `;
 
     const homeAiResponse = await generateAIResponse(
@@ -399,119 +513,73 @@ export async function processCustomRemasterGenerationJob(
       customSkills
     );
 
-    // Salvar Home no Prisma
-    const existingHome = await prisma.page.findFirst({
-      where: { projectId, isHomepage: true }
+    // Salvar Home
+    await prisma.page.create({
+      data: {
+        projectId,
+        name: homePage.name,
+        slug: homePage.slug,
+        isHomepage: true,
+        html: homeAiResponse.html || '<div>Home</div>',
+        css: homeAiResponse.css || '',
+        js: homeAiResponse.js || ''
+      }
     });
 
-    if (existingHome) {
-      await prisma.page.update({
-        where: { id: existingHome.id },
-        data: {
-          name: homePage.name || 'Home',
-          html: homeAiResponse.html || existingHome.html,
-          css: homeAiResponse.css || '',
-          js: homeAiResponse.js || ''
-        }
-      });
-    }
-
-    const homeHtml = homeAiResponse.html || '';
+    const { navbarHtml, footerHtml } = extractNavbarAndFooter(homeAiResponse.html || '');
     const globalCss = homeAiResponse.css || '';
     const globalJs = homeAiResponse.js || '';
-    
-    // Extrai os blocos de Navbar e Footer gerados na Home
-    const { navbarHtml, footerHtml } = extractNavbarAndFooter(homeHtml);
 
-    // 2. GERAR TODAS AS SUBPÁGINAS SEQUENCIALMENTE PARA EVITAR RATE LIMIT DA API
-    if (subPages.length > 0) {
-      if (onProgress) onProgress(`IA gerando ${subPages.length} subpáginas sequencialmente...`, 2, subPages.length + 1);
+    // 4. GERAR SUBPÁGINAS
+    for (let idx = 0; idx < subPages.length; idx++) {
+      const sub = subPages[idx];
+      const subPrompt = `
+        Você é o Engenheiro Frontend do site "${businessName}".
+        Subpágina: "${sub.name}" (${sub.slug}).
 
-      for (let idx = 0; idx < subPages.length; idx++) {
-        const sub = subPages[idx];
-        const subPrompt = `
-            Você é o Engenheiro Frontend do site "${projectName}".
-            Estamos gerando a subpágina "${sub.name}" (arquivo: ${sub.slug}.html).
+        OBJETIVO: Design premium, consistência com a Home e padronização para o editor.
+        CONTEÚDO ORIGINAL:
+        """
+        ${sub.rewrittenHtml || sub.cleanText || ''}
+        """
 
-            DIRETRIZ GLOBAL DO SITE:
-            """
-            ${globalPrompt}
-            """
+        ${sharedComponents.repeatNavbar ? `NAVBAR GERADA NA HOME:\n${navbarHtml}` : ''}
+        ${sharedComponents.repeatFooter ? `FOOTER GERADO NA HOME:\n${footerHtml}` : ''}
 
-            PROMPT ESPECÍFICO DESTA SUBPÁGINA ("${sub.name}"):
-            """
-            ${sub.customPrompt || `Apresente detalhadamente as informações, benefícios e recursos de ${sub.name}.`}
-            """
+        REGRAS:
+        - Mantenha todo o conteúdo e mídias originais.
+        - Use a mesma paleta e estilo da Home.
+        - Retorne HTML limpo e padronizado.
+      `;
 
-            CONTEÚDO EXTRAÍDO DA SUBPÁGINA ORIGINAL:
-            """
-            ${sub.cleanText || `Conteúdo institucional e serviços de ${sub.name}.`}
-            """
+      try {
+        const subAiResponse = await generateAIResponse(
+          subPrompt,
+          { html: '', css: globalCss, js: globalJs },
+          customApiKey,
+          undefined,
+          registeredModels,
+          undefined,
+          customProxyUrl,
+          customSkills
+        );
 
-            ${sharedComponents.repeatNavbar ? `
-            NAVBAR UNIVERSAL PRONTA DA HOME (INCORPORE EXATAMENTE ESTE BLOCO NO TOPO, APENAS MARCANDO A PÁGINA "${sub.name}" COMO ATIVA):
-            """
-            ${navbarHtml || `<header class="p-4 border-b border-slate-800 flex justify-between items-center"><div class="font-bold">${projectName}</div><nav>${navigationLinksText}</nav></header>`}
-            """` : ''}
-
-            ${sharedComponents.repeatFooter ? `
-            FOOTER UNIVERSAL PRONTO DA HOME (INCORPORE EXATAMENTE ESTE BLOCO NA BASE):
-            """
-            ${footerHtml || `<footer class="p-8 border-t border-slate-800 text-center text-slate-400">© ${projectName}</footer>`}
-            """` : ''}
-
-            REGRAS MANDATÓRIAS:
-            1. CONSISTÊNCIA DE TEMA: Mantenha a mesma paleta de cores, tipografia, bordas e cards da Home.
-            2. ENCAIXE DE COMPONENTES: Não recrie nem altere o visual da Navbar/Footer compartilhados, apenas utilize-os no topo e base da página.
-            3. SEPARAÇÃO TOTAL: Retorne APENAS HTML limpo no campo "html" (sem tags <style> nem <script>).
-          `;
-
-          try {
-            const subAiResponse = await generateAIResponse(
-              subPrompt,
-              { html: '', css: globalCss, js: globalJs },
-              customApiKey,
-              undefined,
-              registeredModels,
-              undefined,
-              customProxyUrl,
-              customSkills
-            );
-
-            const existingSub = await prisma.page.findFirst({
-              where: { projectId, slug: sub.slug }
-            });
-
-            if (existingSub) {
-              await prisma.page.update({
-                where: { id: existingSub.id },
-                data: {
-                  name: sub.name,
-                  html: subAiResponse.html || existingSub.html,
-                  css: subAiResponse.css || globalCss,
-                  js: subAiResponse.js || globalJs
-                }
-              });
-            } else {
-              await prisma.page.create({
-                data: {
-                  projectId,
-                  name: sub.name,
-                  slug: sub.slug,
-                  html: subAiResponse.html || '<div>Subpágina</div>',
-                  css: subAiResponse.css || globalCss,
-                  js: subAiResponse.js || globalJs,
-                  isHomepage: false
-                }
-              });
-            }
-          } catch (err: any) {
-            console.error(`Erro ao gerar subpágina "${sub.name}":`, err.message);
+        await prisma.page.create({
+          data: {
+            projectId,
+            name: sub.name,
+            slug: sub.slug,
+            isHomepage: false,
+            html: subAiResponse.html || '<div>Subpágina</div>',
+            css: subAiResponse.css || globalCss,
+            js: subAiResponse.js || globalJs
           }
-      }
+        });
+      } catch (e) {}
     }
 
-    if (onProgress) onProgress(`Site 100% gerado com sucesso!`, subPages.length + 1, subPages.length + 1);
+    if (onProgress) onProgress(`Site remasterizado com sucesso!`, 100, 100);
+    return projectId;
   } catch (err: any) {
     console.error("Erro no processCustomRemasterGenerationJob:", err);
     throw err;

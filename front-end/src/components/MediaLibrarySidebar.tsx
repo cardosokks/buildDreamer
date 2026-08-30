@@ -81,7 +81,7 @@ export const MediaLibrarySidebar: React.FC<MediaLibrarySidebarProps> = ({
           accessKey: minioAccessKey,
           secretKey: minioSecretKey,
           bucket: minioBucket || 'builddreamer-assets',
-          port: minioPort ? parseInt(minioPort, 10) : 9000,
+          port: minioPort ? parseInt(minioPort, 10) : 12000,
           useSSL: minioUseSSL,
           publicUrl: minioPublicUrl || undefined
         } : undefined;

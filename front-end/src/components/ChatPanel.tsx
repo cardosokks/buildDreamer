@@ -127,21 +127,37 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     const stored = localStorage.getItem('custom_gemini_models');
     if (stored) {
       try {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        let parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          let changed = false;
+          parsed = parsed.map((m: any) => {
+            if (m.id === 'gemini-2.5-flash') {
+              changed = true;
+              return { ...m, id: 'gemini-2.0-flash', name: m.name.replace('2.5', '2.0') };
+            }
+            if (m.id === 'gemini-2.5-pro') {
+              changed = true;
+              return { ...m, id: 'gemini-1.5-pro', name: m.name.replace('2.5', '1.5') };
+            }
+            return m;
+          });
+          if (changed) localStorage.setItem('custom_gemini_models', JSON.stringify(parsed));
+          return parsed;
+        }
       } catch {}
     }
     return [
-      { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash' },
       { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash' },
-      { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro' },
-      { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash' }
+      { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash' },
+      { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro' }
     ];
   });
 
   const [selectedModel, setSelectedModel] = useState<string>(() => {
-    // 1. Prioriza o último modelo salvo pelo usuário
-    const savedLastModel = localStorage.getItem('last_selected_ai_model');
+    let savedLastModel = localStorage.getItem('last_selected_ai_model');
+    if (savedLastModel === 'gemini-2.5-flash') savedLastModel = 'gemini-2.0-flash';
+    if (savedLastModel === 'gemini-2.5-pro') savedLastModel = 'gemini-1.5-pro';
+    
     if (savedLastModel) return savedLastModel;
 
     // 2. Se não houver, tenta o primeiro modelo customizado configurado
@@ -152,7 +168,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
         if (parsed.length > 0) return parsed[0].id;
       } catch {}
     }
-    return 'gemini-2.5-flash';
+    return 'gemini-2.0-flash';
   });
 
   // Salvar no localStorage sempre que o usuário alterar o modelo

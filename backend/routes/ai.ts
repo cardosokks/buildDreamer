@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { executeAIRequest, AIExecutionOptions } from '../services/aiEngine';
+import { listGeminiModels } from '../services/gemini';
 import { testOllamaConnection, RECOMMENDED_LOW_SPEC_MODELS } from '../services/ollamaService';
 import { 
   scrapeJobsQueue, 
@@ -79,8 +80,8 @@ async function processAIChatJob(
     aiChatJobsQueue[jobId] = { 
       status: 'processing', 
       currentModel: isMultiPage 
-        ? `${options.model || (options.provider === 'ollama' ? 'qwen2.5-coder:1.5b' : 'gemini-2.5-flash')} (Processando ${pagesToProcess.length} páginas...)`
-        : options.model || (options.provider === 'ollama' ? 'qwen2.5-coder:1.5b' : 'gemini-2.5-flash'),
+        ? `${options.model || (options.provider === 'ollama' ? 'qwen2.5-coder:1.5b' : 'gemini-2.0-flash')} (Processando ${pagesToProcess.length} páginas...)`
+        : options.model || (options.provider === 'ollama' ? 'qwen2.5-coder:1.5b' : 'gemini-2.0-flash'),
       provider: options.provider || 'gemini',
       scope: isMultiPage ? 'all' : 'single',
       pageId,
@@ -146,7 +147,7 @@ async function processAIChatJob(
           html: activeUpdated?.html,
           css: activeUpdated?.css,
           js: activeUpdated?.js,
-          _usedModel: options.model || (options.provider === 'ollama' ? 'qwen2.5-coder:1.5b' : 'gemini-2.5-flash'),
+          _usedModel: options.model || (options.provider === 'ollama' ? 'qwen2.5-coder:1.5b' : 'gemini-2.0-flash'),
           _usedProvider: options.provider || 'gemini',
           updatedPages
         }
@@ -227,6 +228,29 @@ router.get('/ollama/models', async (req, res) => {
   });
 });
 
+// GET /api/ai/gemini/models - Listar modelos diretamente da API do Google
+router.get('/gemini/models', async (req, res) => {
+  try {
+    const customApiKey = req.headers['x-gemini-key'] as string || undefined;
+    const customProxyUrl = req.headers['x-ai-proxy-url'] as string || undefined;
+    
+    const models = await listGeminiModels(customApiKey, customProxyUrl);
+    
+    // Simplifica a resposta para o frontend
+    const simplifiedModels = models.map((m: any) => ({
+      id: m.name.replace('models/', ''),
+      name: m.displayName || m.name.replace('models/', ''),
+      description: m.description,
+      version: m.version,
+      supportedGenerationMethods: m.supportedGenerationMethods
+    }));
+
+    return res.json({ success: true, models: simplifiedModels });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 // POST /api/ai/modify-stream - Inicia job assíncrono de modificação por IA
 router.post('/modify-stream', async (req: AuthenticatedRequest, res: any) => {
   try {
@@ -274,7 +298,7 @@ router.post('/modify-stream', async (req: AuthenticatedRequest, res: any) => {
     const jobId = `chat_job_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
     aiChatJobsQueue[jobId] = { 
       status: 'pending', 
-      currentModel: customModel || (provider === 'ollama' ? 'qwen2.5-coder:1.5b' : 'gemini-2.5-flash'),
+      currentModel: customModel || (provider === 'ollama' ? 'qwen2.5-coder:1.5b' : 'gemini-2.0-flash'),
       provider,
       pageId 
     };
@@ -356,8 +380,8 @@ router.post('/generate-page', async (req: AuthenticatedRequest, res: any) => {
   }
 });
 
-// GET /api/ai/scrape-job/:jobId - Polling de job de remasterização
-router.get('/scrape-job/:jobId', (req, res: any) => {
+// GET /api/ai/scrape-job/:jobId ou /api/ai/remaster/scrape/:jobId/status - Polling de job de remasterização
+router.get(['/scrape-job/:jobId', '/remaster/scrape/:jobId/status'], (req, res: any) => {
   const { jobId } = req.params;
   const job = scrapeJobsQueue[jobId];
   if (!job) {
@@ -366,11 +390,14 @@ router.get('/scrape-job/:jobId', (req, res: any) => {
   return res.json(job);
 });
 
-// POST /api/ai/scrape-url - Iniciar remasterização de site a partir de URL ou HTML
-router.post('/scrape-url', async (req: AuthenticatedRequest, res: any) => {
+// POST /api/ai/scrape-url ou /api/ai/remaster/scrape - Iniciar remasterização de site a partir de URL ou HTML
+router.post(['/scrape-url', '/remaster/scrape'], async (req: AuthenticatedRequest, res: any) => {
   try {
-    const { url, customPrompt, rawHtml, rawCss, projectTitle, companyCategory } = req.body;
-    if (!url && !rawHtml) {
+    const { url, websiteUrl, customPrompt, rawHtml, rawCss, projectTitle, companyCategory, businessName } = req.body;
+    const targetUrl = url || websiteUrl;
+    const targetBusinessName = projectTitle || businessName || 'Site Remasterizado';
+
+    if (!targetUrl && !rawHtml) {
       return res.status(400).json({ error: 'Informe uma URL ou o código HTML do site existente para remasterização.' });
     }
 
@@ -383,13 +410,13 @@ router.post('/scrape-url', async (req: AuthenticatedRequest, res: any) => {
       // Inicia com scraping virtual do HTML informado
       scrapeJobsQueue[jobId] = {
         status: 'completed',
-        websiteUrl: url || 'HTML Direto',
-        businessName: projectTitle || 'Site Remasterizado',
+        websiteUrl: targetUrl || 'HTML Direto',
+        businessName: targetBusinessName,
         discoveredPages: [
           {
             name: 'Home',
             slug: 'index',
-            url: url || 'http://localhost',
+            url: targetUrl || 'http://localhost',
             cleanText: rawHtml.replace(/<[^>]+>/g, ' ').slice(0, 3000),
             excerpt: rawHtml.replace(/<[^>]+>/g, ' ').slice(0, 180) + '...',
             isHomepage: true
@@ -400,8 +427,9 @@ router.post('/scrape-url', async (req: AuthenticatedRequest, res: any) => {
     } else {
       startWebsiteScrapeJob(
         jobId,
-        url,
-        projectTitle || 'Site Remasterizado',
+        targetUrl!,
+        targetBusinessName,
+        req.userId as string,
         undefined
       );
     }
@@ -411,6 +439,85 @@ router.post('/scrape-url', async (req: AuthenticatedRequest, res: any) => {
       message: 'Processamento de remasterização iniciado com sucesso.'
     });
   } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /api/ai/remaster/generate - Gerar site completo remasterizado com IA
+router.post('/remaster/generate', async (req: AuthenticatedRequest, res: any) => {
+  try {
+    const { projectName, globalPrompt, pages, leadId, sharedComponents } = req.body;
+    const userId = req.userId as string;
+
+    if (!projectName || !pages || !Array.isArray(pages)) {
+      return res.status(400).json({ error: 'Dados insuficientes para geração do site.' });
+    }
+
+    // 1. Criar o Projeto no Banco de Dados (Skeleton)
+    const project = await prisma.project.create({
+      data: {
+        name: projectName,
+        description: `Remasterização de site: ${projectName}`,
+        members: {
+          create: {
+            userId,
+            role: 'OWNER'
+          }
+        }
+      }
+    });
+
+    // 2. Vincular ao Lead se houver
+    if (leadId) {
+      await prisma.$executeRawUnsafe(`UPDATE "Lead" SET "projectId" = $1 WHERE "id" = $2`, project.id, leadId).catch(() => {});
+    }
+
+    // 3. Preparar configurações de IA
+    const customApiKey = decodeHeader(req.headers['x-gemini-key']);
+    const customProxyUrl = decodeHeader(req.headers['x-proxy-url']);
+    
+    let registeredModels: string[] | undefined;
+    const rawModels = decodeHeader(req.headers['x-gemini-models']);
+    if (rawModels) {
+      try { registeredModels = JSON.parse(rawModels); } catch {}
+    }
+
+    let customSkills: any[] | undefined;
+    const rawSkills = decodeHeader(req.headers['x-ai-skills']);
+    if (rawSkills) {
+      try { customSkills = JSON.parse(rawSkills); } catch {}
+    }
+
+    // 4. Disparar geração em Background
+    projectJobsQueue[project.id] = { status: 'pending' };
+    processCustomRemasterGenerationJob(
+      project.id,
+      projectName,
+      globalPrompt || 'Design moderno e profissional.',
+      pages,
+      sharedComponents || { repeatNavbar: true, repeatFooter: true },
+      customApiKey,
+      registeredModels,
+      customProxyUrl,
+      (status, attempt, total) => {
+        projectJobsQueue[project.id] = {
+          status: 'processing',
+          currentModel: status,
+          attempt,
+          total
+        };
+      },
+      customSkills
+    ).then(() => {
+      projectJobsQueue[project.id] = { status: 'completed' };
+    }).catch((err) => {
+      console.error(`[Remaster Job ${project.id}] Erro:`, err);
+      projectJobsQueue[project.id] = { status: 'failed', error: err.message };
+    });
+
+    return res.status(201).json(project);
+  } catch (error: any) {
+    console.error('Erro ao iniciar geração remaster:', error);
     return res.status(500).json({ error: error.message });
   }
 });

@@ -194,8 +194,21 @@ html.light .border-slate-900\/80 {
   border-color: #d4d7dc !important;
 }
 
-html.light .text-white {
+html.light .text-white:not(.btn-text) {
   color: #0f1117 !important;
+}
+
+/* Ensure primary buttons keep white text in light mode */
+html.light .bg-purple-600 .text-white,
+html.light .bg-indigo-600 .text-white,
+html.light .bg-emerald-600 .text-white,
+html.light .bg-red-600 .text-white,
+html.light .bg-blue-600 .text-white,
+html.light button.bg-purple-600,
+html.light button.bg-indigo-600,
+html.light .from-purple-600 .text-white,
+html.light .from-emerald-600 .text-white {
+  color: #ffffff !important;
 }
 
 html.light .text-slate-100,
@@ -216,7 +229,7 @@ html.light input,
 html.light select,
 html.light textarea {
   background-color: #ffffff !important;
-  border-color: #b8bcc4 !important;
+  border-color: #d1d5db !important;
   color: #0f1117 !important;
 }
 
@@ -228,7 +241,8 @@ html.light textarea::placeholder {
 /* Light Mode: Sidebar with proper depth */
 html.light aside,
 html.light nav {
-  background-color: #e8eaed;
+  background-color: #f8fafc;
+  border-right: 1px solid #e2e8f0 !important;
 }
 
 /* Light Mode: Tone down vivid accent badges */

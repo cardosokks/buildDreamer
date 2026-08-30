@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { API_URL, safeJson } from '../config';
 import { useAuth } from '../context/AuthContext';
 import { Sparkles, Lock, Mail, User, ArrowRight, ShieldCheck, AlertCircle, Loader2 } from 'lucide-react';
 
@@ -32,14 +33,13 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({ onSwitchToLogin }) =
     setLoading(true);
 
     try {
-      const API_URL = import.meta.env.VITE_API_URL || '';
       const res = await fetch(`${API_URL}/api/auth/signup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, email, password })
       });
 
-      const data = await res.json();
+      const data = await safeJson(res);
       if (!res.ok) throw new Error(data.error || 'Erro ao realizar cadastro');
 
       login(data.token, data.user);

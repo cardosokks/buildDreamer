@@ -41,7 +41,7 @@ import { PropertiesPanel } from './PropertiesPanel';
 import { CodeEditor } from './CodeEditor';
 import { MediaLibrarySidebar } from './MediaLibrarySidebar';
 import { ChatPanel } from './ChatPanel';
-import { API_URL } from '../config';
+import { API_URL, safeJson } from '../config';
 import { useNotification } from '../context/NotificationContext';
 
 interface Page {
@@ -196,7 +196,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (!res.ok) return;
-        const job = await res.json();
+        const job = await safeJson(res);
         
         if (job.status === 'processing' || job.status === 'pending') {
           setAiGenerating(true);
@@ -849,7 +849,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
         });
 
         if (!res.ok) {
-          const errData = await res.json();
+          const errData = await safeJson(res);
           throw new Error(errData.error || 'Falha ao importar arquivo ZIP.');
         }
 

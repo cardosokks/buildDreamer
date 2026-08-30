@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { API_URL, safeJson } from '../config';
 import {
   FolderPlus,
   Trash2,
@@ -31,6 +32,9 @@ import {
   ExternalLink,
   MessageSquare,
   Edit2,
+  Video,
+  FileCode,
+  Image as ImageIcon,
   Check,
   Sun,
   Moon,
@@ -66,7 +70,6 @@ import { SettingsPage } from './SettingsPage';
 import { CRMManager } from './CRMManager';
 import { UserManagementPanel } from './UserManagementPanel';
 import { TeamChatPanel } from './TeamChatPanel';
-import { API_URL } from '../config';
 
 interface Project {
   id: string;
@@ -166,7 +169,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
-        const data = await res.json();
+        const data = await safeJson(res);
         setNgrokOnline(!!data.active && !!data.url);
         setNgrokUrl(data.url || null);
         setNgrokStatus(data.status || (data.active ? 'online' : 'idle'));
@@ -208,7 +211,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
             'x-ngrok-token': customToken
           }
         });
-        const data = await res.json();
+        const data = await safeJson(res);
         if (!res.ok) throw new Error(data.error || 'Erro ao disparar job do Ngrok');
         if (data.url && data.status === 'online') {
           setNgrokOnline(true);
@@ -259,9 +262,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
     url?: string;
     customPrompt: string;
     cleanText: string;
+    html?: string;
+    media?: string[];
+    rewrittenHtml?: string;
     isHomepage: boolean;
     enabled: boolean;
   }>>([]);
+  const [remasterOriginalProjectId, setRemasterOriginalProjectId] = useState<string | null>(null);
   const [repeatNavbar, setRepeatNavbar] = useState(true);
   const [repeatFooter, setRepeatFooter] = useState(true);
   const [generatingRemaster, setGeneratingRemaster] = useState(false);
@@ -307,11 +314,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
       });
 
       if (!res.ok) {
-        const err = await res.json();
+        const err = await safeJson(res);
         throw new Error(err.error || 'Falha ao atualizar projeto');
       }
 
-      const updated = await res.json();
+      const updated = await safeJson(res);
       setProjects(prev => prev.map(p => p.id === updated.id ? { ...p, ...updated } : p));
       setSelectedProjectDetails(updated);
       setShowProjectModal(false);
@@ -731,7 +738,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
         const t0 = Date.now();
         const res = await fetch(`${API_URL}/api/auth/time`, { headers: { 'Authorization': `Bearer ${token}` } });
         if (res.ok) {
-          const { time } = await res.json();
+          const { time } = await safeJson(res);
           const t1 = Date.now();
           const serverMs = new Date(time).getTime();
           const offset = serverMs - ((t0 + t1) / 2);
@@ -772,14 +779,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
         }
       });
       if (!res.ok) throw new Error('Falha ao buscar projetos');
-      const data = await res.json();
+      const data = await safeJson(res);
       // Busca dados de CRM vinculados a cada projeto
       try {
         const crmRes = await fetch(`${API_URL}/api/leads/crm`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (crmRes.ok) {
-          const crmData = await crmRes.json();
+          const crmData = await safeJson(crmRes);
           const crmLeads: any[] = crmData.leads || [];
           const enriched = data.map((p: Project) => {
             const linked = crmLeads.find((l: any) => l.projectId === p.id);
@@ -848,7 +855,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
             headers: { 'Authorization': `Bearer ${token}` }
           });
           if (!res.ok) continue;
-          const job = await res.json();
+          const job = await safeJson(res);
 
           if (job.status === 'completed' || job.status === 'failed') {
             // 🔔 Bell notification for AI site generation
@@ -965,7 +972,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
         body: JSON.stringify({ query: leadQuery, location: `${leadCity} ${leadState} ${leadCountry}`.trim() })
       });
       if (!res.ok) throw new Error('Erro ao buscar clientes');
-      const data = await res.json();
+      const data = await safeJson(res);
       setLeadsList(data.leads || []);
     } catch (err: any) {
       alert(err.message);
@@ -999,6 +1006,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
     setRemasterScrapingStatus('scraping');
     setRemasterProgressMsg(`Conectando e descobrindo subpáginas de ${targetUrl}...`);
     setRemasterPages([]);
+    setRemasterOriginalProjectId(null);
     setShowRemasterModal(true);
 
     const safeHeader = (val: string) => {
@@ -1020,11 +1028,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
       });
 
       if (!res.ok) {
-        const err = await res.json();
+        const err = await safeJson(res);
         throw new Error(err.error || 'Falha ao iniciar scraping do site.');
       }
 
-      const data = await res.json();
+      const data = await safeJson(res);
       setRemasterScrapeJobId(data.jobId);
     } catch (err: any) {
       console.error(err);
@@ -1044,11 +1052,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
         });
 
         if (!res.ok) return;
-        const data = await res.json();
+        const data = await safeJson(res);
 
         if (data.status === 'completed') {
           setRemasterScrapingStatus('completed');
           setRemasterProgressMsg(data.progressMessage || 'Extração finalizada com sucesso!');
+          if (data.projectId) {
+            setRemasterOriginalProjectId(data.projectId);
+          }
 
           const mappedPages = (data.discoveredPages || []).map((p: any) => ({
             name: p.name,
@@ -1058,6 +1069,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
               ? 'Hero impactante com CTA duplo, apresentação dos diferenciais, estatísticas da empresa, depoimentos e formulário de contato/WhatsApp.'
               : `Apresentação detalhada com tópicos visuais, benefícios claros, cards ilustrativos e chamadas para ação focadas em ${p.name}.`,
             cleanText: p.cleanText || '',
+            html: p.html || '',
+            media: p.media || [],
+            rewrittenHtml: p.rewrittenHtml || '',
             isHomepage: !!p.isHomepage,
             enabled: true
           }));
@@ -1123,11 +1137,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
       });
 
       if (!res.ok) {
-        const err = await res.json();
+        const err = await safeJson(res);
         throw new Error(err.error || 'Falha ao iniciar geração do novo site.');
       }
 
-      const newProject = await res.json();
+      const newProject = await safeJson(res);
 
       // Vincula no CRM se o lead for originário do buscador ou salvos
       if (remasterTargetLead) {
@@ -1212,11 +1226,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
         });
 
         if (!res.ok) {
-          const err = await res.json();
+          const err = await safeJson(res);
           throw new Error(err.error || 'Falha ao importar arquivo ZIP.');
         }
 
-        const newProject = await res.json();
+        const newProject = await safeJson(res);
         setProjects([newProject, ...projects]);
         setShowCreateModal(false);
         onSelectProject(newProject.id);
@@ -1273,7 +1287,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
         const errorData = await res.json().catch(() => ({}));
         throw new Error(errorData.error || 'Falha ao criar projeto.');
       }
-      const newProject = await res.json();
+      const newProject = await res.json().catch(() => ({}));
 
       // Se foi gerado a partir de um Lead do buscador/salvos, adiciona ou atualiza no CRM como PROPOSAL_SENT
       if (targetLeadForProject) {
@@ -1523,7 +1537,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
 
               {showBellDropdown && (
                 <div
-                  className={`absolute right-0 mt-2 w-96 max-w-[calc(100vw-2rem)] border rounded-2xl shadow-2xl z-50 animate-in fade-in slide-in-from-top-2 duration-150 overflow-hidden flex flex-col ${theme === 'light' ? 'bg-white border-slate-200' : 'bg-[#0f1117] border-slate-800'}`}
+                  className={`absolute right-[-60px] sm:right-0 top-full mt-2 w-96 max-w-[calc(100vw-2rem)] border rounded-2xl shadow-2xl z-[60] animate-in fade-in slide-in-from-top-2 duration-150 overflow-hidden flex flex-col ${theme === 'light' ? 'bg-white border-slate-200' : 'bg-[#0f1117] border-slate-800'}`}
                   style={{ maxHeight: '520px' }}
                 >
                   {/* Header */}
@@ -1643,7 +1657,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                       }`}>{user?.email}</p>
                   </div>
                 )}
-                <div className="w-7 h-7 rounded-lg bg-slate-800 text-slate-100 flex items-center justify-center font-bold text-xs shadow border border-slate-700">
+                <div className="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-bold text-xs shadow border border-indigo-500">
                   {(user?.name || 'U').charAt(0).toUpperCase()}
                 </div>
               </button>
@@ -1651,7 +1665,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
               {/* Dropdown Menu Popup */}
               {showUserDropdown && (
                 <div
-                  className={`absolute right-0 mt-2 w-56 border rounded-2xl shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-150 backdrop-blur-xl ${theme === 'light'
+                  className={`absolute right-0 top-full mt-2 w-56 border rounded-2xl shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-150 backdrop-blur-xl ${theme === 'light'
                     ? 'bg-white border-slate-200 text-slate-900'
                     : 'bg-[#0f1117] border-slate-800 text-slate-100'
                     }`}
@@ -1841,7 +1855,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                 onClick={() => setActiveTab('crm')}
                 className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-2 py-2.5' : 'gap-3 px-3.5 py-2.5'} rounded-xl text-xs font-semibold transition-all cursor-pointer ${activeTab === 'crm'
                   ? theme === 'light'
-                    ? 'bg-slate-100 text-slate-900 font-bold shadow-sm border border-slate-200'
+                    ? 'bg-indigo-50 text-indigo-700 font-bold border border-indigo-200 shadow-sm'
                     : 'bg-zinc-800/60 text-zinc-200 border border-zinc-700/50 font-bold shadow-sm'
                   : theme === 'light'
                     ? 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
@@ -1849,11 +1863,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                   }`}
                 title="Funil de Vendas"
               >
-                <TrendingUp className="w-4 h-4 text-slate-400 shrink-0" />
+                <TrendingUp className={`w-4 h-4 shrink-0 ${activeTab === 'crm' ? 'text-indigo-500' : 'text-slate-400'}`} />
                 {!sidebarCollapsed && (
                   <>
                     <span className="truncate flex-1 text-left">Funil de Vendas</span>
-                    <span className="text-[9px] px-1.5 py-0.2 rounded-full font-mono bg-zinc-800 border border-zinc-700 text-zinc-400 font-bold">
+                    <span className={`text-[9px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
+                      theme === 'light' ? 'bg-indigo-100 text-indigo-700 border border-indigo-200' : 'bg-zinc-800 border border-zinc-700 text-zinc-400'
+                    }`}>
                       CRM
                     </span>
                   </>
@@ -2016,17 +2032,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
           </aside>
 
         {/* Dynamic Content Panel */}
-        <main className="flex-1 overflow-y-auto px-4 py-5 sm:px-6 sm:py-6">
+        <main className={`flex-1 overflow-y-auto px-4 py-5 sm:px-6 sm:py-6 ${theme === 'light' ? 'bg-slate-50' : 'bg-slate-950'}`}>
           {activeTab === 'general' ? (
             <div className="max-w-6xl mx-auto space-y-5">
               {/* Header de Ação Rápida */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                  <h2 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
+                  <h2 className={`text-xl font-bold tracking-tight flex items-center gap-2 ${theme === 'light' ? 'text-slate-900' : 'text-white'}`}>
                     <Sparkles className="w-5 h-5 text-purple-400" />
                     Visão Geral
                   </h2>
-                  <p className="text-xs text-slate-400">
+                  <p className={`text-xs ${theme === 'light' ? 'text-slate-500' : 'text-slate-400'}`}>
                     Crie sites com IA, prospecte novos clientes e publique em tempo recorde.
                   </p>
                 </div>
@@ -2054,16 +2070,18 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                 {/* Total de Projetos */}
                 <div
                   onClick={() => setActiveTab('projects')}
-                  className="bg-[#0f0b18] border border-slate-850 hover:border-purple-500/40 rounded-2xl p-5 shadow-xl relative overflow-hidden group cursor-pointer transition-all"
+                  className={`border rounded-2xl p-5 shadow-xl relative overflow-hidden group cursor-pointer transition-all ${
+                    theme === 'light' ? 'bg-white border-slate-200 hover:border-purple-300' : 'bg-[#0f0b18] border-slate-850 hover:border-purple-500/40'
+                  }`}
                 >
                   <div className="absolute top-0 right-0 w-20 h-20 bg-purple-500/10 rounded-full blur-xl group-hover:bg-purple-500/20 transition-all" />
                   <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">Total de Sites</span>
+                    <span className={`text-[11px] font-bold uppercase tracking-wider ${theme === 'light' ? 'text-slate-500' : 'text-slate-400'}`}>Total de Sites</span>
                     <div className="p-2 rounded-xl bg-purple-500/10 text-purple-400 border border-purple-500/20">
                       <Layout className="w-4 h-4" />
                     </div>
                   </div>
-                  <p className="text-3xl font-black text-white mt-2">{projects.length}</p>
+                  <p className={`text-3xl font-black mt-2 ${theme === 'light' ? 'text-slate-900' : 'text-white'}`}>{projects.length}</p>
                   <span className="text-[11px] text-purple-400 font-medium flex items-center gap-1 mt-2">
                     Gerenciar projetos <ChevronRight className="w-3 h-3" />
                   </span>
@@ -2072,16 +2090,18 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                 {/* CRM de Vendas de Sites */}
                 <div
                   onClick={() => setActiveTab('crm')}
-                  className="bg-[#0f0f12] border border-zinc-800 hover:border-indigo-500/30 rounded-2xl p-5 shadow-xl relative overflow-hidden group cursor-pointer transition-all"
+                  className={`border rounded-2xl p-5 shadow-xl relative overflow-hidden group cursor-pointer transition-all ${
+                    theme === 'light' ? 'bg-white border-slate-200 hover:border-indigo-300' : 'bg-[#0f0f12] border-zinc-800 hover:border-indigo-500/30'
+                  }`}
                 >
                   <div className="absolute top-0 right-0 w-20 h-20 bg-indigo-500/5 rounded-full blur-xl group-hover:bg-indigo-500/10 transition-all" />
                   <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-zinc-500 font-bold uppercase tracking-wider">CRM de Vendas</span>
+                    <span className={`text-[11px] font-bold uppercase tracking-wider ${theme === 'light' ? 'text-slate-500' : 'text-zinc-500'}`}>CRM de Vendas</span>
                     <div className="p-2 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
                       <TrendingUp className="w-4 h-4" />
                     </div>
                   </div>
-                  <p className="text-3xl font-black text-zinc-200 mt-2">Pipeline</p>
+                  <p className={`text-3xl font-black mt-2 ${theme === 'light' ? 'text-slate-900' : 'text-zinc-200'}`}>Pipeline</p>
                   <span className="text-[11px] text-zinc-500 font-medium flex items-center gap-1 mt-2">
                     Acessar Funil de Vendas <ChevronRight className="w-3 h-3" />
                   </span>
@@ -2090,35 +2110,39 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                 {/* Leads Prospectados & Salvos */}
                 <div
                   onClick={() => setActiveTab('saved-leads')}
-                  className="bg-[#0f0f12] border border-zinc-800 hover:border-zinc-700 rounded-2xl p-5 shadow-xl relative overflow-hidden group cursor-pointer transition-all"
+                  className={`border rounded-2xl p-5 shadow-xl relative overflow-hidden group cursor-pointer transition-all ${
+                    theme === 'light' ? 'bg-white border-slate-200 hover:border-slate-300' : 'bg-[#0f0f12] border-zinc-800 hover:border-zinc-700'
+                  }`}
                 >
                   <div className="absolute top-0 right-0 w-20 h-20 bg-zinc-700/10 rounded-full blur-xl group-hover:bg-zinc-700/20 transition-all" />
                   <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-zinc-500 font-bold uppercase tracking-wider">Leads Salvos</span>
+                    <span className={`text-[11px] font-bold uppercase tracking-wider ${theme === 'light' ? 'text-slate-500' : 'text-zinc-500'}`}>Leads Salvos</span>
                     <div className="p-2 rounded-xl bg-zinc-800/60 text-zinc-400 border border-zinc-700">
                       <Bookmark className="w-4 h-4" />
                     </div>
                   </div>
-                  <p className="text-3xl font-black text-zinc-200 mt-2">{savedLeads.length}</p>
+                  <p className={`text-3xl font-black mt-2 ${theme === 'light' ? 'text-slate-900' : 'text-zinc-200'}`}>{savedLeads.length}</p>
                   <span className="text-[11px] text-zinc-500 font-medium flex items-center gap-1 mt-2">
                     Ver oportunidades <ChevronRight className="w-3 h-3" />
                   </span>
                 </div>
 
                 {/* Status do Servidor e Deploy */}
-                <div className="bg-[#0f0f12] border border-zinc-800 rounded-2xl p-5 shadow-xl relative overflow-hidden group">
+                <div className={`border rounded-2xl p-5 shadow-xl relative overflow-hidden group ${
+                  theme === 'light' ? 'bg-white border-slate-200' : 'bg-[#0f0f12] border-zinc-800'
+                }`}>
                   <div className="absolute top-0 right-0 w-20 h-20 bg-zinc-700/5 rounded-full blur-xl group-hover:bg-zinc-700/10 transition-all" />
                   <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-zinc-500 font-bold uppercase tracking-wider">Servidor App</span>
+                    <span className={`text-[11px] font-bold uppercase tracking-wider ${theme === 'light' ? 'text-slate-500' : 'text-zinc-500'}`}>Servidor App</span>
                     <div className="p-2 rounded-xl bg-zinc-800/60 text-zinc-400 border border-zinc-700">
                       <Server className="w-4 h-4" />
                     </div>
                   </div>
-                  <p className="text-lg font-bold text-zinc-300 mt-2 flex items-center gap-1.5">
+                  <p className={`text-lg font-bold mt-2 flex items-center gap-1.5 ${theme === 'light' ? 'text-slate-700' : 'text-zinc-300'}`}>
                     <span className="w-2.5 h-2.5 bg-indigo-400 rounded-full" />
                     Online & Ativo
                   </p>
-                  <span className="text-[11px] text-zinc-600 font-mono mt-2 block">
+                  <span className={`text-[11px] font-mono mt-2 block ${theme === 'light' ? 'text-slate-500' : 'text-zinc-600'}`}>
                     Porta 12002 • Docker
                   </span>
                 </div>
@@ -4189,14 +4213,30 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                     <Globe className="w-4 h-4 text-indigo-400" />
                     Etapa 1: Varredura e Download das Páginas Existentes
                   </span>
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase font-mono ${remasterScrapingStatus === 'scraping'
-                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30 animate-pulse'
-                    : remasterScrapingStatus === 'completed'
-                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                      : 'bg-red-500/20 text-red-300 border border-red-500/30'
-                    }`}>
-                    {remasterScrapingStatus === 'scraping' ? 'Extraindo...' : remasterScrapingStatus === 'completed' ? 'Concluído' : 'Atenção'}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    {remasterScrapingStatus === 'completed' && remasterScrapeJobId && (
+                      <button
+                        onClick={() => {
+                          if (remasterOriginalProjectId) {
+                            onSelectProject(remasterOriginalProjectId);
+                            setShowRemasterModal(false);
+                          }
+                        }}
+                        className="flex items-center gap-1 px-2 py-1 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-400 border border-indigo-500/30 rounded-lg text-[10px] font-bold transition-all cursor-pointer"
+                      >
+                        <ExternalLink className="w-3 h-3" />
+                        Visualizar Original no Editor
+                      </button>
+                    )}
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase font-mono ${remasterScrapingStatus === 'scraping'
+                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30 animate-pulse'
+                      : remasterScrapingStatus === 'completed'
+                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                        : 'bg-red-500/20 text-red-300 border border-red-500/30'
+                      }`}>
+                      {remasterScrapingStatus === 'scraping' ? 'Extraindo...' : remasterScrapingStatus === 'completed' ? 'Concluído' : 'Atenção'}
+                    </span>
+                  </div>
                 </div>
 
                 <div className="flex items-center gap-3">
@@ -4277,7 +4317,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                   {/* Lista de Páginas com Prompt Individual */}
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
-                      <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                      <h4 className={`text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 ${theme === 'light' ? 'text-slate-600' : 'text-white'}`}>
                         <Layout className="w-4 h-4 text-pink-400" />
                         Páginas Identificadas & Prompts Individuais ({remasterPages.filter(p => p.enabled).length}/{remasterPages.length})
                       </h4>
@@ -4306,8 +4346,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                         <div
                           key={idx}
                           className={`p-3.5 border rounded-xl transition-all space-y-2.5 ${page.enabled
-                            ? 'bg-slate-950 border-purple-500/30 shadow-sm'
-                            : 'bg-slate-950/40 border-slate-850 opacity-60'
+                            ? theme === 'light' ? 'bg-white border-purple-200 shadow-sm' : 'bg-slate-950 border-purple-500/30 shadow-sm'
+                            : theme === 'light' ? 'bg-slate-50 border-slate-200 opacity-60' : 'bg-slate-950/40 border-slate-850 opacity-60'
                             }`}
                         >
                           <div className="flex items-center justify-between gap-3">
@@ -4330,7 +4370,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                                   updated[idx].name = e.target.value;
                                   setRemasterPages(updated);
                                 }}
-                                className="bg-transparent font-bold text-xs text-white border-b border-transparent hover:border-purple-500 focus:border-purple-500 focus:outline-none px-1"
+                                className={`bg-transparent font-bold text-xs border-b border-transparent hover:border-purple-500 focus:border-purple-500 focus:outline-none px-1 ${theme === 'light' ? 'text-slate-900' : 'text-white'}`}
                               />
                               <span className="text-[10px] text-slate-500 font-mono">
                                 (/{page.slug}.html)
@@ -4360,26 +4400,70 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
 
                           {/* Campo de Prompt Específico para esta página */}
                           {page.enabled && (
-                            <div className="space-y-1">
-                              <label className="block text-[10px] text-slate-400 flex items-center justify-between">
-                                <span>Prompt Específico para a página "{page.name}":</span>
-                                {page.cleanText && (
-                                  <span className="text-[9px] text-emerald-400 font-mono">
-                                    ✓ Conteúdo original extraído ({page.cleanText.length} carac.)
-                                  </span>
-                                )}
-                              </label>
-                              <textarea
-                                rows={2}
-                                value={page.customPrompt}
-                                onChange={(e) => {
-                                  const updated = [...remasterPages];
-                                  updated[idx].customPrompt = e.target.value;
-                                  setRemasterPages(updated);
-                                }}
-                                placeholder={`Descreva o que deseja que a IA implemente especificamente na página ${page.name}...`}
-                                className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-xs text-white font-sans focus:border-purple-500 focus:outline-none leading-relaxed"
-                              />
+                            <div className="space-y-3 pt-1">
+                              {/* Media Preview */}
+                              {page.media && page.media.length > 0 && (
+                                <div className="space-y-1.5">
+                                  <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-tight">
+                                    <ImageIcon className="w-3 h-3 text-purple-400" />
+                                    Mídias Capturadas ({page.media.length})
+                                  </div>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {page.media.slice(0, 7).map((m, mIdx) => (
+                                      <div key={mIdx} className="w-10 h-10 rounded-lg bg-slate-900 border border-slate-800 overflow-hidden flex items-center justify-center group relative shadow-inner">
+                                        {m.match(/\.(mp4|webm|mov)$/i) ? (
+                                          <Video className="w-4 h-4 text-slate-500" />
+                                        ) : (
+                                          <img src={m} alt="" className="w-full h-full object-cover opacity-70 group-hover:opacity-100 transition-opacity" referrerPolicy="no-referrer" />
+                                        )}
+                                      </div>
+                                    ))}
+                                    {page.media.length > 7 && (
+                                      <div className="w-10 h-10 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-center text-[10px] font-bold text-slate-500 shadow-inner">
+                                        +{page.media.length - 7}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* DOM Excerpt */}
+                              <div className="space-y-1.5">
+                                <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-tight">
+                                  <FileCode className="w-3 h-3 text-indigo-400" />
+                                  Estrutura de Conteúdo (DOM)
+                                </div>
+                                <div className={`p-2 rounded-lg border ${theme === 'light' ? 'bg-slate-50 border-slate-200' : 'bg-slate-900/50 border-slate-800/50'}`}>
+                                  <p className={`text-[10px] leading-tight italic line-clamp-2 ${theme === 'light' ? 'text-slate-500' : 'text-slate-500'}`}>
+                                    {page.cleanText || "Nenhum texto estrutural detectado."}
+                                  </p>
+                                </div>
+                              </div>
+
+                              <div className="space-y-1.5">
+                                <label className="block text-[10px] text-slate-400 flex items-center justify-between font-bold uppercase tracking-tight">
+                                  <div className="flex items-center gap-1.5">
+                                    <Sparkles className="w-3 h-3 text-pink-400" />
+                                    Diretriz de Refinamento (IA)
+                                  </div>
+                                  {page.cleanText && (
+                                    <span className="text-[9px] text-emerald-500/80 font-mono lowercase">
+                                      ✓ pronto para remasterizar
+                                    </span>
+                                  )}
+                                </label>
+                                <textarea
+                                  rows={2}
+                                  value={page.customPrompt}
+                                  onChange={(e) => {
+                                    const updated = [...remasterPages];
+                                    updated[idx].customPrompt = e.target.value;
+                                    setRemasterPages(updated);
+                                  }}
+                                  placeholder={`Descreva o que deseja que a IA implemente especificamente na página ${page.name}...`}
+                                  className={`w-full px-3 py-2 border rounded-lg text-[11px] font-sans focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 focus:outline-none leading-relaxed transition-all ${theme === 'light' ? 'bg-slate-50 border-slate-200 text-slate-700 placeholder:text-slate-400' : 'bg-slate-900 border-slate-800 text-slate-200 placeholder:text-slate-600'}`}
+                                />
+                              </div>
                             </div>
                           )}
                         </div>

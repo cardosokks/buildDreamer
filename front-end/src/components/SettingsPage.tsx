@@ -28,9 +28,10 @@ import {
   HelpCircle,
   RefreshCw,
   Sliders,
-  Laptop
+  Laptop,
+  DownloadCloud
 } from 'lucide-react';
-import { API_URL } from '../config';
+import { API_URL, safeJson } from '../config';
 
 export interface AISkill {
   id: string;
@@ -122,11 +123,13 @@ export const SettingsPage: React.FC = () => {
     return val === null ? true : val === 'true';
   });
   const [testingOllama, setTestingOllama] = useState(false);
+  const [fetchingGeminiModels, setFetchingGeminiModels] = useState(false);
+  const [fetchingOllamaModels, setFetchingOllamaModels] = useState(false);
   const [ollamaStatus, setOllamaStatus] = useState<{ connected: boolean; message: string; models: any[] } | null>(null);
 
   // MinIO / S3 Settings
   const [minioEndpoint, setMinioEndpoint] = useState(localStorage.getItem('minio_endpoint') || '');
-  const [minioPort, setMinioPort] = useState(localStorage.getItem('minio_port') || '9000');
+  const [minioPort, setMinioPort] = useState(localStorage.getItem('minio_port') || '12000');
   const [minioUseSSL, setMinioUseSSL] = useState<boolean>(localStorage.getItem('minio_use_ssl') === 'true');
   const [minioAccessKey, setMinioAccessKey] = useState(localStorage.getItem('minio_access_key') || '');
   const [minioSecretKey, setMinioSecretKey] = useState(localStorage.getItem('minio_secret_key') || '');
@@ -149,14 +152,30 @@ export const SettingsPage: React.FC = () => {
     const stored = localStorage.getItem('custom_gemini_models');
     if (stored) {
       try {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        let parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          // Migração: substitui IDs inválidos (gemini-2.5-*) por válidos (gemini-2.0-*)
+          let changed = false;
+          parsed = parsed.map((m: any) => {
+            if (m.id === 'gemini-2.5-flash') {
+              changed = true;
+              return { ...m, id: 'gemini-2.0-flash', name: m.name.replace('2.5', '2.0') };
+            }
+            if (m.id === 'gemini-2.5-pro') {
+              changed = true;
+              return { ...m, id: 'gemini-1.5-pro', name: m.name.replace('2.5', '1.5') };
+            }
+            return m;
+          });
+          if (changed) localStorage.setItem('custom_gemini_models', JSON.stringify(parsed));
+          return parsed;
+        }
       } catch {}
     }
     return [
-      { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash (Recomendado / Mais Rápido)' },
-      { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash' },
-      { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro (Alta Precisão)' }
+      { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash (Recomendado / Mais Rápido)' },
+      { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash' },
+      { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro (Alta Precisão)' }
     ];
   };
 
@@ -247,7 +266,7 @@ export const SettingsPage: React.FC = () => {
         body: JSON.stringify(payload)
       });
       if (!res.ok) {
-        const err = await res.json();
+        const err = await safeJson(res);
         throw new Error(err.error || 'Falha ao salvar no banco');
       }
     } catch (e: any) {
@@ -341,6 +360,82 @@ export const SettingsPage: React.FC = () => {
     }
   };
 
+  const handleFetchGeminiModels = async () => {
+    if (!geminiKey && !localStorage.getItem('gemini_api_key')) {
+      setErrorMsg('Configure sua chave API do Gemini antes de buscar os modelos.');
+      return;
+    }
+    setFetchingGeminiModels(true);
+    setSuccessMsg(null);
+    setErrorMsg(null);
+    try {
+      const res = await fetch(`${API_URL}/api/ai/gemini/models`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'x-gemini-key': geminiKey || localStorage.getItem('gemini_api_key') || '',
+          'x-ai-proxy-url': btoa(proxyUrl || localStorage.getItem('ai_proxy_url') || '')
+        }
+      });
+      const data = await res.json();
+      if (data.success && data.models) {
+        const fetchedModels = data.models.map((m: any) => ({
+          id: m.id,
+          name: m.name
+        }));
+        
+        // Mescla com os existentes para não perder nomes amigáveis customizados
+        const existingMap = new Map(models.map(m => [m.id, m.name]));
+        const mergedModels = fetchedModels.map((m: any) => ({
+          id: m.id,
+          name: existingMap.has(m.id) ? existingMap.get(m.id)! : m.name
+        }));
+
+        setModels(mergedModels);
+        localStorage.setItem('custom_gemini_models', JSON.stringify(mergedModels));
+        await saveToDatabase({ customAiModels: mergedModels });
+        setSuccessMsg(`Lista de modelos Gemini atualizada com sucesso! (${mergedModels.length} modelos encontrados)`);
+      } else {
+        throw new Error(data.message || 'Falha ao buscar modelos Gemini');
+      }
+    } catch (err: any) {
+      setErrorMsg(`Erro ao buscar modelos do Gemini: ${err.message}`);
+    } finally {
+      setFetchingGeminiModels(false);
+    }
+  };
+
+  const handleFetchOllamaModels = async () => {
+    setFetchingOllamaModels(true);
+    setSuccessMsg(null);
+    setErrorMsg(null);
+    try {
+      const res = await fetch(`${API_URL}/api/ai/ollama/models?endpoint=${encodeURIComponent(ollamaEndpoint)}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      const data = await res.json();
+      setOllamaStatus({
+        connected: data.connected,
+        message: data.connected ? 'Modelos do Ollama atualizados com sucesso!' : 'Não foi possível conectar ao Ollama.',
+        models: data.models || []
+      });
+      
+      if (data.connected && data.models && data.models.length > 0) {
+        setSuccessMsg(`Lista de modelos Ollama sincronizada! (${data.models.length} modelos locais detectados)`);
+        if (!ollamaModel || !data.models.some((m: any) => m.name === ollamaModel)) {
+          setOllamaModel(data.models[0].name);
+        }
+      } else if (!data.connected) {
+        throw new Error('Certifique-se de que o Ollama está rodando e o endpoint está correto.');
+      }
+    } catch (err: any) {
+      setErrorMsg(`Erro ao sincronizar Ollama: ${err.message}`);
+    } finally {
+      setFetchingOllamaModels(false);
+    }
+  };
+
   const handleSaveOllamaSettings = (e: React.FormEvent) => {
     e.preventDefault();
     localStorage.setItem('ollama_endpoint', ollamaEndpoint);
@@ -372,7 +467,7 @@ export const SettingsPage: React.FC = () => {
           publicUrl: minioPublicUrl
         })
       });
-      const data = await res.json();
+      const data = await safeJson(res);
       setMinioStatus(data);
     } catch (err: any) {
       setMinioStatus({
@@ -802,7 +897,17 @@ export const SettingsPage: React.FC = () => {
                   className="px-4 py-2 rounded-xl bg-cyan-950/60 border border-cyan-500/40 text-cyan-300 hover:bg-cyan-900/60 text-xs font-semibold flex items-center gap-2 transition-all self-start md:self-auto"
                 >
                   {testingOllama ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-                  Testar Conexão Ollama
+                  Testar Conexão
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleFetchOllamaModels}
+                  disabled={fetchingOllamaModels}
+                  className="px-4 py-2 rounded-xl bg-indigo-950/60 border border-indigo-500/40 text-indigo-300 hover:bg-indigo-900/60 text-xs font-semibold flex items-center gap-2 transition-all self-start md:self-auto"
+                >
+                  {fetchingOllamaModels ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <DownloadCloud className="w-3.5 h-3.5" />}
+                  Atualizar Lista de Modelos
                 </button>
               </div>
 
@@ -1174,14 +1279,26 @@ export const SettingsPage: React.FC = () => {
         {activeTab === 'models' && (
           <div className="space-y-6">
             <div className="bg-[#121124] rounded-2xl p-6 md:p-8 border border-purple-500/20 shadow-xl space-y-6">
-              <div>
-                <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                  <Cpu className="w-5 h-5 text-indigo-400" />
-                  Modelos de IA & Ordem de Fallback
-                </h2>
-                <p className="text-xs text-slate-400 mt-1">
-                  Gerencie a lista de modelos candidatos. Se um modelo estiver sobrecarregado ou atingir quota, o sistema tenta o próximo automaticamente.
-                </p>
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                    <Cpu className="w-5 h-5 text-indigo-400" />
+                    Modelos de IA & Ordem de Fallback
+                  </h2>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Gerencie a lista de modelos candidatos. Se um modelo estiver sobrecarregado ou atingir quota, o sistema tenta o próximo automaticamente.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleFetchGeminiModels}
+                  disabled={fetchingGeminiModels}
+                  className="px-4 py-2 rounded-xl bg-purple-950/60 border border-purple-500/40 text-purple-300 hover:bg-purple-900/60 text-xs font-semibold flex items-center gap-2 transition-all self-start md:self-auto"
+                >
+                  {fetchingGeminiModels ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                  Atualizar da API do Gemini
+                </button>
               </div>
 
               <div className="space-y-3">
@@ -1218,7 +1335,7 @@ export const SettingsPage: React.FC = () => {
                     type="text"
                     value={newModelId}
                     onChange={(e) => setNewModelId(e.target.value)}
-                    placeholder="ID do Modelo (ex: gemini-2.5-flash)"
+                    placeholder="ID do Modelo (ex: gemini-2.0-flash)"
                     className="bg-[#0a0a0d] border border-purple-500/20 rounded-xl px-4 py-2.5 text-sm text-white font-mono"
                   />
                   <input

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import { User, Key, Save, Trash2, Plus, Box, Sparkles, Cpu, Check, RotateCcw } from 'lucide-react';
 import { API_URL } from '../config';
 
@@ -69,7 +70,8 @@ export const DEFAULT_AI_SKILLS: AISkill[] = [
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
   const { token, user, login } = useAuth();
-  const [activeTab, setActiveTab] = useState<'profile' | 'ai' | 'models' | 'skills'>('profile');
+  const { theme } = useTheme();
+  const [activeTab, setActiveTab] = useState<'profile' | 'ai' | 'models' | 'ollama' | 'skills'>('profile');
   const [loading, setLoading] = useState(false);
   const [savingRemote, setSavingRemote] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -90,14 +92,29 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
     const stored = localStorage.getItem('custom_gemini_models');
     if (stored) {
       try {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        let parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          let changed = false;
+          parsed = parsed.map((m: any) => {
+            if (m.id === 'gemini-2.5-flash') {
+              changed = true;
+              return { ...m, id: 'gemini-2.0-flash', name: m.name.replace('2.5', '2.0') };
+            }
+            if (m.id === 'gemini-2.5-pro') {
+              changed = true;
+              return { ...m, id: 'gemini-1.5-pro', name: m.name.replace('2.5', '1.5') };
+            }
+            return m;
+          });
+          if (changed) localStorage.setItem('custom_gemini_models', JSON.stringify(parsed));
+          return parsed;
+        }
       } catch {}
     }
     return [
-      { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash (Recomendado)' },
-      { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash' },
-      { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro' }
+      { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash (Recomendado)' },
+      { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash' },
+      { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro' }
     ];
   };
 
@@ -401,41 +418,52 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
 
   return (
     <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4 backdrop-blur-sm">
-      <div className="w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-6 overflow-hidden flex flex-col max-h-[90vh]">
+      <div className={`w-full max-w-2xl border rounded-2xl shadow-2xl p-6 overflow-hidden flex flex-col max-h-[90vh] ${
+        theme === 'light' ? 'bg-white border-slate-200' : 'bg-slate-900 border-slate-800'
+      }`}>
         
-        <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+        <h2 className={`text-xl font-bold mb-6 flex items-center gap-2 ${theme === 'light' ? 'text-slate-900' : 'text-white'}`}>
           Configurações do Sistema
         </h2>
 
         {/* Tab switcher */}
-        <div className="grid grid-cols-4 gap-2 p-1 bg-slate-950 border border-slate-850 rounded-xl mb-6">
+        <div className={`grid grid-cols-5 gap-1 p-1 border rounded-xl mb-6 ${
+          theme === 'light' ? 'bg-slate-100 border-slate-200' : 'bg-slate-950 border-slate-850'
+        }`}>
           <button 
             onClick={() => { setActiveTab('profile'); setErrorMsg(null); setSuccessMsg(null); }}
-            className={`py-2 text-[11px] font-semibold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1 ${activeTab === 'profile' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}
+            className={`py-2 text-[10px] font-semibold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1 ${activeTab === 'profile' ? 'bg-purple-600 text-white shadow-md' : theme === 'light' ? 'text-slate-500 hover:text-slate-900' : 'text-slate-400 hover:text-white'}`}
           >
             <User className="w-3.5 h-3.5" />
             Perfil
           </button>
           <button 
             onClick={() => { setActiveTab('ai'); setErrorMsg(null); setSuccessMsg(null); }}
-            className={`py-2 text-[11px] font-semibold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1 ${activeTab === 'ai' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}
+            className={`py-2 text-[10px] font-semibold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1 ${activeTab === 'ai' ? 'bg-purple-600 text-white shadow-md' : theme === 'light' ? 'text-slate-500 hover:text-slate-900' : 'text-slate-400 hover:text-white'}`}
           >
             <Key className="w-3.5 h-3.5" />
-            Chaves API
+            Chaves
           </button>
           <button 
             onClick={() => { setActiveTab('models'); setErrorMsg(null); setSuccessMsg(null); }}
-            className={`py-2 text-[11px] font-semibold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1 ${activeTab === 'models' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}
+            className={`py-2 text-[10px] font-semibold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1 ${activeTab === 'models' ? 'bg-purple-600 text-white shadow-md' : theme === 'light' ? 'text-slate-500 hover:text-slate-900' : 'text-slate-400 hover:text-white'}`}
           >
             <Box className="w-3.5 h-3.5" />
-            Modelos IA
+            Gemini
+          </button>
+          <button 
+            onClick={() => { setActiveTab('ollama'); setErrorMsg(null); setSuccessMsg(null); }}
+            className={`py-2 text-[10px] font-semibold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1 ${activeTab === 'ollama' ? 'bg-purple-600 text-white shadow-md' : theme === 'light' ? 'text-slate-500 hover:text-slate-900' : 'text-slate-400 hover:text-white'}`}
+          >
+            <Cpu className="w-3.5 h-3.5" />
+            Ollama
           </button>
           <button 
             onClick={() => { setActiveTab('skills'); setErrorMsg(null); setSuccessMsg(null); }}
-            className={`py-2 text-[11px] font-semibold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1 ${activeTab === 'skills' ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}
+            className={`py-2 text-[10px] font-semibold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1 ${activeTab === 'skills' ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-md' : theme === 'light' ? 'text-slate-500 hover:text-slate-900' : 'text-slate-400 hover:text-white'}`}
           >
             <Sparkles className="w-3.5 h-3.5" />
-            Skills IA ({skills.filter(s => s.enabled).length})
+            Skills
           </button>
         </div>
 
@@ -456,26 +484,26 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
           {activeTab === 'profile' && (
             <form onSubmit={handleSaveProfile} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-450 mb-2">Nome Completo</label>
+                <label className={`block text-xs font-semibold uppercase tracking-wider mb-2 ${theme === 'light' ? 'text-slate-500' : 'text-slate-450'}`}>Nome Completo</label>
                 <input 
                   type="text"
                   required
                   placeholder="Seu nome"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl focus:outline-none focus:ring-1 focus:ring-purple-500 text-xs text-white"
+                  className={`w-full px-4 py-2.5 border rounded-xl focus:outline-none focus:ring-1 focus:ring-purple-500 text-xs ${theme === 'light' ? 'bg-white border-slate-200 text-slate-900' : 'bg-slate-950 border-slate-800 text-white'}`}
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-450 mb-2">Endereço de E-mail</label>
+                <label className={`block text-xs font-semibold uppercase tracking-wider mb-2 ${theme === 'light' ? 'text-slate-500' : 'text-slate-450'}`}>Endereço de E-mail</label>
                 <input 
                   type="email"
                   required
                   placeholder="nome@exemplo.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl focus:outline-none focus:ring-1 focus:ring-purple-500 text-xs text-white"
+                  className={`w-full px-4 py-2.5 border rounded-xl focus:outline-none focus:ring-1 focus:ring-purple-500 text-xs ${theme === 'light' ? 'bg-white border-slate-200 text-slate-900' : 'bg-slate-950 border-slate-800 text-white'}`}
                 />
               </div>
 
@@ -495,73 +523,73 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
           {activeTab === 'ai' && (
             <form onSubmit={handleSaveAIKeys} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-455 mb-2 flex items-center gap-1">
+                <label className={`block text-xs font-semibold uppercase tracking-wider mb-2 flex items-center gap-1 ${theme === 'light' ? 'text-slate-500' : 'text-slate-455'}`}>
                   Gemini API Key
-                  <span className="text-[10px] text-amber-400 lowercase italic font-normal">(Recomendado)</span>
+                  <span className="text-[10px] text-amber-500 lowercase italic font-normal">(Recomendado)</span>
                 </label>
                 <input 
                   type="password"
                   placeholder="AIzaSy..."
                   value={geminiKey}
                   onChange={(e) => setGeminiKey(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500 text-xs text-white"
+                  className={`w-full px-4 py-2.5 border rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500 text-xs ${theme === 'light' ? 'bg-white border-slate-200 text-slate-900' : 'bg-slate-950 border-slate-800 text-white'}`}
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-455 mb-2 flex items-center justify-between">
+                <label className={`block text-xs font-semibold uppercase tracking-wider mb-2 flex items-center justify-between ${theme === 'light' ? 'text-slate-500' : 'text-slate-455'}`}>
                   <span>Proxy para IA (HTTP / HTTPS / SOCKS5)</span>
-                  <span className="text-[10px] text-emerald-400 font-mono font-normal">Bypass de Bloqueio</span>
+                  <span className="text-[10px] text-emerald-600 font-mono font-normal">Bypass de Bloqueio</span>
                 </label>
                 <input 
                   type="text"
                   placeholder="http://usuario:senha@ip-proxy:porta ou http://proxy.servidor.com:8080"
                   value={proxyUrl}
                   onChange={(e) => setProxyUrl(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500 text-xs text-white font-mono"
+                  className={`w-full px-4 py-2.5 border rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500 text-xs font-mono ${theme === 'light' ? 'bg-white border-slate-200 text-slate-900' : 'bg-slate-950 border-slate-800 text-white'}`}
                 />
-                <p className="text-[10px] text-slate-500 mt-1">
+                <p className={`text-[10px] mt-1 ${theme === 'light' ? 'text-slate-500' : 'text-slate-500'}`}>
                   Configure um proxy caso o Gemini esteja barrando requisições do seu IP ou datacenter. Todas as chamadas para IA passarão por este túnel.
                 </p>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-455 mb-2 flex items-center justify-between">
+                <label className={`block text-xs font-semibold uppercase tracking-wider mb-2 flex items-center justify-between ${theme === 'light' ? 'text-slate-500' : 'text-slate-455'}`}>
                   <span>Ngrok Authtoken</span>
-                  <span className="text-[10px] text-cyan-400 font-mono font-normal">Acesso Global ao Dashboard</span>
+                  <span className="text-[10px] text-cyan-600 font-mono font-normal">Acesso Global ao Dashboard</span>
                 </label>
                 <input 
                   type="password"
                   placeholder="2xxxx_xxxxxxxxxxxxxxxxxxxx"
                   value={ngrokToken}
                   onChange={(e) => setNgrokToken(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl focus:outline-none focus:ring-1 focus:ring-cyan-500 text-xs text-white font-mono"
+                  className={`w-full px-4 py-2.5 border rounded-xl focus:outline-none focus:ring-1 focus:ring-cyan-500 text-xs font-mono ${theme === 'light' ? 'bg-white border-slate-200 text-slate-900' : 'bg-slate-950 border-slate-800 text-white'}`}
                 />
-                <p className="text-[10px] text-slate-500 mt-1">
+                <p className={`text-[10px] mt-1 ${theme === 'light' ? 'text-slate-500' : 'text-slate-500'}`}>
                   Seu token pessoal do ngrok.com para disponibilizar o painel e os previews do site na internet de qualquer lugar.
                 </p>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-455 mb-2">OpenAI API Key (Opcional)</label>
+                <label className={`block text-xs font-semibold uppercase tracking-wider mb-2 ${theme === 'light' ? 'text-slate-500' : 'text-slate-455'}`}>OpenAI API Key (Opcional)</label>
                 <input 
                   type="password"
                   placeholder="sk-..."
                   value={openaiKey}
                   onChange={(e) => setOpenaiKey(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl focus:outline-none focus:ring-1 focus:ring-purple-500 text-xs text-white"
+                  className={`w-full px-4 py-2.5 border rounded-xl focus:outline-none focus:ring-1 focus:ring-purple-500 text-xs ${theme === 'light' ? 'bg-white border-slate-200 text-slate-900' : 'bg-slate-950 border-slate-800 text-white'}`}
                 />
               </div>
 
               {/* Informações de Ambiente e Armazenamento */}
-              <div className="pt-2 border-t border-slate-850 space-y-2">
-                <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-400">Ambiente de Deploy & Armazenamento</label>
-                <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl flex items-center justify-between">
+              <div className={`pt-2 border-t space-y-2 ${theme === 'light' ? 'border-slate-100' : 'border-slate-850'}`}>
+                <label className={`block text-[11px] font-semibold uppercase tracking-wider ${theme === 'light' ? 'text-slate-500' : 'text-slate-400'}`}>Ambiente de Deploy & Armazenamento</label>
+                <div className={`p-3 border rounded-xl flex items-center justify-between ${theme === 'light' ? 'bg-slate-50 border-slate-200' : 'bg-slate-950 border-slate-800'}`}>
                   <div>
-                    <span className="text-xs font-bold text-white block">Object Storage (MinIO)</span>
+                    <span className={`text-xs font-bold block ${theme === 'light' ? 'text-slate-900' : 'text-white'}`}>Object Storage (MinIO)</span>
                     <span className="text-[10px] text-slate-500">Armazenamento de assets e arquivos na nuvem</span>
                   </div>
-                  <span className="text-[10px] font-mono bg-emerald-950/60 border border-emerald-500/30 text-emerald-400 px-2 py-0.5 rounded-full">
+                  <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${theme === 'light' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : 'bg-emerald-950/60 border border-emerald-500/30 text-emerald-400'}`}>
                     Ativo
                   </span>
                 </div>
@@ -580,18 +608,77 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
             </form>
           )}
 
-          {activeTab === 'models' && (
+          {activeTab === 'ollama' && (
             <div className="space-y-6">
-
-              {/* Sincronização Automática via API Token */}
-              <div className="p-4 bg-purple-950/25 border border-purple-500/30 rounded-xl space-y-2">
+              <div className={`p-4 border rounded-xl space-y-2 ${theme === 'light' ? 'bg-indigo-50 border-indigo-100' : 'bg-purple-950/25 border-purple-500/30'}`}>
                 <div className="flex items-center justify-between">
                   <div>
-                    <h3 className="text-xs font-bold text-white flex items-center gap-1.5">
+                    <h3 className={`text-xs font-bold flex items-center gap-1.5 ${theme === 'light' ? 'text-slate-900' : 'text-white'}`}>
+                      <RotateCcw className="w-3.5 h-3.5 text-purple-400" />
+                      Sincronizar Modelos Locais (Ollama)
+                    </h3>
+                    <p className={`text-[10px] mt-0.5 ${theme === 'light' ? 'text-slate-600' : 'text-slate-400'}`}>
+                      Tenta conectar no seu Ollama local (porta 11434) para listar os modelos instalados.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setLoading(true);
+                      try {
+                        const res = await fetch('http://localhost:11434/api/tags');
+                        if (!res.ok) throw new Error('Ollama não respondeu na porta 11434');
+                        const data = await res.json();
+                        const ollamaModels = data.models.map((m: any) => ({ id: m.name, name: `Ollama: ${m.name}` }));
+                        const existingIds = new Set(models.map(m => m.id));
+                        const newDiscovered = ollamaModels.filter((m: any) => !existingIds.has(m.id));
+                        if (newDiscovered.length > 0) {
+                          const updated = [...models, ...newDiscovered];
+                          setModels(updated);
+                          localStorage.setItem('custom_gemini_models', JSON.stringify(updated));
+                          await saveToDatabase({ customAiModels: updated });
+                          setSuccessMsg(`${newDiscovered.length} modelos do Ollama importados!`);
+                        } else {
+                          setSuccessMsg('Nenhum modelo novo encontrado no Ollama.');
+                        }
+                      } catch (e: any) {
+                        setErrorMsg(`Erro: ${e.message}. Certifique-se que o Ollama está rodando e com OLYMPUS_ORIGINS="*" ou similar.`);
+                      } finally {
+                        setLoading(false);
+                      }
+                    }}
+                    disabled={loading}
+                    className="flex items-center gap-1.5 px-3 py-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-md"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    {loading ? 'Buscando...' : 'Atualizar Ollama'}
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <h3 className={`text-xs font-bold uppercase tracking-wider ${theme === 'light' ? 'text-slate-500' : 'text-slate-450'}`}>
+                  Dica de Uso
+                </h3>
+                <div className={`p-3 rounded-xl border text-[10px] leading-relaxed ${theme === 'light' ? 'bg-slate-50 border-slate-200 text-slate-600' : 'bg-slate-950 border-slate-800 text-slate-400'}`}>
+                  Para que o navegador consiga acessar o Ollama, você deve iniciar o serviço com suporte a CORS. No Linux/Mac: <br/>
+                  <code className="bg-black/20 px-1 rounded text-purple-400">OLLAMA_ORIGINS="*" ollama serve</code>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'models' && (
+            <div className="space-y-6">
+              {/* Sincronização Automática via API Token */}
+              <div className={`p-4 border rounded-xl space-y-2 ${theme === 'light' ? 'bg-indigo-50 border-indigo-100' : 'bg-purple-950/25 border-purple-500/30'}`}>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className={`text-xs font-bold flex items-center gap-1.5 ${theme === 'light' ? 'text-slate-900' : 'text-white'}`}>
                       <Sparkles className="w-3.5 h-3.5 text-purple-400" />
                       Buscar Modelos Disponíveis na API
                     </h3>
-                    <p className="text-[10px] text-slate-400 mt-0.5">
+                    <p className={`text-[10px] mt-0.5 ${theme === 'light' ? 'text-slate-600' : 'text-slate-400'}`}>
                       Consulta a API oficial do Gemini com seu token e cadastra automaticamente os modelos liberados na sua conta.
                     </p>
                   </div>
@@ -599,17 +686,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                     type="button"
                     onClick={handleFetchApiModels}
                     disabled={fetchingApiModels}
-                    className="flex items-center gap-1.5 px-3 py-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all shadow-[0_0_15px_rgba(168,85,247,0.3)] shrink-0 cursor-pointer"
+                    className="flex items-center gap-1.5 px-3 py-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer shadow-md shadow-purple-600/20"
                   >
-                    <Sparkles className="w-3.5 h-3.5" />
+                    <Sparkles className={`w-3.5 h-3.5 ${fetchingApiModels ? 'animate-spin' : ''}`} />
                     {fetchingApiModels ? 'Consultando...' : 'Sincronizar Modelos'}
                   </button>
                 </div>
               </div>
               
               {/* Add New Custom Model Manualmente */}
-              <form onSubmit={handleAddModel} className="bg-slate-950 p-4 border border-slate-850 rounded-xl space-y-3">
-                <h3 className="text-xs font-bold text-slate-350 uppercase tracking-wider">Adicionar Manualmente</h3>
+              <form onSubmit={handleAddModel} className={`p-4 border rounded-xl space-y-3 ${theme === 'light' ? 'bg-slate-50 border-slate-200' : 'bg-slate-950 border-slate-850'}`}>
+                <h3 className={`text-xs font-bold uppercase tracking-wider ${theme === 'light' ? 'text-slate-500' : 'text-slate-350'}`}>Adicionar Manualmente</h3>
                 
                 <div className="grid grid-cols-2 gap-2">
                   <div>
@@ -617,10 +704,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                     <input 
                       type="text"
                       required
-                      placeholder="gemini-2.5-flash"
+                      placeholder="gemini-2.0-flash"
                       value={newModelId}
                       onChange={(e) => setNewModelId(e.target.value)}
-                      className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-xs text-white"
+                      className={`w-full px-3 py-1.5 border rounded text-xs ${theme === 'light' ? 'bg-white border-slate-300 text-slate-900' : 'bg-slate-900 border-slate-800 text-white'}`}
                     />
                   </div>
                   <div>
@@ -631,14 +718,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                       placeholder="Gemini 2.5 Flash"
                       value={newModelName}
                       onChange={(e) => setNewModelName(e.target.value)}
-                      className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-xs text-white"
+                      className={`w-full px-3 py-1.5 border rounded text-xs ${theme === 'light' ? 'bg-white border-slate-300 text-slate-900' : 'bg-slate-900 border-slate-800 text-white'}`}
                     />
                   </div>
                 </div>
 
                 <button
                   type="submit"
-                  className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-white rounded text-xs font-semibold flex items-center justify-center gap-1 cursor-pointer"
+                  className={`w-full py-2 rounded text-xs font-semibold flex items-center justify-center gap-1 cursor-pointer transition-colors ${theme === 'light' ? 'bg-slate-200 hover:bg-slate-300 text-slate-900' : 'bg-slate-800 hover:bg-slate-700 text-white'}`}
                 >
                   <Plus className="w-3.5 h-3.5" />
                   Adicionar Manualmente
@@ -647,7 +734,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
 
               {/* Models List */}
               <div className="space-y-2">
-                <h3 className="text-xs font-bold text-slate-350 uppercase tracking-wider">
+                <h3 className={`text-xs font-bold uppercase tracking-wider ${theme === 'light' ? 'text-slate-500' : 'text-slate-350'}`}>
                   Modelos Cadastrados ({models.length})
                 </h3>
                 
@@ -655,15 +742,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                   {models.map(m => (
                     <div 
                       key={m.id} 
-                      className="flex items-center justify-between p-2.5 bg-slate-900 border border-slate-800 rounded-xl"
+                      className={`flex items-center justify-between p-2.5 border rounded-xl ${theme === 'light' ? 'bg-white border-slate-200' : 'bg-slate-900 border-slate-800'}`}
                     >
                       <div className="min-w-0 pr-2">
-                        <p className="text-xs font-semibold text-white truncate">{m.name}</p>
+                        <p className={`text-xs font-semibold truncate ${theme === 'light' ? 'text-slate-900' : 'text-white'}`}>{m.name}</p>
                         <p className="text-[10px] text-slate-500 font-mono truncate">{m.id}</p>
                       </div>
                       <button
                         onClick={() => handleDeleteModel(m.id)}
-                        className="p-1 text-slate-500 hover:text-red-400 hover:bg-slate-850 rounded transition-all cursor-pointer"
+                        className={`p-1 rounded transition-all cursor-pointer ${theme === 'light' ? 'text-slate-400 hover:text-red-600 hover:bg-red-50' : 'text-slate-500 hover:text-red-400 hover:bg-slate-850'}`}
                         title="Remover modelo"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -672,27 +759,26 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                   ))}
                 </div>
               </div>
-
             </div>
           )}
 
           {activeTab === 'skills' && (
             <div className="space-y-5">
               {/* Header com Descrição e Botão Restaurar Padrões */}
-              <div className="flex items-center justify-between gap-3 p-3 bg-purple-950/20 border border-purple-500/30 rounded-xl">
+              <div className={`flex items-center justify-between gap-3 p-3 border rounded-xl ${theme === 'light' ? 'bg-purple-50 border-purple-100' : 'bg-purple-950/20 border-purple-500/30'}`}>
                 <div>
-                  <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
+                  <h4 className={`text-xs font-bold flex items-center gap-1.5 ${theme === 'light' ? 'text-purple-900' : 'text-white'}`}>
                     <Sparkles className="w-4 h-4 text-pink-400" />
                     Skills & Diretrizes Avançadas da IA
                   </h4>
-                  <p className="text-[11px] text-slate-400 mt-0.5">
+                  <p className={`text-[11px] mt-0.5 ${theme === 'light' ? 'text-slate-600' : 'text-slate-400'}`}>
                     Ative ou crie skills para turbinar a criação e o chat de IA com animações, objetos 3D, parallax e alta conversão.
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={handleResetDefaultSkills}
-                  className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-[10px] font-semibold flex items-center gap-1 shrink-0 transition-all cursor-pointer"
+                  className={`px-2.5 py-1.5 rounded-lg text-[10px] font-semibold flex items-center gap-1 shrink-0 transition-all cursor-pointer ${theme === 'light' ? 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50' : 'bg-slate-800 hover:bg-slate-700 text-slate-300'}`}
                   title="Restaurar lista de skills de fábrica"
                 >
                   <RotateCcw className="w-3 h-3" />
@@ -701,9 +787,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
               </div>
 
               {/* Formulário de Adicionar / Editar Skill */}
-              <form onSubmit={handleSaveSkill} className="p-3.5 bg-slate-950 border border-slate-800 rounded-xl space-y-3">
+              <form onSubmit={handleSaveSkill} className={`p-3.5 border rounded-xl space-y-3 ${theme === 'light' ? 'bg-slate-50 border-slate-200' : 'bg-slate-950 border-slate-800'}`}>
                 <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
+                  <h4 className={`text-xs font-bold flex items-center gap-1.5 ${theme === 'light' ? 'text-slate-900' : 'text-white'}`}>
                     <Plus className="w-3.5 h-3.5 text-purple-400" />
                     {editingSkillId ? 'Editar Skill' : 'Criar Nova Skill Personalizada'}
                   </h4>
@@ -716,7 +802,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                         setNewSkillDesc('');
                         setNewSkillSnippet('');
                       }}
-                      className="text-[10px] text-slate-400 hover:text-white underline cursor-pointer"
+                      className={`text-[10px] underline cursor-pointer ${theme === 'light' ? 'text-slate-500 hover:text-slate-800' : 'text-slate-400 hover:text-white'}`}
                     >
                       Cancelar Edição
                     </button>
@@ -725,22 +811,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   <div className="sm:col-span-2">
-                    <label className="block text-[10px] text-slate-400 mb-1">Nome da Skill</label>
+                    <label className={`block text-[10px] mb-1 ${theme === 'light' ? 'text-slate-500' : 'text-slate-400'}`}>Nome da Skill</label>
                     <input 
                       type="text"
                       required
                       placeholder="Ex: Animações de Scroll GSAP"
                       value={newSkillName}
                       onChange={(e) => setNewSkillName(e.target.value)}
-                      className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-xs text-white focus:border-purple-500 focus:outline-none"
+                      className={`w-full px-3 py-1.5 border rounded text-xs focus:ring-1 focus:ring-purple-500 focus:outline-none ${theme === 'light' ? 'bg-white border-slate-300 text-slate-900' : 'bg-slate-900 border-slate-800 text-white'}`}
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] text-slate-400 mb-1">Categoria</label>
+                    <label className={`block text-[10px] mb-1 ${theme === 'light' ? 'text-slate-500' : 'text-slate-400'}`}>Categoria</label>
                     <select
                       value={newSkillCategory}
                       onChange={(e: any) => setNewSkillCategory(e.target.value)}
-                      className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-xs text-purple-300 focus:border-purple-500 focus:outline-none cursor-pointer"
+                      className={`w-full px-3 py-1.5 border rounded text-xs focus:ring-1 focus:ring-purple-500 focus:outline-none cursor-pointer ${theme === 'light' ? 'bg-white border-slate-300 text-purple-600' : 'bg-slate-900 border-slate-800 text-purple-300'}`}
                     >
                       <option value="3d">3D & WebGL</option>
                       <option value="animation">Animações & Scroll</option>
@@ -753,20 +839,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                 </div>
 
                 <div>
-                  <label className="block text-[10px] text-slate-400 mb-1">Descrição Curta</label>
+                  <label className={`block text-[10px] mb-1 ${theme === 'light' ? 'text-slate-500' : 'text-slate-400'}`}>Descrição Curta</label>
                   <input 
                     type="text"
                     placeholder="Ex: Transições suaves de cards e efeitos de fade ao rolar."
                     value={newSkillDesc}
                     onChange={(e) => setNewSkillDesc(e.target.value)}
-                    className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-xs text-white focus:border-purple-500 focus:outline-none"
+                    className={`w-full px-3 py-1.5 border rounded text-xs focus:ring-1 focus:ring-purple-500 focus:outline-none ${theme === 'light' ? 'bg-white border-slate-300 text-slate-900' : 'bg-slate-900 border-slate-800 text-white'}`}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[10px] text-slate-400 mb-1 flex items-center justify-between">
+                  <label className={`block text-[10px] mb-1 flex items-center justify-between ${theme === 'light' ? 'text-slate-500' : 'text-slate-400'}`}>
                     <span>Instrução / Prompt Técnico da Skill (Injetado na IA)</span>
-                    <span className="text-[9px] text-purple-400 font-mono">HTML, CSS, JS</span>
+                    <span className="text-[9px] text-purple-500 font-mono">HTML, CSS, JS</span>
                   </label>
                   <textarea 
                     rows={3}
@@ -774,7 +860,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                     placeholder="Ex: Crie animações de entrada com IntersectionObserver no JS e classes CSS separadas..."
                     value={newSkillSnippet}
                     onChange={(e) => setNewSkillSnippet(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded text-xs text-white font-mono focus:border-purple-500 focus:outline-none resize-none leading-relaxed"
+                    className={`w-full px-3 py-2 border rounded text-xs font-mono focus:ring-1 focus:ring-purple-500 focus:outline-none resize-none leading-relaxed ${theme === 'light' ? 'bg-white border-slate-300 text-slate-900' : 'bg-slate-900 border-slate-800 text-white'}`}
                   />
                 </div>
 
@@ -790,10 +876,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
               {/* Lista de Skills Cadastradas com Toggle Ativo/Inativo */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-bold text-slate-350 uppercase tracking-wider">
+                  <h4 className={`text-xs font-bold uppercase tracking-wider ${theme === 'light' ? 'text-slate-500' : 'text-slate-350'}`}>
                     Skills Cadastradas ({skills.length})
                   </h4>
-                  <span className="text-[10px] text-purple-400 font-mono">
+                  <span className="text-[10px] text-purple-500 font-mono">
                     {skills.filter(s => s.enabled).length} ativas na geração
                   </span>
                 </div>
@@ -804,8 +890,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                       key={s.id} 
                       className={`p-3 border rounded-xl transition-all ${
                         s.enabled 
-                          ? 'bg-slate-950/80 border-purple-500/40 shadow-sm' 
-                          : 'bg-slate-950/30 border-slate-850 opacity-60'
+                          ? (theme === 'light' ? 'bg-white border-purple-200 shadow-sm' : 'bg-slate-950/80 border-purple-500/40 shadow-sm')
+                          : (theme === 'light' ? 'bg-slate-50 border-slate-200 opacity-60' : 'bg-slate-950/30 border-slate-850 opacity-60')
                       }`}
                     >
                       <div className="flex items-start justify-between gap-2">
@@ -815,18 +901,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                               type="checkbox"
                               checked={s.enabled}
                               onChange={() => handleToggleSkill(s.id)}
-                              className="rounded bg-slate-900 border-slate-700 text-purple-600 focus:ring-0 cursor-pointer"
+                              className="rounded border-slate-300 text-purple-600 focus:ring-0 cursor-pointer"
                               title={s.enabled ? 'Skill Ativa' : 'Skill Inativa'}
                             />
-                            <span className="text-xs font-bold text-white truncate">{s.name}</span>
-                            <span className="text-[9px] uppercase px-1.5 py-0.2 rounded bg-purple-950 text-purple-300 border border-purple-500/30 font-mono">
+                            <span className={`text-xs font-bold truncate ${theme === 'light' ? 'text-slate-900' : 'text-white'}`}>{s.name}</span>
+                            <span className={`text-[9px] uppercase px-1.5 py-0.2 rounded border font-mono ${theme === 'light' ? 'bg-purple-50 text-purple-600 border-purple-100' : 'bg-purple-950 text-purple-300 border-purple-500/30'}`}>
                               {s.category}
                             </span>
                           </div>
                           {s.description && (
-                            <p className="text-[11px] text-slate-400 line-clamp-1">{s.description}</p>
+                            <p className={`text-[11px] line-clamp-1 ${theme === 'light' ? 'text-slate-600' : 'text-slate-400'}`}>{s.description}</p>
                           )}
-                          <p className="text-[10px] text-slate-500 font-mono line-clamp-2 italic bg-slate-900/60 p-1.5 rounded border border-slate-850">
+                          <p className={`text-[10px] font-mono line-clamp-2 italic p-1.5 rounded border ${theme === 'light' ? 'bg-slate-100 border-slate-200 text-slate-700' : 'bg-slate-900/60 border-slate-850 text-slate-500'}`}>
                             {s.promptSnippet}
                           </p>
                         </div>
@@ -835,7 +921,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                           <button
                             type="button"
                             onClick={() => handleStartEditSkill(s)}
-                            className="p-1.5 text-slate-400 hover:text-purple-300 hover:bg-slate-850 rounded transition-all cursor-pointer"
+                            className={`p-1.5 rounded transition-all cursor-pointer ${theme === 'light' ? 'text-slate-400 hover:text-purple-600 hover:bg-slate-100' : 'text-slate-400 hover:text-purple-300 hover:bg-slate-850'}`}
                             title="Editar Skill"
                           >
                             <Cpu className="w-3.5 h-3.5" />
@@ -843,7 +929,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                           <button
                             type="button"
                             onClick={() => handleDeleteSkill(s.id)}
-                            className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-slate-850 rounded transition-all cursor-pointer"
+                            className={`p-1.5 rounded transition-all cursor-pointer ${theme === 'light' ? 'text-slate-400 hover:text-red-600 hover:bg-red-50' : 'text-slate-400 hover:text-red-400 hover:bg-slate-850'}`}
                             title="Excluir Skill"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -860,10 +946,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
         </div>
 
         {/* Modal Footer */}
-        <div className="flex items-center justify-end pt-6 border-t border-slate-800/60 mt-6 shrink-0">
+        <div className={`flex items-center justify-end pt-6 border-t mt-6 shrink-0 ${theme === 'light' ? 'border-slate-100' : 'border-slate-800/60'}`}>
           <button
             onClick={onClose}
-            className="px-5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs transition-colors cursor-pointer"
+            className={`px-5 py-2 rounded-xl text-xs transition-colors cursor-pointer ${theme === 'light' ? 'bg-slate-100 hover:bg-slate-200 text-slate-600' : 'bg-slate-800 hover:bg-slate-700 text-slate-300'}`}
           >
             Fechar
           </button>

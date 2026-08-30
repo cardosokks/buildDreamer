@@ -199,6 +199,8 @@ export interface AttachedFile {
   isImage?: boolean;
 }
 
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
 export const generateAIResponse = async (
   prompt: string, 
   context: { html: string; css: string; js: string },
@@ -210,20 +212,47 @@ export const generateAIResponse = async (
   customSkills?: Array<{ id: string; name: string; promptSnippet: string; enabled: boolean }>,
   attachedFiles?: AttachedFile[]
 ) => {
-  const activeKey = customApiKey || process.env.GEMINI_API_KEY;
+  const activeKey = (customApiKey || process.env.GEMINI_API_KEY || '').trim();
   const proxyUrl = isValidHttpUrl(customProxyUrl) ? customProxyUrl!.trim() : defaultProxyUrl;
 
   let candidateModels: string[] = [];
+  
+  // Sanitização de modelos (impede modelos inexistentes como gemini-2.5)
+  const sanitizeModelName = (name: string) => {
+    let clean = name.trim();
+    if (clean.startsWith('models/')) clean = clean.replace('models/', '');
+    // Mapeia modelos experimentais ou nomes errados para versões estáveis
+    if (clean.includes('gemini-2.5-flash')) return 'gemini-1.5-flash';
+    if (clean.includes('gemini-2.5-pro')) return 'gemini-1.5-pro';
+    if (clean === 'gemini-2.0-flash') return 'gemini-2.0-flash-exp';
+    if (clean === 'gemini-pro') return 'gemini-1.0-pro';
+    return clean;
+  };
+
   if (registeredModels && Array.isArray(registeredModels) && registeredModels.length > 0) {
-    candidateModels = [...registeredModels];
-    if (customModel && !candidateModels.includes(customModel)) {
-      candidateModels.unshift(customModel);
+    candidateModels = registeredModels.map(sanitizeModelName);
+    if (customModel) {
+      const sanitizedCustom = sanitizeModelName(customModel);
+      if (!candidateModels.includes(sanitizedCustom)) {
+        candidateModels.unshift(sanitizedCustom);
+      }
     }
+    // Garante que sempre haja modelos estáveis de fallback
+    if (!candidateModels.includes('gemini-1.5-flash-latest')) candidateModels.push('gemini-1.5-flash-latest');
+    if (!candidateModels.includes('gemini-1.5-flash')) candidateModels.push('gemini-1.5-flash');
+    if (!candidateModels.includes('gemini-1.5-flash-8b')) candidateModels.push('gemini-1.5-flash-8b');
+    if (!candidateModels.includes('gemini-1.5-pro-latest')) candidateModels.push('gemini-1.5-pro-latest');
+    if (!candidateModels.includes('gemini-1.5-pro')) candidateModels.push('gemini-1.5-pro');
+    if (!candidateModels.includes('gemini-2.0-flash-exp')) candidateModels.push('gemini-2.0-flash-exp');
+    if (!candidateModels.includes('gemini-1.0-pro')) candidateModels.push('gemini-1.0-pro');
   } else if (customModel) {
-    candidateModels = [customModel];
+    candidateModels = [sanitizeModelName(customModel), 'gemini-1.5-flash-latest', 'gemini-1.5-flash', 'gemini-1.5-flash-8b', 'gemini-1.5-pro-latest', 'gemini-1.5-pro', 'gemini-2.0-flash-exp', 'gemini-1.0-pro'];
   } else {
-    candidateModels = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-2.5-pro'];
+    candidateModels = ['gemini-1.5-flash-latest', 'gemini-1.5-flash', 'gemini-1.5-flash-8b', 'gemini-1.5-pro-latest', 'gemini-1.5-pro', 'gemini-2.0-flash-exp', 'gemini-1.0-pro'];
   }
+
+  // Remove duplicatas mantendo a ordem e filtra modelos inválidos/vazios
+  candidateModels = [...new Set(candidateModels)].filter(m => m && typeof m === 'string' && m.length > 3);
 
   // Se customSkills for omitido ou vazio, usa DEFAULT_AI_SKILLS como fallback ativo
   const skillsToUse = (customSkills && Array.isArray(customSkills) && customSkills.length > 0)
@@ -330,79 +359,142 @@ export const generateAIResponse = async (
       onModelAttempt(modelToTry, i + 1, candidateModels.length);
     }
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    // Tenta v1beta primeiro, depois v1 para cada modelo se der 404
+    const versionsToTry = ['v1beta', 'v1'];
+    
+    for (const apiVersion of versionsToTry) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
-    try {
-      const isGemini25 = modelToTry.includes('2.5') || modelToTry.includes('2.0');
-      
-      const generationConfig: any = {
-        responseMimeType: 'application/json',
-        temperature: 0.35,
-        topP: 0.95,
-        maxOutputTokens: 8192
-      };
-
-      if (isGemini25) {
-        // Desativa 'thinking' para respostas instantâneas sem latência de raciocínio desnecessária
-        generationConfig.thinkingConfig = {
-          thinkingBudget: 0
+      try {
+        const generationConfig: any = {
+          responseMimeType: 'application/json',
+          temperature: 0.35,
+          topP: 0.95,
+          maxOutputTokens: 8192
         };
-      }
 
-      const userParts: any[] = [
-        {
-          text: `${systemPrompt}\n\nContexto do site:\nHTML: ${context.html}\nCSS: ${context.css}\nJS: ${context.js}\n\nPedido do Usuário: ${prompt}`
-        },
-        ...inlineImageParts
-      ];
-
-      const payload: any = {
-        contents: [
+        const userParts: any[] = [
           {
-            role: 'user',
-            parts: userParts
+            text: `${systemPrompt}\n\nContexto do site:\nHTML: ${context.html}\nCSS: ${context.css}\nJS: ${context.js}\n\nPedido do Usuário: ${prompt}`
+          },
+          ...inlineImageParts
+        ];
+
+        const payload: any = {
+          contents: [
+            {
+              role: 'user',
+              parts: userParts
+            }
+          ],
+          generationConfig
+        };
+
+        const fetchOptions: any = {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload),
+          signal: controller.signal
+        };
+
+        if (proxyUrl) {
+          fetchOptions.dispatcher = new ProxyAgent(proxyUrl);
+        }
+
+        const urlObj = new URL(`https://generativelanguage.googleapis.com/${apiVersion}/models/${modelToTry}:generateContent`);
+        urlObj.searchParams.set('key', activeKey);
+        const apiUrl = urlObj.toString();
+
+        const response = await undiciFetch(apiUrl, fetchOptions);
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          const errText = await response.text();
+          let googleErrorMessage = '';
+          try {
+            const parsedError = JSON.parse(errText);
+            googleErrorMessage = parsedError?.error?.message || '';
+          } catch {}
+
+          // Se for 404, tenta a próxima versão do mesmo modelo
+          if (response.status === 404) {
+            console.warn(`[Gemini API] Modelo ${modelToTry} não encontrado em ${apiVersion}. Tentando alternativa...`);
+            continue; 
           }
-        ],
-        generationConfig
-      };
 
-      const fetchOptions: any = {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(payload),
-        signal: controller.signal
-      };
+          // Se for 429 (Quota Exceeded), registra e aguarda um pouco antes de tentar o PRÓXIMO modelo da lista candidateModels
+          if (response.status === 429) {
+            console.error(`[Gemini API Quota] Limite atingido para ${modelToTry}. Erro: ${googleErrorMessage}`);
+            lastError = new Error(`Quota excedida (429) para ${modelToTry}: ${googleErrorMessage}`);
+            // Aumenta o tempo de espera para 5 segundos para dar fôlego real ao free tier
+            await sleep(5000); 
+            break; // Sai do loop de versões para este modelo e vai para o próximo modelo candidato
+          }
 
-      if (proxyUrl) {
-        fetchOptions.dispatcher = new ProxyAgent(proxyUrl);
+          throw new Error(`Erro na API (${response.status}) ao chamar ${modelToTry} (${apiVersion}): ${googleErrorMessage || errText}`);
+        }
+
+        const resJson: any = await response.json();
+        const rawText = resJson?.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+
+        const parsed = resilientJsonParse(rawText);
+        parsed._usedModel = modelToTry;
+        console.log(`[AI Engine] Sucesso com o modelo: ${modelToTry} (${apiVersion})`);
+        return parsed;
+
+      } catch (error: any) {
+        clearTimeout(timeoutId);
+        if (error.name === 'AbortError') {
+          console.warn(`[AI Engine] Timeout na tentativa com ${modelToTry} (${apiVersion})`);
+        } else {
+          console.warn(`[AI Engine] Falha em ${modelToTry} (${apiVersion}):`, error.message);
+        }
+        lastError = error;
+        // Se não for erro de 404/versão, ou se for a última versão disponível para este modelo, continua para o próximo modelo candidato
+        if (apiVersion === versionsToTry[versionsToTry.length - 1]) {
+           break;
+        }
       }
-
-      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelToTry}:generateContent?key=${activeKey}`;
-
-      const response = await undiciFetch(apiUrl, fetchOptions);
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        const errText = await response.text();
-        throw new Error(`HTTP ${response.status}: ${errText}`);
-      }
-
-      const resJson: any = await response.json();
-      const rawText = resJson?.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
-
-      const parsed = resilientJsonParse(rawText);
-      parsed._usedModel = modelToTry;
-      return parsed;
-    } catch (error: any) {
-      clearTimeout(timeoutId);
-      console.warn(`[AI Engine] Tentativa com o modelo ${modelToTry} (${i + 1}/${candidateModels.length}) falhou:`, error.message);
-      lastError = error;
     }
   }
 
   console.error("Erro na API do Gemini em todos os modelos candidatos:", lastError);
   throw new Error(`Erro ao gerar resposta da IA: ${lastError?.message || 'Falha de conexão com a API do Gemini'}`);
+};
+
+/**
+ * Lista modelos disponíveis diretamente da API do Gemini
+ */
+export const listGeminiModels = async (customApiKey?: string, customProxyUrl?: string) => {
+  const activeKey = (customApiKey || process.env.GEMINI_API_KEY || '').trim();
+  const proxyUrl = isValidHttpUrl(customProxyUrl) ? customProxyUrl!.trim() : defaultProxyUrl;
+
+  if (!activeKey) {
+    throw new Error("Chave da API do Gemini não fornecida.");
+  }
+
+  const urlObj = new URL(`https://generativelanguage.googleapis.com/v1beta/models`);
+  urlObj.searchParams.set('key', activeKey);
+  const apiUrl = urlObj.toString();
+
+  const fetchOptions: any = {
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json' }
+  };
+
+  if (proxyUrl) {
+    fetchOptions.dispatcher = new ProxyAgent(proxyUrl);
+  }
+
+  const response = await undiciFetch(apiUrl, fetchOptions);
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`HTTP ${response.status}: ${errText}`);
+  }
+
+  const data: any = await response.json();
+  return data.models || [];
 };

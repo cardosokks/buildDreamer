@@ -1,4 +1,6 @@
 import * as Minio from 'minio';
+import fs from 'fs';
+import path from 'path';
 
 export interface MinioConfig {
   endpoint: string;
@@ -28,7 +30,18 @@ export function getEffectiveMinioConfig(overrides?: Partial<MinioConfig>): Minio
 
   // Sanitizar endpoint (remover http:// ou https:// se presente)
   let cleanEndpoint = endpoint.replace(/^https?:\/\//i, '').replace(/\/+$/, '');
-  let port = parseInt(portStr, 10);
+  
+  let effectivePortStr = portStr;
+  
+  // Se estivermos rodando no Docker (service name 'app' geralmente) e o usuário tentar 'localhost',
+  // traduzimos para o nome do serviço interno do docker 'minio'
+  if ((cleanEndpoint === 'localhost' || cleanEndpoint === '127.0.0.1') && process.env.DATABASE_URL?.includes('@postgres')) {
+    cleanEndpoint = 'minio';
+    // Se a porta for a porta externa (12000), mudamos para a interna (9000)
+    if (effectivePortStr === '12000') effectivePortStr = '9000';
+  }
+
+  let port = parseInt(effectivePortStr, 10);
   if (cleanEndpoint.includes(':')) {
     const parts = cleanEndpoint.split(':');
     cleanEndpoint = parts[0];
@@ -52,7 +65,9 @@ export function createMinioClient(config: MinioConfig): Minio.Client {
     port: config.port || (config.useSSL ? 443 : 9000),
     useSSL: !!config.useSSL,
     accessKey: config.accessKey,
-    secretKey: config.secretKey
+    secretKey: config.secretKey,
+    region: 'us-east-1', // Definir uma região padrão ajuda em alguns casos
+    pathStyle: true      // Forçar pathStyle evita erros de DNS com buckets em localhost/IP
   });
 }
 
@@ -99,6 +114,42 @@ export async function testMinioConnection(config: MinioConfig): Promise<{ succes
       message: `Falha na conexão com MinIO: ${error.message || 'Verifique as credenciais e o endpoint.'}`
     };
   }
+}
+
+export async function uploadAssetToStorage(
+  buffer: Buffer,
+  filename: string,
+  mimeType: string,
+  overrides?: Partial<MinioConfig>
+): Promise<{ url: string; size: number; key: string; isMinio: boolean }> {
+  let publicUrl = '';
+  let objectName = `uploads/${Date.now()}_${filename.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+  let isMinio = false;
+
+  try {
+    const minioRes = await uploadBufferToMinio(buffer, filename, mimeType, overrides);
+    publicUrl = minioRes.url;
+    objectName = minioRes.key;
+    isMinio = true;
+  } catch (error) {
+    console.warn(`[MinIO] Upload falhou ou não configurado. Usando fallback local para ${filename}.`);
+    const uploadsDir = path.join(process.cwd(), 'front-end', 'public', 'uploads');
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir, { recursive: true });
+    }
+    const localFileName = `${Date.now()}_${filename.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+    const filePath = path.join(uploadsDir, localFileName);
+    fs.writeFileSync(filePath, buffer);
+    publicUrl = `/uploads/${localFileName}`;
+    objectName = localFileName;
+  }
+
+  return {
+    url: publicUrl,
+    size: buffer.length,
+    key: objectName,
+    isMinio
+  };
 }
 
 export async function uploadBufferToMinio(
