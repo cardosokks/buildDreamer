@@ -21,6 +21,7 @@ import {
   CheckCircle2, 
   Clock, 
   X,
+  ChevronLeft,
   ChevronRight,
   ArrowRight,
   Store,
@@ -97,6 +98,12 @@ export const CRMManager: React.FC<CRMManagerProps> = ({ onOpenRemasterModal, onO
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, statusFilter]);
   
   // Product & Sale states
   const [products, setProducts] = useState<Product[]>([]);
@@ -104,7 +111,10 @@ export const CRMManager: React.FC<CRMManagerProps> = ({ onOpenRemasterModal, onO
   const [showProductModal, setShowProductModal] = useState(false);
   const [showSaleModal, setShowSaleModal] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [showClientHistoryModal, setShowClientHistoryModal] = useState(false);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
+  const [clientHistoryLead, setClientHistoryLead] = useState<Lead | null>(null);
+  const [saleToRefund, setSaleToRefund] = useState<Sale | null>(null);
   
   const [productForm, setProductForm] = useState({
     name: '',
@@ -114,6 +124,7 @@ export const CRMManager: React.FC<CRMManagerProps> = ({ onOpenRemasterModal, onO
   });
   
   const [saleForm, setSaleForm] = useState({
+    leadId: '',
     productId: '',
     notes: ''
   });
@@ -142,6 +153,26 @@ export const CRMManager: React.FC<CRMManagerProps> = ({ onOpenRemasterModal, onO
   const fetchLeads = async () => {
     setLoading(true);
     try {
+      // Auto-sync saved leads from localStorage if any
+      try {
+        const localSaved = localStorage.getItem('builddreamer_saved_leads');
+        if (localSaved) {
+          const parsed = JSON.parse(localSaved);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            await fetch(`${API_URL}/api/leads/bulk`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+              },
+              body: JSON.stringify({ leads: parsed })
+            });
+          }
+        }
+      } catch (e) {
+        console.warn('Erro ao auto-sincronizar leads salvos:', e);
+      }
+
       const res = await fetch(`${API_URL}/api/leads`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -243,8 +274,22 @@ export const CRMManager: React.FC<CRMManagerProps> = ({ onOpenRemasterModal, onO
   };
 
   const handleDelete = async (id: string) => {
-    // Hidden as per requirements
-    return;
+    if (!confirm('Tem certeza que deseja excluir este cliente?')) return;
+    try {
+      const res = await fetch(`${API_URL}/api/leads/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        notify.success('Cliente excluído com sucesso');
+        fetchLeads();
+      } else {
+        const err = await safeJson(res);
+        notify.error(err.error || 'Erro ao excluir cliente');
+      }
+    } catch (err) {
+      notify.error('Erro de conexão ao excluir cliente');
+    }
   };
 
   const handleCreateProduct = async (e: React.FormEvent) => {
@@ -285,7 +330,11 @@ export const CRMManager: React.FC<CRMManagerProps> = ({ onOpenRemasterModal, onO
 
   const handleRegisterSale = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedLead) return;
+    const targetLeadId = selectedLead?.id || saleForm.leadId;
+    if (!targetLeadId) {
+      notify.error('Selecione um cliente para a venda');
+      return;
+    }
     
     const product = products.find(p => p.id === saleForm.productId);
     if (!product) {
@@ -301,7 +350,7 @@ export const CRMManager: React.FC<CRMManagerProps> = ({ onOpenRemasterModal, onO
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          leadId: selectedLead.id,
+          leadId: targetLeadId,
           productId: saleForm.productId,
           productName: product.name,
           amount: product.price,
@@ -311,11 +360,34 @@ export const CRMManager: React.FC<CRMManagerProps> = ({ onOpenRemasterModal, onO
       if (res.ok) {
         notify.success('Venda registrada com sucesso');
         setShowSaleModal(false);
-        setSaleForm({ productId: '', notes: '' });
+        setSelectedLead(null);
+        setSaleForm({ leadId: '', productId: '', notes: '' });
         fetchLeads();
+      } else {
+        const err = await safeJson(res);
+        notify.error(err.error || 'Erro ao registrar venda');
       }
     } catch (err) {
       notify.error('Erro ao registrar venda');
+    }
+  };
+
+  const handleRefundSale = async (saleId: string) => {
+    try {
+      const res = await fetch(`${API_URL}/api/sales/${saleId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        notify.success('Venda extornada com sucesso');
+        setSaleToRefund(null);
+        fetchLeads();
+      } else {
+        const err = await safeJson(res);
+        notify.error(err.error || 'Erro ao extornar venda');
+      }
+    } catch (err) {
+      notify.error('Erro de conexão ao extornar venda');
     }
   };
 
@@ -352,6 +424,9 @@ export const CRMManager: React.FC<CRMManagerProps> = ({ onOpenRemasterModal, onO
     return matchesSearch && matchesStatus;
   });
 
+  const totalPages = Math.ceil(filteredLeads.length / itemsPerPage) || 1;
+  const paginatedLeads = filteredLeads.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
   const getStatusBadge = (status: string) => {
     const opt = STATUS_OPTIONS.find(o => o.value === status);
     if (!opt) return null;
@@ -383,6 +458,24 @@ export const CRMManager: React.FC<CRMManagerProps> = ({ onOpenRemasterModal, onO
               R$ {sales.reduce((acc, curr) => acc + curr.amount, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </div>
           </div>
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-lg transition-all cursor-pointer"
+          >
+            <UserPlus className="w-4 h-4" />
+            Novo Cliente
+          </button>
+          <button
+            onClick={() => {
+              setSelectedLead(null);
+              setSaleForm({ leadId: '', productId: '', notes: '' });
+              setShowSaleModal(true);
+            }}
+            className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-lg transition-all cursor-pointer"
+          >
+            <ShoppingCart className="w-4 h-4" />
+            Lançar Venda
+          </button>
           <button
             onClick={() => setShowProductModal(true)}
             className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-lg transition-all cursor-pointer"
@@ -447,80 +540,122 @@ export const CRMManager: React.FC<CRMManagerProps> = ({ onOpenRemasterModal, onO
             <p className="text-xs text-slate-500 mt-1">Comece cadastrando um novo lead ou importe do buscador.</p>
           </div>
         ) : (
-          <div className="divide-y divide-slate-800/50">
-            {filteredLeads.map(lead => {
-              const linkedProject = projects.find(p => p.id === lead.projectId);
-              
-              return (
-                <div 
-                  key={lead.id} 
-                  onClick={() => {
-                    setSelectedLead(lead);
-                    setShowSaleModal(true);
-                  }}
-                  className="grid grid-cols-[2fr_1.5fr_1fr_1fr_auto] gap-4 px-6 py-4 items-center hover:bg-slate-900/40 transition-all group cursor-pointer"
-                >
-                  {/* Name & Company */}
-                  <div className="min-w-0">
-                    <div className="font-bold text-white text-sm truncate">{lead.name}</div>
-                    <div className="flex items-center gap-1.5 text-[10px] text-slate-500 mt-0.5">
-                      <Store className="w-3 h-3" />
-                      <span className="truncate">{lead.company || 'Pessoa Física'}</span>
-                    </div>
-                  </div>
-
-                  {/* Status & Value */}
-                  <div>
-                    <div className="mb-1">{getStatusBadge(lead.status)}</div>
-                    <div className="text-xs font-mono font-bold text-slate-300">
-                      Vendas: R$ {sales.filter(s => s.leadId === lead.id).reduce((acc, curr) => acc + curr.amount, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                    </div>
-                  </div>
-
-                  {/* Contact Info */}
-                  <div className="space-y-1">
-                    {lead.phone && (
-                      <div className="flex items-center gap-1.5 text-[10px] text-slate-400">
-                        <Phone className="w-3 h-3 text-slate-500" />
-                        {lead.phone}
+          <>
+            <div className="divide-y divide-slate-800/50">
+              {paginatedLeads.map(lead => {
+                const linkedProject = projects.find(p => p.id === lead.projectId);
+                
+                return (
+                  <div 
+                    key={lead.id} 
+                    className="grid grid-cols-[2fr_1.5fr_1fr_1fr_auto] gap-4 px-6 py-4 items-center hover:bg-slate-900/40 transition-all group"
+                  >
+                    {/* Name & Company */}
+                    <div className="min-w-0">
+                      <div className="font-bold text-white text-sm truncate">{lead.name}</div>
+                      <div className="flex items-center gap-1.5 text-[10px] text-slate-500 mt-0.5">
+                        <Store className="w-3 h-3" />
+                        <span className="truncate">{lead.company || 'Pessoa Física'}</span>
                       </div>
-                    )}
-                    {lead.email && (
-                      <div className="flex items-center gap-1.5 text-[10px] text-slate-400">
-                        <Mail className="w-3 h-3 text-slate-500" />
-                        <span className="truncate">{lead.email}</span>
-                      </div>
-                    )}
-                  </div>
+                    </div>
 
-                  {/* Linked Project */}
-                  <div>
-                    {linkedProject ? (
+                    {/* Status & Value */}
+                    <div>
+                      <div className="mb-1">{getStatusBadge(lead.status)}</div>
+                      <div className="text-xs font-mono font-bold text-slate-300">
+                        Vendas: R$ {sales.filter(s => s.leadId === lead.id).reduce((acc, curr) => acc + curr.amount, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </div>
+                    </div>
+
+                    {/* Contact Info */}
+                    <div className="space-y-1">
+                      {lead.phone && (
+                        <div className="flex items-center gap-1.5 text-[10px] text-slate-400">
+                          <Phone className="w-3 h-3 text-slate-500" />
+                          {lead.phone}
+                        </div>
+                      )}
+                      {lead.email && (
+                        <div className="flex items-center gap-1.5 text-[10px] text-slate-400">
+                          <Mail className="w-3 h-3 text-slate-500" />
+                          <span className="truncate">{lead.email}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Linked Project */}
+                    <div>
+                      {linkedProject ? (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); onOpenProject && onOpenProject(linkedProject.id); }}
+                          className="flex items-center gap-1.5 px-2 py-1 bg-indigo-500/10 border border-indigo-500/20 rounded-lg text-[10px] font-bold text-indigo-400 hover:bg-indigo-500/20 transition-all cursor-pointer truncate"
+                        >
+                          <Globe className="w-3 h-3" />
+                          {linkedProject.name}
+                        </button>
+                      ) : (
+                        <span className="text-[10px] text-slate-600 italic">Nenhum site</span>
+                      )}
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex items-center gap-1.5 justify-end">
                       <button
-                        onClick={(e) => { e.stopPropagation(); onOpenProject && onOpenProject(linkedProject.id); }}
-                        className="flex items-center gap-1.5 px-2 py-1 bg-indigo-500/10 border border-indigo-500/20 rounded-lg text-[10px] font-bold text-indigo-400 hover:bg-indigo-500/20 transition-all cursor-pointer truncate"
+                        onClick={() => {
+                          setClientHistoryLead(lead);
+                          setShowClientHistoryModal(true);
+                        }}
+                        className="p-1.5 bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 rounded-lg hover:bg-indigo-500/20 transition-all cursor-pointer"
+                        title="Histórico de Vendas do Cliente"
                       >
-                        <Globe className="w-3 h-3" />
-                        {linkedProject.name}
+                        <History className="w-3.5 h-3.5" />
                       </button>
-                    ) : (
-                      <span className="text-[10px] text-slate-600 italic">Nenhum site</span>
-                    )}
+                      <button
+                        onClick={() => {
+                          setSelectedLead(lead);
+                          setShowSaleModal(true);
+                        }}
+                        className="flex items-center gap-1 px-3 py-1.5 bg-emerald-600/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-bold rounded-lg hover:bg-emerald-600/20 transition-all cursor-pointer"
+                      >
+                        <ShoppingCart className="w-3 h-3" />
+                        Lançar Venda
+                      </button>
+                    </div>
                   </div>
+                );
+              })}
+            </div>
 
-                  {/* Actions */}
-                  <div className="flex items-center gap-1 justify-end" onClick={e => e.stopPropagation()}>
-                    <button
-                      className="flex items-center gap-1 px-3 py-1.5 bg-emerald-600/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-bold rounded-lg hover:bg-emerald-600/20 transition-all"
-                    >
-                      <ShoppingCart className="w-3 h-3" />
-                      Lançar Venda
-                    </button>
-                  </div>
+            {/* Pagination Footer */}
+            {filteredLeads.length > 0 && (
+              <div className="flex flex-col sm:flex-row items-center justify-between px-6 py-4 border-t border-slate-800 bg-slate-900/40 text-xs text-slate-400 gap-4">
+                <div>
+                  Mostrando <span className="font-bold text-white">{(currentPage - 1) * itemsPerPage + 1}</span> a <span className="font-bold text-white">{Math.min(currentPage * itemsPerPage, filteredLeads.length)}</span> de <span className="font-bold text-white">{filteredLeads.length}</span> leads (10 por página)
                 </div>
-              );
-            })}
-          </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
+                    disabled={currentPage === 1}
+                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed text-white font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                    Anterior
+                  </button>
+                  <span className="px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg font-mono text-white">
+                    Página {currentPage} de {totalPages}
+                  </span>
+                  <button
+                    onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))}
+                    disabled={currentPage >= totalPages}
+                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed text-white font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer"
+                  >
+                    Próxima
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
 
@@ -771,20 +906,38 @@ export const CRMManager: React.FC<CRMManagerProps> = ({ onOpenRemasterModal, onO
       )}
 
       {/* Sale Registration Modal */}
-      {showSaleModal && selectedLead && (
+      {showSaleModal && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
           <div className="bg-[#0a0a0c] border border-slate-800 w-full max-w-md rounded-3xl shadow-2xl p-6 space-y-6">
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-lg font-bold text-white">Lançar Venda</h3>
-                <p className="text-xs text-slate-500">Registrando venda para {selectedLead.name}</p>
+                <p className="text-xs text-slate-500">
+                  {selectedLead ? `Registrando venda para ${selectedLead.name}` : 'Selecione o cliente e o produto'}
+                </p>
               </div>
-              <button onClick={() => setShowSaleModal(false)} className="text-slate-500 hover:text-white p-2 hover:bg-slate-800 rounded-xl cursor-pointer">
+              <button onClick={() => { setShowSaleModal(false); setSelectedLead(null); }} className="text-slate-500 hover:text-white p-2 hover:bg-slate-800 rounded-xl cursor-pointer">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <form onSubmit={handleRegisterSale} className="space-y-4">
+              {!selectedLead && (
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase">Selecionar Cliente</label>
+                  <select
+                    required
+                    value={saleForm.leadId}
+                    onChange={e => setSaleForm({...saleForm, leadId: e.target.value})}
+                    className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white text-sm focus:border-emerald-500 focus:outline-none cursor-pointer"
+                  >
+                    <option value="">Selecione um cliente...</option>
+                    {leads.map(l => (
+                      <option key={l.id} value={l.id}>{l.name} {l.company ? `(${l.company})` : ''}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <div className="space-y-1.5">
                 <label className="text-[10px] font-bold text-slate-500 uppercase">Selecionar Produto</label>
                 <select
@@ -880,6 +1033,7 @@ export const CRMManager: React.FC<CRMManagerProps> = ({ onOpenRemasterModal, onO
                     <th className="px-6 py-4">Cliente</th>
                     <th className="px-6 py-4">Produto</th>
                     <th className="px-6 py-4">Valor</th>
+                    <th className="px-6 py-4 text-right">Ação</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/50">
@@ -904,6 +1058,14 @@ export const CRMManager: React.FC<CRMManagerProps> = ({ onOpenRemasterModal, onO
                         <td className="px-6 py-4 font-bold text-emerald-400 text-sm">
                           R$ {sale.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                         </td>
+                        <td className="px-6 py-4 text-right">
+                          <button
+                            onClick={() => setSaleToRefund(sale)}
+                            className="px-3 py-1.5 bg-rose-500/10 border border-rose-500/20 text-rose-400 hover:bg-rose-500/20 text-[10px] font-bold rounded-lg transition-all cursor-pointer"
+                          >
+                            Extornar
+                          </button>
+                        </td>
                       </tr>
                     ))}
                 </tbody>
@@ -911,6 +1073,126 @@ export const CRMManager: React.FC<CRMManagerProps> = ({ onOpenRemasterModal, onO
               {sales.length === 0 && (
                 <div className="p-12 text-center text-slate-600 italic text-xs">Nenhuma venda registrada no período.</div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Client History Modal */}
+      {showClientHistoryModal && clientHistoryLead && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="bg-[#0a0a0c] border border-slate-800 w-full max-w-2xl rounded-3xl shadow-2xl p-6 flex flex-col max-h-[85vh]">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-indigo-500/10 rounded-xl text-indigo-400">
+                  <History className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-white">Histórico de Vendas: {clientHistoryLead.name}</h3>
+                  <p className="text-xs text-slate-500">{clientHistoryLead.company || 'Cliente'} • Total: R$ {sales.filter(s => s.leadId === clientHistoryLead.id).reduce((acc, curr) => acc + curr.amount, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                </div>
+              </div>
+              <button onClick={() => setShowClientHistoryModal(false)} className="text-slate-500 hover:text-white p-2 hover:bg-slate-800 rounded-xl cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto border border-slate-800 rounded-2xl">
+              <table className="w-full text-left">
+                <thead className="bg-slate-900/80 sticky top-0 text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                  <tr>
+                    <th className="px-6 py-4">Data</th>
+                    <th className="px-6 py-4">Produto</th>
+                    <th className="px-6 py-4">Valor</th>
+                    <th className="px-6 py-4 text-right">Ação</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/50">
+                  {sales
+                    .filter(s => s.leadId === clientHistoryLead.id)
+                    .map(sale => (
+                      <tr key={sale.id} className="hover:bg-slate-900/30 transition-colors">
+                        <td className="px-6 py-4 text-xs text-slate-400 font-mono">
+                          {new Date(sale.createdAt).toLocaleDateString()}
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="text-sm font-bold text-white">{sale.productName}</div>
+                          {sale.notes && <div className="text-[10px] text-slate-500">{sale.notes}</div>}
+                        </td>
+                        <td className="px-6 py-4 font-bold text-emerald-400 text-sm">
+                          R$ {sale.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <button
+                            onClick={() => setSaleToRefund(sale)}
+                            className="px-3 py-1.5 bg-rose-500/10 border border-rose-500/20 text-rose-400 hover:bg-rose-500/20 text-[10px] font-bold rounded-lg transition-all cursor-pointer"
+                          >
+                            Extornar Venda
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+              {sales.filter(s => s.leadId === clientHistoryLead.id).length === 0 && (
+                <div className="p-12 text-center text-slate-600 italic text-xs">Nenhuma venda registrada para este cliente.</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Refund Confirmation Modal */}
+      {saleToRefund && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
+          <div className="bg-[#0f0b18] border border-slate-800 w-full max-w-md rounded-3xl shadow-2xl p-6 flex flex-col space-y-5 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-rose-500/10 border border-rose-500/20 rounded-2xl text-rose-400">
+                  <Trash2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-white">Confirmar Extorno</h3>
+                  <p className="text-xs text-slate-400">Esta ação não pode ser desfeita</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setSaleToRefund(null)} 
+                className="text-slate-500 hover:text-white p-2 hover:bg-slate-800 rounded-xl cursor-pointer transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="bg-slate-950/80 border border-slate-850 rounded-2xl p-4 space-y-2 text-xs">
+              <div className="flex justify-between">
+                <span className="text-slate-500">Produto:</span>
+                <span className="font-bold text-white">{saleToRefund.productName}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Valor a extornar:</span>
+                <span className="font-bold text-rose-400">R$ {saleToRefund.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+              </div>
+              <div className="text-[11px] text-slate-400 italic pt-1 border-t border-slate-800/60">
+                O valor será subtraído do total negociado com o cliente.
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setSaleToRefund(null)}
+                className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-xl transition-all cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => handleRefundSale(saleToRefund.id)}
+                className="px-5 py-2.5 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-rose-900/30 transition-all cursor-pointer flex items-center gap-2"
+              >
+                Confirmar Extorno
+              </button>
             </div>
           </div>
         </div>

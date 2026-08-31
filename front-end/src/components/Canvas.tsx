@@ -165,13 +165,7 @@ export const Canvas: React.FC<CanvasProps> = ({
             color: #ffffff;
           }
 
-          [contenteditable="true"] {
-            outline: 2px solid #22c55e !important;
-            outline-offset: 3px !important;
-            cursor: text !important;
-            min-width: 1ch;
-            border-radius: 2px;
-          }
+
         </style>
         <style id="studio-user-styles">
           ${css}
@@ -246,7 +240,6 @@ export const Canvas: React.FC<CanvasProps> = ({
 
           function removeSelection() {
             if (currentSelected) {
-              currentSelected.removeAttribute('contenteditable');
               currentSelected = null;
               currentSelectedPath = null;
             }
@@ -466,38 +459,10 @@ export const Canvas: React.FC<CanvasProps> = ({
 
           // Click selection
           document.body.addEventListener('click', (e) => {
-            if (e.target && e.target.getAttribute('contenteditable') === 'true') {
-              return;
-            }
             if (e.target.closest('#studio-quick-toolbar')) return;
             e.preventDefault();
             e.stopPropagation();
             selectElement(e.target, false);
-          });
-
-          // Double Click Inline Edit
-          document.body.addEventListener('dblclick', (e) => {
-            if (e.target.closest('#studio-quick-toolbar')) return;
-            e.preventDefault();
-            e.stopPropagation();
-            const target = e.target;
-            if (target && target.id !== 'canvas-root' && target !== document.body) {
-              target.setAttribute('contenteditable', 'true');
-              target.focus();
-
-              const onBlur = () => {
-                target.removeAttribute('contenteditable');
-                target.removeEventListener('blur', onBlur);
-                const path = getIndexPath(target);
-                window.parent.postMessage({
-                  type: 'INLINE_TEXT_CHANGED',
-                  path,
-                  text: target.innerHTML || target.textContent
-                }, '*');
-                updateOverlayPosition();
-              };
-              target.addEventListener('blur', onBlur);
-            }
           });
 
           // Hover

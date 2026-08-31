@@ -564,21 +564,38 @@ class InMemoryDatabase {
       results.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
       return results;
     },
+    findFirst: async ({ where }: { where: { id?: string; userId?: string } }) => {
+      for (const s of this.sales.values()) {
+        if (where.id && s.id !== where.id) continue;
+        if (where.userId && s.userId !== where.userId) continue;
+        return { ...s };
+      }
+      return null;
+    },
     create: async ({ data }: { data: any }) => {
       const id = `sale_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-      const sale: MockSale = {
+      const now = new Date();
+      const sale = {
         id,
         leadId: data.leadId,
         productId: data.productId || null,
         productName: data.productName,
         amount: Number(data.amount),
         userId: data.userId,
-        createdAt: new Date()
+        createdAt: now
       };
       this.sales.set(id, sale);
       this.save();
       return { ...sale };
-    }
+    },
+    delete: async ({ where }: { where: { id: string } }) => {
+      const s = this.sales.get(where.id);
+      if (s) {
+        this.sales.delete(where.id);
+        this.save();
+      }
+      return s || { id: where.id };
+    },
   };
 
   projectMember = {

@@ -74,4 +74,36 @@ router.post('/', async (req: AuthenticatedRequest, res) => {
   }
 });
 
+// Delete/Refund a sale (Extornar)
+router.delete('/:id', async (req: AuthenticatedRequest, res) => {
+  try {
+    const { id } = req.params;
+    const sale = await prisma.sale.findFirst({
+      where: { id, userId: req.userId }
+    });
+
+    if (!sale) {
+      return res.status(404).json({ error: 'Venda não encontrada' });
+    }
+
+    // Decrement lead dealValue
+    await prisma.lead.update({
+      where: { id: sale.leadId },
+      data: {
+        dealValue: {
+          decrement: sale.amount
+        }
+      }
+    });
+
+    await prisma.sale.delete({
+      where: { id }
+    });
+
+    res.json({ success: true, message: 'Venda extornada com sucesso' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;

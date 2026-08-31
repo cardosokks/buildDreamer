@@ -136,7 +136,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [leadsSubTab, setLeadsSubTab] = useState<'search' | 'saved'>('search');
+  const [leadsSubTab, setLeadsSubTab] = useState<'search' | 'saved'>('saved');
   const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
 
   const [isTeamChatOpen, setIsTeamChatOpen] = useState(false);
@@ -505,6 +505,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
   }, [savedViewMode]);
   const [savedCurrentPage, setSavedCurrentPage] = useState(1);
   const [savedPerPage, setSavedPerPage] = useState(10);
+  const [savedSearchTerm, setSavedSearchTerm] = useState('');
+  const [savedCategoryFilter, setSavedCategoryFilter] = useState('ALL');
+
+  useEffect(() => {
+    setSavedCurrentPage(1);
+  }, [savedSearchTerm, savedCategoryFilter]);
 
   // Saved Leads State (Persistência no LocalStorage)
   const [savedLeads, setSavedLeads] = useState<Lead[]>(() => {
@@ -515,6 +521,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
       return [];
     }
   });
+
+  const filteredSavedLeads = savedLeads.filter(lead => {
+    const matchesSearch = (lead.name?.toLowerCase() || '').includes(savedSearchTerm.toLowerCase()) ||
+                         (lead.address?.toLowerCase() || '').includes(savedSearchTerm.toLowerCase()) ||
+                         (lead.phone?.toLowerCase() || '').includes(savedSearchTerm.toLowerCase());
+    const matchesCategory = savedCategoryFilter === 'ALL' || lead.category === savedCategoryFilter;
+    return matchesSearch && matchesCategory;
+  });
+
+  const savedCategories = Array.from(new Set(savedLeads.map(l => l.category).filter(Boolean)));
 
   // Helper para salvar leads ou presets no banco de dados
   const syncSettingsToDatabase = async (payload: { savedLeads?: any; filterPresets?: any }) => {
@@ -541,6 +557,24 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
         updated = prev.filter(l => l.id !== lead.id && l.name !== lead.name);
       } else {
         updated = [...prev, lead];
+        // Also send to CRM backend
+        fetch(`${API_URL}/api/leads`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            name: lead.name,
+            company: lead.category || 'Comércio Local',
+            phone: lead.phone || null,
+            email: lead.email || null,
+            website: lead.website || null,
+            address: lead.address || null,
+            status: 'PROSPECT',
+            origin: 'SEARCH'
+          })
+        }).catch(err => console.warn('Erro ao sincronizar lead salvo com CRM:', err));
       }
       localStorage.setItem('builddreamer_saved_leads', JSON.stringify(updated));
       syncSettingsToDatabase({ savedLeads: updated });
@@ -583,6 +617,24 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
     setSavedLeads(updated);
     localStorage.setItem('builddreamer_saved_leads', JSON.stringify(updated));
     syncSettingsToDatabase({ savedLeads: updated });
+
+    // Also send to CRM backend
+    fetch(`${API_URL}/api/leads`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        name: newLead.name,
+        company: newLead.category || 'Comércio Local',
+        phone: newLead.phone || null,
+        website: newLead.website || null,
+        address: newLead.address || null,
+        status: 'PROSPECT',
+        origin: 'MANUAL'
+      })
+    }).catch(err => console.warn('Erro ao sincronizar lead manual com CRM:', err));
 
     // Reset Form
     setManualLeadName('');
@@ -2797,49 +2849,37 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
             />
           ) : activeTab === 'leads' ? (
             /* BUSCAR CLIENTES & LEADS SALVOS (UNIFIED WINDOW) */
-            <div className="max-w-6xl mx-auto space-y-4">
+            <div className="max-w-6xl mx-auto space-y-3">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                  <h2 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
+                  <h2 className="text-lg font-bold text-white tracking-tight flex items-center gap-2">
                     <Users className="w-5 h-5 text-indigo-400" />
                     Buscador & Gestor de Clientes
                   </h2>
-                  <p className="text-xs text-slate-400">Encontre empresas locais sem site e gerencie seus leads favoritados.</p>
                 </div>
 
                 <div className="flex items-center gap-2 flex-wrap">
                   {leadsSubTab === 'saved' && (
                     <button
                       onClick={() => setShowManualLeadModal(true)}
-                      className="px-3 py-1.5 bg-yellow-500 hover:bg-yellow-400 text-slate-950 font-bold rounded-xl text-xs transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
+                      title="Novo Lead Manual"
+                      className="p-2.5 bg-yellow-500 hover:bg-yellow-400 text-slate-950 rounded-xl transition-all shadow-sm flex items-center justify-center cursor-pointer"
                     >
-                      <Plus className="w-3.5 h-3.5" />
-                      Novo Lead Manual
+                      <Plus className="w-4 h-4" />
                     </button>
                   )}
                   <button
                     onClick={() => setShowPresetListModal(true)}
-                    className="px-3 py-1.5 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                    title={`Filtros Prontos (${filterPresets.length})`}
+                    className="p-2.5 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 rounded-xl transition-all flex items-center justify-center cursor-pointer"
                   >
-                    <SlidersHorizontal className="w-3.5 h-3.5" />
-                    Filtros Prontos ({filterPresets.length})
+                    <SlidersHorizontal className="w-4 h-4" />
                   </button>
                 </div>
               </div>
 
               {/* Sub-Tabs Selector */}
               <div className="flex border-b border-slate-800 gap-1">
-                <button
-                  onClick={() => setLeadsSubTab('search')}
-                  className={`px-4 py-2 text-xs font-bold border-b-2 transition-all flex items-center gap-1.5 cursor-pointer ${
-                    leadsSubTab === 'search'
-                      ? 'border-indigo-500 text-indigo-400 font-bold'
-                      : 'border-transparent text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  <Search className="w-3.5 h-3.5" />
-                  Buscar Novos Clientes
-                </button>
                 <button
                   onClick={() => setLeadsSubTab('saved')}
                   className={`px-4 py-2 text-xs font-bold border-b-2 transition-all flex items-center gap-1.5 cursor-pointer ${
@@ -2850,6 +2890,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                 >
                   <Bookmark className="w-3.5 h-3.5" />
                   Clientes Salvos ({savedLeads.length})
+                </button>
+                <button
+                  onClick={() => setLeadsSubTab('search')}
+                  className={`px-4 py-2 text-xs font-bold border-b-2 transition-all flex items-center gap-1.5 cursor-pointer ${
+                    leadsSubTab === 'search'
+                      ? 'border-indigo-500 text-indigo-400 font-bold'
+                      : 'border-transparent text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Search className="w-3.5 h-3.5" />
+                  Buscar Novos Clientes
                 </button>
               </div>
 
@@ -3472,321 +3523,355 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {/* Barra Superior da Listagem de Salvos: Contador e Alternador de Layout */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#0f0b18] border border-slate-850 px-4 py-3 rounded-2xl text-xs">
-                    <div className="flex items-center gap-2 text-slate-400">
-                      <span>Exibindo <strong>{Math.min((savedCurrentPage - 1) * savedPerPage + 1, savedLeads.length)}</strong>–<strong>{Math.min(savedCurrentPage * savedPerPage, savedLeads.length)}</strong> de <strong>{savedLeads.length}</strong> leads favoritados</span>
+                  {/* Barra de Pesquisa e Filtro de Categoria para Clientes Salvos */}
+                  <div className="flex flex-col sm:flex-row items-center gap-3 bg-[#0f0b18] border border-slate-850 p-4 rounded-2xl">
+                    <div className="relative flex-1 w-full">
+                      <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-slate-500" />
+                      <input
+                        type="text"
+                        placeholder="Buscar nos clientes salvos por nome, endereço ou telefone..."
+                        value={savedSearchTerm}
+                        onChange={(e) => setSavedSearchTerm(e.target.value)}
+                        className="w-full pl-11 pr-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-purple-500 transition-all"
+                      />
                     </div>
-
-                    <div className="flex items-center gap-3">
-                      {/* Itens por página */}
-                      <div className="flex items-center gap-1.5 text-slate-400">
-                        <span>Por página:</span>
-                        <select
-                          value={savedPerPage}
-                          onChange={(e) => {
-                            setSavedPerPage(Number(e.target.value));
-                            setSavedCurrentPage(1);
-                          }}
-                          className="bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-white text-xs focus:outline-none"
-                        >
-                          <option value={10}>10</option>
-                          <option value={20}>20</option>
-                          <option value={30}>30</option>
-                          <option value={50}>50</option>
-                        </select>
-                      </div>
-
-                      {/* Alternador Tabela / Cards */}
-                      <div className="flex items-center bg-slate-950 border border-slate-800 rounded-xl p-0.5">
-                        <button
-                          type="button"
-                          onClick={() => setSavedViewMode('table')}
-                          className={`px-2.5 py-1 rounded-lg transition-all ${savedViewMode === 'table' ? 'bg-purple-700 text-white font-bold' : 'text-slate-400 hover:text-white'
-                            }`}
-                          title="Visualização em Lista Compacta"
-                        >
-                          Lista
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setSavedViewMode('cards')}
-                          className={`px-2.5 py-1 rounded-lg transition-all ${savedViewMode === 'cards' ? 'bg-purple-700 text-white font-bold' : 'text-slate-400 hover:text-white'
-                            }`}
-                          title="Visualização em Cards"
-                        >
-                          Cards
-                        </button>
-                      </div>
-                    </div>
+                    <select
+                      value={savedCategoryFilter}
+                      onChange={(e) => setSavedCategoryFilter(e.target.value)}
+                      className="w-full sm:w-56 px-3 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-purple-500 cursor-pointer"
+                    >
+                      <option value="ALL">Todas as Categorias</option>
+                      {savedCategories.map(cat => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                    </select>
                   </div>
 
-                  {/* Renderização em Lista Compacta / Tabela para Leads Salvos */}
-                  {savedViewMode === 'table' ? (
-                    <div className="bg-[#0f0b18] border border-slate-850 rounded-2xl overflow-hidden shadow-xl">
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-left border-collapse">
-                          <thead>
-                            <tr className="border-b border-slate-850 bg-slate-950/60 text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                              <th className="py-3.5 px-4">Estabelecimento / Categoria</th>
-                              <th className="py-3.5 px-4">Endereço</th>
-                              <th className="py-3.5 px-4">Contato & Presença</th>
-                              <th className="py-3.5 px-4 text-center">Nota</th>
-                              <th className="py-3.5 px-4 text-right whitespace-nowrap shrink-0">Ações</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-850/60 text-xs">
-                            {savedLeads
-                              .slice((savedCurrentPage - 1) * savedPerPage, savedCurrentPage * savedPerPage)
-                              .map(lead => {
-                                const mapsSearchUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${lead.name} ${lead.address || lead.city || ''}`)}`;
-
-                                return (
-                                  <tr key={lead.id} className="hover:bg-slate-900/40 transition-colors">
-                                    <td className="py-3.5 px-4">
-                                      <div className="font-bold text-white text-sm flex items-center gap-2">
-                                        <span className="truncate max-w-[220px]" title={lead.name}>{lead.name}</span>
-                                        <BookmarkCheck className="w-3.5 h-3.5 text-yellow-400 fill-yellow-400 shrink-0" />
-                                      </div>
-                                      {lead.category && (
-                                        <span className="text-[10px] text-yellow-400 font-mono mt-0.5 block">{lead.category}</span>
-                                      )}
-                                    </td>
-
-                                    <td className="py-3.5 px-4 text-slate-300 max-w-[260px]">
-                                      <div className="flex items-start gap-1.5">
-                                        <MapPin className="w-3.5 h-3.5 text-pink-400 shrink-0 mt-0.5" />
-                                        <span className="line-clamp-2 text-xs text-slate-300" title={lead.address}>
-                                          {lead.address || `${lead.city || ''} - ${lead.state || ''}`}
-                                        </span>
-                                      </div>
-                                    </td>
-
-                                    <td className="py-3.5 px-4">
-                                      <div className="space-y-1">
-                                        <div className="flex items-center gap-1.5 text-slate-300 font-mono text-xs">
-                                          <Phone className="w-3 h-3 text-indigo-400 shrink-0" />
-                                          <span>{lead.phone}</span>
-                                        </div>
-                                        <div>
-                                          {lead.website ? (
-                                            <a
-                                              href={lead.website}
-                                              target="_blank"
-                                              rel="noopener noreferrer"
-                                              className="text-[11px] text-cyan-400 hover:underline flex items-center gap-1 truncate max-w-[180px]"
-                                              title={lead.website}
-                                            >
-                                              <Globe className="w-3 h-3 shrink-0" />
-                                              <span className="truncate">{lead.website.replace(/^https?:\/\//, '')}</span>
-                                            </a>
-                                          ) : (
-                                            <span className="text-[10px] font-bold text-red-400 bg-red-950/40 border border-red-500/20 px-1.5 py-0.5 rounded">
-                                              Sem Website
-                                            </span>
-                                          )}
-                                        </div>
-                                      </div>
-                                    </td>
-
-                                    <td className="py-3.5 px-4 text-center">
-                                      <span className="inline-flex items-center gap-1 bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 px-2 py-0.5 rounded-lg text-xs font-bold">
-                                        <Star className="w-3 h-3 fill-yellow-400" />
-                                        {lead.rating}
-                                      </span>
-                                    </td>
-
-                                    <td className="py-3.5 px-4 text-right whitespace-nowrap shrink-0">
-                                      <div className="flex items-center justify-end gap-1 flex-nowrap shrink-0 whitespace-nowrap">
-                                        <a
-                                          href={mapsSearchUrl}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className="p-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-pink-500/40 text-pink-400 rounded-lg transition-all"
-                                          title="Ver no Google Maps"
-                                        >
-                                          <MapPin className="w-3.5 h-3.5" />
-                                        </a>
-
-                                        {/* Botão WhatsApp */}
-                                        {lead.whatsappUrl && (
-                                          <a
-                                            href={lead.whatsappUrl}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="p-1.5 bg-emerald-600/20 hover:bg-emerald-600/40 border border-emerald-500/40 text-emerald-400 rounded-lg transition-all"
-                                            title="Conversar no WhatsApp"
-                                          >
-                                            <Phone className="w-3.5 h-3.5" />
-                                          </a>
-                                        )}
-
-                                        {/* Botão Favoritar / Remover dos Salvos */}
-                                        <button
-                                          onClick={() => handleToggleSaveLead(lead)}
-                                          className="p-1.5 bg-yellow-500/20 border border-yellow-500/40 text-yellow-300 hover:text-red-400 rounded-lg transition-all cursor-pointer"
-                                          title="Remover dos salvos"
-                                        >
-                                          <BookmarkCheck className="w-3.5 h-3.5 fill-yellow-400" />
-                                        </button>
-
-                                        {/* Botão: Gerar Site */}
-                                        <button
-                                          onClick={() => handleCreateProjectFromLead(lead)}
-                                          className="p-1.5 bg-indigo-600/30 hover:bg-indigo-600 border border-indigo-500/40 text-indigo-200 hover:text-white rounded-lg transition-all shadow-sm cursor-pointer"
-                                          title="Gerar Site Profissional para este Cliente"
-                                        >
-                                          <Layout className="w-3.5 h-3.5" />
-                                        </button>
-
-                                        {/* Botão: Melhorar com IA (Apenas se tiver website) */}
-                                        {lead.website && (
-                                          <button
-                                            onClick={() => handleStartRemasterFlow(lead)}
-                                            className="p-1.5 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white rounded-lg transition-all shadow-md shadow-purple-600/20 cursor-pointer"
-                                            title="Melhorar com IA (Remasterizar subpáginas)"
-                                          >
-                                            <Sparkles className="w-3.5 h-3.5" />
-                                          </button>
-                                        )}
-                                      </div>
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                          </tbody>
-                        </table>
-                      </div>
+                  {filteredSavedLeads.length === 0 ? (
+                    <div className="p-12 bg-[#0f0b18] border border-slate-850 rounded-2xl text-center space-y-2">
+                      <Users className="w-10 h-10 text-slate-600 mx-auto" />
+                      <h3 className="text-sm font-bold text-white">Nenhum cliente encontrado</h3>
+                      <p className="text-xs text-slate-500">Tente ajustar os termos de pesquisa ou o filtro de categoria.</p>
                     </div>
                   ) : (
-                    /* Renderização em Cards para Leads Salvos */
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {savedLeads
-                        .slice((savedCurrentPage - 1) * savedPerPage, savedCurrentPage * savedPerPage)
-                        .map(lead => (
-                          <div
-                            key={lead.id}
-                            className="bg-[#0f0b18] border border-slate-850 rounded-2xl p-5 flex flex-col justify-between hover:border-slate-850 transition-all shadow-md"
-                          >
-                            <div className="space-y-2">
-                              <div className="flex items-start justify-between gap-3">
-                                <div>
-                                  <h3 className="font-bold text-white text-base leading-tight">{lead.name}</h3>
-                                  {lead.category && (
-                                    <span className="text-[10px] text-yellow-400 font-mono">{lead.category}</span>
-                                  )}
-                                </div>
-                                <button
-                                  onClick={() => handleToggleSaveLead(lead)}
-                                  className="p-1 text-yellow-400 hover:text-red-400 transition-colors cursor-pointer"
-                                  title="Remover dos salvos"
-                                >
-                                  <BookmarkCheck className="w-5 h-5 fill-yellow-400" />
-                                </button>
-                              </div>
+                    <>
+                      {/* Barra Superior da Listagem de Salvos: Contador e Alternador de Layout */}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#0f0b18] border border-slate-850 px-4 py-3 rounded-2xl text-xs">
+                        <div className="flex items-center gap-2 text-slate-400">
+                          <span>Exibindo <strong>{Math.min((savedCurrentPage - 1) * savedPerPage + 1, filteredSavedLeads.length)}</strong>–<strong>{Math.min(savedCurrentPage * savedPerPage, filteredSavedLeads.length)}</strong> de <strong>{filteredSavedLeads.length}</strong> clientes salvos</span>
+                        </div>
 
-                              <p className="text-xs text-slate-400 flex items-center gap-1.5">
-                                <MapPin className="w-3.5 h-3.5 text-pink-400 shrink-0" />
-                                <span className="line-clamp-1">{lead.address}</span>
-                              </p>
-
-                              <p className="text-xs text-slate-400 flex items-center gap-1.5">
-                                <Phone className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-                                <span>{lead.phone}</span>
-                              </p>
-
-                              <p className="text-xs flex items-center gap-1.5">
-                                <Globe className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-                                {lead.website ? (
-                                  <a href={lead.website} target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline line-clamp-1">
-                                    {lead.website}
-                                  </a>
-                                ) : (
-                                  <span className="text-red-400 font-semibold uppercase tracking-wider text-[10px] bg-red-950/30 border border-red-500/25 px-1.5 py-0.5 rounded">Sem Website (Oportunidade!)</span>
-                                )}
-                              </p>
-                            </div>
-
-                            <div className="mt-4 pt-4 border-t border-slate-850/80 flex items-center justify-between gap-2 flex-wrap">
-                              <span className="text-[10px] text-slate-500 font-mono">Salvo na Lista</span>
-                              <div className="flex items-center gap-1.5 flex-nowrap shrink-0 whitespace-nowrap">
-                                <a
-                                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${lead.name} ${lead.address || lead.city || ''}`)}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="p-2 bg-slate-900 hover:bg-pink-950/40 border border-slate-800 hover:border-pink-500/40 text-pink-400 rounded-xl transition-all shadow-sm"
-                                  title="Ver no Google Maps"
-                                >
-                                  <MapPin className="w-4 h-4" />
-                                </a>
-                                {lead.whatsappUrl && (
-                                  <a
-                                    href={lead.whatsappUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="p-2 bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-500/40 text-emerald-400 rounded-xl transition-all shadow-sm"
-                                    title="Conversar no WhatsApp"
-                                  >
-                                    <Phone className="w-4 h-4" />
-                                  </a>
-                                )}
-                                <button
-                                  onClick={() => handleCreateProjectFromLead(lead)}
-                                  className="p-2 bg-indigo-600/20 hover:bg-indigo-600 border border-indigo-500/40 text-indigo-300 hover:text-white rounded-xl transition-all shadow-sm cursor-pointer"
-                                  title="Gerar Site com IA para este Cliente"
-                                >
-                                  <Layout className="w-4 h-4" />
-                                </button>
-                                {lead.website && (
-                                  <button
-                                    onClick={() => handleStartRemasterFlow(lead)}
-                                    className="p-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white rounded-xl transition-all shadow-md hover:shadow-purple-500/30 cursor-pointer"
-                                    title="Melhorar com IA: Analisar páginas e recriar com IA"
-                                  >
-                                    <Sparkles className="w-4 h-4" />
-                                  </button>
-                                )}
-                              </div>
-                            </div>
+                        <div className="flex items-center gap-3">
+                          {/* Itens por página */}
+                          <div className="flex items-center gap-1.5 text-slate-400">
+                            <span>Por página:</span>
+                            <select
+                              value={savedPerPage}
+                              onChange={(e) => {
+                                setSavedPerPage(Number(e.target.value));
+                                setSavedCurrentPage(1);
+                              }}
+                              className="bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-white text-xs focus:outline-none"
+                            >
+                              <option value={10}>10</option>
+                              <option value={20}>20</option>
+                              <option value={30}>30</option>
+                              <option value={50}>50</option>
+                            </select>
                           </div>
-                        ))}
-                    </div>
-                  )}
 
-                  {/* Paginação para Leads Salvos */}
-                  {Math.ceil(savedLeads.length / savedPerPage) > 1 && (
-                    <div className="flex items-center justify-center gap-2 pt-4">
-                      <button
-                        onClick={() => setSavedCurrentPage(p => Math.max(p - 1, 1))}
-                        disabled={savedCurrentPage === 1}
-                        className="px-3.5 py-2 bg-[#0f0b18] border border-slate-800 hover:border-purple-500/40 text-xs font-semibold text-slate-300 hover:text-white rounded-xl disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-                      >
-                        Anterior
-                      </button>
-
-                      <div className="flex items-center gap-1">
-                        {Array.from({ length: Math.ceil(savedLeads.length / savedPerPage) }, (_, i) => i + 1).map(page => (
-                          <button
-                            key={page}
-                            onClick={() => setSavedCurrentPage(page)}
-                            className={`w-8 h-8 rounded-xl text-xs font-bold transition-all ${savedCurrentPage === page
-                              ? 'bg-purple-700 text-white shadow-[0_0_10px_rgba(168,85,247,0.4)]'
-                              : 'bg-[#0f0b18] border border-slate-850 text-slate-400 hover:text-white'
-                              }`}
-                          >
-                            {page}
-                          </button>
-                        ))}
+                          {/* Alternador Tabela / Cards */}
+                          <div className="flex items-center bg-slate-950 border border-slate-800 rounded-xl p-0.5">
+                            <button
+                              type="button"
+                              onClick={() => setSavedViewMode('table')}
+                              className={`px-2.5 py-1 rounded-lg transition-all ${savedViewMode === 'table' ? 'bg-purple-700 text-white font-bold' : 'text-slate-400 hover:text-white'
+                                }`}
+                              title="Visualização em Lista Compacta"
+                            >
+                              Lista
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setSavedViewMode('cards')}
+                              className={`px-2.5 py-1 rounded-lg transition-all ${savedViewMode === 'cards' ? 'bg-purple-700 text-white font-bold' : 'text-slate-400 hover:text-white'
+                                }`}
+                              title="Visualização em Cards"
+                            >
+                              Cards
+                            </button>
+                          </div>
+                        </div>
                       </div>
 
-                      <button
-                        onClick={() => setSavedCurrentPage(p => Math.min(p + 1, Math.ceil(savedLeads.length / savedPerPage)))}
-                        disabled={savedCurrentPage === Math.ceil(savedLeads.length / savedPerPage)}
-                        className="px-3.5 py-2 bg-[#0f0b18] border border-slate-800 hover:border-purple-500/40 text-xs font-semibold text-slate-300 hover:text-white rounded-xl disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-                      >
-                        Próxima
-                      </button>
-                    </div>
+                      {/* Renderização em Lista Compacta / Tabela para Leads Salvos */}
+                      {savedViewMode === 'table' ? (
+                        <div className="bg-[#0f0b18] border border-slate-850 rounded-2xl overflow-hidden shadow-xl">
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-left border-collapse">
+                              <thead>
+                                <tr className="border-b border-slate-850 bg-slate-950/60 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                                  <th className="py-3.5 px-4">Estabelecimento / Categoria</th>
+                                  <th className="py-3.5 px-4">Endereço</th>
+                                  <th className="py-3.5 px-4">Contato & Presença</th>
+                                  <th className="py-3.5 px-4 text-center">Nota</th>
+                                  <th className="py-3.5 px-4 text-right whitespace-nowrap shrink-0">Ações</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-850/60 text-xs">
+                                {filteredSavedLeads
+                                  .slice((savedCurrentPage - 1) * savedPerPage, savedCurrentPage * savedPerPage)
+                                  .map(lead => {
+                                    const mapsSearchUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${lead.name} ${lead.address || lead.city || ''}`)}`;
+
+                                    return (
+                                      <tr key={lead.id} className="hover:bg-slate-900/40 transition-colors">
+                                        <td className="py-3.5 px-4">
+                                          <div className="font-bold text-white text-sm flex items-center gap-2">
+                                            <span className="truncate max-w-[220px]" title={lead.name}>{lead.name}</span>
+                                            <BookmarkCheck className="w-3.5 h-3.5 text-yellow-400 fill-yellow-400 shrink-0" />
+                                          </div>
+                                          {lead.category && (
+                                            <span className="text-[10px] text-yellow-400 font-mono mt-0.5 block">{lead.category}</span>
+                                          )}
+                                        </td>
+
+                                        <td className="py-3.5 px-4 text-slate-300 max-w-[260px]">
+                                          <div className="flex items-start gap-1.5">
+                                            <MapPin className="w-3.5 h-3.5 text-pink-400 shrink-0 mt-0.5" />
+                                            <span className="line-clamp-2 text-xs text-slate-300" title={lead.address}>
+                                              {lead.address || `${lead.city || ''} - ${lead.state || ''}`}
+                                            </span>
+                                          </div>
+                                        </td>
+
+                                        <td className="py-3.5 px-4">
+                                          <div className="space-y-1">
+                                            <div className="flex items-center gap-1.5 text-slate-300 font-mono text-xs">
+                                              <Phone className="w-3 h-3 text-indigo-400 shrink-0" />
+                                              <span>{lead.phone}</span>
+                                            </div>
+                                            <div>
+                                              {lead.website ? (
+                                                <a
+                                                  href={lead.website}
+                                                  target="_blank"
+                                                  rel="noopener noreferrer"
+                                                  className="text-[11px] text-cyan-400 hover:underline flex items-center gap-1 truncate max-w-[180px]"
+                                                  title={lead.website}
+                                                >
+                                                  <Globe className="w-3 h-3 shrink-0" />
+                                                  <span className="truncate">{lead.website.replace(/^https?:\/\//, '')}</span>
+                                                </a>
+                                              ) : (
+                                                <span className="text-[10px] font-bold text-red-400 bg-red-950/40 border border-red-500/20 px-1.5 py-0.5 rounded">
+                                                  Sem Website
+                                                </span>
+                                              )}
+                                            </div>
+                                          </div>
+                                        </td>
+
+                                        <td className="py-3.5 px-4 text-center">
+                                          <span className="inline-flex items-center gap-1 bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 px-2 py-0.5 rounded-lg text-xs font-bold">
+                                            <Star className="w-3 h-3 fill-yellow-400" />
+                                            {lead.rating}
+                                          </span>
+                                        </td>
+
+                                        <td className="py-3.5 px-4 text-right whitespace-nowrap shrink-0">
+                                          <div className="flex items-center justify-end gap-1 flex-nowrap shrink-0 whitespace-nowrap">
+                                            <a
+                                              href={mapsSearchUrl}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="p-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-pink-500/40 text-pink-400 rounded-lg transition-all"
+                                              title="Ver no Google Maps"
+                                            >
+                                              <MapPin className="w-3.5 h-3.5" />
+                                            </a>
+
+                                            {/* Botão WhatsApp */}
+                                            {lead.whatsappUrl && (
+                                              <a
+                                                href={lead.whatsappUrl}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="p-1.5 bg-emerald-600/20 hover:bg-emerald-600/40 border border-emerald-500/40 text-emerald-400 rounded-lg transition-all"
+                                                title="Conversar no WhatsApp"
+                                              >
+                                                <Phone className="w-3.5 h-3.5" />
+                                              </a>
+                                            )}
+
+                                            {/* Botão Favoritar / Remover dos Salvos */}
+                                            <button
+                                              onClick={() => handleToggleSaveLead(lead)}
+                                              className="p-1.5 bg-yellow-500/20 border border-yellow-500/40 text-yellow-300 hover:text-red-400 rounded-lg transition-all cursor-pointer"
+                                              title="Remover dos salvos"
+                                            >
+                                              <BookmarkCheck className="w-3.5 h-3.5 fill-yellow-400" />
+                                            </button>
+
+                                            {/* Botão: Gerar Site */}
+                                            <button
+                                              onClick={() => handleCreateProjectFromLead(lead)}
+                                              className="p-1.5 bg-indigo-600/30 hover:bg-indigo-600 border border-indigo-500/40 text-indigo-200 hover:text-white rounded-lg transition-all shadow-sm cursor-pointer"
+                                              title="Gerar Site Profissional para este Cliente"
+                                            >
+                                              <Layout className="w-3.5 h-3.5" />
+                                            </button>
+
+                                            {/* Botão: Melhorar com IA (Apenas se tiver website) */}
+                                            {lead.website && (
+                                              <button
+                                                onClick={() => handleStartRemasterFlow(lead)}
+                                                className="p-1.5 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white rounded-lg transition-all shadow-md shadow-purple-600/20 cursor-pointer"
+                                                title="Melhorar com IA (Remasterizar subpáginas)"
+                                              >
+                                                <Sparkles className="w-3.5 h-3.5" />
+                                              </button>
+                                            )}
+                                          </div>
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      ) : (
+                        /* Renderização em Cards para Leads Salvos */
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {filteredSavedLeads
+                            .slice((savedCurrentPage - 1) * savedPerPage, savedCurrentPage * savedPerPage)
+                            .map(lead => (
+                              <div
+                                key={lead.id}
+                                className="bg-[#0f0b18] border border-slate-850 rounded-2xl p-5 flex flex-col justify-between hover:border-slate-850 transition-all shadow-md"
+                              >
+                                <div className="space-y-2">
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div>
+                                      <h3 className="font-bold text-white text-base leading-tight">{lead.name}</h3>
+                                      {lead.category && (
+                                        <span className="text-[10px] text-yellow-400 font-mono">{lead.category}</span>
+                                      )}
+                                    </div>
+                                    <button
+                                      onClick={() => handleToggleSaveLead(lead)}
+                                      className="p-1 text-yellow-400 hover:text-red-400 transition-colors cursor-pointer"
+                                      title="Remover dos salvos"
+                                    >
+                                      <BookmarkCheck className="w-5 h-5 fill-yellow-400" />
+                                    </button>
+                                  </div>
+
+                                  <p className="text-xs text-slate-400 flex items-center gap-1.5">
+                                    <MapPin className="w-3.5 h-3.5 text-pink-400 shrink-0" />
+                                    <span className="line-clamp-1">{lead.address}</span>
+                                  </p>
+
+                                  <p className="text-xs text-slate-400 flex items-center gap-1.5">
+                                    <Phone className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                                    <span>{lead.phone}</span>
+                                  </p>
+
+                                  <p className="text-xs flex items-center gap-1.5">
+                                    <Globe className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                                    {lead.website ? (
+                                      <a href={lead.website} target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline line-clamp-1">
+                                        {lead.website}
+                                      </a>
+                                    ) : (
+                                      <span className="text-red-400 font-semibold uppercase tracking-wider text-[10px] bg-red-950/30 border border-red-500/25 px-1.5 py-0.5 rounded">Sem Website (Oportunidade!)</span>
+                                    )}
+                                  </p>
+                                </div>
+
+                                <div className="mt-4 pt-4 border-t border-slate-850/80 flex items-center justify-between gap-2 flex-wrap">
+                                  <span className="text-[10px] text-slate-500 font-mono">Salvo na Lista</span>
+                                  <div className="flex items-center gap-1.5 flex-nowrap shrink-0 whitespace-nowrap">
+                                    <a
+                                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${lead.name} ${lead.address || lead.city || ''}`)}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="p-2 bg-slate-900 hover:bg-pink-950/40 border border-slate-800 hover:border-pink-500/40 text-pink-400 rounded-xl transition-all shadow-sm"
+                                      title="Ver no Google Maps"
+                                    >
+                                      <MapPin className="w-4 h-4" />
+                                    </a>
+                                    {lead.whatsappUrl && (
+                                      <a
+                                        href={lead.whatsappUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="p-2 bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-500/40 text-emerald-400 rounded-xl transition-all shadow-sm"
+                                        title="Conversar no WhatsApp"
+                                      >
+                                        <Phone className="w-4 h-4" />
+                                      </a>
+                                    )}
+                                    <button
+                                      onClick={() => handleCreateProjectFromLead(lead)}
+                                      className="p-2 bg-indigo-600/20 hover:bg-indigo-600 border border-indigo-500/40 text-indigo-300 hover:text-white rounded-xl transition-all shadow-sm cursor-pointer"
+                                      title="Gerar Site com IA para este Cliente"
+                                    >
+                                      <Layout className="w-4 h-4" />
+                                    </button>
+                                    {lead.website && (
+                                      <button
+                                        onClick={() => handleStartRemasterFlow(lead)}
+                                        className="p-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white rounded-xl transition-all shadow-md hover:shadow-purple-500/30 cursor-pointer"
+                                        title="Melhorar com IA: Analisar páginas e recriar com IA"
+                                      >
+                                        <Sparkles className="w-4 h-4" />
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                        </div>
+                      )}
+
+                      {/* Paginação para Leads Salvos */}
+                      {Math.ceil(filteredSavedLeads.length / savedPerPage) > 1 && (
+                        <div className="flex items-center justify-center gap-2 pt-4">
+                          <button
+                            onClick={() => setSavedCurrentPage(p => Math.max(p - 1, 1))}
+                            disabled={savedCurrentPage === 1}
+                            className="px-3.5 py-2 bg-[#0f0b18] border border-slate-800 hover:border-purple-500/40 text-xs font-semibold text-slate-300 hover:text-white rounded-xl disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                          >
+                            Anterior
+                          </button>
+
+                          <div className="flex items-center gap-1">
+                            {Array.from({ length: Math.ceil(filteredSavedLeads.length / savedPerPage) }, (_, i) => i + 1).map(page => (
+                              <button
+                                key={page}
+                                onClick={() => setSavedCurrentPage(page)}
+                                className={`w-8 h-8 rounded-xl text-xs font-bold transition-all ${savedCurrentPage === page
+                                  ? 'bg-purple-700 text-white shadow-[0_0_10px_rgba(168,85,247,0.4)]'
+                                  : 'bg-[#0f0b18] border border-slate-850 text-slate-400 hover:text-white'
+                                  }`}
+                              >
+                                {page}
+                              </button>
+                            ))}
+                          </div>
+
+                          <button
+                            onClick={() => setSavedCurrentPage(p => Math.min(p + 1, Math.ceil(filteredSavedLeads.length / savedPerPage)))}
+                            disabled={savedCurrentPage === Math.ceil(filteredSavedLeads.length / savedPerPage)}
+                            className="px-3.5 py-2 bg-[#0f0b18] border border-slate-800 hover:border-purple-500/40 text-xs font-semibold text-slate-300 hover:text-white rounded-xl disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                          >
+                            Próxima
+                          </button>
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               )}
