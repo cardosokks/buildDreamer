@@ -115,7 +115,7 @@ async function ensureBucket(client: Minio.Client, bucket: string): Promise<boole
           console.warn(`[MinIO] Servidor MinIO indisponível ao criar bucket (${err.message}). Usando armazenamento local.`);
           return false;
         }
-        console.warn(`[MinIO] Erro ao criar bucket "${bucket}":`, err.message || err);
+        console.warn(`[MinIO] Erro ao criar bucket "${bucket}": ${err.code || err.message || 'Desconhecido'}`);
         return false;
       }
     }
@@ -147,7 +147,7 @@ async function ensureBucket(client: Minio.Client, bucket: string): Promise<boole
       markMinioOffline();
       console.warn(`[MinIO] Servidor MinIO indisponível. Usando armazenamento local.`);
     } else {
-      console.warn('[MinIO] Erro ao verificar/garantir bucket:', err.message || err);
+      console.warn(`[MinIO] Erro ao verificar/garantir bucket: ${err.code || err.message || 'Desconhecido'}`);
     }
     return false;
   }
@@ -216,8 +216,8 @@ export async function getAssetStream(objectName: string): Promise<NodeJS.Readabl
         if (isNetworkError(err)) {
           markMinioOffline();
           console.warn(`[MinIO] MinIO desconectou ao ler ${objectName}. Aplicando fallback local.`);
-        } else {
-          console.warn(`[MinIO] getObject falhou para ${objectName}, tentando fallback local:`, err.message || err);
+        } else if (err.code !== 'NoSuchKey') {
+          console.warn(`[MinIO] getObject falhou para ${objectName} (${err.code || 'Desconhecido'}). Tentando fallback local.`);
         }
       }
     }

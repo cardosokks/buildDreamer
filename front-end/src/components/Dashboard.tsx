@@ -126,9 +126,10 @@ interface DashboardProps {
   initialTab?: 'general' | 'projects' | 'crm' | 'leads' | 'saved-leads' | 'presets' | 'settings' | 'users';
   onTabChange?: (tab: 'general' | 'projects' | 'crm' | 'leads' | 'saved-leads' | 'presets' | 'settings' | 'users') => void;
   onSelectProject: (projectId: string) => void;
+  onSelectProjectAI?: (projectId: string) => void;
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', onTabChange, onSelectProject }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', onTabChange, onSelectProject, onSelectProjectAI }) => {
   const { token, logout, user, isAdmin } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const notify = useNotification();
@@ -454,7 +455,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
   // User Profile Dropdown state
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [showBellDropdown, setShowBellDropdown] = useState(false);
-  const { bellNotifications, unreadBellCount, markBellRead, markAllBellRead, removeBellNotification, clearBell, addBellNotification } = useNotification();
+  const { bellNotifications, unreadBellCount, markBellRead, markAllBellRead, removeBellNotification, clearBell, addBellNotification, showErrorDetail } = useNotification();
 
   // Leads search states segmentados e filtros avançados
   const [leadQuery, setLeadQuery] = useState('');
@@ -522,6 +523,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
     }
   });
 
+  useEffect(() => {
+    const handleStorageChange = () => {
+      try {
+        const stored = localStorage.getItem('builddreamer_saved_leads');
+        setSavedLeads(stored ? JSON.parse(stored) : []);
+      } catch {}
+    };
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
+
   const filteredSavedLeads = savedLeads.filter(lead => {
     const matchesSearch = (lead.name?.toLowerCase() || '').includes(savedSearchTerm.toLowerCase()) ||
                          (lead.address?.toLowerCase() || '').includes(savedSearchTerm.toLowerCase()) ||
@@ -549,16 +561,46 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
     }
   };
 
-  const handleToggleSaveLead = (lead: Lead) => {
-    setSavedLeads(prev => {
-      const exists = prev.some(l => l.id === lead.id || l.name === lead.name);
-      let updated;
-      if (exists) {
-        updated = prev.filter(l => l.id !== lead.id && l.name !== lead.name);
-      } else {
-        updated = [...prev, lead];
-        // Also send to CRM backend
-        fetch(`${API_URL}/api/leads`, {
+  const handleToggleSaveLead = async (lead: Lead) => {
+    const isCurrentlySaved = savedLeads.some(l => l.id === lead.id || l.name === lead.name);
+
+    if (isCurrentlySaved) {
+      setSavedLeads(prev => {
+        const updated = prev.filter(l => l.id !== lead.id && l.name !== lead.name);
+        localStorage.setItem('builddreamer_saved_leads', JSON.stringify(updated));
+        syncSettingsToDatabase({ savedLeads: updated });
+        return updated;
+      });
+
+      // Remove from CRM backend
+      try {
+        const res = await fetch(`${API_URL}/api/leads`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const allLeads = await res.json();
+          const leadToDelete = allLeads.find((l: any) => l.name === lead.name);
+          if (leadToDelete) {
+            await fetch(`${API_URL}/api/leads/${leadToDelete.id}`, {
+              method: 'DELETE',
+              headers: { 'Authorization': `Bearer ${token}` }
+            });
+          }
+        }
+      } catch (err) {
+        console.warn('Erro ao remover lead do CRM:', err);
+      }
+    } else {
+      setSavedLeads(prev => {
+        const updated = [...prev, lead];
+        localStorage.setItem('builddreamer_saved_leads', JSON.stringify(updated));
+        syncSettingsToDatabase({ savedLeads: updated });
+        return updated;
+      });
+
+      // Add to CRM backend
+      try {
+        await fetch(`${API_URL}/api/leads`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -574,12 +616,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
             status: 'PROSPECT',
             origin: 'SEARCH'
           })
-        }).catch(err => console.warn('Erro ao sincronizar lead salvo com CRM:', err));
+        });
+      } catch (err) {
+        console.warn('Erro ao sincronizar lead salvo com CRM:', err);
       }
-      localStorage.setItem('builddreamer_saved_leads', JSON.stringify(updated));
-      syncSettingsToDatabase({ savedLeads: updated });
-      return updated;
-    });
+    }
   };
 
   const handleAddManualLead = (e: React.FormEvent) => {
@@ -1330,20 +1371,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
       }
 
       setProjects([newProject, ...projects]);
-      setGeneratingProjectJobs(prev => {
-        const updated = {
-          ...prev,
-          [newProject.id]: { status: 'processing', currentModel: 'Gerando Design System e Páginas...' }
-        };
-        try {
-          localStorage.setItem('rp_generating_project_jobs', JSON.stringify(updated));
-        } catch { }
-        return updated;
-      });
-
       setShowRemasterModal(false);
-      setActiveTab('projects');
       fetchProjects();
+      onSelectProject(newProject.id);
     } catch (err: any) {
       notify.error(err.message, 'Erro de Remasterização');
     } finally {
@@ -1766,8 +1796,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                           return (
                             <div
                               key={n.id}
-                              onClick={() => markBellRead(n.id)}
-                              className={`flex items-start gap-3 px-4 py-3 transition-all cursor-default group ${
+                              onClick={() => {
+                                markBellRead(n.id);
+                                showErrorDetail(n.title, n.message);
+                              }}
+                              className={`flex items-start gap-3 px-4 py-3 transition-all cursor-pointer group ${
                                 !n.read
                                   ? theme === 'light' ? 'bg-slate-50 hover:bg-slate-100' : 'bg-zinc-900/40 hover:bg-zinc-900/60'
                                   : theme === 'light' ? 'hover:bg-slate-50' : 'hover:bg-zinc-900/20'
@@ -2200,34 +2233,22 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
         <main className={`flex-1 overflow-y-auto px-4 py-5 sm:px-6 sm:py-6 ${theme === 'light' ? 'bg-slate-50' : 'bg-slate-950'}`}>
           {activeTab === 'general' ? (
             <div className="max-w-6xl mx-auto space-y-5">
-              {/* Header de Ação Rápida */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
-                  <h2 className={`text-xl font-bold tracking-tight flex items-center gap-2 ${theme === 'light' ? 'text-slate-900' : 'text-white'}`}>
-                    <Sparkles className="w-5 h-5 text-purple-400" />
-                    Visão Geral
-                  </h2>
-                  <p className={`text-xs ${theme === 'light' ? 'text-slate-500' : 'text-slate-400'}`}>
-                    Crie sites com IA, prospecte novos clientes e publique em tempo recorde.
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-2 flex-wrap">
-                  <button
-                    onClick={() => { setCreationMode('ai'); setShowCreateModal(true); }}
-                    className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <Zap className="w-3.5 h-3.5" />
-                    Criar com IA
-                  </button>
-                  <button
-                    onClick={() => setActiveTab('leads')}
-                    className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-200 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <Users className="w-3.5 h-3.5 text-pink-400" />
-                    Buscar Leads
-                  </button>
-                </div>
+              {/* Toolbar de Ação Rápida */}
+              <div className="flex items-center justify-end gap-2 flex-wrap mb-1">
+                <button
+                  onClick={() => { setCreationMode('ai'); setShowCreateModal(true); }}
+                  title="Criar com IA"
+                  className="p-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl shadow-md transition-all flex items-center justify-center cursor-pointer"
+                >
+                  <Zap className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setActiveTab('leads')}
+                  title="Buscar Leads"
+                  className="p-2 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-200 rounded-xl transition-all flex items-center justify-center cursor-pointer"
+                >
+                  <Users className="w-4 h-4 text-pink-400" />
+                </button>
               </div>
 
               {/* Status & Estatísticas em Grid Principal */}
@@ -2470,18 +2491,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
             </div>
           ) : activeTab === 'projects' ? (
             <div className="max-w-6xl mx-auto space-y-4">
-              {/* Header de Projetos */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-xl font-bold text-white tracking-tight">Meus Sites & Projetos</h2>
-                  <p className="text-xs text-slate-400">{projects.length} projeto{projects.length !== 1 ? 's' : ''} · Gerencie, edite ou crie novos sites com IA.</p>
-                </div>
+              {/* Toolbar: Novo Projeto */}
+              <div className="flex justify-end">
                 <button
                   onClick={() => setShowCreateModal(true)}
-                  className="flex items-center gap-1.5 px-4 py-2 bg-purple-700 hover:bg-purple-650 text-white text-xs font-bold rounded-xl transition-all shadow-md cursor-pointer self-start sm:self-auto"
+                  title="Novo Projeto"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-700 hover:bg-purple-600 text-white rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer"
                 >
                   <FolderPlus className="w-4 h-4" />
-                  Novo Projeto
+                  <span>Novo Projeto</span>
                 </button>
               </div>
 
@@ -2688,6 +2706,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                           </div>
 
                           <div className="flex items-center gap-1">
+                            {onSelectProjectAI && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); onSelectProjectAI(project.id); }}
+                                className="p-1.5 text-slate-500 hover:text-purple-400 rounded-lg hover:bg-purple-950/40 transition-all cursor-pointer"
+                                title="Melhorar com IA & Chat"
+                              >
+                                <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+                              </button>
+                            )}
                             <button
                               onClick={(e) => { e.stopPropagation(); setActiveTab('crm'); }}
                               className="p-1.5 text-slate-500 hover:text-emerald-400 rounded-lg hover:bg-emerald-950/40 transition-all cursor-pointer"
@@ -2809,6 +2836,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                             </>
                           ) : (
                             <>
+                              {onSelectProjectAI && (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); onSelectProjectAI(project.id); }}
+                                  className="p-1.5 text-slate-500 hover:text-purple-400 rounded-lg hover:bg-purple-950/40 transition-all cursor-pointer"
+                                  title="Melhorar com IA & Chat"
+                                >
+                                  <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+                                </button>
+                              )}
                               <button
                                 onClick={(e) => { e.stopPropagation(); setActiveTab('crm'); }}
                                 className="p-1.5 text-slate-500 hover:text-emerald-400 rounded-lg hover:bg-emerald-950/40 transition-all cursor-pointer"
@@ -2850,32 +2886,23 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
           ) : activeTab === 'leads' ? (
             /* BUSCAR CLIENTES & LEADS SALVOS (UNIFIED WINDOW) */
             <div className="max-w-6xl mx-auto space-y-3">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-lg font-bold text-white tracking-tight flex items-center gap-2">
-                    <Users className="w-5 h-5 text-indigo-400" />
-                    Buscador & Gestor de Clientes
-                  </h2>
-                </div>
-
-                <div className="flex items-center gap-2 flex-wrap">
-                  {leadsSubTab === 'saved' && (
-                    <button
-                      onClick={() => setShowManualLeadModal(true)}
-                      title="Novo Lead Manual"
-                      className="p-2.5 bg-yellow-500 hover:bg-yellow-400 text-slate-950 rounded-xl transition-all shadow-sm flex items-center justify-center cursor-pointer"
-                    >
-                      <Plus className="w-4 h-4" />
-                    </button>
-                  )}
+              <div className="flex justify-end items-center gap-2">
+                {leadsSubTab === 'saved' && (
                   <button
-                    onClick={() => setShowPresetListModal(true)}
-                    title={`Filtros Prontos (${filterPresets.length})`}
-                    className="p-2.5 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 rounded-xl transition-all flex items-center justify-center cursor-pointer"
+                    onClick={() => setShowManualLeadModal(true)}
+                    title="Novo Lead Manual"
+                    className="p-2 bg-yellow-500 hover:bg-yellow-400 text-slate-950 rounded-xl transition-all shadow-sm flex items-center justify-center cursor-pointer"
                   >
-                    <SlidersHorizontal className="w-4 h-4" />
+                    <Plus className="w-4 h-4" />
                   </button>
-                </div>
+                )}
+                <button
+                  onClick={() => setShowPresetListModal(true)}
+                  title={`Filtros Prontos (${filterPresets.length})`}
+                  className="p-2 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 rounded-xl transition-all flex items-center justify-center cursor-pointer"
+                >
+                  <SlidersHorizontal className="w-4 h-4" />
+                </button>
               </div>
 
               {/* Sub-Tabs Selector */}

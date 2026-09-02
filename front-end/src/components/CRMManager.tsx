@@ -282,6 +282,20 @@ export const CRMManager: React.FC<CRMManagerProps> = ({ onOpenRemasterModal, onO
       });
       if (res.ok) {
         notify.success('Cliente excluído com sucesso');
+        
+        const leadToDelete = leads.find(l => l.id === id);
+        if (leadToDelete) {
+           const localSaved = localStorage.getItem('builddreamer_saved_leads');
+           if (localSaved) {
+              try {
+                let parsed = JSON.parse(localSaved);
+                parsed = parsed.filter((l: any) => l.name !== leadToDelete.name);
+                localStorage.setItem('builddreamer_saved_leads', JSON.stringify(parsed));
+                window.dispatchEvent(new Event('storage'));
+              } catch(e) {}
+           }
+        }
+        
         fetchLeads();
       } else {
         const err = await safeJson(res);
@@ -438,31 +452,22 @@ export const CRMManager: React.FC<CRMManagerProps> = ({ onOpenRemasterModal, onO
   };
 
   return (
-    <div className="space-y-6">
-      {/* CRM Header & Stats */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-[#0f0b18] border border-slate-850 rounded-2xl p-6 shadow-xl">
-        <div className="flex items-center gap-4">
-          <div className="p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-2xl text-indigo-400 shadow-inner">
-            <TrendingUp className="w-6 h-6" />
-          </div>
-          <div>
-            <h2 className="text-xl font-bold text-white tracking-tight">Funil de Vendas de Sites</h2>
-            <p className="text-xs text-slate-400">Gerencie seus prospectos e converta-os em clientes ativos.</p>
-          </div>
+    <div className="space-y-4">
+      {/* CRM Action Bar & Stats */}
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-[#0f0b18] border border-slate-850 rounded-2xl p-3 shadow-xl">
+        <div className="px-3.5 py-1.5 bg-slate-900 border border-slate-800 rounded-xl flex items-center gap-2">
+          <span className="text-[10px] uppercase font-bold text-slate-500">Total Vendas:</span>
+          <span className="text-xs font-black text-emerald-400">
+            R$ {sales.reduce((acc, curr) => acc + curr.amount, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+          </span>
         </div>
 
-        <div className="flex items-center gap-2">
-          <div className="px-4 py-2 bg-slate-900 border border-slate-800 rounded-xl">
-            <div className="text-[10px] uppercase font-bold text-slate-500 mb-0.5">Total Vendas</div>
-            <div className="text-sm font-black text-emerald-400">
-              R$ {sales.reduce((acc, curr) => acc + curr.amount, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-            </div>
-          </div>
+        <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={() => setShowAddModal(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-lg transition-all cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer"
           >
-            <UserPlus className="w-4 h-4" />
+            <UserPlus className="w-3.5 h-3.5" />
             Novo Cliente
           </button>
           <button
@@ -471,23 +476,23 @@ export const CRMManager: React.FC<CRMManagerProps> = ({ onOpenRemasterModal, onO
               setSaleForm({ leadId: '', productId: '', notes: '' });
               setShowSaleModal(true);
             }}
-            className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-lg transition-all cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer"
           >
-            <ShoppingCart className="w-4 h-4" />
+            <ShoppingCart className="w-3.5 h-3.5" />
             Lançar Venda
           </button>
           <button
             onClick={() => setShowProductModal(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-lg transition-all cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer"
           >
-            <Package className="w-4 h-4" />
+            <Package className="w-3.5 h-3.5" />
             Criar Produtos
           </button>
           <button
             onClick={() => setShowHistoryModal(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs rounded-xl shadow-lg transition-all cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer"
           >
-            <History className="w-4 h-4" />
+            <History className="w-3.5 h-3.5" />
             Histórico
           </button>
         </div>

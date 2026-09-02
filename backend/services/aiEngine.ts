@@ -44,12 +44,17 @@ export async function executeAIRequest(
 
     const skillsDirective = skillsToUse.map(s => `- ${s.name}: ${s.promptSnippet}`).join('\n');
 
-    return await generateOllamaResponse(prompt, context, {
-      endpointUrl: options.ollamaEndpoint,
-      model: options.model || 'qwen2.5-coder:1.5b',
-      lowSpecMode: options.lowSpecMode !== false,
-      skillsDirective
-    });
+    try {
+      return await generateOllamaResponse(prompt, context, {
+        endpointUrl: options.ollamaEndpoint,
+        model: options.model || 'qwen2.5-coder:1.5b',
+        lowSpecMode: options.lowSpecMode !== false,
+        skillsDirective
+      });
+    } catch (ollamaErr: any) {
+      console.error(`[AIEngine] Falha na execução com Ollama:`, ollamaErr);
+      throw ollamaErr;
+    }
   }
 
   // Rota 2: Google Gemini (com fallback entre modelos)

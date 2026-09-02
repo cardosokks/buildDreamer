@@ -24,17 +24,45 @@ if (defaultProxyUrl) {
 }
 
 /**
+ * Extrai HTML puro de qualquer texto, inclusive blocos markdown e conversacionais
+ */
+export function extractHtmlFromRawText(text: string): string {
+  let cleaned = text.trim();
+
+  // 1. Tentar extrair do bloco de código markdown ```html ... ``` ou ```xml ... ``` ou ``` ... ```
+  const codeBlockRegex = /```(?:html|xml|javascript|json)?\s*([\s\S]*?)\s*```/i;
+  const match = cleaned.match(codeBlockRegex);
+  if (match && match[1] && match[1].trim()) {
+    cleaned = match[1].trim();
+  }
+
+  // 2. Se ainda contiver texto conversacional antes de uma tag HTML (ex: "Aqui está: <div..."), extrair a partir da primeira tag HTML
+  const firstTag = cleaned.indexOf('<');
+  const lastTag = cleaned.lastIndexOf('>');
+  if (firstTag !== -1 && lastTag !== -1 && lastTag > firstTag) {
+    const candidate = cleaned.slice(firstTag, lastTag + 1).trim();
+    // Validar se o candidato começa com tag HTML ou possui tags válidas
+    if (candidate.startsWith('<') && candidate.endsWith('>')) {
+      cleaned = candidate;
+    }
+  }
+
+  return cleaned;
+}
+
+/**
  * Limpa o HTML removendo tags <style> e <script> embutidas para garantir separação estrita
  */
 export function cleanHtmlExtractAssets(rawHtml: string, existingCss = '', existingJs = '') {
-  let cleanHtml = rawHtml;
+  const extractedHtml = extractHtmlFromRawText(rawHtml);
+  let cleanHtml = extractedHtml;
   let extractedCss = existingCss;
   let extractedJs = existingJs;
 
   // Extrair e remover tags <style> do HTML
   const styleRegex = /<style\b[^>]*>([\s\S]*?)<\/style>/gi;
   let styleMatch;
-  while ((styleMatch = styleRegex.exec(rawHtml)) !== null) {
+  while ((styleMatch = styleRegex.exec(extractedHtml)) !== null) {
     if (styleMatch[1] && styleMatch[1].trim()) {
       extractedCss = `${extractedCss}\n${styleMatch[1].trim()}`.trim();
     }
@@ -44,7 +72,7 @@ export function cleanHtmlExtractAssets(rawHtml: string, existingCss = '', existi
   // Extrair e remover tags <script> do HTML (exceto CDNs externos como Tailwind)
   const scriptRegex = /<script\b(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi;
   let scriptMatch;
-  while ((scriptMatch = scriptRegex.exec(rawHtml)) !== null) {
+  while ((scriptMatch = scriptRegex.exec(extractedHtml)) !== null) {
     if (scriptMatch[1] && scriptMatch[1].trim()) {
       extractedJs = `${extractedJs}\n${scriptMatch[1].trim()}`.trim();
     }
@@ -73,60 +101,147 @@ export function cleanHtmlExtractAssets(rawHtml: string, existingCss = '', existi
 }
 
 /**
- * Tenta fazer o parse de JSON de forma ultra resiliente mesmo se houver caracteres de controle
+ * Utilitário auxiliar para extrair um valor de string escapado de um JSON quebrado
  */
-function resilientJsonParse(rawString: string): any {
+function extractJsonField(text: string, keyName: string): string | null {
+  // Encontrar o padrão "keyName" : " ou 'keyName' : ' ou simplesmente keyName: "
+  const keyRegex = new RegExp(`"${keyName}"\\s*:\\s*(["'])`, 'i');
+  const match = text.match(keyRegex);
+  if (!match) {
+    const keyRegexNoQuotes = new RegExp(`\\b${keyName}\\b\\s*:\\s*(["'])`, 'i');
+    const matchNoQuotes = text.match(keyRegexNoQuotes);
+    if (!matchNoQuotes) return null;
+    return parseEscapedStringValue(text, matchNoQuotes.index! + matchNoQuotes[0].length, matchNoQuotes[1]);
+  }
+  return parseEscapedStringValue(text, match.index! + match[0].length, match[1]);
+}
+
+function parseEscapedStringValue(text: string, startIndex: number, quoteChar: string): string {
+  let result = '';
+  let i = startIndex;
+  while (i < text.length) {
+    const char = text[i];
+    if (char === '\\') {
+      const nextChar = text[i + 1];
+      if (nextChar === '"' || nextChar === "'" || nextChar === '\\' || nextChar === '/' || nextChar === 'b' || nextChar === 'f' || nextChar === 'n' || nextChar === 'r' || nextChar === 't') {
+        if (nextChar === 'n') result += '\n';
+        else if (nextChar === 't') result += '\t';
+        else if (nextChar === 'r') result += '\r';
+        else result += nextChar;
+        i += 2;
+      } else {
+        result += char;
+        i++;
+      }
+    } else if (char === quoteChar) {
+      break;
+    } else {
+      result += char;
+      i++;
+    }
+  }
+  return result;
+}
+
+/**
+ * Tenta fazer o parse de JSON de forma ultra resiliente mesmo se houver caracteres de controle ou formatação variada
+ */
+export function resilientJsonParse(rawString: string): any {
   let text = rawString.trim();
 
-  if (text.startsWith('```')) {
+  // Remove blocos de código markdown se existirem
+  const codeBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  if (codeBlockMatch) {
+    text = codeBlockMatch[1].trim();
+  } else if (text.startsWith('```')) {
     text = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
   }
 
+  const formatResult = (obj: any) => {
+    // Se não tiver 'html' mas tiver outro campo óbvio, mapear automaticamente
+    let htmlContent = obj.html || obj.navbar || obj.footer || '';
+    if (!htmlContent) {
+      const keys = Object.keys(obj);
+      const likelyKey = keys.find(k => {
+        const kl = k.toLowerCase();
+        return kl.includes('html') || kl.includes('code') || kl.includes('codigo') || kl.includes('markup') || kl.includes('body') || kl.includes('section') || kl.includes('secao') || kl.includes('content') || kl === 'response';
+      });
+      if (likelyKey) {
+        htmlContent = obj[likelyKey];
+      }
+    }
+
+    const cssContent = obj.css || obj.styles || obj.style || '';
+    const jsContent = obj.js || obj.script || obj.scripts || '';
+    const explanationContent = obj.explanation || obj.explicacao || obj.desc || obj.description || 'Código atualizado pela IA.';
+
+    const cleaned = cleanHtmlExtractAssets(htmlContent, cssContent, jsContent);
+    return {
+      explanation: explanationContent,
+      html: cleaned.html || htmlContent || '',
+      css: cleaned.css || cssContent || '',
+      js: cleaned.js || jsContent || '',
+      navbar: obj.navbar || undefined,
+      footer: obj.footer || undefined
+    };
+  };
+
+  // 1. Parse JSON Direto
   try {
     const directParsed = JSON.parse(text);
-    const cleaned = cleanHtmlExtractAssets(directParsed.html || '', directParsed.css || '', directParsed.js || '');
-    return {
-      ...directParsed,
-      html: cleaned.html,
-      css: cleaned.css,
-      js: cleaned.js
-    };
+    return formatResult(directParsed);
   } catch {}
 
+  // 2. Extrair objeto JSON delimitado por chaves
   const firstBrace = text.indexOf('{');
   const lastBrace = text.lastIndexOf('}');
   if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
     const trimmed = text.slice(firstBrace, lastBrace + 1);
     try {
       const parsed = JSON.parse(trimmed);
-      const cleaned = cleanHtmlExtractAssets(parsed.html || '', parsed.css || '', parsed.js || '');
+      return formatResult(parsed);
+    } catch {
+      try {
+        // Tratar escapes de quebras de linha e tabs comuns
+        const sanitized = trimmed.replace(/(?<!\\)"([^"\\]*(?:\\.[^"\\]*)*)"/g, (match) => {
+          return match.replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/\t/g, '\\t');
+        });
+        const parsed = JSON.parse(sanitized);
+        return formatResult(parsed);
+      } catch {}
+    }
+  }
+
+  // 3. Extrator de propriedades nativo ultra robusto (Trata aspas escapadas e quebra de chaves)
+  const extHtml = extractJsonField(text, 'html') || extractJsonField(text, 'code') || extractJsonField(text, 'codigo') || extractJsonField(text, 'markup') || extractJsonField(text, 'content');
+  const extCss = extractJsonField(text, 'css') || extractJsonField(text, 'styles') || extractJsonField(text, 'style');
+  const extJs = extractJsonField(text, 'js') || extractJsonField(text, 'script') || extractJsonField(text, 'scripts');
+  const extExpl = extractJsonField(text, 'explanation') || extractJsonField(text, 'explicacao') || extractJsonField(text, 'desc') || extractJsonField(text, 'description');
+
+  if (extHtml !== null) {
+    const cleaned = cleanHtmlExtractAssets(extHtml, extCss || '', extJs || '');
+    return {
+      explanation: extExpl || 'Conteúdo gerado via scanner resiliente.',
+      html: cleaned.html || extHtml,
+      css: cleaned.css || extCss || '',
+      js: cleaned.js || extJs || '',
+      navbar: undefined,
+      footer: undefined
+    };
+  }
+
+  // 4. Se não contiver nenhuma estrutura JSON, mas contiver tags HTML diretas, trata como HTML puro
+  if (text.includes('<') && text.includes('>')) {
+    const extractedHtml = extractHtmlFromRawText(text);
+    if (extractedHtml && extractedHtml.trim().length > 10) {
+      const cleaned = cleanHtmlExtractAssets(extractedHtml);
       return {
-        ...parsed,
+        explanation: 'Código HTML atualizado diretamente.',
         html: cleaned.html,
         css: cleaned.css,
         js: cleaned.js
       };
-    } catch {}
-  }
-
-  // Regex fallback
-  const htmlMatch = text.match(/"html"\s*:\s*"([\s\S]*?)"\s*,\s*"(?:css|js|explanation)"/);
-  const cssMatch = text.match(/"css"\s*:\s*"([\s\S]*?)"\s*,\s*"(?:js|html|explanation)"/);
-  const jsMatch = text.match(/"js"\s*:\s*"([\s\S]*?)"\s*,\s*"(?:css|html|explanation)"/);
-  const explMatch = text.match(/"explanation"\s*:\s*"([\s\S]*?)"/);
-
-  if (htmlMatch) {
-    const rawH = htmlMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"');
-    const rawC = cssMatch ? cssMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"') : '';
-    const rawJ = jsMatch ? jsMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"') : '';
-    const cleaned = cleanHtmlExtractAssets(rawH, rawC, rawJ);
-
-    return {
-      explanation: explMatch ? explMatch[1] : 'Página gerada pela IA.',
-      html: cleaned.html,
-      css: cleaned.css,
-      js: cleaned.js
-    };
+    }
   }
 
   throw new Error('Falha ao processar resposta JSON da IA.');
@@ -217,43 +332,70 @@ export const generateAIResponse = async (
 
   let candidateModels: string[] = [];
   
-  // Sanitização de modelos (impede modelos inexistentes como gemini-2.5)
-  const sanitizeModelName = (name: string) => {
+  // Sanitização de modelos (impede modelos descontinuados/especializados e garante uso dos modelos ativos Gemini 3.x)
+  const sanitizeModelName = (name: string): string | null => {
+    if (!name || typeof name !== 'string') return null;
     let clean = name.trim();
     if (clean.startsWith('models/')) clean = clean.replace('models/', '');
-    // Mapeia modelos experimentais ou nomes errados para versões estáveis
-    if (clean.includes('gemini-2.5-flash')) return 'gemini-1.5-flash';
-    if (clean.includes('gemini-2.5-pro')) return 'gemini-1.5-pro';
-    if (clean === 'gemini-2.0-flash') return 'gemini-2.0-flash-exp';
-    if (clean === 'gemini-pro') return 'gemini-1.0-pro';
+    
+    // Filtra modelos especializados que não servem para geração de código
+    const invalidKeywords = ['-tts', '-image', 'gemma', 'imagen', 'embedding', '-customtools', 'bison', 'gecko', 'aqa', 'audio', 'vision-preview', 'veo', 'lyria'];
+    if (invalidKeywords.some(kw => clean.toLowerCase().includes(kw))) {
+      return null;
+    }
+
+    // Mapeamentos para modelos ativos (substitui modelos descontinuados ou instáveis que retornam 404/503)
+    if (
+      clean.includes('gemini-1.5') || 
+      clean.includes('gemini-1.0') || 
+      clean.includes('gemini-2.0') ||
+      clean === 'gemini-2.5-flash' ||
+      clean === 'gemini-2.5-pro' ||
+      clean === 'gemini-pro' ||
+      clean === 'gemini-flash-latest' ||
+      clean === 'gemini-pro-latest'
+    ) {
+      return 'gemini-3.6-flash';
+    }
+
     return clean;
   };
 
+  const DEFAULT_MODELS = [
+    'gemini-3.6-flash',
+    'gemini-3.5-flash',
+    'gemini-3.7-flash',
+    'gemini-3.1-pro-preview',
+    'gemini-2.5-flash-lite'
+  ];
+
   if (registeredModels && Array.isArray(registeredModels) && registeredModels.length > 0) {
-    candidateModels = registeredModels.map(sanitizeModelName);
+    const sanitizedList = registeredModels
+      .map(sanitizeModelName)
+      .filter((m): m is string => m !== null && m.length > 3);
+
+    candidateModels = [...sanitizedList];
+    
     if (customModel) {
       const sanitizedCustom = sanitizeModelName(customModel);
-      if (!candidateModels.includes(sanitizedCustom)) {
+      if (sanitizedCustom && !candidateModels.includes(sanitizedCustom)) {
         candidateModels.unshift(sanitizedCustom);
       }
     }
     
-    // Prioriza modelos flash para evitar erros de cota
-    if (!candidateModels.includes('gemini-1.5-flash')) candidateModels.unshift('gemini-1.5-flash');
-    if (!candidateModels.includes('gemini-1.5-flash-latest')) candidateModels.unshift('gemini-1.5-flash-latest');
-    
-    // Garante que sempre haja modelos estáveis de fallback
-    if (!candidateModels.includes('gemini-1.5-flash-8b')) candidateModels.push('gemini-1.5-flash-8b');
-    if (!candidateModels.includes('gemini-1.5-flash')) candidateModels.push('gemini-1.5-flash');
-    if (!candidateModels.includes('gemini-1.5-flash-8b')) candidateModels.push('gemini-1.5-flash-8b');
-    if (!candidateModels.includes('gemini-1.5-pro-latest')) candidateModels.push('gemini-1.5-pro-latest');
-    if (!candidateModels.includes('gemini-1.5-pro')) candidateModels.push('gemini-1.5-pro');
-    if (!candidateModels.includes('gemini-2.0-flash-exp')) candidateModels.push('gemini-2.0-flash-exp');
-    if (!candidateModels.includes('gemini-1.0-pro')) candidateModels.push('gemini-1.0-pro');
+    // Garante que haja modelos estáveis de fallback
+    for (const m of DEFAULT_MODELS) {
+      if (!candidateModels.includes(m)) candidateModels.push(m);
+    }
   } else if (customModel) {
-    candidateModels = [sanitizeModelName(customModel), 'gemini-1.5-flash-latest', 'gemini-1.5-flash', 'gemini-1.5-flash-8b', 'gemini-1.5-pro-latest', 'gemini-1.5-pro', 'gemini-2.0-flash-exp', 'gemini-1.0-pro'];
+    const sanitizedCustom = sanitizeModelName(customModel);
+    if (sanitizedCustom) {
+      candidateModels = [sanitizedCustom, ...DEFAULT_MODELS.filter(m => m !== sanitizedCustom)];
+    } else {
+      candidateModels = [...DEFAULT_MODELS];
+    }
   } else {
-    candidateModels = ['gemini-1.5-flash-latest', 'gemini-1.5-flash', 'gemini-1.5-flash-8b', 'gemini-1.5-pro-latest', 'gemini-1.5-pro', 'gemini-2.0-flash-exp', 'gemini-1.0-pro'];
+    candidateModels = [...DEFAULT_MODELS];
   }
 
   // Remove duplicatas mantendo a ordem e filtra modelos inválidos/vazios
@@ -355,8 +497,8 @@ export const generateAIResponse = async (
 
   let lastError: any = null;
 
-  // Timeout por requisição para evitar que a IA fique pendurada se o upstream demorar
-  const REQUEST_TIMEOUT_MS = 30000;
+  // Timeout por requisição para evitar que a IA fique pendurada se o upstream demorar (60 segundos)
+  const REQUEST_TIMEOUT_MS = 60000;
 
   for (let i = 0; i < candidateModels.length; i++) {
     const modelToTry = candidateModels[i];
@@ -364,103 +506,120 @@ export const generateAIResponse = async (
       onModelAttempt(modelToTry, i + 1, candidateModels.length);
     }
 
-    // Tenta v1beta primeiro, depois v1 para cada modelo se der 404
     const versionsToTry = ['v1beta', 'v1'];
+    let modelSuccess = false;
     
     for (const apiVersion of versionsToTry) {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+      if (modelSuccess) break;
 
-      try {
-        const generationConfig: any = {
-          responseMimeType: 'application/json',
-          temperature: 0.35,
-          topP: 0.95,
-          maxOutputTokens: 8192
-        };
+      const maxRetriesPerVersion = 2;
+      for (let attempt = 0; attempt <= maxRetriesPerVersion; attempt++) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
-        const userParts: any[] = [
-          {
-            text: `${systemPrompt}\n\nContexto do site:\nHTML: ${context.html}\nCSS: ${context.css}\nJS: ${context.js}\n\nPedido do Usuário: ${prompt}`
-          },
-          ...inlineImageParts
-        ];
+        try {
+          const generationConfig: any = {
+            responseMimeType: 'application/json',
+            temperature: 0.35,
+            topP: 0.95,
+            maxOutputTokens: 8192
+          };
 
-        const payload: any = {
-          contents: [
+          const userParts: any[] = [
             {
-              role: 'user',
-              parts: userParts
+              text: `${systemPrompt}\n\nContexto do site:\nHTML: ${context.html}\nCSS: ${context.css}\nJS: ${context.js}\n\nPedido do Usuário: ${prompt}`
+            },
+            ...inlineImageParts
+          ];
+
+          const payload: any = {
+            contents: [
+              {
+                role: 'user',
+                parts: userParts
+              }
+            ],
+            generationConfig
+          };
+
+          const fetchOptions: any = {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload),
+            signal: controller.signal
+          };
+
+          if (proxyUrl) {
+            fetchOptions.dispatcher = new ProxyAgent(proxyUrl);
+          }
+
+          const urlObj = new URL(`https://generativelanguage.googleapis.com/${apiVersion}/models/${modelToTry}:generateContent`);
+          
+          // Suporte híbrido para Chave de API tradicional (AIzaSy) e Bearer Token de Container (AQ.Ab...)
+          const isToken = activeKey.startsWith('AQ.') || !activeKey.startsWith('AIzaSy');
+          if (isToken) {
+            fetchOptions.headers['Authorization'] = `Bearer ${activeKey}`;
+          } else {
+            urlObj.searchParams.set('key', activeKey);
+          }
+          
+          const apiUrl = urlObj.toString();
+
+          const response = await undiciFetch(apiUrl, fetchOptions);
+          clearTimeout(timeoutId);
+
+          if (!response.ok) {
+            const errText = await response.text();
+            let googleErrorMessage = '';
+            try {
+              const parsedError = JSON.parse(errText);
+              googleErrorMessage = parsedError?.error?.message || '';
+            } catch {}
+
+            // Se for 404, não adianta tentar novamente esta versão do modelo
+            if (response.status === 404) {
+              console.warn(`[Gemini API] Modelo ${modelToTry} não encontrado em ${apiVersion}. Tentando alternativa...`);
+              break; // Sai do loop de retries desta versão e tenta a próxima versão
             }
-          ],
-          generationConfig
-        };
 
-        const fetchOptions: any = {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(payload),
-          signal: controller.signal
-        };
+            // Se for erro temporário de alta demanda (503), quota (429) ou erro de servidor (500/502/504)
+            const isTransient = [429, 500, 502, 503, 504].includes(response.status);
+            if (isTransient && attempt < maxRetriesPerVersion) {
+              const backoffMs = (attempt + 1) * 2000;
+              console.warn(`[Gemini API] Modelo ${modelToTry} (${apiVersion}) retornou HTTP ${response.status} (${googleErrorMessage || 'Alta demanda / Temporário'}). Aguardando ${backoffMs}ms antes de tentar novamente (tentativa ${attempt + 1}/${maxRetriesPerVersion})...`);
+              await sleep(backoffMs);
+              continue; // Tenta novamente na próxima iteração do loop attempt
+            }
 
-        if (proxyUrl) {
-          fetchOptions.dispatcher = new ProxyAgent(proxyUrl);
-        }
-
-        const urlObj = new URL(`https://generativelanguage.googleapis.com/${apiVersion}/models/${modelToTry}:generateContent`);
-        urlObj.searchParams.set('key', activeKey);
-        const apiUrl = urlObj.toString();
-
-        const response = await undiciFetch(apiUrl, fetchOptions);
-        clearTimeout(timeoutId);
-
-        if (!response.ok) {
-          const errText = await response.text();
-          let googleErrorMessage = '';
-          try {
-            const parsedError = JSON.parse(errText);
-            googleErrorMessage = parsedError?.error?.message || '';
-          } catch {}
-
-          // Se for 404, tenta a próxima versão do mesmo modelo
-          if (response.status === 404) {
-            console.warn(`[Gemini API] Modelo ${modelToTry} não encontrado em ${apiVersion}. Tentando alternativa...`);
-            continue; 
+            // Se esgotaram os retries ou é um erro permanente
+            lastError = new Error(`Erro na API (${response.status}) ao chamar ${modelToTry} (${apiVersion}): ${googleErrorMessage || errText}`);
+            console.warn(`[Gemini API] Modelo ${modelToTry} (${apiVersion}) falhou com HTTP ${response.status}. Passando para o próximo modelo candidato...`);
+            break; // Sai do loop de retries desta versão
           }
 
-          // Se for 429 (Quota Exceeded), registra e aguarda um pouco antes de tentar o PRÓXIMO modelo da lista candidateModels
-          if (response.status === 429) {
-            console.error(`[Gemini API Quota] Limite atingido para ${modelToTry}. Erro: ${googleErrorMessage}`);
-            lastError = new Error(`Quota excedida (429) para ${modelToTry}: ${googleErrorMessage}`);
-            // Aumenta o tempo de espera para 5 segundos para dar fôlego real ao free tier
-            await sleep(5000); 
-            break; // Sai do loop de versões para este modelo e vai para o próximo modelo candidato
+          const resJson: any = await response.json();
+          const rawText = resJson?.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+
+          const parsed = resilientJsonParse(rawText);
+          parsed._usedModel = modelToTry;
+          console.log(`[AI Engine] Sucesso com o modelo: ${modelToTry} (${apiVersion})`);
+          modelSuccess = true;
+          return parsed;
+
+        } catch (error: any) {
+          clearTimeout(timeoutId);
+          if (error.name === 'AbortError') {
+            console.warn(`[AI Engine] Timeout na tentativa com ${modelToTry} (${apiVersion})`);
+          } else {
+            console.warn(`[AI Engine] Exceção em ${modelToTry} (${apiVersion}):`, error.message);
           }
+          lastError = error;
 
-          throw new Error(`Erro na API (${response.status}) ao chamar ${modelToTry} (${apiVersion}): ${googleErrorMessage || errText}`);
-        }
-
-        const resJson: any = await response.json();
-        const rawText = resJson?.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
-
-        const parsed = resilientJsonParse(rawText);
-        parsed._usedModel = modelToTry;
-        console.log(`[AI Engine] Sucesso com o modelo: ${modelToTry} (${apiVersion})`);
-        return parsed;
-
-      } catch (error: any) {
-        clearTimeout(timeoutId);
-        if (error.name === 'AbortError') {
-          console.warn(`[AI Engine] Timeout na tentativa com ${modelToTry} (${apiVersion})`);
-        } else {
-          console.warn(`[AI Engine] Falha em ${modelToTry} (${apiVersion}):`, error.message);
-        }
-        lastError = error;
-        // Se não for erro de 404/versão, ou se for a última versão disponível para este modelo, continua para o próximo modelo candidato
-        if (apiVersion === versionsToTry[versionsToTry.length - 1]) {
-           break;
+          if (attempt < maxRetriesPerVersion) {
+            await sleep(1500);
+          }
         }
       }
     }
@@ -482,13 +641,21 @@ export const listGeminiModels = async (customApiKey?: string, customProxyUrl?: s
   }
 
   const urlObj = new URL(`https://generativelanguage.googleapis.com/v1beta/models`);
-  urlObj.searchParams.set('key', activeKey);
-  const apiUrl = urlObj.toString();
-
+  
   const fetchOptions: any = {
     method: 'GET',
     headers: { 'Content-Type': 'application/json' }
   };
+
+  // Suporte híbrido para Chave de API tradicional (AIzaSy) e Bearer Token de Container (AQ.Ab...)
+  const isToken = activeKey.startsWith('AQ.') || !activeKey.startsWith('AIzaSy');
+  if (isToken) {
+    fetchOptions.headers['Authorization'] = `Bearer ${activeKey}`;
+  } else {
+    urlObj.searchParams.set('key', activeKey);
+  }
+
+  const apiUrl = urlObj.toString();
 
   if (proxyUrl) {
     fetchOptions.dispatcher = new ProxyAgent(proxyUrl);

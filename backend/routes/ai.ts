@@ -231,33 +231,42 @@ router.get('/ollama/models', async (req, res) => {
   });
 });
 
-// GET /api/ai/gemini/models - Listar modelos diretamente da API do Google
-router.get('/gemini/models', async (req, res) => {
+// GET /api/ai/gemini/models & /api/ai/models - Listar modelos diretamente da API do Google
+router.get(['/gemini/models', '/models'], async (req, res) => {
   try {
     const customApiKey = decodeHeader(req.headers['x-gemini-key']) || undefined;
     const customProxyUrl = decodeHeader(req.headers['x-ai-proxy-url']) || undefined;
     
     const models = await listGeminiModels(customApiKey, customProxyUrl);
     
-    // Simplifica a resposta para o frontend
-    const simplifiedModels = models.map((m: any) => ({
-      id: m.name.replace('models/', ''),
-      name: m.displayName || m.name.replace('models/', ''),
-      description: m.description,
-      version: m.version,
-      supportedGenerationMethods: m.supportedGenerationMethods
-    }));
+    const invalidKeywords = ['-tts', '-image', 'gemma', 'imagen', 'embedding', '-customtools', 'bison', 'gecko', 'aqa', 'audio', 'vision-preview'];
+
+    // Simplifica a resposta para o frontend e filtra apenas modelos de texto/código válidos
+    const simplifiedModels = models
+      .filter((m: any) => {
+        if (!m.name) return false;
+        const name = m.name.toLowerCase();
+        if (invalidKeywords.some(kw => name.includes(kw))) return false;
+        return !m.supportedGenerationMethods || m.supportedGenerationMethods.includes('generateContent');
+      })
+      .map((m: any) => ({
+        id: m.name.replace('models/', ''),
+        name: m.displayName || m.name.replace('models/', ''),
+        description: m.description,
+        version: m.version,
+        supportedGenerationMethods: m.supportedGenerationMethods
+      }));
 
     return res.json({ success: true, models: simplifiedModels });
   } catch (error: any) {
-    return res.status(500).json({ success: false, message: error.message });
+    return res.status(500).json({ success: false, error: error.message, message: error.message });
   }
 });
 
 // POST /api/ai/modify-stream - Inicia job assíncrono de modificação por IA
 router.post('/modify-stream', async (req: AuthenticatedRequest, res: any) => {
   try {
-    const { prompt, pageId, applyToAll, targetPageIds, attachedFiles, lowSpecMode } = req.body;
+    const { prompt, pageId, applyToAll, targetPageIds, attachedFiles, lowSpecMode, targetSectionIndex, targetSectionLabel, targetSectionHtml } = req.body;
 
     if (!prompt || !pageId) {
       return res.status(400).json({ error: 'Prompt e pageId são obrigatórios' });
@@ -325,7 +334,10 @@ router.post('/modify-stream', async (req: AuthenticatedRequest, res: any) => {
         registeredModels,
         proxyUrl: customProxyUrl,
         ollamaEndpoint,
-        customSkills
+        customSkills,
+        targetSectionIndex: targetSectionIndex !== undefined ? Number(targetSectionIndex) : undefined,
+        targetSectionLabel: targetSectionLabel || undefined,
+        targetSectionHtml: targetSectionHtml || undefined
       }
     );
 
@@ -529,37 +541,27 @@ router.post('/remaster/generate', async (req: AuthenticatedRequest, res: any) =>
     const ollamaEndpoint = decodeHeader(req.headers['x-ollama-endpoint']);
     const lowSpecMode = req.headers['x-ollama-low-spec'] ? req.headers['x-ollama-low-spec'] === 'true' : undefined;
 
-    // 4. Disparar geração em Background
-    projectJobsQueue[project.id] = { status: 'pending' };
-    processCustomRemasterGenerationJob(
+    // 4. Disparar geração em Background via Fila do Chat (AIQueueManager)
+    const job = aiQueueManager.enqueue(
       project.id,
-      projectName,
+      'site_remaster',
       globalPrompt || 'Design moderno e profissional.',
-      pages,
-      sharedComponents || { repeatNavbar: true, repeatFooter: true },
-      customApiKey,
-      registeredModels,
-      customProxyUrl,
-      (status, attempt, total) => {
-        projectJobsQueue[project.id] = {
-          status: 'processing',
-          currentModel: status,
-          attempt,
-          total
-        };
-      },
-      customSkills,
-      userId,
-      aiProvider,
-      ollamaEndpoint,
-      customModel,
-      lowSpecMode
-    ).then(() => {
-      projectJobsQueue[project.id] = { status: 'completed' };
-    }).catch((err) => {
-      console.error(`[Remaster Job ${project.id}] Erro:`, err);
-      projectJobsQueue[project.id] = { status: 'failed', error: err.message };
-    });
+      undefined,
+      {
+        businessName: projectName,
+        pagesList: pages,
+        sharedComponents: sharedComponents || { repeatNavbar: true, repeatFooter: true },
+        customApiKey,
+        registeredModels,
+        customProxyUrl,
+        customSkills,
+        userId,
+        aiProvider,
+        ollamaEndpoint,
+        customModel,
+        lowSpecMode
+      }
+    );
 
     return res.status(201).json(project);
   } catch (error: any) {

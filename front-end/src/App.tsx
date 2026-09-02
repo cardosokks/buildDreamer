@@ -3,9 +3,10 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { AuthPage } from './components/AuthPage';
 import { Dashboard } from './components/Dashboard';
 import { VisualBuilder } from './components/VisualBuilder';
+import { AIImprover } from './components/AIImprover';
 
 export interface AppRoute {
-  type: 'dashboard' | 'builder' | 'auth';
+  type: 'dashboard' | 'builder' | 'ai-improver' | 'auth';
   tab?: 'general' | 'projects' | 'crm' | 'leads' | 'saved-leads' | 'presets' | 'settings' | 'users';
   projectId?: string;
 }
@@ -17,6 +18,11 @@ const parseUrlToRoute = (): AppRoute => {
   if (path.startsWith('/builder/')) {
     const projectId = path.replace('/builder/', '').split('/')[0];
     if (projectId) return { type: 'builder', projectId };
+  }
+  
+  if (path.startsWith('/ai-improver/')) {
+    const projectId = path.replace('/ai-improver/', '').split('/')[0];
+    if (projectId) return { type: 'ai-improver', projectId };
   }
   
   if (path === '/projects') return { type: 'dashboard', tab: 'projects' };
@@ -53,6 +59,8 @@ const MainApp: React.FC = () => {
     let url = '/';
     if (newRoute.type === 'builder' && newRoute.projectId) {
       url = `/builder/${newRoute.projectId}`;
+    } else if (newRoute.type === 'ai-improver' && newRoute.projectId) {
+      url = `/ai-improver/${newRoute.projectId}`;
     } else if (newRoute.type === 'dashboard') {
       if (newRoute.tab === 'projects') url = '/projects';
       else if (newRoute.tab === 'crm') url = '/crm';
@@ -74,8 +82,17 @@ const MainApp: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-950 flex justify-center items-center text-slate-400 font-mono text-xs">
-        Carregando sessão...
+      <div 
+        className="min-h-screen bg-slate-950 flex flex-col justify-center items-center text-slate-300 font-sans p-6 select-none animate-fade-in"
+        role="status"
+        aria-live="polite"
+      >
+        <div className="relative flex items-center justify-center mb-5">
+          <div className="w-12 h-12 rounded-full border-2 border-purple-500/20 border-t-purple-500 animate-spin" />
+          <div className="absolute w-6 h-6 rounded-full bg-purple-500/20 blur-md" />
+        </div>
+        <div className="text-base font-bold tracking-tight text-white mb-1">BuildDreamer</div>
+        <div className="text-xs text-slate-400 font-medium">Verificando autenticação e sessão de usuário...</div>
       </div>
     );
   }
@@ -96,6 +113,19 @@ const MainApp: React.FC = () => {
         <VisualBuilder 
           projectId={route.projectId} 
           onBack={() => navigate({ type: 'dashboard', tab: 'projects' })} 
+          onOpenAIImprover={() => navigate({ type: 'ai-improver', projectId: route.projectId })}
+        />
+      </div>
+    );
+  }
+
+  if (route.type === 'ai-improver' && route.projectId) {
+    return (
+      <div className="h-screen w-screen overflow-hidden">
+        <AIImprover 
+          projectId={route.projectId} 
+          onBack={() => navigate({ type: 'dashboard', tab: 'projects' })} 
+          onOpenEditor={() => navigate({ type: 'builder', projectId: route.projectId })}
         />
       </div>
     );
@@ -106,6 +136,7 @@ const MainApp: React.FC = () => {
       initialTab={route.tab || 'general'}
       onTabChange={(tab) => navigate({ type: 'dashboard', tab })}
       onSelectProject={(id) => navigate({ type: 'builder', projectId: id })} 
+      onSelectProjectAI={(id) => navigate({ type: 'ai-improver', projectId: id })} 
     />
   );
 };

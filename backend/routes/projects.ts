@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { prisma } from '../db';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { executeAIRequest } from '../services/aiEngine';
+import { aiQueueManager } from '../services/aiQueueManager';
 
 const router = Router();
 
@@ -107,7 +108,18 @@ async function processAIProjectGeneration(
 // Check job task status endpoint
 router.get('/jobs/:projectId/status', async (req: AuthenticatedRequest, res: any) => {
   const projectId = req.params.projectId as string;
-  const job = projectJobsQueue[projectId] || { status: 'completed' }; // fallback default to completed if no active job queue exists
+  const activeAiQueueJob = aiQueueManager.getActiveJob(projectId);
+  if (activeAiQueueJob) {
+    return res.json({
+      status: activeAiQueueJob.status,
+      currentModel: activeAiQueueJob.currentModel,
+      attempt: 1,
+      total: 1,
+      type: activeAiQueueJob.type,
+      error: activeAiQueueJob.error
+    });
+  }
+  const job = projectJobsQueue[projectId] || { status: 'completed' };
   return res.json(job);
 });
 
@@ -222,12 +234,15 @@ router.post('/', async (req: AuthenticatedRequest, res: any) => {
     // Se um leadId foi fornecido, vincula o projeto diretamente ao lead no CRM com segurança via Prisma Client
     if (leadId) {
       try {
-        await prisma.lead.update({
-          where: { id: leadId, userId },
-          data: { projectId: project.id }
-        });
+        const existingLead = await prisma.lead.findUnique({ where: { id: leadId } });
+        if (existingLead && existingLead.userId === userId) {
+          await prisma.lead.update({
+            where: { id: leadId },
+            data: { projectId: project.id }
+          });
+        }
       } catch (leadLinkErr) {
-        console.warn('Erro ao vincular lead ao projeto recém-criado:', leadLinkErr);
+        // Silently ignore if lead not found or other minor issues
       }
     }
 

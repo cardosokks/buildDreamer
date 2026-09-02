@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
-import { API_URL } from '../config';
+import { API_URL, safeJson } from '../config';
 import { Users, UserPlus, Shield, Key, Trash2, Edit2, Check, X, Lock, Mail, User as UserIcon, Calendar, AlertTriangle } from 'lucide-react';
 
 interface SystemUser {
@@ -51,10 +51,11 @@ export const UserManagementPanel: React.FC = () => {
   const fetchUsers = async () => {
     try {
       setLoading(true);
+      const activeToken = token || localStorage.getItem('auth_token') || '';
       const res = await fetch(`${API_URL}/api/users`, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${activeToken}` }
       });
-      const data = await res.json();
+      const data = await safeJson(res);
       if (res.ok && data.users) {
         setUsers(data.users);
       } else {
@@ -79,11 +80,12 @@ export const UserManagementPanel: React.FC = () => {
     }
 
     try {
+      const activeToken = token || localStorage.getItem('auth_token') || '';
       const res = await fetch(`${API_URL}/api/users`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
+          Authorization: `Bearer ${activeToken}`
         },
         body: JSON.stringify({
           email: newEmail,
@@ -93,7 +95,7 @@ export const UserManagementPanel: React.FC = () => {
         })
       });
 
-      const data = await res.json();
+      const data = await safeJson(res);
       if (res.ok) {
         success('Usuário criado com sucesso!');
         setShowCreateModal(false);
@@ -123,16 +125,17 @@ export const UserManagementPanel: React.FC = () => {
         payload.password = editPassword;
       }
 
+      const activeToken = token || localStorage.getItem('auth_token') || '';
       const res = await fetch(`${API_URL}/api/users/${editingUser.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
+          Authorization: `Bearer ${activeToken}`
         },
         body: JSON.stringify(payload)
       });
 
-      const data = await res.json();
+      const data = await safeJson(res);
       if (res.ok) {
         success('Usuário atualizado com sucesso!');
         setEditingUser(null);
@@ -153,16 +156,17 @@ export const UserManagementPanel: React.FC = () => {
     }
 
     try {
+      const activeToken = token || localStorage.getItem('auth_token') || '';
       const res = await fetch(`${API_URL}/api/users/${userId}/reset-password`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
+          Authorization: `Bearer ${activeToken}`
         },
         body: JSON.stringify({ newPassword: resetPasswordVal })
       });
 
-      const data = await res.json();
+      const data = await safeJson(res);
       if (res.ok) {
         success(data.message || 'Senha redefinida com sucesso!');
         setResettingPasswordId(null);
@@ -181,11 +185,12 @@ export const UserManagementPanel: React.FC = () => {
     }
 
     try {
+      const activeToken = token || localStorage.getItem('auth_token') || '';
       const res = await fetch(`${API_URL}/api/users/${userId}`, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${activeToken}` }
       });
-      const data = await res.json();
+      const data = await safeJson(res);
       if (res.ok) {
         success('Usuário excluído com sucesso!');
         fetchUsers();
@@ -214,23 +219,12 @@ export const UserManagementPanel: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-[var(--bg-card)] border border-[var(--border-subtle)] p-6 rounded-2xl shadow-sm">
-        <div>
-          <div className="flex items-center gap-2.5 mb-1">
-            <div className="p-2 rounded-xl bg-purple-600/10 text-purple-500">
-              <Users className="w-5 h-5" />
-            </div>
-            <h2 className="text-xl font-bold tracking-tight text-[var(--text-primary)]">Gerenciamento de Usuários e Permissões</h2>
-          </div>
-          <p className="text-sm text-[var(--text-secondary)]">
-            Crie contas para novos membros da equipe e atribua níveis de acesso (Admin, Editor, Suporte, Visualizador ou Usuário).
-          </p>
-        </div>
+    <div className="space-y-4">
+      {/* Action Toolbar */}
+      <div className="flex items-center justify-end">
         <button
           onClick={() => setShowCreateModal(true)}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-medium text-sm transition-all shadow-lg shadow-purple-600/20 cursor-pointer shrink-0"
+          className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-medium text-xs transition-all shadow-md cursor-pointer shrink-0"
         >
           <UserPlus className="w-4 h-4" />
           <span>Novo Usuário</span>

@@ -154,6 +154,7 @@ export const SettingsPage: React.FC = () => {
   const [models, setModels] = useState<Array<{ id: string; name: string }>>(getStoredModels());
   const [newModelId, setNewModelId] = useState('');
   const [newModelName, setNewModelName] = useState('');
+  const [fetchingApiModels, setFetchingApiModels] = useState(false);
 
   // Skills CRUD State
   const getStoredSkills = (): AISkill[] => {
@@ -484,6 +485,59 @@ export const SettingsPage: React.FC = () => {
     setSuccessMsg('Modelo removido com sucesso!');
   };
 
+  const handleFetchApiModels = async () => {
+    setFetchingApiModels(true);
+    setErrorMsg(null);
+    setSuccessMsg(null);
+
+    const activeKey = geminiKey || localStorage.getItem('gemini_api_key') || '';
+
+    const safeHeader = (val: string) => {
+      try { return btoa(unescape(encodeURIComponent(val))); } catch { return ''; }
+    };
+
+    try {
+      const res = await fetch(`${API_URL}/api/ai/gemini/models`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'x-gemini-key': safeHeader(activeKey),
+          'x-ai-proxy-url': safeHeader(proxyUrl || localStorage.getItem('ai_proxy_url') || '')
+        }
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || err.message || 'Falha ao buscar modelos na API do Gemini');
+      }
+
+      const data = await res.json();
+      const apiModels: Array<{ id: string; name: string }> = data.models || [];
+
+      if (apiModels.length === 0) {
+        setErrorMsg('Nenhum modelo de geração de conteúdo encontrado na API do Gemini para esta chave.');
+        return;
+      }
+
+      const existingIds = new Set(models.map(m => m.id));
+      const newDiscovered = apiModels.filter(m => !existingIds.has(m.id));
+
+      if (newDiscovered.length === 0) {
+        setSuccessMsg(`Todos os ${apiModels.length} modelos retornados pela API do Gemini já estão cadastrados!`);
+      } else {
+        const updated = [...models, ...newDiscovered];
+        setModels(updated);
+        localStorage.setItem('custom_gemini_models', JSON.stringify(updated));
+        await saveToDatabase({ customAiModels: updated });
+        setSuccessMsg(`Sucesso! ${newDiscovered.length} novo(s) modelo(s) do Gemini foram cadastrados e salvos no banco.`);
+      }
+    } catch (e: any) {
+      console.error(e);
+      setErrorMsg(`Erro ao sincronizar com a API do Gemini: ${e.message}`);
+    } finally {
+      setFetchingApiModels(false);
+    }
+  };
+
   const handleToggleSkill = async (id: string) => {
     const updated = skills.map(s => s.id === id ? { ...s, enabled: !s.enabled } : s);
     setSkills(updated);
@@ -540,38 +594,16 @@ export const SettingsPage: React.FC = () => {
   };
 
   return (
-    <div className="flex-1 overflow-y-auto bg-[#090813] text-slate-100 p-6 md:p-10 font-sans">
-      <div className="max-w-5xl mx-auto space-y-8">
+    <div className="flex-1 overflow-y-auto bg-[#090813] text-slate-100 p-4 md:p-6 font-sans">
+      <div className="max-w-5xl mx-auto space-y-4">
         
-        {/* Header com Paleta da Logo BuildDreamer */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-purple-500/20 pb-6">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-purple-600 via-indigo-600 to-cyan-400 p-[1px] shadow-lg shadow-purple-600/30 flex items-center justify-center">
-              <div className="w-full h-full bg-[#121124] rounded-2xl flex items-center justify-center">
-                <Sparkles className="w-6 h-6 text-purple-400 animate-pulse" />
-              </div>
-            </div>
-            <div>
-              <h1 className="text-2xl md:text-3xl font-extrabold text-white font-heading tracking-tight flex items-center gap-2">
-                Configurações do Sistema
-                {savingRemote && (
-                  <span className="text-xs px-2.5 py-0.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20 font-normal flex items-center gap-1">
-                    <Loader2 className="w-3 h-3 animate-spin" /> Sincronizando...
-                  </span>
-                )}
-              </h1>
-              <p className="text-sm text-slate-400">
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-slate-400 bg-slate-900/60 px-3 py-1.5 rounded-xl border border-purple-500/20 flex items-center gap-1.5">
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-              BuildDreamer v2.0
+        {savingRemote && (
+          <div className="flex justify-end">
+            <span className="text-xs px-2.5 py-0.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20 font-normal flex items-center gap-1">
+              <Loader2 className="w-3 h-3 animate-spin" /> Sincronizando alterações...
             </span>
           </div>
-        </div>
+        )}
 
         {/* Notificações globais */}
         {successMsg && (
@@ -789,6 +821,19 @@ export const SettingsPage: React.FC = () => {
                   <p className="text-[11px] text-slate-500">
                     Utilizada quando o provedor Google Gemini está selecionado.
                   </p>
+                  
+                  {/* Botão para Sincronizar Modelos com a API do Gemini */}
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      onClick={handleFetchApiModels}
+                      disabled={fetchingApiModels}
+                      className="w-full py-2 bg-gradient-to-r from-purple-600 via-indigo-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer shadow-md shadow-purple-600/20 flex items-center justify-center gap-2"
+                    >
+                      <Sparkles className={`w-3.5 h-3.5 ${fetchingApiModels ? 'animate-spin' : ''}`} />
+                      {fetchingApiModels ? 'Sincronizando Modelos com API...' : 'Sincronizar Todos os Modelos com API'}
+                    </button>
+                  </div>
                 </div>
 
                 <div className="space-y-2">
@@ -1150,6 +1195,28 @@ export const SettingsPage: React.FC = () => {
                 <p className="text-xs text-slate-400 mt-1">
                   Gerencie a lista de modelos candidatos. Se um modelo estiver sobrecarregado ou atingir quota, o sistema tenta o próximo automaticamente.
                 </p>
+              </div>
+
+              {/* Botão de Sincronização Direta com a API do Gemini */}
+              <div className="p-4 rounded-xl border border-purple-500/30 bg-purple-950/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg">
+                <div>
+                  <h4 className="text-xs font-bold text-white flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-purple-400 shrink-0" />
+                    Sincronizar Automático com a API do Gemini
+                  </h4>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Busca todos os modelos ativos de IA disponíveis para sua chave API e cadastra automaticamente na lista abaixo.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleFetchApiModels}
+                  disabled={fetchingApiModels}
+                  className="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer shadow-md shadow-purple-600/20 flex items-center justify-center gap-2"
+                >
+                  <Sparkles className={`w-3.5 h-3.5 ${fetchingApiModels ? 'animate-spin' : ''}`} />
+                  {fetchingApiModels ? 'Sincronizando...' : 'Sincronizar Modelos'}
+                </button>
               </div>
 
               <div className="space-y-3">

@@ -164,9 +164,24 @@ async function registerDownloadedMedia(
 }
 
 /**
+ * Auxiliar para verificar se um link é base64, interno ou já baixado localmente
+ */
+function isLocalOrBase64(url: string): boolean {
+  if (!url) return true;
+  const lower = url.toLowerCase();
+  if (lower.startsWith('data:')) return true;
+  if (lower.startsWith('/api/media/files/')) return true;
+  if (lower.startsWith('/data/uploads/')) return true;
+  if (lower.includes('/api/media/files/')) return true;
+  if (lower.includes('/data/uploads/')) return true;
+  if (lower.startsWith('assets/') || lower.startsWith('./assets/') || lower.startsWith('../assets/')) return true;
+  return false;
+}
+
+/**
  * Detecta e substitui mídias em um HTML de forma robusta e as salva no banco/armazenamento
  */
-async function processPageAssets(
+export async function processPageAssets(
   html: string, 
   baseUrl: string, 
   assetCache: Map<string, string>,
@@ -177,27 +192,65 @@ async function processPageAssets(
 ): Promise<string> {
   let rewrittenHtml = html;
   
-  // Regex aprimorada para capturar src, href, poster, data-src, data-bg, etc.
+  // Coletar mídias candidatas usando duas estratégias:
+  // 1. Regex de extensão clássica (para caminhos relativos ou absolutos)
   const assetRegex = /(src|href|poster|data-src|data-bg)=["']([^"'#?]+(\.(png|jpe?g|gif|svg|webp|mp4|webm|css|js|woff2?))(\?[^"']*)?)["']/gi;
-  
   const matches = [...html.matchAll(assetRegex)];
   
-  for (const match of matches) {
-    const attribute = match[1];
-    const originalUrl = match[2];
-    
+  // 2. Regex de mídias absolutas externas (para URLs externas dinâmicas sem extensão de arquivo visível)
+  const absoluteMediaRegex = /(src|data-src|data-bg|poster)=["'](https?:\/\/[^"'#?]+(\?[^"']*)?)["']/gi;
+  const absMatches = [...html.matchAll(absoluteMediaRegex)];
+  
+  // Combinar ambas em um conjunto único de URLs originais para evitar duplicados
+  const candidateUrls = new Set<string>();
+  for (const m of matches) {
+    candidateUrls.add(m[2]);
+  }
+  for (const m of absMatches) {
+    candidateUrls.add(m[2]);
+  }
+
+  for (const originalUrl of candidateUrls) {
+    if (isLocalOrBase64(originalUrl)) {
+      continue;
+    }
+
     try {
-      const fullUrl = new URL(originalUrl, baseUrl).href;
+      // Resolve a URL (se for absoluta, a classe URL a usará diretamente sem problemas)
+      const fullUrl = new URL(originalUrl, baseUrl || undefined).href;
       
       if (assetCache.has(fullUrl)) {
-        rewrittenHtml = rewrittenHtml.replace(originalUrl, assetCache.get(fullUrl)!);
+        rewrittenHtml = rewrittenHtml.split(originalUrl).join(assetCache.get(fullUrl)!);
         continue;
       }
 
       console.log(`[Remaster] Baixando e salvando asset: ${fullUrl}`);
       const { buffer, contentType } = await downloadAsset(fullUrl);
       
-      const fileName = `${crypto.randomBytes(4).toString('hex')}_${fullUrl.split('/').pop()?.split('?')[0] || 'asset'}`;
+      // Deduz a extensão correta baseada no content-type ou na URL original
+      let ext = fullUrl.split('/').pop()?.split('?')[0]?.split('.').pop()?.toLowerCase() || '';
+      const knownExtensions = ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'mp4', 'webm', 'css', 'js', 'woff2', 'woff', 'ttf', 'otf', 'ico'];
+      if (!knownExtensions.includes(ext)) {
+        const mimeToExt: Record<string, string> = {
+          'image/png': 'png',
+          'image/jpeg': 'jpg',
+          'image/jpg': 'jpg',
+          'image/gif': 'gif',
+          'image/svg+xml': 'svg',
+          'image/webp': 'webp',
+          'video/mp4': 'mp4',
+          'video/webm': 'webm',
+          'text/css': 'css',
+          'application/javascript': 'js',
+          'text/javascript': 'js'
+        };
+        const mimeClean = contentType.split(';')[0].toLowerCase().trim();
+        ext = mimeToExt[mimeClean] || 'png'; // default para png se for imagem externa sem extensão clara
+      }
+
+      const rawFileName = fullUrl.split('/').pop()?.split('?')[0]?.replace(/\.[a-zA-Z0-9]+$/, '') || 'asset';
+      const fileName = `${crypto.randomBytes(4).toString('hex')}_${rawFileName}.${ext}`;
+
       const uploadRes = await uploadAssetToStorage(buffer, fileName, contentType, projectId);
       
       // Registrar no banco de dados com segurança
@@ -224,16 +277,39 @@ async function processPageAssets(
   
   for (const match of bgMatches) {
     const originalUrl = match[1];
-    if (originalUrl.startsWith('data:')) continue; // Ignora base64
+    if (isLocalOrBase64(originalUrl)) {
+      continue;
+    }
     
     try {
-      const fullUrl = new URL(originalUrl, baseUrl).href;
+      const fullUrl = new URL(originalUrl, baseUrl || undefined).href;
       if (assetCache.has(fullUrl)) {
         rewrittenHtml = rewrittenHtml.split(originalUrl).join(assetCache.get(fullUrl)!);
         continue;
       }
+      
+      console.log(`[Remaster] Baixando e salvando bg-image: ${fullUrl}`);
       const { buffer, contentType } = await downloadAsset(fullUrl);
-      const fileName = `bg_${crypto.randomBytes(4).toString('hex')}_${fullUrl.split('/').pop()?.split('?')[0] || 'bg'}`;
+      
+      // Deduz a extensão correta baseada no content-type ou na URL original
+      let ext = fullUrl.split('/').pop()?.split('?')[0]?.split('.').pop()?.toLowerCase() || '';
+      const knownExtensions = ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'mp4', 'webm', 'css', 'js', 'woff2', 'woff', 'ttf', 'otf', 'ico'];
+      if (!knownExtensions.includes(ext)) {
+        const mimeToExt: Record<string, string> = {
+          'image/png': 'png',
+          'image/jpeg': 'jpg',
+          'image/jpg': 'jpg',
+          'image/gif': 'gif',
+          'image/svg+xml': 'svg',
+          'image/webp': 'webp'
+        };
+        const mimeClean = contentType.split(';')[0].toLowerCase().trim();
+        ext = mimeToExt[mimeClean] || 'png';
+      }
+
+      const rawFileName = fullUrl.split('/').pop()?.split('?')[0]?.replace(/\.[a-zA-Z0-9]+$/, '') || 'bg';
+      const fileName = `bg_${crypto.randomBytes(4).toString('hex')}_${rawFileName}.${ext}`;
+
       const uploadRes = await uploadAssetToStorage(buffer, fileName, contentType, projectId);
       
       // Registrar no banco de dados com segurança
@@ -249,7 +325,9 @@ async function processPageAssets(
 
       assetCache.set(fullUrl, uploadRes.url);
       rewrittenHtml = rewrittenHtml.split(originalUrl).join(uploadRes.url);
-    } catch (err) {}
+    } catch (err) {
+      console.warn(`[Remaster] Erro ao processar bg-image ${originalUrl}:`, (err as Error).message);
+    }
   }
   return rewrittenHtml;
 }
@@ -758,7 +836,7 @@ export async function processCustomRemasterGenerationJob(
     const activePages = pagesList.filter(p => p.enabled !== false);
     const totalPages = activePages.length;
     const providerLabel = aiProvider === 'ollama' ? 'Ollama' : (aiProvider || 'Gemini');
-    const modelLabel = customModel || (aiProvider === 'ollama' ? 'qwen2.5-coder:1.5b' : 'gemini-2.5-flash');
+    const modelLabel = customModel || (aiProvider === 'ollama' ? 'qwen2.5-coder:1.5b' : 'gemini-3.6-flash');
 
     // 1. PROCESSAR ATIVOS E PREPARAR CONTEÚDO DE TODAS AS PÁGINAS
     if (onProgress) onProgress(`Baixando mídias e extraindo código completo HTML/CSS/JS (${totalPages} páginas)...`, 0, totalPages * 2);

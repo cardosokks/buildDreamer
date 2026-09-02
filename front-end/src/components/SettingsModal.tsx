@@ -96,13 +96,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
         if (Array.isArray(parsed) && parsed.length > 0) {
           let changed = false;
           parsed = parsed.map((m: any) => {
-            if (m.id === 'gemini-2.5-flash') {
+            if (m.id === 'gemini-1.5-flash' || m.id === 'gemini-2.0-flash' || m.id === 'gemini-1.0-pro') {
               changed = true;
-              return { ...m, id: 'gemini-2.0-flash', name: m.name.replace('2.5', '2.0') };
+              return { ...m, id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash' };
             }
-            if (m.id === 'gemini-2.5-pro') {
+            if (m.id === 'gemini-1.5-pro') {
               changed = true;
-              return { ...m, id: 'gemini-1.5-pro', name: m.name.replace('2.5', '1.5') };
+              return { ...m, id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro' };
             }
             return m;
           });
@@ -112,9 +112,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
       } catch {}
     }
     return [
-      { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash (Recomendado)' },
-      { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash' },
-      { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro' }
+      { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash (Recomendado)' },
+      { id: 'gemini-3.7-flash', name: 'Gemini 3.7 Flash' },
+      { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro (Alta Precisão)' }
     ];
   };
 
@@ -305,23 +305,24 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
     };
 
     try {
-      const res = await fetch(`${API_URL}/api/ai/models`, {
+      const res = await fetch(`${API_URL}/api/ai/gemini/models`, {
         headers: {
           'Authorization': `Bearer ${token}`,
-          'x-gemini-key': safeHeader(activeKey)
+          'x-gemini-key': safeHeader(activeKey),
+          'x-ai-proxy-url': safeHeader(proxyUrl || localStorage.getItem('ai_proxy_url') || '')
         }
       });
 
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || 'Falha ao buscar modelos na API do Gemini');
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || err.message || 'Falha ao buscar modelos na API do Gemini');
       }
 
       const data = await res.json();
       const apiModels: Array<{ id: string; name: string }> = data.models || [];
 
       if (apiModels.length === 0) {
-        setErrorMsg('Nenhum modelo de geração de conteúdo encontrado para este token.');
+        setErrorMsg('Nenhum modelo de geração de conteúdo encontrado na API do Gemini para esta chave.');
         return;
       }
 
@@ -330,13 +331,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
       const newDiscovered = apiModels.filter(m => !existingIds.has(m.id));
 
       if (newDiscovered.length === 0) {
-        setSuccessMsg(`Todos os ${apiModels.length} modelos retornados pela API já estão cadastrados!`);
+        setSuccessMsg(`Todos os ${apiModels.length} modelos retornados pela API do Gemini já estão cadastrados!`);
       } else {
         const updated = [...models, ...newDiscovered];
         setModels(updated);
         localStorage.setItem('custom_gemini_models', JSON.stringify(updated));
         await saveToDatabase({ customAiModels: updated });
-        setSuccessMsg(`Sucesso! ${newDiscovered.length} novos modelos foram encontrados na sua chave e salvos no banco.`);
+        setSuccessMsg(`Sucesso! ${newDiscovered.length} novo(s) modelo(s) do Gemini foram cadastrados e salvos no banco.`);
       }
     } catch (e: any) {
       console.error(e);
@@ -534,6 +535,28 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                   onChange={(e) => setGeminiKey(e.target.value)}
                   className={`w-full px-4 py-2.5 border rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500 text-xs ${theme === 'light' ? 'bg-white border-slate-200 text-slate-900' : 'bg-slate-950 border-slate-800 text-white'}`}
                 />
+              </div>
+
+              {/* Botão de Sincronizar e Cadastrar Modelos do Gemini */}
+              <div className={`p-3.5 border rounded-xl flex items-center justify-between gap-3 ${theme === 'light' ? 'bg-purple-50/80 border-purple-200/80' : 'bg-purple-950/30 border-purple-500/30'}`}>
+                <div className="min-w-0 flex-1">
+                  <h4 className={`text-xs font-bold flex items-center gap-1.5 ${theme === 'light' ? 'text-purple-900' : 'text-white'}`}>
+                    <Sparkles className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                    Sincronizar Modelos Gemini
+                  </h4>
+                  <p className={`text-[10px] mt-0.5 leading-relaxed ${theme === 'light' ? 'text-purple-800/80' : 'text-slate-300'}`}>
+                    Consulta a API do Gemini com sua chave e cadastra automaticamente todos os modelos disponíveis na conta.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleFetchApiModels}
+                  disabled={fetchingApiModels}
+                  className="px-3.5 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer shadow-md shadow-purple-600/20 flex items-center gap-1.5"
+                >
+                  <Sparkles className={`w-3.5 h-3.5 ${fetchingApiModels ? 'animate-spin' : ''}`} />
+                  {fetchingApiModels ? 'Sincronizando...' : 'Sincronizar Modelos'}
+                </button>
               </div>
 
               <div>

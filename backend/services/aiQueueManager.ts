@@ -1,15 +1,18 @@
 import { prisma } from '../db';
 import { executeAIRequest } from './aiEngine';
+import { executeSiteRemaster } from './siteRemasterWorker';
+import { processPageAssets } from './siteRemaster';
 
 export interface AIQueueItem {
   id: string;
   projectId: string;
-  type: 'chat_edit' | 'page_remaster';
+  type: 'chat_edit' | 'page_remaster' | 'site_remaster';
   status: 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled';
   prompt: string;
   pageId?: string;
   currentModel?: string;
   error?: string;
+  retryCount?: number;
   result?: {
     explanation: string;
     html?: string;
@@ -23,6 +26,135 @@ export interface AIQueueItem {
   createdAt: Date;
   updatedAt: Date;
   options?: any;
+}
+
+export function parsePageSections(html: string): { wrapperOpen: string; sections: string[]; wrapperClose: string } {
+  let innerHtml = html.trim();
+  let wrapperOpen = '';
+  let wrapperClose = '';
+
+  // Detect and extract outer wrapper
+  const wrapperRegex = /^(<div\s+[^>]*id=["'](?:page-wrapper|canvas-root)["'][^>]*>)([\s\S]*)(<\/div>)$/i;
+  const match = innerHtml.match(wrapperRegex);
+  if (match) {
+    wrapperOpen = match[1];
+    innerHtml = match[2].trim();
+    wrapperClose = match[3];
+  } else {
+    // If not matching completely with start/end, try a simpler regex search for wrapper start
+    const wrapperStartRegex = /^(<div\s+[^>]*id=["'](?:page-wrapper|canvas-root)["'][^>]*>)/i;
+    const startMatch = innerHtml.match(wrapperStartRegex);
+    if (startMatch) {
+      wrapperOpen = startMatch[1];
+      innerHtml = innerHtml.slice(wrapperOpen.length).trim();
+      if (innerHtml.endsWith('</div>')) {
+        wrapperClose = '</div>';
+        innerHtml = innerHtml.slice(0, -6).trim();
+      }
+    }
+  }
+
+  // Split innerHtml into top-level tags
+  const sections: string[] = [];
+  let index = 0;
+  
+  // A simple and bulletproof scanner for top-level tags
+  while (index < innerHtml.length) {
+    // Find next non-whitespace char
+    const char = innerHtml[index];
+    if (/\s/.test(char)) {
+      index++;
+      continue;
+    }
+
+    if (char === '<') {
+      // Find the tag name
+      const tagStart = index;
+      const nextSpaceOrClose = innerHtml.indexOf(' ', tagStart);
+      const nextClose = innerHtml.indexOf('>', tagStart);
+      
+      let tagEndIndex = nextClose;
+      if (nextSpaceOrClose !== -1 && nextSpaceOrClose < nextClose) {
+        tagEndIndex = nextSpaceOrClose;
+      }
+      
+      if (tagEndIndex === -1) {
+        // Corrupted HTML, just grab remainder
+        sections.push(innerHtml.slice(tagStart));
+        break;
+      }
+
+      const tagName = innerHtml.slice(tagStart + 1, tagEndIndex).trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+      
+      // If it's a comment or doctype, skip or grab it
+      if (tagName.startsWith('!') || tagName.startsWith('?')) {
+        const commentEnd = innerHtml.indexOf('-->', tagStart);
+        if (commentEnd !== -1) {
+          index = commentEnd + 3;
+        } else {
+          index = innerHtml.length;
+        }
+        continue;
+      }
+
+      // We need to find the matching closing tag for this tagName at the top level
+      // By keeping track of nested same-name tags
+      let depth = 1;
+      let scanIndex = nextClose + 1;
+      const openTagPattern = new RegExp(`<${tagName}\\b`, 'i');
+      const closeTagPattern = new RegExp(`</${tagName}>`, 'i');
+
+      while (scanIndex < innerHtml.length && depth > 0) {
+        // Check if there is an open or close tag next
+        const remaining = innerHtml.slice(scanIndex);
+        const nextOpen = remaining.search(openTagPattern);
+        const nextCloseTag = remaining.search(closeTagPattern);
+
+        if (nextCloseTag === -1) {
+          // No closing tag found, grab until the end
+          scanIndex = innerHtml.length;
+          break;
+        }
+
+        if (nextOpen !== -1 && nextOpen < nextCloseTag) {
+          depth++;
+          scanIndex += nextOpen + tagName.length + 1;
+        } else {
+          depth--;
+          scanIndex += nextCloseTag + tagName.length + 3;
+        }
+      }
+
+      const sectionContent = innerHtml.slice(tagStart, scanIndex);
+      if (sectionContent.trim()) {
+        sections.push(sectionContent);
+      }
+      index = scanIndex;
+    } else {
+      // Plain text or text node at top level (e.g. text between sections)
+      const nextTag = innerHtml.indexOf('<', index);
+      if (nextTag !== -1) {
+        const textNode = innerHtml.slice(index, nextTag).trim();
+        if (textNode) {
+          sections.push(`<div>${textNode}</div>`); // Wrap it safely
+        }
+        index = nextTag;
+      } else {
+        const textNode = innerHtml.slice(index).trim();
+        if (textNode) {
+          sections.push(`<div>${textNode}</div>`);
+        }
+        break;
+      }
+    }
+  }
+
+  // Fallback if no sections were parsed
+  if (sections.length === 0 && innerHtml) {
+    sections.push(innerHtml);
+  }
+
+  return { wrapperOpen, sections, wrapperClose };
 }
 
 class ProjectQueue {
@@ -79,8 +211,16 @@ class ProjectQueue {
       }
     } catch (err: any) {
       console.error(`[AIQueueManager] Erro no item ${nextItem.id} para o projeto ${this.projectId}:`, err);
-      // Se foi cancelado, mantém o status de cancelado
-      if ((nextItem.status as string) !== 'cancelled') {
+      
+      const isTransient = /503|429|500|502|504|high demand|temporary|econnreset|etimedout/i.test(err.message || '');
+      const currentRetry = nextItem.retryCount || 0;
+
+      // Se for erro temporário de API ou rede e ainda tiver retentativas
+      if ((nextItem.status as string) !== 'cancelled' && isTransient && currentRetry < 2) {
+        nextItem.retryCount = currentRetry + 1;
+        nextItem.status = 'pending';
+        console.warn(`[AIQueueManager] Re-agendando item ${nextItem.id} (tentativa ${nextItem.retryCount}/2) após erro temporário da API.`);
+      } else if ((nextItem.status as string) !== 'cancelled') {
         nextItem.status = 'failed';
         nextItem.error = err.message || 'Erro imprevisto ao processar a requisição de IA.';
       }
@@ -97,6 +237,8 @@ class ProjectQueue {
       await this.executeChatEdit(item);
     } else if (item.type === 'page_remaster') {
       await this.executePageRemaster(item);
+    } else if (item.type === 'site_remaster') {
+      await executeSiteRemaster(item);
     } else {
       throw new Error(`Tipo de tarefa desconhecido: ${item.type}`);
     }
@@ -143,10 +285,33 @@ class ProjectQueue {
         if (item.status === 'cancelled') return;
 
         const currentPage = pagesToProcess[i];
+        item.currentModel = `[${i + 1}/${pagesToProcess.length}] Processando imagens da página: "${currentPage.name}"`;
+
+        let pageHtml = currentPage.html || '<div></div>';
+        try {
+          const rewrittenHtml = await processPageAssets(
+            pageHtml,
+            '',
+            new Map<string, string>(),
+            page.project?.ownerId || undefined,
+            page.projectId
+          );
+          if (rewrittenHtml !== pageHtml) {
+            pageHtml = rewrittenHtml;
+            await prisma.page.update({
+              where: { id: currentPage.id },
+              data: { html: rewrittenHtml }
+            });
+            currentPage.html = rewrittenHtml;
+          }
+        } catch (assetErr) {
+          console.warn(`[executeChatEdit] Erro ao reescrever assets da página ${currentPage.name}:`, assetErr);
+        }
+
         item.currentModel = `[${i + 1}/${pagesToProcess.length}] Atualizando página: "${currentPage.name}"`;
 
         const context = {
-          html: currentPage.html || '<div></div>',
+          html: pageHtml,
           css: currentPage.css || '',
           js: currentPage.js || ''
         };
@@ -196,35 +361,150 @@ class ProjectQueue {
         updatedPages
       };
     } else {
-      const context = {
-        html: page.html || '<div></div>',
-        css: page.css || '',
-        js: page.js || ''
-      };
-
-      const result = await executeAIRequest(prompt, context, {
-        ...options,
-        onProgress: (info) => {
-          item.currentModel = info.model;
+      let pageHtml = page.html || '<div></div>';
+      item.currentModel = `Processando imagens da página: "${page.name}"...`;
+      try {
+        const rewrittenHtml = await processPageAssets(
+          pageHtml,
+          '',
+          new Map<string, string>(),
+          page.project?.ownerId || undefined,
+          page.projectId
+        );
+        if (rewrittenHtml !== pageHtml) {
+          pageHtml = rewrittenHtml;
+          await prisma.page.update({
+            where: { id: page.id },
+            data: { html: rewrittenHtml }
+          });
+          page.html = rewrittenHtml;
         }
-      });
+      } catch (assetErr) {
+        console.warn(`[executeChatEdit] Erro ao reescrever assets da página ${page.name}:`, assetErr);
+      }
 
-      if (item.status === 'cancelled') return;
+      const targetSectionIndex = options.targetSectionIndex;
+      const targetSectionLabel = options.targetSectionLabel || (targetSectionIndex !== undefined ? `Seção #${targetSectionIndex + 1}` : undefined);
+      const targetSectionHtml = options.targetSectionHtml;
+
+      let result;
+      let finalHtml = pageHtml;
+      let finalCss = page.css || '';
+      let finalJs = page.js || '';
+
+      if (targetSectionIndex !== undefined && targetSectionHtml) {
+        // MODO EDIÇÃO DE SEÇÃO ESPECÍFICA
+        console.log(`[AIQueueManager] Iniciando edição direcionada para a seção index ${targetSectionIndex}: ${targetSectionLabel}`);
+        
+        const sectionPrompt = `
+Você é o Arquiteto Frontend Master.
+Sua missão é atualizar EXCLUSIVAMENTE a seção "${targetSectionLabel}" dentro da página "${page.name}".
+
+ATENÇÃO EXTREMA:
+1. Retorne um JSON no qual o campo "html" contenha APENAS o código HTML atualizado para esta seção selecionada. Não retorne a página inteira nem o container wrapper externo.
+2. Comece o HTML retornado pela mesma tag raiz (por exemplo, <section ...>, <header ...>, ou <div ...>) correspondente à seção atual se possível, aplicando as modificações solicitadas pelo usuário.
+3. Se o usuário pedir para adicionar novos estilos ou comportamentos, você pode incluí-los como classes Tailwind adicionais no HTML, ou retornar regras customizadas no campo "css" e "js" (estes serão anexados globalmente).
+4. Mantenha os textos originais, logomarcas, mídias e imagens originais da seção, a menos que o pedido diga explicitamente para trocá-los.
+
+PEDIDO DE ALTERAÇÃO DO USUÁRIO PARA ESTA SEÇÃO:
+"""
+${prompt}
+"""
+
+CÓDIGO HTML ATUAL DESTA SEÇÃO:
+"""
+${targetSectionHtml}
+"""
+
+CONTEXTO GERAL DO DESIGN SYSTEM E DEMAIS PARTES DA PÁGINA (Use apenas para referência de cores, estilos, fontes e design global):
+- HTML Completo:
+"""
+${pageHtml}
+"""
+- CSS Atual:
+"""
+${page.css || ''}
+"""
+        `;
+
+        const context = {
+          html: targetSectionHtml,
+          css: page.css || '',
+          js: page.js || ''
+        };
+
+        result = await executeAIRequest(sectionPrompt, context, {
+          ...options,
+          onProgress: (info) => {
+            item.currentModel = `${info.model || 'Processando'} (Seção: ${targetSectionLabel})`;
+          }
+        });
+
+        if (item.status === 'cancelled') return;
+
+        // Fazer a mesclagem cirúrgica do HTML da seção modificada de volta na página original
+        const { wrapperOpen, sections, wrapperClose } = parsePageSections(pageHtml);
+        if (targetSectionIndex >= 0 && targetSectionIndex < sections.length) {
+          sections[targetSectionIndex] = result.html;
+          finalHtml = `${wrapperOpen}${sections.join('\n\n')}${wrapperClose}`;
+          console.log(`[AIQueueManager] Seção index ${targetSectionIndex} substituída com sucesso!`);
+        } else {
+          // Fallback se o index estiver fora do intervalo (ex: página mudou no meio)
+          // Tenta substituir por correspondência exata do HTML original
+          const matchedIndex = sections.findIndex(s => s.trim() === targetSectionHtml.trim());
+          if (matchedIndex !== -1) {
+            sections[matchedIndex] = result.html;
+            finalHtml = `${wrapperOpen}${sections.join('\n\n')}${wrapperClose}`;
+          } else {
+            console.warn(`[AIQueueManager] Seção index ${targetSectionIndex} não encontrada na árvore atual de ${sections.length} seções. Salvando alteração direta.`);
+            finalHtml = result.html;
+          }
+        }
+
+        // Mesclar CSS e JS
+        if (result.css && result.css.trim() && !finalCss.includes(result.css.trim())) {
+          finalCss = `${finalCss}\n\n/* Estilos adicionados via IA para ${targetSectionLabel} */\n${result.css.trim()}`;
+        }
+        if (result.js && result.js.trim() && !finalJs.includes(result.js.trim())) {
+          finalJs = `${finalJs}\n\n// Funcionalidades adicionadas via IA para ${targetSectionLabel}\n${result.js.trim()}`;
+        }
+
+      } else {
+        // MODO PÁGINA INTEIRA (Comportamento Legado)
+        const context = {
+          html: pageHtml,
+          css: page.css || '',
+          js: page.js || ''
+        };
+
+        result = await executeAIRequest(prompt, context, {
+          ...options,
+          onProgress: (info) => {
+            item.currentModel = info.model;
+          }
+        });
+
+        if (item.status === 'cancelled') return;
+
+        finalHtml = result.html;
+        finalCss = result.css;
+        finalJs = result.js;
+      }
 
       await prisma.page.update({
         where: { id: page.id },
         data: {
-          html: result.html,
-          css: result.css,
-          js: result.js
+          html: finalHtml,
+          css: finalCss,
+          js: finalJs
         }
       });
 
       item.result = {
         explanation: result.explanation,
-        html: result.html,
-        css: result.css,
-        js: result.js,
+        html: finalHtml,
+        css: finalCss,
+        js: finalJs,
         _usedModel: result._usedModel,
         _usedProvider: result._usedProvider
       };
@@ -242,8 +522,39 @@ class ProjectQueue {
 
     if (!page) throw new Error('Página não encontrada para remasterização.');
 
-    item.currentModel = options.model || 'gemini-2.0-flash';
+    item.currentModel = 'Preparando página para melhoramento inteligente...';
     item.scope = 'single';
+
+    // Antes de carregar no melhoramento, substitui links originais por links baixados
+    let pageHtml = page.html || '';
+    try {
+      item.currentModel = 'Baixando imagens originais para o servidor local...';
+      const rewrittenHtml = await processPageAssets(
+        pageHtml,
+        '',
+        new Map<string, string>(),
+        page.project?.ownerId || undefined,
+        page.projectId
+      );
+      if (rewrittenHtml !== pageHtml) {
+        pageHtml = rewrittenHtml;
+        await prisma.page.update({
+          where: { id: pageId },
+          data: { html: rewrittenHtml }
+        });
+        page.html = rewrittenHtml;
+        console.log(`[executePageRemaster] Sucesso: Imagens baixadas e referenciadas localmente na página ${page.name}.`);
+      }
+    } catch (assetErr) {
+      console.warn(`[executePageRemaster] Erro ao processar imagens originais antes do melhoramento:`, assetErr);
+    }
+
+    item.currentModel = options.model || 'gemini-2.0-flash';
+
+    // Otimização de Tokens: Se solicitado, não enviamos CSS e JS inteiros, pois o Tailwind irá recriar
+    const optimizeTokens = options.optimizeTokens !== false;
+    const cssContent = optimizeTokens ? (page.css ? '/* CSS omitido para economizar tokens, refaça usando Tailwind */' : '') : page.css;
+    const jsContent = optimizeTokens ? (page.js ? '// JS omitido, crie as interatividades necessárias' : '') : page.js;
 
     const remasterPrompt = `
       Você é o Arquiteto Frontend Master.
@@ -253,21 +564,26 @@ class ProjectQueue {
       """
       ${prompt || 'Melhore o layout e estilo com Tailwind CSS de forma moderna, elegante e responsiva.'}
       """
+      ${options.customPrompt ? `\nDIRETRIZ ESPECÍFICA DESTA PÁGINA:\n"""\n${options.customPrompt}\n"""\n` : ''}
 
       HTML ORIGINAL DA PÁGINA:
       """
-      ${page.html}
+      ${pageHtml}
       """
+      ${options.extractedNavbar ? `\nUSE ESTA NAVBAR EXATAMENTE COMO ESTÁ (Se houver navbar):\n"""\n${options.extractedNavbar}\n"""\n` : ''}
+      ${options.extractedFooter ? `\nUSE ESTE FOOTER EXATAMENTE COMO ESTÁ (Se houver footer):\n"""\n${options.extractedFooter}\n"""\n` : ''}
 
+      ${!optimizeTokens ? `
       CSS ORIGINAL:
       """
-      ${page.css}
+      ${cssContent}
       """
 
       JS ORIGINAL:
       """
-      ${page.js}
+      ${jsContent}
       """
+      ` : ''}
 
       REGRAS OBRIGATÓRIAS E INEGOCIÁVEIS:
       1. NÃO REFAÇA DO ZERO E NÃO INVENTE TEXTOS FAKE. Mantenha integralmente todas as frases originais, slogans, títulos, parágrafos, contatos, telefones e mídias.
@@ -277,9 +593,9 @@ class ProjectQueue {
     `;
 
     const context = {
-      html: page.html || '',
-      css: page.css || '',
-      js: page.js || ''
+      html: pageHtml,
+      css: cssContent || '',
+      js: jsContent || ''
     };
 
     const aiResponse = await executeAIRequest(
@@ -295,7 +611,7 @@ class ProjectQueue {
 
     if (item.status === 'cancelled') return;
 
-    const updatedHtml = aiResponse.html || page.html;
+    const updatedHtml = aiResponse.html || pageHtml;
     const updatedCss = aiResponse.css || page.css;
     const updatedJs = aiResponse.js || page.js;
 
@@ -333,7 +649,7 @@ class AIQueueManager {
 
   enqueue(
     projectId: string,
-    type: 'chat_edit' | 'page_remaster',
+    type: 'chat_edit' | 'page_remaster' | 'site_remaster',
     prompt: string,
     pageId?: string,
     options?: any

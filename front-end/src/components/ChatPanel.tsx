@@ -1,7 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { z } from 'zod';
 import { useAuth } from '../context/AuthContext';
 import { Sparkles, Send, Bot, User, Check, Play, Undo2, Globe, Loader2, RotateCcw, AlertCircle, Layers, ChevronDown, CheckSquare, Square, Copy, Paperclip, X, Image as ImageIcon, FileCode } from 'lucide-react';
 import { API_URL } from '../config';
+
+const AiResultSchema = z.object({
+  components: z.array(z.any()), // To be refined with a full schema
+  css: z.string().optional().default(''),
+  js: z.string().optional().default(''),
+  explanation: z.string().optional().default(''),
+  _usedModel: z.string().optional(),
+});
 
 interface PageInfo {
   id: string;
@@ -14,10 +23,16 @@ interface ChatPanelProps {
   pageId: string;
   projectId?: string;
   pages?: PageInfo[];
-  onApplyChanges: (html: string, css: string, js: string, targetPageId?: string) => void;
+  activePageHtml?: string;
+  onApplyChanges: (components: any[], css: string, js: string, targetPageId?: string) => void;
   onUndo?: () => void;
   canUndo?: boolean;
   onReloadAllPages?: () => void;
+  editScope?: 'all' | 'section';
+  setEditScope?: (scope: 'all' | 'section') => void;
+  selectedSectionIndex?: number | null;
+  setSelectedSectionIndex?: (index: number | null) => void;
+  onSectionsDetected?: (sections: Array<{ index: number; label: string; html: string; tagName: string }>) => void;
 }
 
 export interface AttachedFile {
@@ -30,7 +45,8 @@ export interface AttachedFile {
 interface Message {
   role: 'user' | 'assistant';
   text: string;
-  html?: string;
+  html?: string; // To be deprecated
+  components?: any[]; // New structure
   css?: string;
   js?: string;
   modelUsed?: string;
@@ -46,10 +62,16 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   pageId, 
   projectId,
   pages = [],
+  activePageHtml = '',
   onApplyChanges, 
   onUndo, 
   canUndo, 
-  onReloadAllPages 
+  onReloadAllPages,
+  editScope: externalEditScope,
+  setEditScope: externalSetEditScope,
+  selectedSectionIndex: externalSelectedSectionIndex,
+  setSelectedSectionIndex: externalSelectedSectionIndexSetter,
+  onSectionsDetected
 }) => {
   const { token } = useAuth();
   const chatStorageKey = projectId ? `chat_history_proj_${projectId}` : `chat_history_${pageId}`;
@@ -80,6 +102,99 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   
   // Fila de tarefas de IA do projeto
   const [projectQueue, setProjectQueue] = useState<any[]>([]);
+
+  // Controle de escopo da edição (redefinido para prevenção de regressões)
+  const [localEditScope, setLocalEditScope] = useState<'all' | 'section'>('all');
+  const editScope = externalEditScope !== undefined ? externalEditScope : localEditScope;
+  const setEditScope = externalSetEditScope !== undefined ? externalSetEditScope : setLocalEditScope;
+
+  const [detectedSections, setDetectedSections] = useState<Array<{ index: number; label: string; html: string; tagName: string }>>([]);
+  
+  const [localSelectedSectionIndex, setLocalSelectedSectionIndex] = useState<number | null>(null);
+  const selectedSectionIndex = externalSelectedSectionIndex !== undefined && externalSelectedSectionIndex !== null ? externalSelectedSectionIndex : localSelectedSectionIndex;
+  const setSelectedSectionIndex = externalSelectedSectionIndexSetter !== undefined ? externalSelectedSectionIndexSetter : setLocalSelectedSectionIndex;
+
+  // Parser em tempo de execução para auto-detecção de seções do canvas no frontend (Zero instabilidade)
+  useEffect(() => {
+    if (!activePageHtml) {
+      setDetectedSections([]);
+      setSelectedSectionIndex(null);
+      return;
+    }
+
+    try {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(activePageHtml, 'text/html');
+      
+      // Encontra o wrapper comum (#page-wrapper, #canvas-root ou body)
+      const wrapper = doc.querySelector('#page-wrapper') || doc.querySelector('#canvas-root') || doc.body;
+      const children = Array.from(wrapper.children);
+      
+      const sections = children.map((child, index) => {
+        let label = '';
+        const tagName = child.tagName.toLowerCase();
+        
+        if (tagName === 'header' || tagName === 'nav' || child.querySelector('nav') || child.id?.includes('header') || child.className?.includes('header')) {
+          label = `Cabeçalho / Menu (Navbar)`;
+        } else if (tagName === 'footer' || child.id?.includes('footer') || child.className?.includes('footer')) {
+          label = `Rodapé (Footer)`;
+        } else if (child.id?.includes('hero') || child.className?.includes('hero')) {
+          label = `Seção Hero (Destaque Principal)`;
+        } else if (child.id?.includes('pricing') || child.className?.includes('pricing') || child.textContent?.toLowerCase().includes('preço') || child.textContent?.toLowerCase().includes('plano')) {
+          label = `Tabela de Preços (Pricing)`;
+        } else if (child.id?.includes('contact') || child.className?.includes('contact') || child.querySelector('form')) {
+          label = `Formulário de Contato`;
+        } else if (child.id?.includes('features') || child.className?.includes('features') || child.id?.includes('beneficios') || child.className?.includes('beneficios')) {
+          label = `Recursos e Benefícios`;
+        } else if (child.id?.includes('testimonials') || child.className?.includes('testimonials') || child.textContent?.toLowerCase().includes('depoimentos') || child.textContent?.toLowerCase().includes('cliente')) {
+          label = `Depoimentos / Clientes`;
+        } else {
+          const header = child.querySelector('h1, h2, h3, h4, h5, h6');
+          if (header && header.textContent?.trim()) {
+            const text = header.textContent.trim();
+            label = `Seção: "${text.length > 25 ? text.slice(0, 25) + '...' : text}"`;
+          } else {
+            const textContent = child.textContent?.trim();
+            if (textContent) {
+              const cleanText = textContent.replace(/\s+/g, ' ');
+              label = `Seção: "${cleanText.length > 25 ? cleanText.slice(0, 25) + '...' : cleanText}"`;
+            } else {
+              label = `Seção ${index + 1} (${tagName})`;
+            }
+          }
+        }
+        
+        return {
+          index,
+          label: `[#${index + 1}] ${label}`,
+          html: child.outerHTML,
+          tagName
+        };
+      });
+
+      setDetectedSections(sections);
+      if (onSectionsDetected) {
+        onSectionsDetected(sections);
+      }
+      
+      // Se tiver seções, pré-seleciona a primeira se não houver seleção ou se a anterior for inválida
+      if (sections.length > 0) {
+        setSelectedSectionIndex(prev => {
+          if (prev !== null && prev >= 0 && prev < sections.length) return prev;
+          return 0;
+        });
+      } else {
+        setSelectedSectionIndex(null);
+      }
+    } catch (e) {
+      console.warn("Erro ao detectar seções no frontend:", e);
+      setDetectedSections([]);
+      if (onSectionsDetected) {
+        onSectionsDetected([]);
+      }
+      setSelectedSectionIndex(null);
+    }
+  }, [activePageHtml, onSectionsDetected]);
 
   // Buscar fila de IA do projeto periodicamente
   useEffect(() => {
@@ -215,13 +330,13 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
         if (Array.isArray(parsed) && parsed.length > 0) {
           let changed = false;
           parsed = parsed.map((m: any) => {
-            if (m.id === 'gemini-2.5-flash') {
+            if (m.id === 'gemini-1.5-flash' || m.id === 'gemini-2.0-flash' || m.id === 'gemini-1.0-pro') {
               changed = true;
-              return { ...m, id: 'gemini-2.0-flash', name: m.name.replace('2.5', '2.0') };
+              return { ...m, id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash' };
             }
-            if (m.id === 'gemini-2.5-pro') {
+            if (m.id === 'gemini-1.5-pro') {
               changed = true;
-              return { ...m, id: 'gemini-1.5-pro', name: m.name.replace('2.5', '1.5') };
+              return { ...m, id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro' };
             }
             return m;
           });
@@ -231,9 +346,9 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       } catch {}
     }
     return [
-      { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash' },
-      { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash' },
-      { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro' }
+      { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash (Recomendado)' },
+      { id: 'gemini-3.7-flash', name: 'Gemini 3.7 Flash' },
+      { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro' }
     ];
   });
 
@@ -253,8 +368,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       return 'qwen2.5-coder:1.5b';
     }
     let savedLastModel = localStorage.getItem('last_selected_ai_model');
-    if (savedLastModel === 'gemini-2.5-flash') savedLastModel = 'gemini-2.0-flash';
-    if (savedLastModel === 'gemini-2.5-pro') savedLastModel = 'gemini-1.5-pro';
+    if (savedLastModel === 'gemini-1.5-flash' || savedLastModel === 'gemini-2.0-flash') savedLastModel = 'gemini-2.5-flash';
+    if (savedLastModel === 'gemini-1.5-pro') savedLastModel = 'gemini-2.5-pro';
     
     if (savedLastModel) return savedLastModel;
 
@@ -266,7 +381,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
         if (parsed.length > 0) return parsed[0].id;
       } catch {}
     }
-    return 'gemini-2.0-flash';
+    return 'gemini-2.5-flash';
   });
 
   // Salvar no localStorage sempre que o usuário alterar o modelo
@@ -388,13 +503,34 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
             setLoading(false);
             setActiveJobModel(null);
 
+            const result = AiResultSchema.safeParse(jobData.result);
+
+            if (!result.success) {
+              console.error("Erro de validação do resultado da IA:", result.error);
+              const errorMessage: Message = { 
+                role: 'assistant', 
+                text: "Erro: A resposta da IA não está no formato esperado.",
+                isError: true,
+                failedPrompt: promptSent || lastUserPrompt,
+                id: jobId
+              };
+              const freshStored = localStorage.getItem(storageKeyToUse);
+              const freshMessages: Message[] = freshStored ? JSON.parse(freshStored) : [];
+              if (!freshMessages.some(m => m.id === jobId)) {
+                const finalMessages = [...freshMessages, errorMessage];
+                localStorage.setItem(storageKeyToUse, JSON.stringify(finalMessages));
+                setMessages(finalMessages);
+              }
+              return;
+            }
+
             const assistantMessage: Message = { 
               role: 'assistant', 
-              text: jobData.result.explanation || 'Alterações arquitetadas e geradas com sucesso.',
-              html: jobData.result.html,
-              css: jobData.result.css,
-              js: jobData.result.js,
-              modelUsed: jobData.result._usedModel || jobData.currentModel || selectedModel,
+              text: result.data.explanation || 'Alterações arquitetadas e geradas com sucesso.',
+              components: result.data.components,
+              css: result.data.css,
+              js: result.data.js,
+              modelUsed: result.data._usedModel || jobData.currentModel || selectedModel,
               applied: true,
               scope: jobData.scope,
               id: jobId
@@ -415,8 +551,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
             }
 
             // Auto-aplica as alterações imediatamente no Canvas atual
-            if (jobData.result.html) {
-              onApplyChanges(jobData.result.html, jobData.result.css || '', jobData.result.js || '', targetPageId);
+            if (result.data.components) {
+              onApplyChanges(result.data.components, result.data.css || '', result.data.js || '', targetPageId);
             }
           } else if (jobData.status === 'failed') {
             if (activePollRef.current) clearInterval(activePollRef.current);
@@ -458,8 +594,13 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
             }
           }
         }
-      } catch (pollErr) {
-        console.error("Erro no polling do chat IA:", pollErr);
+      } catch (pollErr: any) {
+        const isNetworkError = pollErr instanceof TypeError || (pollErr && pollErr.message && pollErr.message.includes('fetch'));
+        if (isNetworkError) {
+          console.warn("Conexão instável ou servidor reiniciando... Retentando polling do chat IA silenciosamente.");
+        } else {
+          console.error("Erro no polling do chat IA:", pollErr);
+        }
       }
     }, 1500);
   };
@@ -565,7 +706,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
           'x-low-spec-mode': String(lowSpecMode)
         },
         body: JSON.stringify({ 
-          prompt: messageText, 
+          prompt: `${messageText}\n\nIMPORTANT: Return your response strictly as a JSON object with the following structure: { "components": ComponentNode[], "css": string, "js": string, "explanation": string }. Use the ComponentNode type defined as { id: string, type: 'container' | 'text' | 'image' | 'button' | 'section', props: { className?: string, style?: any, [key: string]: any }, children?: ComponentNode[], text?: string }. Do NOT return raw HTML.`, 
           pageId: currentRequestPageId, 
           model: preferredProvider === 'ollama' ? (localStorage.getItem('ollama_selected_model') || selectedModel) : selectedModel,
           applyToAll: isMultiTarget,
@@ -573,7 +714,10 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
           attachedFiles: currentFiles.length > 0 ? currentFiles : undefined,
           provider: preferredProvider,
           ollamaEndpoint,
-          lowSpecMode
+          lowSpecMode,
+          targetSectionIndex: editScope === 'section' && selectedSectionIndex !== null ? selectedSectionIndex : undefined,
+          targetSectionLabel: editScope === 'section' && selectedSectionIndex !== null ? detectedSections[selectedSectionIndex]?.label : undefined,
+          targetSectionHtml: editScope === 'section' && selectedSectionIndex !== null ? detectedSections[selectedSectionIndex]?.html : undefined
         })
       });
 
@@ -866,7 +1010,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                     Código Pronto
                   </span>
                   <button
-                    onClick={() => onApplyChanges(msg.html!, msg.css || '', msg.js || '', pageId)}
+                    onClick={() => onApplyChanges(msg.components || [], msg.css || '', msg.js || '', pageId)}
                     className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-lg text-[11px] transition-all shadow-sm hover:shadow-[0_0_10px_rgba(168,85,247,0.4)] cursor-pointer"
                   >
                     <Play className="w-3 h-3 fill-white" />
@@ -913,7 +1057,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                       <div className="flex items-center gap-1.5">
                         <span className={`w-1.5 h-1.5 rounded-full ${isProcessing ? 'bg-amber-400 animate-pulse' : 'bg-slate-500'}`} />
                         <span className="font-bold text-slate-200 truncate block">
-                          {item.type === 'page_remaster' ? 'Remasterização' : 'Ajuste de Chat'}
+                          {item.type === 'page_remaster' ? 'Remasterização' : item.type === 'site_remaster' ? 'Remasterização do Site' : 'Ajuste de Chat'}
                         </span>
                         <span className="text-[9px] px-1 bg-slate-800 text-slate-400 rounded font-mono shrink-0">
                           #{qIdx + 1}
@@ -994,6 +1138,62 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
             <span className="text-[10px] px-1.5 py-0.2 rounded bg-purple-950 border border-purple-500/30 text-purple-300 font-mono">
               Navbar/Footer sincronizados
             </span>
+          )}
+        </div>
+
+        {/* Controle do Escopo da Edição (Evita processar o site inteiro) */}
+        <div className="bg-slate-900/60 p-2 rounded-xl border border-slate-800/80 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">Escopo de Edição</span>
+            
+            <div className="flex items-center gap-1.5 bg-slate-950 p-0.5 rounded-lg border border-slate-850">
+              <button
+                type="button"
+                onClick={() => setEditScope('all')}
+                className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer ${
+                  editScope === 'all'
+                    ? 'bg-purple-600 text-white shadow-sm font-extrabold'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Página Inteira
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditScope('section')}
+                className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer ${
+                  editScope === 'section'
+                    ? 'bg-purple-600 text-white shadow-sm font-extrabold'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Apenas Seção
+              </button>
+            </div>
+          </div>
+
+          {editScope === 'section' && (
+            <div className="space-y-1 animate-in fade-in slide-in-from-top-1 duration-150">
+              <label className="text-[9px] text-slate-500 font-bold block">Selecione a seção a ser modificada pelo prompt:</label>
+              {detectedSections.length > 0 ? (
+                <select
+                  value={selectedSectionIndex ?? 0}
+                  onChange={(e) => setSelectedSectionIndex(Number(e.target.value))}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-1.5 text-[11px] text-slate-200 outline-none focus:border-purple-500 cursor-pointer"
+                >
+                  {detectedSections.map((sec) => (
+                    <option key={sec.index} value={sec.index}>
+                      {sec.label}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <div className="text-[10px] text-yellow-500/90 bg-yellow-950/20 px-2 py-1 rounded-lg border border-yellow-800/30 flex items-center gap-1.5">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                  Nenhuma seção detectada. Certifique-se de que a página possui blocos estruturais válidos.
+                </div>
+              )}
+            </div>
           )}
         </div>
 

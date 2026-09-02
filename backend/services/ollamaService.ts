@@ -1,4 +1,4 @@
-import { cleanHtmlExtractAssets } from './gemini';
+import { cleanHtmlExtractAssets, resilientJsonParse, extractHtmlFromRawText } from './gemini';
 
 export interface OllamaModelInfo {
   name: string;
@@ -40,12 +40,24 @@ export async function testOllamaConnection(endpointUrl: string = 'http://localho
 
     const res = await fetch(`${cleanUrl}/api/tags`, {
       method: 'GET',
-      headers: { 'Accept': 'application/json' },
+      headers: { 
+        'Accept': 'application/json',
+        'ngrok-skip-browser-warning': 'true',
+        'Bypass-Tunnel-Reminder': 'true'
+      },
       signal: controller.signal
     });
     clearTimeout(timeout);
 
     if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      if (res.status === 404 && errText.trim().startsWith('<')) {
+        return {
+          success: false,
+          message: `A URL fornecida não parece ser do Ollama. Se você estiver usando o Ngrok, verifique se apontou para a porta 11434 e não para a porta do app.`,
+          endpoint: cleanUrl
+        };
+      }
       return {
         success: false,
         message: `Ollama respondeu com status HTTP ${res.status}`,
@@ -71,6 +83,24 @@ export async function testOllamaConnection(endpointUrl: string = 'http://localho
   }
 }
 
+function handleOllamaErrorResponse(status: number, errText: string, model: string, endpoint: string): Error {
+  const isHtml = errText.trim().startsWith('<') || errText.includes('<!DOCTYPE html>') || errText.includes('<html>');
+  
+  if (status === 502 || status === 503 || status === 504 || isHtml) {
+    return new Error(
+      `O serviço do Ollama local não está acessível (Status ${status}). ` +
+      `Isso significa que o seu túnel de conexão (Ngrok/LocalTunnel) em "${endpoint}" está ativo, mas o servidor do Ollama local não respondeu.\n\n` +
+      `Para resolver este problema de conexão na sua máquina local, siga estes passos:\n` +
+      `1. Verifique se o aplicativo do Ollama está rodando no seu computador (com 'ollama serve' ou aberto em segundo plano).\n` +
+      `2. No terminal local, garanta que o modelo está instalado rodando: "ollama run ${model}"\n` +
+      `3. Certifique-se de que o Ngrok está redirecionando para a porta correta do Ollama (11434). O comando recomendado é: "ngrok http 11434"\n` +
+      `4. Atualize a URL do endpoint nas configurações se o Ngrok tiver sido reiniciado.`
+    );
+  }
+  
+  return new Error(`Ollama retornou status ${status}: ${errText.substring(0, 300)}`);
+}
+
 export async function generateOllamaResponse(
   prompt: string,
   context: { html: string; css: string; js: string },
@@ -89,12 +119,22 @@ export async function generateOllamaResponse(
   const model = options.model || 'qwen2.5-coder:1.5b';
   const isLowSpec = options.lowSpecMode !== false; // Default true para proteger PCs modestos
 
+  // Detectar se o modelo é um modelo de raciocínio/thinking para evitar conflito com format: 'json' do Ollama
+  const modelLower = model.toLowerCase();
+  const isReasoningModel = modelLower.includes('r1') || 
+                           modelLower.includes('deepseek') || 
+                           modelLower.includes('think') || 
+                           modelLower.includes('reasoning') ||
+                           modelLower.includes('qwen3.5');
+
+  const useJsonFormat = !isReasoningModel;
+
   // Prompt simplificado e ultra conciso para modelos leves de 1B a 7B
   const systemPrompt = `Você é um Engenheiro Frontend especialista em Tailwind CSS e design moderno.
 Sua missão: Modificar ou gerar o código da página web conforme o pedido do usuário.
 
 REGRAS:
-1. Retorne APENAS um JSON válido no formato:
+1. Retorne um JSON válido contendo exatamente as chaves:
 {
   "explanation": "Breve resumo em português do que foi feito.",
   "html": "<código HTML com classes Tailwind sem tags style ou script>",
@@ -102,6 +142,7 @@ REGRAS:
   "js": "// JS interativo opcional"
 }
 2. O HTML deve ser limpo, moderno, responsivo e com classes Tailwind CSS.
+${isReasoningModel ? '3. Você pode usar pensamento/raciocínio antes, mas certifique-se de que sua saída final contenha o objeto JSON completo com essas chaves.' : ''}
 ${options.skillsDirective ? `\nDIRETRIZES EXTRAS:\n${options.skillsDirective}` : ''}`;
 
   // Se o contexto for muito grande em PC fraco, encurtamos ligeiramente para economizar memória VRAM
@@ -109,8 +150,8 @@ ${options.skillsDirective ? `\nDIRETRIZES EXTRAS:\n${options.skillsDirective}` :
   let contextCss = context.css || '';
   let contextJs = context.js || '';
 
-  if (isLowSpec && contextHtml.length > 15000) {
-    contextHtml = contextHtml.slice(0, 15000) + '\n<!-- [Conteúdo truncado para economia de memória] -->';
+  if (isLowSpec && contextHtml.length > 10000) {
+    contextHtml = contextHtml.slice(0, 10000) + '\n<!-- [Conteúdo truncado para economia de memória] -->';
   }
 
   const userPrompt = `Contexto atual da página:
@@ -128,67 +169,110 @@ ${prompt}
 
 Retorne exclusivamente o objeto JSON com "explanation", "html", "css", "js".`;
 
-  const requestBody = {
-    model,
-    system: systemPrompt,
-    prompt: userPrompt,
-    stream: false,
-    format: 'json',
-    options: {
-      temperature: isLowSpec ? 0.2 : 0.4,
-      top_p: 0.9,
-      num_predict: isLowSpec ? 3072 : 4096,
-      num_ctx: isLowSpec ? 4096 : 8192,
-      num_thread: 4
-    }
-  };
-
   const controller = new AbortController();
-  // 120s de timeout para modelos locais em CPU mais lentas
-  const timeoutId = setTimeout(() => controller.abort(), 120000);
+  // 360s (6 minutos) de timeout para modelos locais complexos em CPU
+  const timeoutId = setTimeout(() => controller.abort(), 360000);
 
   try {
-    const response = await fetch(`${cleanUrl}/api/generate`, {
+    // Usando /api/chat como principal por preservar os templates de chat do Ollama
+    const chatRequestBody = {
+      model,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ],
+      stream: false,
+      ...(useJsonFormat ? { format: 'json' } : {}),
+      options: {
+        temperature: isLowSpec ? 0.2 : 0.4,
+        top_p: 0.9,
+        num_predict: isLowSpec ? 3072 : 4096,
+        num_ctx: isLowSpec ? 8192 : 16384,
+        num_thread: 4
+      }
+    };
+
+    let response = await fetch(`${cleanUrl}/api/chat`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestBody),
+      headers: { 
+        'Content-Type': 'application/json',
+        'ngrok-skip-browser-warning': 'true',
+        'Bypass-Tunnel-Reminder': 'true'
+      },
+      body: JSON.stringify(chatRequestBody),
       signal: controller.signal
     });
-    clearTimeout(timeoutId);
 
-    if (!response.ok) {
+    let rawResponse = '';
+
+    if (response.status === 404) {
+      console.log('[OllamaService] /api/chat retornou 404. Fazendo fallback para /api/generate...');
+      const generateRequestBody = {
+        model,
+        system: systemPrompt,
+        prompt: userPrompt,
+        stream: false,
+        ...(useJsonFormat ? { format: 'json' } : {}),
+        options: chatRequestBody.options
+      };
+
+      const genResponse = await fetch(`${cleanUrl}/api/generate`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+          'Bypass-Tunnel-Reminder': 'true'
+        },
+        body: JSON.stringify(generateRequestBody),
+        signal: controller.signal
+      });
+
+      if (!genResponse.ok) {
+        const errText = await genResponse.text().catch(() => '');
+        throw handleOllamaErrorResponse(genResponse.status, errText, model, cleanUrl);
+      }
+
+      const genData: any = await genResponse.json();
+      rawResponse = genData.response || '';
+    } else if (!response.ok) {
       const errText = await response.text().catch(() => '');
-      throw new Error(`Ollama HTTP ${response.status}: ${errText}`);
+      throw handleOllamaErrorResponse(response.status, errText, model, cleanUrl);
+    } else {
+      const chatData: any = await response.json();
+      rawResponse = chatData.message?.content || chatData.response || '';
     }
 
-    const data: any = await response.json();
-    const rawResponse = data.response || '{}';
+    clearTimeout(timeoutId);
 
     let parsed: any;
     try {
-      parsed = JSON.parse(rawResponse);
-    } catch {
-      // Fallback para extração de JSON em blocos markdown ou texto
-      const firstBrace = rawResponse.indexOf('{');
-      const lastBrace = rawResponse.lastIndexOf('}');
-      if (firstBrace !== -1 && lastBrace > firstBrace) {
-        try {
-          parsed = JSON.parse(rawResponse.slice(firstBrace, lastBrace + 1));
-        } catch {}
-      }
-    }
-
-    if (!parsed || (!parsed.html && !parsed.explanation)) {
-      // Se o modelo 1B gerou HTML direto sem wrapper JSON:
+      parsed = resilientJsonParse(rawResponse);
+    } catch (parseErr) {
+      console.warn('[OllamaService] resilientJsonParse falhou, usando extrator de HTML robusto. Erro:', parseErr);
+      const extractedHtml = extractHtmlFromRawText(rawResponse);
       parsed = {
         explanation: 'Código atualizado pelo modelo local Ollama.',
-        html: rawResponse.replace(/```(?:html|json)?/gi, '').replace(/```/g, '').trim(),
+        html: extractedHtml || rawResponse.replace(/```(?:html|json)?/gi, '').replace(/```/g, '').trim(),
         css: '',
         js: ''
       };
     }
 
     const cleaned = cleanHtmlExtractAssets(parsed.html || '', parsed.css || '', parsed.js || '');
+
+    if (!cleaned.html || cleaned.html.trim().length < 15) {
+      // Se ainda estiver vazio ou muito curto, tentamos um último esforço: usar extractHtmlFromRawText diretamente na resposta bruta
+      const lastResortHtml = extractHtmlFromRawText(rawResponse);
+      const lastResortCleaned = cleanHtmlExtractAssets(lastResortHtml);
+      if (lastResortCleaned.html && lastResortCleaned.html.trim().length >= 15) {
+        cleaned.html = lastResortCleaned.html;
+        cleaned.css = lastResortCleaned.css || cleaned.css;
+        cleaned.js = lastResortCleaned.js || cleaned.js;
+      } else {
+        console.error('[OllamaService] Resposta bruta recebida do Ollama:', rawResponse);
+        throw new Error(`O modelo local Ollama (${model}) retornou uma resposta com código HTML vazio ou inválido.`);
+      }
+    }
 
     return {
       explanation: parsed.explanation || 'Alterações aplicadas com sucesso pelo modelo local Ollama.',
@@ -200,6 +284,13 @@ Retorne exclusivamente o objeto JSON com "explanation", "html", "css", "js".`;
     };
   } catch (error: any) {
     clearTimeout(timeoutId);
+    if (error.name === 'AbortError' || error.message?.includes('aborted')) {
+      throw new Error(
+        `O Ollama excedeu o limite de tempo de 6 minutos gerando com o modelo "${model}". ` +
+        `Modelos como o qwen3.5:4b exigem bastante processamento e podem demorar mais se estiverem rodando apenas na CPU. ` +
+        `Recomendamos: 1) Usar um modelo mais leve como "qwen2.5-coder:1.5b", 2) Ativar o "Modo de Baixo Desempenho" nas configurações, ou 3) Configurar aceleração por GPU no seu Ollama local.`
+      );
+    }
     throw new Error(`Erro ao processar com Ollama (${model}): ${error.message}`);
   }
 }

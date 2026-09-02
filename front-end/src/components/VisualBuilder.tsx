@@ -46,13 +46,18 @@ import { ChatPanel } from './ChatPanel';
 import { API_URL, safeJson } from '../config';
 import { useNotification } from '../context/NotificationContext';
 
+import { InspectorPanel } from './InspectorPanel';
+import { findNodeById, updateComponentNode, removeNodeById, addNodeToParentById } from '../utils/tree';
+import { ComponentNode } from '../types/canvas';
+
 interface Page {
   id: string;
   name: string;
   slug: string;
-  html: string;
+  html: string; // Keep for now for compatibility, will deprecate
   css: string;
   js: string;
+  components?: ComponentNode[]; // New JSON tree structure
   seoTitle?: string;
   seoDescription?: string;
   seoOgImage?: string;
@@ -68,17 +73,19 @@ interface ProjectData {
 interface VisualBuilderProps {
   projectId: string;
   onBack: () => void;
+  onOpenAIImprover?: () => void;
 }
 
 interface HistoryState {
   html: string;
   css: string;
   js: string;
+  components?: ComponentNode[];
   timestamp: string;
   description: string;
 }
 
-export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack }) => {
+export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack, onOpenAIImprover }) => {
   const { token } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const notify = useNotification();
@@ -97,6 +104,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
   // Selection & Tree State
   const [selectedSelector, setSelectedSelector] = useState<string | null>(null);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
+  const [selectedComponentId, setSelectedComponentId] = useState<string | null>(null);
   const [hoverPath, setHoverPath] = useState<string | null>(null);
   const [selectedStyles, setSelectedStyles] = useState<Record<string, string>>({});
   const [selectedAttrs, setSelectedAttrs] = useState<Record<string, string>>({});
@@ -257,6 +265,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
         html: activePage.html,
         css: activePage.css,
         js: activePage.js,
+        components: activePage.components,
         timestamp: new Date().toLocaleTimeString(),
         description
       }
@@ -275,6 +284,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
         html: activePage.html,
         css: activePage.css,
         js: activePage.js,
+        components: activePage.components,
         timestamp: new Date().toLocaleTimeString(),
         description: 'Undo State'
       }
@@ -282,7 +292,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
 
     setProject(prev => prev ? {
       ...prev,
-      pages: prev.pages.map(p => p.id === activePage.id ? { ...p, html: last.html, css: last.css, js: last.js } : p)
+      pages: prev.pages.map(p => p.id === activePage.id ? { ...p, html: last.html, css: last.css, js: last.js, components: last.components } : p)
     } : null);
   }, [undoStack, activePage]);
 
@@ -297,6 +307,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
         html: activePage.html,
         css: activePage.css,
         js: activePage.js,
+        components: activePage.components,
         timestamp: new Date().toLocaleTimeString(),
         description: 'Redo State'
       }
@@ -304,7 +315,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
 
     setProject(prev => prev ? {
       ...prev,
-      pages: prev.pages.map(p => p.id === activePage.id ? { ...p, html: next.html, css: next.css, js: next.js } : p)
+      pages: prev.pages.map(p => p.id === activePage.id ? { ...p, html: next.html, css: next.css, js: next.js, components: next.components } : p)
     } : null);
   }, [redoStack, activePage]);
 
@@ -454,7 +465,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
   }, []);
 
   // Update Page Code with Database Sync
-  const handleCodeChange = async (type: 'html' | 'css' | 'js', value: string) => {
+  const handleCodeChange = async (type: 'html' | 'css' | 'js' | 'components', value: any) => {
     const currentPage = activePageRef.current;
     if (!currentPage) return;
     pushHistorySnapshot(`Edição de ${type.toUpperCase()}`);
@@ -517,6 +528,23 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
       const newHtml = serializeBodyContent(doc);
       handleCodeChange('html', newHtml);
     }
+  };
+
+  const handleUpdateNode = (updatedNode: ComponentNode) => {
+    if (!activePage) return;
+    const newComponents = updateComponentNode(activePage.components || [], updatedNode.id, () => updatedNode);
+    handleCodeChange('components', newComponents);
+  };
+
+  const handleMoveNode = (sourceId: string, targetParentId: string, index: number) => {
+    if (!activePage) return;
+    const components = activePage.components || [];
+    const nodeToMove = findNodeById(components, sourceId);
+    if (!nodeToMove) return;
+
+    const componentsRemoved = removeNodeById(components, sourceId);
+    const newComponents = addNodeToParentById(componentsRemoved, targetParentId, nodeToMove, index);
+    handleCodeChange('components', newComponents);
   };
 
   // Attribute change handler
@@ -726,22 +754,38 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
   };
 
   // AI Copilot Change Application
-  const handleApplyAIChanges = (newHtml: string, newCss: string, newJs: string) => {
-    if (!activePage) return;
+  const handleApplyAIChanges = async (newHtml: string, newCss: string, newJs: string, targetPageId?: string) => {
+    const pageIdToUpdate = targetPageId || activePage?.id;
+    if (!pageIdToUpdate) return;
     pushHistorySnapshot("Alterações aplicadas pelo AI Copilot");
+    
+    // Atualiza o estado local imediatamente para feedback instantâneo na UI
     setProject(prev => prev ? {
       ...prev,
-      pages: prev.pages.map(p => p.id === activePage.id ? { ...p, html: newHtml, css: newCss, js: newJs } : p)
+      pages: prev.pages.map(p => p.id === pageIdToUpdate ? { ...p, html: newHtml, css: newCss, js: newJs } : p)
     } : null);
 
-    fetch(`${API_URL}/api/pages/${activePage.id}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify({ html: newHtml, css: newCss, js: newJs })
-    }).catch(console.error);
+    try {
+      // Envia a atualização para o backend e aguarda a conclusão antes de sincronizar novamente
+      const res = await fetch(`${API_URL}/api/pages/${pageIdToUpdate}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ html: newHtml, css: newCss, js: newJs })
+      });
+
+      if (!res.ok) {
+        throw new Error('Falha ao salvar as alterações no servidor');
+      }
+
+      // Agora que a persistência foi confirmada pelo backend, sincroniza os detalhes do projeto com segurança
+      await fetchProjectDetails();
+    } catch (err: any) {
+      console.error("Erro ao aplicar alterações da IA:", err);
+      notify.error("Não foi possível salvar as alterações da IA no servidor. Tente novamente.", "Erro de Sincronização");
+    }
   };
 
   // Parse HTML into recursive DOM Layer tree
@@ -936,6 +980,18 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
 
   const getFullHtmlDocument = () => {
     if (!activePage) return '';
+    const safePagesJson = JSON.stringify((project?.pages || []).map(p => ({
+      name: p.name,
+      slug: p.slug,
+      isHomepage: p.isHomepage,
+      html: p.html,
+      css: p.css,
+      js: p.js,
+      title: p.seoTitle || p.name
+    }))).replace(/</g, '\\u003c');
+
+    const safeJs = (activePage.js || '').replace(/<\/script/gi, '<\\/script');
+
     return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -971,19 +1027,11 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
     ${activePage.html || ''}
   </div>
   <script>
-    ${activePage.js || ''}
+    ${safeJs}
   </script>
   <script>
     // Interceptor de navegação para Preview local multi-páginas
-    window.__PROJECT_PAGES__ = ${JSON.stringify((project?.pages || []).map(p => ({
-      name: p.name,
-      slug: p.slug,
-      isHomepage: p.isHomepage,
-      html: p.html,
-      css: p.css,
-      js: p.js,
-      title: p.seoTitle || p.name
-    })))};
+    window.__PROJECT_PAGES__ = ${safePagesJson};
 
     document.addEventListener('click', function(e) {
       var target = e.target.closest('a');
@@ -1153,24 +1201,17 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
             </button>
           </div>
 
-          {/* Chat AI Toggle */}
-          <button 
-            onClick={() => setShowChat(!showChat)}
-            className={`p-2 rounded-xl transition-all cursor-pointer ${showChat ? 'bg-purple-600 text-white shadow-[0_0_15px_rgba(168,85,247,0.3)]' : 'bg-slate-900 text-slate-400 hover:text-white'}`}
-            title="AI Copilot Studio"
-          >
-            <MessageSquare className="w-4 h-4" />
-          </button>
-
-          {/* Botão Remasterizar esta Página com IA */}
-          <button
-            onClick={() => setShowRemasterPageModal(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white text-xs font-bold shadow-md shadow-purple-600/30 transition-all cursor-pointer"
-            title="Melhorar design desta página com IA (Mantendo textos e mídias)"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-yellow-300 animate-pulse" />
-            <span className="hidden sm:inline">Melhorar com IA</span>
-          </button>
+          {/* Botão Unificado para abrir a página dedicada de Otimização & Chat com IA */}
+          {onOpenAIImprover && (
+            <button
+              onClick={onOpenAIImprover}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white text-xs font-bold shadow-md shadow-purple-600/30 hover:shadow-purple-600/50 hover:scale-[1.02] transition-all cursor-pointer"
+              title="Abrir o Copilot de IA e a Fila de Melhorias Automáticas"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-yellow-300 animate-pulse" />
+              <span>✨ IA & Chat</span>
+            </button>
+          )}
 
           {/* Botão Unificado de Preview (Local + Ngrok) */}
           <div className="relative">
@@ -1590,14 +1631,16 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
                 html={activePage.html}
                 css={activePage.css}
                 js={activePage.js}
+                components={activePage.components}
                 highlightPath={selectedPath}
                 hoverPath={hoverPath}
                 zoom={zoom}
-                onElementSelect={(selector, styles, attrs, path) => {
+                onElementSelect={(selector, styles, attrs, path, componentId) => {
                   setSelectedSelector(selector);
                   setSelectedStyles(styles);
                   setSelectedAttrs(attrs);
                   setSelectedPath(path);
+                  setSelectedComponentId(componentId);
                 }}
                 onInlineContentChange={handleInlineTextChange}
                 onDeleteElement={handleDeleteElement}
@@ -1636,60 +1679,45 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack 
           </button>
 
           {showStylesPanel && (
-          <PropertiesPanel
-            selectedSelector={selectedSelector}
-            selectedPath={selectedPath}
-            selectedStyles={selectedStyles}
-            selectedAttrs={selectedAttrs}
-            onStyleChange={handleStyleChange}
-            onAttrChange={handleAttrChange}
-            onDeleteElement={handleDeleteElement}
-            onDuplicateElement={handleDuplicateElement}
-            onMoveElement={handleMoveElement}
-            onMoveElementDirection={handleMoveElementDirection}
-            layers={layers}
-            onSelectLayer={(selector, path) => {
-              setSelectedSelector(selector);
-              setSelectedPath(path);
-            }}
-            onHoverLayer={(path) => setHoverPath(path)}
-            onSaveSelectionAsTemplate={handleSaveSelectionAsTemplate}
-            pageSeo={{
-              title: activePage?.seoTitle || activePage?.name || '',
-              description: activePage?.seoDescription || '',
-              ogImage: activePage?.seoOgImage || ''
-            }}
-            onPageSeoChange={handlePageSeoChange}
-            onOpenMediaGallery={(target) => {
-              setMediaGalleryTarget(target || null);
-              setActiveLeftSidebar('media');
-            }}
-          />
+          <div className="w-80 h-full overflow-y-auto bg-slate-950 border-l border-slate-800">
+            {selectedComponentId && (
+              <InspectorPanel
+                node={findNodeById(activePage?.components || [], selectedComponentId) || {} as ComponentNode}
+                onUpdate={handleUpdateNode}
+              />
+            )}
+            <PropertiesPanel
+              selectedSelector={selectedSelector}
+              selectedPath={selectedPath}
+              selectedStyles={selectedStyles}
+              selectedAttrs={selectedAttrs}
+              onStyleChange={handleStyleChange}
+              onAttrChange={handleAttrChange}
+              onDeleteElement={handleDeleteElement}
+              onDuplicateElement={handleDuplicateElement}
+              onMoveElement={handleMoveElement}
+              onMoveElementDirection={handleMoveElementDirection}
+              layers={layers}
+              onSelectLayer={(selector, path) => {
+                setSelectedSelector(selector);
+                setSelectedPath(path);
+              }}
+              onHoverLayer={(path) => setHoverPath(path)}
+              onSaveSelectionAsTemplate={handleSaveSelectionAsTemplate}
+              pageSeo={{
+                title: activePage?.seoTitle || activePage?.name || '',
+                description: activePage?.seoDescription || '',
+                ogImage: activePage?.seoOgImage || ''
+              }}
+              onPageSeoChange={handlePageSeoChange}
+              onOpenMediaGallery={(target) => {
+                setMediaGalleryTarget(target || null);
+                setActiveLeftSidebar('media');
+              }}
+            />
+          </div>
           )}
         </div>
-
-        {/* AI Copilot Panel */}
-        {showChat && activePage && (
-          <ChatPanel
-            pageId={activePage.id}
-            projectId={projectId}
-            pages={project?.pages || [activePage]}
-            onApplyChanges={handleApplyAIChanges}
-            onUndo={handleUndo}
-            canUndo={undoStack.length > 0}
-            onReloadAllPages={async () => {
-              try {
-                const res = await fetch(`${API_URL}/api/projects/${projectId}`, {
-                  headers: { 'Authorization': `Bearer ${token}` }
-                });
-                if (res.ok) {
-                  const data = await res.json();
-                  setProject(data);
-                }
-              } catch {}
-            }}
-          />
-        )}
       </div>
 
       {/* ─── Modal de Código Fonte Completo ─── */}
