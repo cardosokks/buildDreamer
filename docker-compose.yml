@@ -1,41 +1,70 @@
+version: '3.8'
+
 services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: builddreamer-app
+    restart: always
+    ports:
+      - "12002:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DATABASE_URL=postgresql://postgres:builddreamer_secret_password@postgres:5432/builddreamer?schema=public
+      - JWT_SECRET=builddreamer_super_secure_jwt_token_2026
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - MINIO_ENDPOINT=minio
+      - MINIO_PORT=9000
+      - MINIO_USE_SSL=false
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadminpassword
+      - MINIO_BUCKET=builddreamer-assets
+      - OLLAMA_HOST=http://ollama:11434
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    volumes:
+      - ./public/uploads:/app/public/uploads
+
   postgres:
-    image: postgres:15-alpine
+    image: postgres:16-alpine
+    container_name: builddreamer-postgres
     restart: always
     environment:
-      POSTGRES_USER: builder_user
-      POSTGRES_PASSWORD: builder_password
-      POSTGRES_DB: builder_db
+      POSTGRES_DB: builddreamer
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: builddreamer_secret_password
     ports:
-      - "5432"
+      - "12003:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d builddreamer"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
-  backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+  minio:
+    image: minio/minio:latest
+    container_name: builddreamer-minio
     restart: always
-    ports:
-      - "5000:5000"
+    command: server /data --console-address ":9001"
     environment:
-      - API_URL=${API_URL}
-      - PORT=5000
-      - DATABASE_URL=postgresql://builder_user:builder_password@postgres:5432/builder_db?schema=public
-      - JWT_SECRET=super-secret-key-change-in-prod
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
-    depends_on:
-      - postgres
-
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    restart: always
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadminpassword
+      MINIO_REGION: us-east-1
     ports:
-      - "3001:80"
-    depends_on:
-      - backend
+      - "12000:9000"
+      - "12001:9001"
+    volumes:
+      - minio_data:/data
+
 
 volumes:
   postgres_data:
+  minio_data:
+  ollama_data:
