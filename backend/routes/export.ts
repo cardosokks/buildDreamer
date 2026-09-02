@@ -122,12 +122,20 @@ router.get('/:projectId', async (req: AuthenticatedRequest, res: any) => {
 
       let processedCss = processMediaInContent(page.css || '');
 
+      const finalTitle = page.seoTitle || page.title || page.name || project.name;
+      const finalDesc = page.seoDescription || page.description || project.description || '';
+
       const htmlContent = `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${page.title || page.name}</title>
+  <title>${finalTitle}</title>
+  <meta name="description" content="${finalDesc}">
+  <meta property="og:title" content="${finalTitle}">
+  <meta property="og:description" content="${finalDesc}">
+  <meta property="og:type" content="website">
+  ${project.favicon ? `<link rel="icon" href="${project.favicon}">` : ''}
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <style>

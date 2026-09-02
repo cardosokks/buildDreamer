@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useCallback } from 'react';
+import React, { useEffect, useRef, useCallback, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { renderTreeToHtml } from '../utils/renderer';
 import { ComponentNode } from '../types/canvas';
 
@@ -52,6 +53,9 @@ export const Canvas: React.FC<CanvasProps> = ({
   const isInitializedRef = useRef(false);
   const lastHtmlSentRef = useRef<string>('');
   const lastCssSentRef = useRef<string>('');
+  const [selectionRect, setSelectionRect] = useState<{ top: number; left: number; width: number; height: number; bottom: number; right: number } | null>(null);
+  const [selectionTagText, setSelectionTagText] = useState<string>('');
+  const [activeElementPath, setActiveElementPath] = useState<string | null>(null);
 
   const getRenderedHtml = useCallback(() => {
     if (components && components.length > 0) {
@@ -161,66 +165,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       border-radius: 2px;
     }
 
-    /* Floating Quick Action Toolbar (FIXED TO VIEWPORT) */
-    #studio-quick-toolbar {
-      position: fixed;
-      display: none;
-      z-index: 999999;
-      pointer-events: auto;
-      background: #0f0b18;
-      border: 1px solid #7e22ce;
-      border-radius: 8px;
-      padding: 4px 6px;
-      box-shadow: 0 12px 30px rgba(0,0,0,0.6), 0 0 0 1px rgba(126, 34, 206, 0.3);
-      align-items: center;
-      gap: 4px;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      user-select: none;
-      white-space: nowrap;
-    }
 
-    #studio-tag-badge {
-      background: #9333ea;
-      color: #ffffff;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-      font-size: 10px;
-      font-weight: 700;
-      padding: 2px 7px;
-      border-radius: 4px;
-      text-transform: lowercase;
-      margin-right: 2px;
-      display: inline-flex;
-      align-items: center;
-      max-width: 140px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .studio-tool-btn {
-      background: #1e1630;
-      border: 1px solid #3b285a;
-      color: #e2e8f0;
-      border-radius: 5px;
-      padding: 3px 7px;
-      font-size: 11px;
-      font-weight: 500;
-      cursor: pointer;
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      transition: all 0.15s ease;
-      line-height: 1.2;
-    }
-    .studio-tool-btn:hover {
-      background: #9333ea;
-      border-color: #a855f7;
-      color: #ffffff;
-    }
-    .studio-tool-btn.danger:hover {
-      background: #ef4444;
-      border-color: #ef4444;
-      color: #ffffff;
-    }
 
     /* ContentEditable Active Outline */
     [contenteditable="true"] {
@@ -250,16 +195,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   <div id="studio-hover-box"></div>
   <div id="studio-drop-indicator"></div>
 
-  <!-- Floating Quick Toolbar -->
-  <div id="studio-quick-toolbar" role="toolbar" aria-label="Ações do Elemento">
-    <span id="studio-tag-badge">div</span>
-    <button type="button" class="studio-tool-btn" id="btn-parent" title="Selecionar Elemento Pai">▲ Pai</button>
-    <button type="button" class="studio-tool-btn" id="btn-move-up" title="Mover para Cima">↑ Cima</button>
-    <button type="button" class="studio-tool-btn" id="btn-move-down" title="Mover para Baixo">↓ Baixo</button>
-    <button type="button" class="studio-tool-btn" id="btn-duplicate" title="Duplicar Elemento">📋 Duplicar</button>
-    <button type="button" class="studio-tool-btn" id="btn-inline-edit" title="Editar Texto Diretamente">✏️ Texto</button>
-    <button type="button" class="studio-tool-btn danger" id="btn-delete" title="Excluir Elemento">🗑️ Excluir</button>
-  </div>
+
 
   <script>
     (function() {
@@ -318,7 +254,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       function updateOverlayPosition() {
         if (!currentSelected || !currentSelected.isConnected || isEditingInline) {
           if (selectionBox) selectionBox.style.display = 'none';
-          if (quickToolbar) quickToolbar.style.display = 'none';
+          window.parent.postMessage({ type: 'HIDE_SELECTION_RECT' }, '*');
           return;
         }
 
@@ -327,7 +263,7 @@ export const Canvas: React.FC<CanvasProps> = ({
         // Check if element is completely off-screen or hidden
         if (rect.width === 0 && rect.height === 0 && rect.top === 0 && rect.left === 0) {
           if (selectionBox) selectionBox.style.display = 'none';
-          if (quickToolbar) quickToolbar.style.display = 'none';
+          window.parent.postMessage({ type: 'HIDE_SELECTION_RECT' }, '*');
           return;
         }
 
@@ -344,33 +280,19 @@ export const Canvas: React.FC<CanvasProps> = ({
           }
         }
 
-        // Position Floating Quick Toolbar (FIXED coords)
-        if (quickToolbar) {
-          quickToolbar.style.display = 'flex';
-          
-          let toolTop = rect.top - 42;
-          if (toolTop < 6) {
-            toolTop = rect.bottom + 8;
-          }
+        const tag = currentSelected.tagName.toLowerCase();
+        const id = currentSelected.id ? '#' + currentSelected.id : '';
+        const cls = currentSelected.className && typeof currentSelected.className === 'string'
+          ? '.' + currentSelected.className.split(' ').filter(c => c && !c.startsWith('studio-'))[0]
+          : '';
+        const tagText = tag + id + (cls ? cls.slice(0, 14) : '');
 
-          let toolLeft = rect.left;
-          const maxLeft = window.innerWidth - 350;
-          if (toolLeft > maxLeft) toolLeft = Math.max(6, maxLeft);
-          if (toolLeft < 6) toolLeft = 6;
-
-          quickToolbar.style.top = toolTop + 'px';
-          quickToolbar.style.left = toolLeft + 'px';
-        }
-
-        // Update Tag Badge text
-        if (tagBadge && currentSelected) {
-          const tag = currentSelected.tagName.toLowerCase();
-          const id = currentSelected.id ? '#' + currentSelected.id : '';
-          const cls = currentSelected.className && typeof currentSelected.className === 'string'
-            ? '.' + currentSelected.className.split(' ').filter(c => c && !c.startsWith('studio-'))[0]
-            : '';
-          tagBadge.textContent = tag + id + (cls ? cls.slice(0, 14) : '');
-        }
+        window.parent.postMessage({
+          type: 'UPDATE_SELECTION_RECT',
+          rect: { top: rect.top, left: rect.left, width: rect.width, height: rect.height, bottom: rect.bottom, right: rect.right },
+          tagText,
+          path: currentSelectedPath
+        }, '*');
       }
 
       function removeSelection() {
@@ -384,7 +306,7 @@ export const Canvas: React.FC<CanvasProps> = ({
         currentSelected = null;
         currentSelectedPath = null;
         if (selectionBox) selectionBox.style.display = 'none';
-        if (quickToolbar) quickToolbar.style.display = 'none';
+        window.parent.postMessage({ type: 'HIDE_SELECTION_RECT' }, '*');
       }
 
       function selectElement(target, shouldScroll) {
@@ -589,49 +511,21 @@ export const Canvas: React.FC<CanvasProps> = ({
         if (hoverBox) hoverBox.style.display = 'none';
       });
 
-      // ─── Quick Toolbar Button Handlers ───
-      document.getElementById('btn-parent').addEventListener('click', function(e) {
-        e.stopPropagation();
-        if (!currentSelected) return;
-        const parent = currentSelected.parentElement;
-        if (parent && !isInternalStudioNode(parent)) {
-          selectElement(parent, false);
+      // ─── Incoming Actions From Parent ───
+      window.addEventListener('message', function(msg) {
+        if (!msg.data) return;
+        if (msg.data.type === 'ACTION_SELECT_PARENT' && currentSelected) {
+          const parent = currentSelected.parentElement;
+          if (parent && !isInternalStudioNode(parent)) {
+            selectElement(parent, false);
+          }
         }
-      });
-
-      document.getElementById('btn-move-up').addEventListener('click', function(e) {
-        e.stopPropagation();
-        if (!currentSelected) return;
-        const path = getIndexPath(currentSelected);
-        window.parent.postMessage({ type: 'ACTION_MOVE_ELEMENT_DIRECTION', path, direction: 'up' }, '*');
-      });
-
-      document.getElementById('btn-move-down').addEventListener('click', function(e) {
-        e.stopPropagation();
-        if (!currentSelected) return;
-        const path = getIndexPath(currentSelected);
-        window.parent.postMessage({ type: 'ACTION_MOVE_ELEMENT_DIRECTION', path, direction: 'down' }, '*');
-      });
-
-      document.getElementById('btn-duplicate').addEventListener('click', function(e) {
-        e.stopPropagation();
-        if (!currentSelected) return;
-        const path = getIndexPath(currentSelected);
-        window.parent.postMessage({ type: 'ACTION_DUPLICATE_ELEMENT', path }, '*');
-      });
-
-      document.getElementById('btn-inline-edit').addEventListener('click', function(e) {
-        e.stopPropagation();
-        if (!currentSelected) return;
-        startInlineEdit(currentSelected);
-      });
-
-      document.getElementById('btn-delete').addEventListener('click', function(e) {
-        e.stopPropagation();
-        if (!currentSelected) return;
-        const path = getIndexPath(currentSelected);
-        removeSelection();
-        window.parent.postMessage({ type: 'ACTION_DELETE_ELEMENT', path }, '*');
+        if (msg.data.type === 'ACTION_START_INLINE_EDIT' && currentSelected) {
+          startInlineEdit(currentSelected);
+        }
+        if (msg.data.type === 'REQUEST_UPDATE_RECT') {
+          updateOverlayPosition();
+        }
       });
 
       // ─── Resize Handles Drag Logic ───
@@ -974,6 +868,32 @@ export const Canvas: React.FC<CanvasProps> = ({
           }
           break;
 
+        case 'UPDATE_SELECTION_RECT':
+          if (iframeRef.current) {
+            const iframeRect = iframeRef.current.getBoundingClientRect();
+            const scale = zoom / 100;
+            const screenTop = iframeRect.top + event.data.rect.top * scale;
+            const screenLeft = iframeRect.left + event.data.rect.left * scale;
+            const screenBottom = iframeRect.top + event.data.rect.bottom * scale;
+            const screenRight = iframeRect.left + event.data.rect.right * scale;
+            setSelectionRect({
+              top: screenTop,
+              left: screenLeft,
+              width: event.data.rect.width * scale,
+              height: event.data.rect.height * scale,
+              bottom: screenBottom,
+              right: screenRight
+            });
+            setSelectionTagText(event.data.tagText);
+            setActiveElementPath(event.data.path);
+          }
+          break;
+
+        case 'HIDE_SELECTION_RECT':
+          setSelectionRect(null);
+          setActiveElementPath(null);
+          break;
+
         default:
           break;
       }
@@ -1011,6 +931,99 @@ export const Canvas: React.FC<CanvasProps> = ({
           sandbox="allow-scripts allow-same-origin"
         />
       </div>
+
+      {selectionRect && createPortal(
+        <div
+          id="studio-quick-toolbar"
+          role="toolbar"
+          aria-label="Ações do Elemento"
+          className="fixed z-[999999] bg-[#0f0b18] border border-purple-500/50 rounded-xl px-2.5 py-1.5 shadow-2xl flex items-center gap-1.5 text-xs text-white select-none animate-in fade-in duration-100"
+          style={{
+            top: (() => {
+              let t = selectionRect.top - 46;
+              if (t < 8) t = selectionRect.bottom + 8;
+              return t;
+            })(),
+            left: Math.max(8, Math.min(selectionRect.left, window.innerWidth - 380))
+          }}
+        >
+          <span className="bg-purple-600 text-white font-mono text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider max-w-[120px] truncate">
+            {selectionTagText || 'element'}
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              iframeRef.current?.contentWindow?.postMessage({ type: 'ACTION_SELECT_PARENT' }, '*');
+            }}
+            className="px-2 py-1 bg-slate-900 hover:bg-purple-600 border border-slate-700 hover:border-purple-400 rounded-lg font-medium transition-all cursor-pointer"
+            title="Selecionar Elemento Pai"
+          >
+            ▲ Pai
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (activeElementPath && onMoveElementDirection) {
+                onMoveElementDirection(activeElementPath, 'up');
+                setTimeout(() => iframeRef.current?.contentWindow?.postMessage({ type: 'REQUEST_UPDATE_RECT' }, '*'), 50);
+              }
+            }}
+            className="px-2 py-1 bg-slate-900 hover:bg-purple-600 border border-slate-700 hover:border-purple-400 rounded-lg font-medium transition-all cursor-pointer"
+            title="Mover para Cima"
+          >
+            ↑ Cima
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (activeElementPath && onMoveElementDirection) {
+                onMoveElementDirection(activeElementPath, 'down');
+                setTimeout(() => iframeRef.current?.contentWindow?.postMessage({ type: 'REQUEST_UPDATE_RECT' }, '*'), 50);
+              }
+            }}
+            className="px-2 py-1 bg-slate-900 hover:bg-purple-600 border border-slate-700 hover:border-purple-400 rounded-lg font-medium transition-all cursor-pointer"
+            title="Mover para Baixo"
+          >
+            ↓ Baixo
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (activeElementPath && onDuplicateElement) {
+                onDuplicateElement(activeElementPath);
+              }
+            }}
+            className="px-2 py-1 bg-slate-900 hover:bg-purple-600 border border-slate-700 hover:border-purple-400 rounded-lg font-medium transition-all cursor-pointer"
+            title="Duplicar Elemento"
+          >
+            📋 Duplicar
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              iframeRef.current?.contentWindow?.postMessage({ type: 'ACTION_START_INLINE_EDIT' }, '*');
+            }}
+            className="px-2 py-1 bg-slate-900 hover:bg-purple-600 border border-slate-700 hover:border-purple-400 rounded-lg font-medium transition-all cursor-pointer"
+            title="Editar Texto Diretamente"
+          >
+            ✏️ Texto
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (activeElementPath && onDeleteElement) {
+                onDeleteElement(activeElementPath);
+                setSelectionRect(null);
+              }
+            }}
+            className="px-2 py-1 bg-rose-950/40 hover:bg-rose-600 border border-rose-900/60 hover:border-rose-500 text-rose-300 hover:text-white rounded-lg font-medium transition-all cursor-pointer"
+            title="Excluir Elemento"
+          >
+            🗑️ Excluir
+          </button>
+        </div>,
+        document.body
+      )}
     </div>
   );
 };

@@ -523,6 +523,8 @@ router.post('/import-zip', async (req: AuthenticatedRequest, res: any) => {
       name: string;
       slug: string;
       title: string;
+      seoTitle?: string;
+      seoDescription?: string;
       isHomepage: boolean;
       html: string;
       css: string;
@@ -543,9 +545,13 @@ router.post('/import-zip', async (req: AuthenticatedRequest, res: any) => {
       const slug = isHome ? 'index' : basename.toLowerCase().replace(/[^a-z0-9]+/g, '-');
       const nameTitle = isHome ? 'Home' : basename.charAt(0).toUpperCase() + basename.slice(1);
 
-      // Tenta extrair <title>
+      // Tenta extrair <title> e <meta name="description">
       const titleMatch = rawHtml.match(/<title[^>]*>([^<]+)<\/title>/i);
       const title = titleMatch ? titleMatch[1].trim() : nameTitle;
+
+      const descMatch = rawHtml.match(/<meta\s+name=["']description["']\s+content=["']([^"']+)["'][^>]*>/i) ||
+                        rawHtml.match(/<meta\s+content=["']([^"']+)["']\s+name=["']description["'][^>]*>/i);
+      const seoDescription = descMatch ? descMatch[1].trim() : '';
 
       // Extrai corpo ou <div id="canvas-root"> ou <body>
       let bodyHtml = rawHtml;
@@ -580,6 +586,8 @@ router.post('/import-zip', async (req: AuthenticatedRequest, res: any) => {
         name: nameTitle,
         slug,
         title,
+        seoTitle: title,
+        seoDescription,
         isHomepage: isHome,
         html: bodyHtml,
         css: cssContent,
@@ -613,6 +621,8 @@ router.post('/import-zip', async (req: AuthenticatedRequest, res: any) => {
             data: {
               name: ep.name,
               title: ep.title,
+              seoTitle: ep.seoTitle,
+              seoDescription: ep.seoDescription,
               html: ep.html,
               css: ep.css || existingPage.css,
               js: ep.js || existingPage.js
@@ -625,6 +635,8 @@ router.post('/import-zip', async (req: AuthenticatedRequest, res: any) => {
               name: ep.name,
               slug: ep.slug,
               title: ep.title,
+              seoTitle: ep.seoTitle,
+              seoDescription: ep.seoDescription,
               isHomepage: ep.isHomepage,
               html: ep.html,
               css: ep.css,
@@ -656,6 +668,8 @@ router.post('/import-zip', async (req: AuthenticatedRequest, res: any) => {
               name: p.name,
               slug: p.slug,
               title: p.title,
+              seoTitle: p.seoTitle,
+              seoDescription: p.seoDescription,
               isHomepage: p.isHomepage,
               html: p.html,
               css: p.css,

@@ -34,7 +34,8 @@ import {
   Upload,
   Image as ImageIcon,
   CheckCircle,
-  X
+  X,
+  ShieldCheck
 } from 'lucide-react';
 import { Sidebar } from './Sidebar';
 import type { ElementNode } from './Sidebar';
@@ -43,6 +44,7 @@ import { PropertiesPanel } from './PropertiesPanel';
 import { CodeEditor } from './CodeEditor';
 import { MediaLibrarySidebar } from './MediaLibrarySidebar';
 import { ChatPanel } from './ChatPanel';
+import { SEOAuditModal } from './SEOAuditModal';
 import { API_URL, safeJson } from '../config';
 import { useNotification } from '../context/NotificationContext';
 
@@ -168,6 +170,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
   const [showCodeModal, setShowCodeModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [showRemasterPageModal, setShowRemasterPageModal] = useState(false);
+  const [showSEOAuditModal, setShowSEOAuditModal] = useState(false);
   const [pageRemasterPrompt, setPageRemasterPrompt] = useState('Aprimore o design e layout desta página com Tailwind CSS mantendo estritamente todas as frases, textos e mídias originais.');
   const [remasteringPage, setRemasteringPage] = useState(false);
   const [showProjectMenuDropdown, setShowProjectMenuDropdown] = useState(false);
@@ -1288,7 +1291,17 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
             className="hidden" 
           />
 
-          {/* Menu Dropdown de Projeto (Importar / Exportar Código / Exportar ZIP) */}
+          {/* Botão de Auditoria SEO & Acessibilidade */}
+          <button
+            onClick={() => setShowSEOAuditModal(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-purple-500/40 text-purple-300 rounded-xl text-xs font-semibold transition-all cursor-pointer shadow-sm"
+            title="Auditoria de SEO, Acessibilidade WCAG e Boas Práticas"
+          >
+            <ShieldCheck className="w-3.5 h-3.5 text-purple-400" />
+            <span className="hidden md:inline">Auditoria SEO</span>
+          </button>
+
+          {/* Menu Dropdown de Projeto (Importar / Exportار Código / Exportar ZIP) */}
           <div className="relative">
             <button 
               onClick={() => setShowProjectMenuDropdown(!showProjectMenuDropdown)}
@@ -1975,6 +1988,19 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
             </div>
           </div>
         </div>
+      )}
+
+      {/* SEO & Accessibility Audit Modal */}
+      {activePage && (
+        <SEOAuditModal
+          isOpen={showSEOAuditModal}
+          onClose={() => setShowSEOAuditModal(false)}
+          pageHtml={activePage.html}
+          pageName={activePage.name}
+          seoTitle={activePage.seoTitle}
+          seoDescription={activePage.seoDescription}
+          seoOgImage={activePage.seoOgImage}
+        />
       )}
     </div>
   );
