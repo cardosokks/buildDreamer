@@ -1,11 +1,21 @@
 import { Router } from 'express';
 import { prisma } from '../db';
 import { AuthenticatedRequest } from '../middleware/auth';
+import { getAssetStream } from '../services/storageService';
 import JSZip from 'jszip';
 import path from 'path';
 import fs from 'fs';
 
 const router = Router();
+
+async function streamToBuffer(stream: NodeJS.ReadableStream): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    stream.on('data', (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
+    stream.on('end', () => resolve(Buffer.concat(chunks)));
+    stream.on('error', (err) => reject(err));
+  });
+}
 
 /**
  * Normaliza links internos nas páginas HTML para funcionarem em qualquer hospedagem estática
@@ -24,7 +34,7 @@ function normalizeHtmlLinks(html: string, isHome: boolean, allPages: Array<{ slu
     if (!targetPage) return match;
 
     if (targetPage.isHomepage) {
-      return isHome ? `href="index.html"` : `href="index.html"`;
+      return `href="index.html"`;
     } else {
       return `href="${targetPage.slug}.html"`;
     }
@@ -45,7 +55,8 @@ router.get('/:projectId', async (req: AuthenticatedRequest, res: any) => {
         }
       },
       include: {
-        pages: true
+        pages: true,
+        assets: true
       }
     });
 
@@ -72,45 +83,93 @@ router.get('/:projectId', async (req: AuthenticatedRequest, res: any) => {
 
     const bundledAssets = new Set<string>();
 
-    // Função auxiliar para coletar e empacotar mídias do HTML/CSS
-    const processMediaInContent = (content: string): string => {
+    // Função auxiliar para coletar e empacotar mídias do HTML/CSS (MinIO ou disco)
+    const processMediaInContent = async (content: string): Promise<string> => {
       if (!content || !includeAssets || !assetsFolder) return content;
 
       let rewritten = content;
-      // Captura links do tipo /api/media/files/<filename> ou http(s)://.../api/media/files/<filename> ou /data/uploads/<filename>
-      const mediaRegex = /(?:https?:\/\/[^\s"'()]+)?(?:\/api\/media\/files\/|\/data\/uploads\/)([a-zA-Z0-9_\-\.]+)/gi;
+      // Captura links do tipo /api/media/files/<filename>, http(s)://.../api/media/files/<filename>, /data/uploads/<filename> ou uploads/<filename>
+      const mediaRegex = /(?:https?:\/\/[^\s"'()]+)?(?:\/api\/media\/files\/|\/data\/uploads\/|uploads\/)([a-zA-Z0-9_\-\.]+)/gi;
       const matches = [...content.matchAll(mediaRegex)];
 
       for (const match of matches) {
         const fullMatch = match[0];
         const filename = match[1];
 
-        // Tenta localizar o arquivo de mídia no servidor
-        let filePath = path.join(uploadsDir, filename);
-        if (!fs.existsSync(filePath)) {
-          filePath = path.join(uploadsDirAlt, filename);
-        }
-
-        if (fs.existsSync(filePath) && !bundledAssets.has(filename)) {
-          try {
-            const fileBuf = fs.readFileSync(filePath);
-            assetsFolder.file(filename, fileBuf);
-            bundledAssets.add(filename);
-          } catch (e) {
-            console.warn(`[Export] Não foi possível ler arquivo de mídia ${filename}:`, e);
-          }
-        }
-
-        if (bundledAssets.has(filename) || fs.existsSync(filePath)) {
+        if (bundledAssets.has(filename)) {
           rewritten = rewritten.split(fullMatch).join(`assets/${filename}`);
+          continue;
+        }
+
+        try {
+          const stream = await getAssetStream(filename);
+          const buffer = await streamToBuffer(stream);
+          assetsFolder.file(filename, buffer);
+          bundledAssets.add(filename);
+          rewritten = rewritten.split(fullMatch).join(`assets/${filename}`);
+        } catch (e) {
+          // Fallback para arquivo local em disco
+          let filePath = path.join(uploadsDir, filename);
+          if (!fs.existsSync(filePath)) {
+            filePath = path.join(uploadsDirAlt, filename);
+          }
+
+          if (fs.existsSync(filePath)) {
+            try {
+              const fileBuf = fs.readFileSync(filePath);
+              assetsFolder.file(filename, fileBuf);
+              bundledAssets.add(filename);
+              rewritten = rewritten.split(fullMatch).join(`assets/${filename}`);
+            } catch (err) {
+              console.warn(`[Export] Não foi possível ler arquivo local ${filename}:`, err);
+            }
+          } else {
+            console.warn(`[Export] Mídia não encontrada para empacotar: ${filename}`);
+          }
         }
       }
 
       return rewritten;
     };
+
+    // Processar assets cadastrados explicitamente no projeto
+    if (project.assets && project.assets.length > 0 && includeAssets && assetsFolder) {
+      for (const asset of project.assets) {
+        if (asset.url) {
+          const parts = asset.url.split('/');
+          const filename = parts[parts.length - 1];
+          if (filename && !bundledAssets.has(filename)) {
+            try {
+              const stream = await getAssetStream(filename);
+              const buffer = await streamToBuffer(stream);
+              assetsFolder.file(filename, buffer);
+              bundledAssets.add(filename);
+            } catch {}
+          }
+        }
+      }
+    }
+
+    // Processar Favicon do projeto
+    let processedFavicon = project.favicon;
+    if (processedFavicon && includeAssets && assetsFolder) {
+      const matchFav = processedFavicon.match(/(?:\/api\/media\/files\/|\/data\/uploads\/|uploads\/)([a-zA-Z0-9_\-\.]+)/i);
+      if (matchFav) {
+        const favFilename = matchFav[1];
+        if (!bundledAssets.has(favFilename)) {
+          try {
+            const stream = await getAssetStream(favFilename);
+            const buffer = await streamToBuffer(stream);
+            assetsFolder.file(favFilename, buffer);
+            bundledAssets.add(favFilename);
+          } catch {}
+        }
+        processedFavicon = `assets/${favFilename}`;
+      }
+    }
     
     // Process pages and assets
-    project.pages.forEach(page => {
+    for (const page of project.pages) {
       const isHome = page.isHomepage;
       const filename = isHome ? "index.html" : `${page.slug}.html`;
       
@@ -118,9 +177,9 @@ router.get('/:projectId', async (req: AuthenticatedRequest, res: any) => {
       const jsFilename = `${page.slug}.js`;
 
       let normalizedPageHtml = normalizeHtmlLinks(page.html, isHome, project.pages);
-      normalizedPageHtml = processMediaInContent(normalizedPageHtml);
+      normalizedPageHtml = await processMediaInContent(normalizedPageHtml);
 
-      let processedCss = processMediaInContent(page.css || '');
+      let processedCss = await processMediaInContent(page.css || '');
 
       const finalTitle = page.seoTitle || page.title || page.name || project.name;
       const finalDesc = page.seoDescription || page.description || project.description || '';
@@ -135,7 +194,7 @@ router.get('/:projectId', async (req: AuthenticatedRequest, res: any) => {
   <meta property="og:title" content="${finalTitle}">
   <meta property="og:description" content="${finalDesc}">
   <meta property="og:type" content="website">
-  ${project.favicon ? `<link rel="icon" href="${project.favicon}">` : ''}
+  ${processedFavicon ? `<link rel="icon" href="${processedFavicon}">` : ''}
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <style>
@@ -172,7 +231,7 @@ router.get('/:projectId', async (req: AuthenticatedRequest, res: any) => {
       if (includeJs && jsFolder) {
         jsFolder.file(jsFilename, page.js || '');
       }
-    });
+    }
 
     if (includeReadme) {
       zip.file("README.md", `# ${project.name}\n\nSite exportado do construtor de sites Real Premise / AI Website Builder.\n\n## Estrutura dos Arquivos:\n- \`index.html\`: Página Principal (Home)\n- \`*.html\`: Demais páginas do site na raiz\n- \`assets/\`: Mídias e imagens originais do site\n- \`css/\`: Folhas de estilo adicionais\n- \`js/\`: Scripts interativos\n`);
@@ -206,3 +265,4 @@ services:
 });
 
 export const exportRouter = router;
+

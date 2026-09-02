@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Image as ImageIcon, Upload, Trash2, Plus, Copy, Check, Search, Loader2, X, RefreshCw } from 'lucide-react';
+import { Image as ImageIcon, Upload, Trash2, Plus, Copy, Check, Search, Loader2, X, RefreshCw, CheckSquare, Square } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { API_URL } from '../config';
 import { useNotification } from '../context/NotificationContext';
@@ -31,6 +31,8 @@ export const MediaLibrarySidebar: React.FC<MediaLibrarySidebarProps> = ({
   const [uploading, setUploading] = useState(false);
   const [search, setSearch] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [deleting, setDeleting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchMedia = async () => {
@@ -93,6 +95,7 @@ export const MediaLibrarySidebar: React.FC<MediaLibrarySidebarProps> = ({
       const data = await res.json();
       if (data.media) {
         setMediaList(prev => [data.media, ...prev]);
+        notify.success('Imagem enviada com sucesso!', 'Upload');
         const fullUrl = resolveFullImageUrl(data.media.url);
         if (onSelectImage) onSelectImage(fullUrl);
       }
@@ -107,7 +110,7 @@ export const MediaLibrarySidebar: React.FC<MediaLibrarySidebarProps> = ({
 
   const handleDeleteMedia = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!confirm('Deseja excluir esta imagem da biblioteca permanentemente?')) return;
+    if (!window.confirm('Deseja excluir esta imagem da biblioteca permanentemente?')) return;
 
     try {
       const res = await fetch(`${API_URL}/api/media/${id}`, {
@@ -116,9 +119,81 @@ export const MediaLibrarySidebar: React.FC<MediaLibrarySidebarProps> = ({
       });
       if (res.ok) {
         setMediaList(prev => prev.filter(m => m.id !== id));
+        setSelectedIds(prev => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+        notify.success('Imagem excluída com sucesso.', 'Exclusão');
+      } else {
+        notify.error('Falha ao excluir a imagem.', 'Erro');
       }
     } catch (err) {
       console.error('Erro ao excluir mídia:', err);
+      notify.error('Erro de conexão ao excluir imagem.', 'Erro');
+    }
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedIds.size === 0) return;
+    if (!window.confirm(`Deseja excluir permanentemente as ${selectedIds.size} imagens selecionadas?`)) return;
+
+    setDeleting(true);
+    try {
+      const idsArray = Array.from(selectedIds);
+      const res = await fetch(`${API_URL}/api/media/batch-delete`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ ids: idsArray })
+      });
+
+      if (res.ok) {
+        setMediaList(prev => prev.filter(m => !selectedIds.has(m.id)));
+        setSelectedIds(new Set());
+        notify.success(`${idsArray.length} imagens excluídas com sucesso.`, 'Exclusão em Lote');
+      } else {
+        notify.error('Falha ao excluir imagens selecionadas.', 'Erro');
+      }
+    } catch (err) {
+      console.error('Erro na exclusão em lote:', err);
+      notify.error('Erro ao processar exclusão em lote.', 'Erro');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const toggleSelectOne = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    const filteredIds = filtered.map(m => m.id);
+    const allSelected = filteredIds.length > 0 && filteredIds.every(id => selectedIds.has(id));
+    
+    if (allSelected) {
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        filteredIds.forEach(id => next.delete(id));
+        return next;
+      });
+    } else {
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        filteredIds.forEach(id => next.add(id));
+        return next;
+      });
     }
   };
 
@@ -135,12 +210,15 @@ export const MediaLibrarySidebar: React.FC<MediaLibrarySidebarProps> = ({
     const fullUrl = resolveFullImageUrl(url);
     navigator.clipboard.writeText(fullUrl);
     setCopiedId(id);
+    notify.success('URL copiada para a área de transferência!', 'Copiado');
     setTimeout(() => setCopiedId(null), 2000);
   };
 
   const filtered = mediaList.filter(m =>
     m.name.toLowerCase().includes(search.toLowerCase())
   );
+
+  const allFilteredSelected = filtered.length > 0 && filtered.every(m => selectedIds.has(m.id));
 
   return (
     <aside className="w-80 bg-[#0c0814] border-r border-purple-500/20 h-full flex flex-col z-30 shadow-2xl animate-in slide-in-from-left-3 duration-200">
@@ -174,8 +252,8 @@ export const MediaLibrarySidebar: React.FC<MediaLibrarySidebarProps> = ({
         </div>
       </div>
 
-      {/* Area de Upload */}
-      <div className="p-4 border-b border-slate-850 bg-slate-900/30">
+      {/* Area de Upload e Ações em Lote */}
+      <div className="p-4 border-b border-slate-850 bg-slate-900/30 space-y-3">
         <input
           type="file"
           ref={fileInputRef}
@@ -202,17 +280,50 @@ export const MediaLibrarySidebar: React.FC<MediaLibrarySidebarProps> = ({
           )}
         </button>
 
-        {/* Busca */}
-        <div className="relative mt-3">
-          <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            placeholder="Buscar imagem pelo nome..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="w-full pl-9 pr-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
-          />
+        {/* Busca e Seleção em Lote */}
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="Buscar imagem pelo nome..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="w-full pl-9 pr-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
+            />
+          </div>
+
+          {filtered.length > 0 && (
+            <button
+              onClick={toggleSelectAll}
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors border ${
+                allFilteredSelected 
+                  ? 'bg-purple-600/30 text-purple-300 border-purple-500/50' 
+                  : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-white'
+              }`}
+              title={allFilteredSelected ? "Desmarcar todos" : "Selecionar visíveis"}
+            >
+              {allFilteredSelected ? <CheckSquare className="w-3.5 h-3.5" /> : <Square className="w-3.5 h-3.5" />}
+              <span>Todos</span>
+            </button>
+          )}
         </div>
+
+        {selectedIds.size > 0 && (
+          <div className="flex items-center justify-between bg-purple-950/40 border border-purple-500/30 rounded-xl px-3 py-2 text-xs">
+            <span className="text-purple-300 font-medium">
+              {selectedIds.size} {selectedIds.size === 1 ? 'selecionada' : 'selecionadas'}
+            </span>
+            <button
+              onClick={handleDeleteSelected}
+              disabled={deleting}
+              className="px-2.5 py-1 bg-red-600 hover:bg-red-500 text-white font-bold rounded-lg transition-colors flex items-center gap-1 shadow-sm disabled:opacity-50"
+            >
+              {deleting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+              <span>Excluir Selecionadas</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Lista / Grade de Imagens */}
@@ -232,6 +343,7 @@ export const MediaLibrarySidebar: React.FC<MediaLibrarySidebarProps> = ({
           <div className="grid grid-cols-2 gap-2.5">
             {filtered.map(media => {
               const fullUrl = resolveFullImageUrl(media.url);
+              const isSelected = selectedIds.has(media.id);
 
               return (
                 <div
@@ -240,7 +352,9 @@ export const MediaLibrarySidebar: React.FC<MediaLibrarySidebarProps> = ({
                     if (onSelectImage) onSelectImage(fullUrl);
                     if (onInsertImageToCanvas) onInsertImageToCanvas(fullUrl, media.name);
                   }}
-                  className="group bg-slate-950 border border-slate-850 hover:border-purple-500/50 rounded-xl overflow-hidden flex flex-col transition-all cursor-pointer shadow-md relative"
+                  className={`group bg-slate-950 border rounded-xl overflow-hidden flex flex-col transition-all cursor-pointer shadow-md relative ${
+                    isSelected ? 'border-purple-500 ring-1 ring-purple-500 bg-purple-950/20' : 'border-slate-850 hover:border-purple-500/50'
+                  }`}
                 >
                   <div className="h-28 w-full bg-slate-900 overflow-hidden relative flex items-center justify-center p-1">
                     <img
@@ -249,6 +363,20 @@ export const MediaLibrarySidebar: React.FC<MediaLibrarySidebarProps> = ({
                       className="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform duration-200"
                       loading="lazy"
                     />
+
+                    {/* Checkbox de seleção */}
+                    <button
+                      type="button"
+                      onClick={(e) => toggleSelectOne(media.id, e)}
+                      className={`absolute top-2 left-2 z-10 p-1 rounded-md transition-all shadow-sm ${
+                        isSelected 
+                          ? 'bg-purple-600 text-white opacity-100' 
+                          : 'bg-black/50 text-white opacity-0 group-hover:opacity-100 hover:bg-black/70'
+                      }`}
+                      title={isSelected ? "Desmarcar" : "Selecionar"}
+                    >
+                      {isSelected ? <CheckSquare className="w-3.5 h-3.5" /> : <Square className="w-3.5 h-3.5" />}
+                    </button>
 
                     <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5 p-2 backdrop-blur-[1px]">
                       {onInsertImageToCanvas && (
@@ -282,7 +410,7 @@ export const MediaLibrarySidebar: React.FC<MediaLibrarySidebarProps> = ({
                     </div>
                   </div>
 
-                  <div className="p-2 bg-slate-950 border-t border-slate-900">
+                  <div className="p-2 bg-slate-950 border-t border-slate-950">
                     <p className="text-[11px] text-slate-300 font-semibold truncate leading-tight" title={media.name}>
                       {media.name}
                     </p>

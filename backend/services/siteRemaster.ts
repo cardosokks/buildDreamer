@@ -192,22 +192,37 @@ export async function processPageAssets(
 ): Promise<string> {
   let rewrittenHtml = html;
   
-  // Coletar mídias candidatas usando duas estratégias:
-  // 1. Regex de extensão clássica (para caminhos relativos ou absolutos)
-  const assetRegex = /(src|href|poster|data-src|data-bg)=["']([^"'#?]+(\.(png|jpe?g|gif|svg|webp|mp4|webm|css|js|woff2?))(\?[^"']*)?)["']/gi;
+  // Coletar mídias candidatas usando estratégias robustas:
+  // 1. Regex de atributos padrão e de lazy load
+  const assetRegex = /(src|href|poster|data-src|data-bg|data-original|data-lazy-src)=["']([^"'#?]+(\.(png|jpe?g|gif|svg|webp|mp4|webm|css|js|woff2?))(\?[^"']*)?)["']/gi;
   const matches = [...html.matchAll(assetRegex)];
   
   // 2. Regex de mídias absolutas externas (para URLs externas dinâmicas sem extensão de arquivo visível)
-  const absoluteMediaRegex = /(src|data-src|data-bg|poster)=["'](https?:\/\/[^"'#?]+(\?[^"']*)?)["']/gi;
+  const absoluteMediaRegex = /(src|data-src|data-bg|data-original|data-lazy-src|poster)=["'](https?:\/\/[^"'#?]+(\?[^"']*)?)["']/gi;
   const absMatches = [...html.matchAll(absoluteMediaRegex)];
-  
-  // Combinar ambas em um conjunto único de URLs originais para evitar duplicados
+
+  // 3. Regex para srcset em imagens responsivas
+  const srcsetRegex = /srcset=["']([^"']+)["']/gi;
+  const srcsetMatches = [...html.matchAll(srcsetRegex)];
+  const srcsetUrls = new Set<string>();
+  for (const m of srcsetMatches) {
+    const parts = m[1].split(',');
+    for (const part of parts) {
+      const u = part.trim().split(/\s+/)[0];
+      if (u) srcsetUrls.add(u);
+    }
+  }
+
+  // Combinar em um conjunto único de URLs originais para evitar duplicados
   const candidateUrls = new Set<string>();
   for (const m of matches) {
     candidateUrls.add(m[2]);
   }
   for (const m of absMatches) {
     candidateUrls.add(m[2]);
+  }
+  for (const u of srcsetUrls) {
+    candidateUrls.add(u);
   }
 
   for (const originalUrl of candidateUrls) {
@@ -955,17 +970,24 @@ export async function processCustomRemasterGenerationJob(
       }
     );
 
-    // Atualizar Home imediatamente no banco de dados
+    // Atualizar Home imediatamente no banco de dados (reprocessando assets se necessário)
+    let finalHomeHtml = homeAiResponse.html || homePage.html;
+    try {
+      finalHomeHtml = await processPageAssets(finalHomeHtml, homePage.originalUrl || homePage.url || '', assetCache, resolvedUserId!, projectId);
+    } catch (e) {
+      console.warn('[Remaster] Erro ao reprocessar assets da home gerada:', e);
+    }
+
     await prisma.page.update({
       where: { id: homePage.dbId },
       data: {
-        html: homeAiResponse.html || homePage.html,
+        html: finalHomeHtml,
         css: homeAiResponse.css || homePage.css,
         js: homeAiResponse.js || homePage.js
       }
     });
 
-    const { navbarHtml, footerHtml } = extractNavbarAndFooter(homeAiResponse.html || '');
+    const { navbarHtml, footerHtml } = extractNavbarAndFooter(finalHomeHtml);
     const globalCss = homeAiResponse.css || '';
     const globalJs = homeAiResponse.js || '';
 
@@ -1024,11 +1046,18 @@ export async function processCustomRemasterGenerationJob(
           }
         );
 
-        // SALVAR IMEDIATAMENTE NO BANCO DE DADOS CADA SUBPÁGINA CONCLUÍDA
+        // SALVAR IMEDIATAMENTE NO BANCO DE DADOS CADA SUBPÁGINA CONCLUÍDA (reprocessando assets)
+        let finalSubHtml = subAiResponse.html || sub.html;
+        try {
+          finalSubHtml = await processPageAssets(finalSubHtml, sub.originalUrl || sub.url || '', assetCache, resolvedUserId!, projectId);
+        } catch (e) {
+          console.warn(`[Remaster] Erro ao reprocessar assets da subpágina ${sub.name}:`, e);
+        }
+
         await prisma.page.update({
           where: { id: sub.dbId },
           data: {
-            html: subAiResponse.html || sub.html,
+            html: finalSubHtml,
             css: subAiResponse.css || globalCss,
             js: subAiResponse.js || globalJs
           }

@@ -190,6 +190,25 @@ router.delete('/:id', authenticateToken, async (req: AuthenticatedRequest, res: 
   }
 });
 
+// POST /api/media/batch-delete - Excluir múltiplas mídias
+router.post('/batch-delete', authenticateToken, async (req: AuthenticatedRequest, res: any) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: 'Lista de IDs inválida.' });
+    }
+    await prisma.media.deleteMany({
+      where: {
+        id: { in: ids },
+        userId: req.userId
+      }
+    });
+    return res.json({ success: true, count: ids.length });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
 // GET /api/media/files/* - Servir arquivos (Proxy para MinIO ou Local)
 router.get('/files/*', async (req, res) => {
   try {

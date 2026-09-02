@@ -56,6 +56,13 @@ export const Canvas: React.FC<CanvasProps> = ({
   const [selectionRect, setSelectionRect] = useState<{ top: number; left: number; width: number; height: number; bottom: number; right: number } | null>(null);
   const [selectionTagText, setSelectionTagText] = useState<string>('');
   const [activeElementPath, setActiveElementPath] = useState<string | null>(null);
+  const [contextMenu, setContextMenu] = useState<{
+    visible: boolean;
+    x: number;
+    y: number;
+    path: string;
+    tagText: string;
+  } | null>(null);
 
   const getRenderedHtml = useCallback(() => {
     if (components && components.length > 0) {
@@ -486,6 +493,30 @@ export const Canvas: React.FC<CanvasProps> = ({
         startInlineEdit(e.target);
       }, true);
 
+      // ─── Context Menu Listener (Right-click) ───
+      document.addEventListener('contextmenu', function(e) {
+        if (isInternalStudioNode(e.target)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const target = e.target;
+        selectElement(target, false);
+        const tag = target.tagName.toLowerCase();
+        const id = target.id ? '#' + target.id : '';
+        const cls = target.className && typeof target.className === 'string'
+          ? '.' + target.className.split(' ').filter(c => c && !c.startsWith('studio-'))[0]
+          : '';
+        const tagText = tag + id + (cls ? cls.slice(0, 14) : '');
+        const path = getIndexPath(target);
+
+        window.parent.postMessage({
+          type: 'OPEN_CONTEXT_MENU',
+          x: e.clientX,
+          y: e.clientY,
+          path,
+          tagText
+        }, '*');
+      }, true);
+
       // ─── Hover Listener (FIXED coords) ───
       document.body.addEventListener('mousemove', function(e) {
         if (isEditingInline) {
@@ -525,6 +556,30 @@ export const Canvas: React.FC<CanvasProps> = ({
         }
         if (msg.data.type === 'REQUEST_UPDATE_RECT') {
           updateOverlayPosition();
+        }
+        if (msg.data.type === 'ACTION_TOGGLE_LOCK' && msg.data.path) {
+          const root = document.getElementById('canvas-root') || document.body;
+          const el = getElementByPath(root, msg.data.path);
+          if (el) {
+            const isLocked = el.getAttribute('data-locked') === 'true';
+            if (isLocked) {
+              el.removeAttribute('data-locked');
+              el.style.pointerEvents = '';
+              el.style.userSelect = '';
+            } else {
+              el.setAttribute('data-locked', 'true');
+              el.style.pointerEvents = 'none';
+              el.style.userSelect = 'none';
+              removeSelection();
+            }
+            const canvasRoot = document.getElementById('canvas-root');
+            if (canvasRoot) {
+              window.parent.postMessage({
+                type: 'CANVAS_HTML_CHANGED',
+                html: canvasRoot.innerHTML
+              }, '*');
+            }
+          }
         }
       });
 
@@ -816,6 +871,13 @@ export const Canvas: React.FC<CanvasProps> = ({
     }, '*');
   }, [hoverPath]);
 
+  // Global click to close context menu
+  useEffect(() => {
+    const handleGlobalClick = () => setContextMenu(null);
+    window.addEventListener('click', handleGlobalClick);
+    return () => window.removeEventListener('click', handleGlobalClick);
+  }, []);
+
   // Handle Incoming Messages from iframe
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
@@ -892,6 +954,22 @@ export const Canvas: React.FC<CanvasProps> = ({
         case 'HIDE_SELECTION_RECT':
           setSelectionRect(null);
           setActiveElementPath(null);
+          break;
+
+        case 'OPEN_CONTEXT_MENU':
+          if (iframeRef.current) {
+            const iframeRect = iframeRef.current.getBoundingClientRect();
+            const scale = zoom / 100;
+            const screenX = iframeRect.left + event.data.x * scale;
+            const screenY = iframeRect.top + event.data.y * scale;
+            setContextMenu({
+              visible: true,
+              x: screenX,
+              y: screenY,
+              path: event.data.path,
+              tagText: event.data.tagText
+            });
+          }
           break;
 
         default:
@@ -1021,6 +1099,89 @@ export const Canvas: React.FC<CanvasProps> = ({
           >
             🗑️ Excluir
           </button>
+        </div>,
+        document.body
+      )}
+
+      {contextMenu && contextMenu.visible && createPortal(
+        <div
+          className="fixed z-[999999] bg-[#0f0b18] border border-purple-500/40 rounded-xl shadow-2xl py-1.5 w-52 text-xs text-white select-none animate-in fade-in zoom-in-95 duration-100"
+          style={{
+            top: Math.min(contextMenu.y, window.innerHeight - 240),
+            left: Math.min(contextMenu.x, window.innerWidth - 220)
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="px-3 py-1.5 border-b border-slate-800 text-[10px] font-mono text-purple-400 font-bold uppercase tracking-wider flex items-center justify-between">
+            <span>{contextMenu.tagText}</span>
+            <button 
+              onClick={() => setContextMenu(null)}
+              className="text-slate-400 hover:text-white"
+            >
+              ✕
+            </button>
+          </div>
+          <div className="p-1 space-y-0.5">
+            <button
+              type="button"
+              onClick={() => {
+                if (onDuplicateElement) onDuplicateElement(contextMenu.path);
+                setContextMenu(null);
+              }}
+              className="w-full text-left px-3 py-2 rounded-lg hover:bg-purple-600/30 hover:text-purple-300 flex items-center gap-2 transition-colors cursor-pointer"
+            >
+              📋 Duplicar
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (onMoveElementDirection) {
+                  onMoveElementDirection(contextMenu.path, 'down');
+                  setTimeout(() => iframeRef.current?.contentWindow?.postMessage({ type: 'REQUEST_UPDATE_RECT' }, '*'), 50);
+                }
+                setContextMenu(null);
+              }}
+              className="w-full text-left px-3 py-2 rounded-lg hover:bg-purple-600/30 hover:text-purple-300 flex items-center gap-2 transition-colors cursor-pointer"
+            >
+              ⬆️ Trazer para Frente
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (onMoveElementDirection) {
+                  onMoveElementDirection(contextMenu.path, 'up');
+                  setTimeout(() => iframeRef.current?.contentWindow?.postMessage({ type: 'REQUEST_UPDATE_RECT' }, '*'), 50);
+                }
+                setContextMenu(null);
+              }}
+              className="w-full text-left px-3 py-2 rounded-lg hover:bg-purple-600/30 hover:text-purple-300 flex items-center gap-2 transition-colors cursor-pointer"
+            >
+              ⬇️ Enviar para Trás
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                iframeRef.current?.contentWindow?.postMessage({
+                  type: 'ACTION_TOGGLE_LOCK',
+                  path: contextMenu.path
+                }, '*');
+                setContextMenu(null);
+              }}
+              className="w-full text-left px-3 py-2 rounded-lg hover:bg-purple-600/30 hover:text-purple-300 flex items-center gap-2 transition-colors cursor-pointer border-t border-slate-800/80 mt-1 pt-1.5"
+            >
+              🔒 Bloquear / Desbloquear
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (onDeleteElement) onDeleteElement(contextMenu.path);
+                setContextMenu(null);
+              }}
+              className="w-full text-left px-3 py-2 rounded-lg hover:bg-rose-600/20 hover:text-rose-300 text-rose-400 flex items-center gap-2 transition-colors cursor-pointer"
+            >
+              🗑️ Excluir
+            </button>
+          </div>
         </div>,
         document.body
       )}
