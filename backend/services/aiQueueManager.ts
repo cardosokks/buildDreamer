@@ -586,15 +586,22 @@ Desenvolva uma página rica, altamente detalhada e relevante para "${sub.name}",
 Você é o Arquiteto Frontend Líder do site "${resolvedBusinessName}".
 Sua tarefa é gerar o código completo da subpágina "${sub.name}" (slug: ${sub.slug}).
 
-ESTILO VISUAL & PALETA:
+ESTILO VISUAL & PALETA DO PROJETO:
 ${resolvedStyle} | ${resolvedPalette}
 
+CSS DA PÁGINA HOME (PRINCIPAL) - REUTILIZE TODAS AS VARIÁVEIS E FONTES:
+Você DEVE utilizar exatamente as mesmas variáveis de estilo (:root) e fontes definidas para a Home. NÃO crie novas cores ou fontes!
+Aqui está o CSS original da Home para sua referência obrigatória:
+\`\`\`css
+${updatedHomeCss}
+\`\`\`
+
 DIRETRIZES DE IDENTIDADE VISUAL E REAPROVEITAMENTO:
-1. A subpágina DEVE utilizar integralmente o mesmo esquema visual e variáveis CSS (:root) do segmento "${resolvedSegment}" criados para a Home.
-2. NUNCA aplique temas hardcoded estáticos ou cores genéricas fora da paleta do segmento da empresa.
+1. A subpágina DEVE utilizar integralmente o mesmo esquema visual e variáveis CSS (:root) do segmento "${resolvedSegment}" criados para a Home e listados no CSS acima.
+2. É ESTRITAMENTE PROIBIDO inventar uma nova paleta de cores ou redefinir as variáveis do :root com cores diferentes das que estão no bloco acima. Toda e qualquer classe customizada ou cor deve beber diretamente das variáveis como var(--brand-primary), var(--brand-accent), etc.
 3. NAVBAR E FOOTER:
    - Utilize a mesma estrutura de Navbar e Footer da Home abaixo.
-   - Na Navbar, destaque o link "${sub.name}" com classe ativa (ex: text-purple-400 font-bold ou border-b-2 border-purple-500).
+   - Na Navbar, destaque o link "${sub.name}" com classe ativa (ex: text-[var(--brand-accent)] font-bold ou border-b-2 border-[var(--brand-accent)]).
 ${navbarHtml ? `\nNAVBAR BASE DA HOME:\n${navbarHtml}\n` : ''}
 ${footerHtml ? `\nFOOTER BASE DA HOME:\n${footerHtml}\n` : ''}
 
