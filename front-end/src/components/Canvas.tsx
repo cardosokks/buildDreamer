@@ -79,10 +79,17 @@ export const Canvas: React.FC<CanvasProps> = ({
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300..800;1,300..800&family=Syne:wght@700;800&family=Space+Grotesk:wght@500;700&family=Outfit:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700;800;900&family=Cinzel:wght@600;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+  <script src="https://unpkg.com/lenis@1.1.18/dist/lenis.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css"/>
+  <script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>
+  <script type="module" src="https://unpkg.com/@splinetool/viewer/build/spline-viewer.js"></script>
   
   <style id="studio-core-styles">
     *, *::before, *::after {
@@ -807,6 +814,29 @@ export const Canvas: React.FC<CanvasProps> = ({
       } catch (err) {
         console.warn('Erro na execução do script personalizado:', err);
       }
+
+      // Auto-initialize canvas dynamic features
+      setTimeout(function() {
+        if (window.lucide) { try { lucide.createIcons(); } catch(e){} }
+        if (typeof Swiper !== 'undefined' && document.querySelector('.maps-reviews-swiper')) {
+          try {
+            new Swiper('.maps-reviews-swiper', {
+              effect: 'cards',
+              grabCursor: true,
+              pagination: { el: '.swiper-pagination', clickable: true },
+              autoplay: { delay: 4000, disableOnInteraction: false }
+            });
+          } catch(e){}
+        }
+        if (typeof gsap !== 'undefined' && typeof ScrollTrigger !== 'undefined') {
+          try {
+            gsap.registerPlugin(ScrollTrigger);
+            gsap.utils.toArray('.gsap-reveal').forEach(function(el) {
+              gsap.from(el, { opacity: 0, y: 35, duration: 0.8, ease: 'power2.out', scrollTrigger: { trigger: el, start: 'top 85%' } });
+            });
+          } catch(e){}
+        }
+      }, 300);
     })();
   </script>
 </body>

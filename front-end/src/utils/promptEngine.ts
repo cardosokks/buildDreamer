@@ -46,11 +46,104 @@ export function mapSegmentToTheme(segment: string, userStyle: string = '', userP
   const style = (userStyle || '').toLowerCase();
   const palette = (userPalette || '').toLowerCase();
 
+  // 0. Se o usuário digitou um estilo visual personalizado, dar prioridade total a esse conceito
+  if (style.trim().length > 0) {
+    if (style.includes('neon') || style.includes('cyber') || style.includes('escuro neon')) {
+      return {
+        id: 'dark_neon_custom',
+        name: 'Design Escuro & Néon Cyber',
+        description: 'Estética noturna imersiva com fundo obsidian profundo, realces em néon vibrante e atmosfera tecnológica de alta conversão.',
+        colors: {
+          bg: '#080a12',
+          cardBg: '#101526',
+          accent: '#a855f7',
+          accentGlow: 'rgba(168, 85, 247, 0.35)',
+          textPrimary: '#f8fafc',
+          textSecondary: '#94a3b8',
+          border: 'rgba(168, 85, 247, 0.25)'
+        },
+        typography: {
+          headingFont: 'Syne, Space Grotesk, sans-serif',
+          bodyFont: 'Plus Jakarta Sans, sans-serif',
+          styleDescription: 'Tipografia futurista imponente combinando títulos em Syne com corpo legível em Plus Jakarta Sans.'
+        },
+        recommendedHero: 'splitscreen_3d'
+      };
+    }
+
+    if (style.includes('clean') || style.includes('claro') || style.includes('branc') || style.includes('minimal')) {
+      return {
+        id: 'clean_minimal_custom',
+        name: 'Clean & Minimalista Respirável',
+        description: 'Design claro, translúcido e sofisticado, com máxima elegância tipográfica, espaços em branco e visual de alto padrão.',
+        colors: {
+          bg: '#f8fafc',
+          cardBg: '#ffffff',
+          accent: '#2563eb',
+          accentGlow: 'rgba(37, 99, 235, 0.15)',
+          textPrimary: '#0f172a',
+          textSecondary: '#475569',
+          border: '#e2e8f0'
+        },
+        typography: {
+          headingFont: 'Plus Jakarta Sans, Outfit, sans-serif',
+          bodyFont: 'Inter, sans-serif',
+          styleDescription: 'Tipografia limpa, leve e refinada para leitura agradável.'
+        },
+        recommendedHero: 'parallax'
+      };
+    }
+
+    if (style.includes('lux') || style.includes('gold') || style.includes('dourad') || style.includes('premium')) {
+      return {
+        id: 'dark_luxe_custom',
+        name: 'Dark Luxe & Premium Gold',
+        description: 'Estética noturna nobre com detalhes refinados em âmbar/dourado, vidro fosco e atmosfera luxuosa.',
+        colors: {
+          bg: '#0a0810',
+          cardBg: '#141021',
+          accent: '#d97706',
+          accentGlow: 'rgba(217, 119, 6, 0.25)',
+          textPrimary: '#f8fafc',
+          textSecondary: '#a1a1aa',
+          border: 'rgba(217, 119, 6, 0.2)'
+        },
+        typography: {
+          headingFont: 'Cinzel, Playfair Display, serif',
+          bodyFont: 'Plus Jakarta Sans, sans-serif',
+          styleDescription: 'Títulos em caixa alta ou serif elegante transmitindo exclusividade.'
+        },
+        recommendedHero: 'splitscreen_3d'
+      };
+    }
+
+    return {
+      id: 'tailored_user_style',
+      name: 'Identidade Sob Medida por IA',
+      description: `A IA criará autonomamente uma combinação exclusiva de cores, gradientes e fontes inspirados no conceito "${userStyle}".`,
+      colors: {
+        bg: '#090d16',
+        cardBg: '#111827',
+        accent: '#8b5cf6',
+        accentGlow: 'rgba(139, 92, 246, 0.3)',
+        textPrimary: '#f8fafc',
+        textSecondary: '#94a3b8',
+        border: 'rgba(139, 92, 246, 0.25)'
+      },
+      typography: {
+        headingFont: 'Syne, Plus Jakarta Sans, Outfit',
+        bodyFont: 'Inter, sans-serif',
+        styleDescription: 'Seleção tipográfica dinâmica ajustada sob medida para o nicho.'
+      },
+      recommendedHero: 'bento'
+    };
+  }
+
   // 1. Dark Luxe: Barbearias, Bares, Baladas, Pubs, Tabacarias, Gastronomia Noturna, Luxo
   if (
     seg.includes('barb') || seg.includes('bar') || seg.includes('pub') || seg.includes('balada') ||
     seg.includes('tabac') || seg.includes('drinks') || seg.includes('steak') || seg.includes('luxe') ||
-    seg.includes('noite') || style.includes('dark luxe') || palette.includes('dark-luxury') || palette.includes('gold')
+    seg.includes('noite')
   ) {
     return {
       id: 'dark_luxe',
@@ -78,8 +171,7 @@ export function mapSegmentToTheme(segment: string, userStyle: string = '', userP
   if (
     seg.includes('clinic') || seg.includes('clínica') || seg.includes('médic') || seg.includes('dentis') ||
     seg.includes('odonto') || seg.includes('estétic') || seg.includes('saúde') || seg.includes('saude') ||
-    seg.includes('dermato') || seg.includes('psico') || seg.includes('fisio') || seg.includes('spa') ||
-    style.includes('clean medical') || palette.includes('medical')
+    seg.includes('dermato') || seg.includes('psico') || seg.includes('fisio') || seg.includes('spa')
   ) {
     return {
       id: 'clean_medical',
@@ -106,8 +198,7 @@ export function mapSegmentToTheme(segment: string, userStyle: string = '', userP
   // 3. High Contrast / Performance: Academias, Crossfit, Personal, Lutas, Esportes
   if (
     seg.includes('academ') || seg.includes('crossfit') || seg.includes('fit') || seg.includes('personal') ||
-    seg.includes('treino') || seg.includes('esporte') || seg.includes('luta') || seg.includes('suplement') ||
-    style.includes('high contrast') || style.includes('performance') || palette.includes('high-contrast')
+    seg.includes('treino') || seg.includes('esporte') || seg.includes('luta') || seg.includes('suplement')
   ) {
     return {
       id: 'high_contrast',
@@ -135,7 +226,7 @@ export function mapSegmentToTheme(segment: string, userStyle: string = '', userP
   if (
     seg.includes('café') || seg.includes('cafe') || seg.includes('padaria') || seg.includes('bistrô') ||
     seg.includes('bistro') || seg.includes('confeitar') || seg.includes('pizzaria') || seg.includes('artesanal') ||
-    seg.includes('orgânic') || seg.includes('gastronomia') || style.includes('warm natural') || palette.includes('warm')
+    seg.includes('orgânic') || seg.includes('gastronomia')
   ) {
     return {
       id: 'warm_natural',
@@ -186,11 +277,11 @@ export function mapSegmentToTheme(segment: string, userStyle: string = '', userP
     };
   }
 
-  // Fallback Padrão: Corporate Luxury
+  // Fallback Padrão: Identidade Exclusiva por IA
   return {
-    id: 'corporate_luxury',
-    name: 'Modern Corporate Luxury',
-    description: 'Design contemporâneo sofisticado com fundo escuro elegante, acentos vibrantes e alta conversão.',
+    id: 'ai_bespoke_luxury',
+    name: 'Identidade Sob Medida por IA',
+    description: `A IA gerará autonomamente uma paleta de cores e tipografia exclusiva perfeitamente adequada para "${segment}".`,
     colors: {
       bg: '#0a0c12',
       cardBg: '#121624',
@@ -201,9 +292,9 @@ export function mapSegmentToTheme(segment: string, userStyle: string = '', userP
       border: 'rgba(99, 102, 241, 0.2)'
     },
     typography: {
-      headingFont: 'Plus Jakarta Sans, sans-serif',
+      headingFont: 'Syne, Plus Jakarta Sans, Outfit, sans-serif',
       bodyFont: 'Inter, sans-serif',
-      styleDescription: 'Design limpo, dinâmico e focado em alta conversão comercial.'
+      styleDescription: 'Tipografia contemporânea e exclusiva criada para o negócio.'
     },
     recommendedHero: 'splitscreen_3d'
   };
@@ -237,8 +328,13 @@ export function buildStructuredSitePrompt(params: PromptBuildParams): string {
   const reviewsCountNum = leadInfo?.reviewsCount || 128;
 
   const customStyleDirective = visualStyle.trim()
-    ? `APLIQUE RIGOROSAMENTE O ESTILO VISUAL SOLICITADO: "${visualStyle}". Garanta que a paleta de cores, gradientes neon/luxo, sombras brilhantes glow, vidros foscos e bordas semi-transparentes reflitam perfeitamente esse conceito.`
-    : `Siga a paleta do Tema Mapeado [${theme.name}]: Fundo ${theme.colors.bg}, Cartões em ${theme.colors.cardBg}, Acento ${theme.colors.accent} com Glow ${theme.colors.accentGlow} e bordas ${theme.colors.border}.`;
+    ? `APLIQUE O ESTILO VISUAL SOLICITADO PELO USUÁRIO: "${visualStyle}".
+- O modelo DEVE criar uma identidade visual 100% personalizada e alinhada ao conceito "${visualStyle}".
+- ESCOLHA DE CORES E PALETA: A IA tem total liberdade para escolher a melhor combinação de cores hexadecimais, gradientes, brilhos glow, cartões translúcidos e bordas de destaque. Se o usuário pediu "escuro neon", crie tons escuros profundos com acentos néon (roxo, ciano, esmeralda ou rosa). Se pediu "clean/claro", utilize fundos leves e respiráveis.
+- TIPOGRAFIA EXCLUSIVA: Escolha famílias do Google Fonts apropriadas para o nicho (ex: Syne, Plus Jakarta Sans, Outfit, Space Grotesk, Inter, Lora, etc.).`
+    : `IDENTIDADE VISUAL DINÂMICA E EXCLUSIVA CRIADA PELA IA:
+- A IA possui liberdade total para definir a paleta de cores, gradientes, tipografia e hierarquia de seções ideal para o segmento "${segment}" e empresa "${businessName}".
+- Crie uma combinação única de cores e tipografia (tema escuro, claro, neon ou luxuoso conforme a natureza do negócio). NUNCA utilize cores fixas ou engessadas que deixem os sites parecidos entre si.`;
 
   return `==============================================================================
 PROMPT ESTRUTURADO DE ALTA FIDELIDADE — GERADOR DE SITES PROFISSIONAIS

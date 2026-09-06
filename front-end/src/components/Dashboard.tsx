@@ -4740,23 +4740,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                             <div className="flex items-center justify-between text-xs">
                               <span className="font-bold text-purple-300 flex items-center gap-1.5">
                                 <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-                                Mapeamento do Theme Engine: <span className="text-white">{activeTheme.name}</span>
+                                Mapeamento Inteligente: <span className="text-white">{activeTheme.name}</span>
                               </span>
-                              <span className="text-[10px] text-slate-400 font-mono">
+                              <span className="text-[10px] text-purple-300/80 font-mono">
                                 Hero Rec.: {activeTheme.recommendedHero}
                               </span>
                             </div>
                             <p className="text-[11px] text-slate-300 leading-normal">{activeTheme.description}</p>
                             <div className="flex items-center justify-between text-[10px] pt-1 border-t border-slate-800/80">
                               <div className="flex items-center gap-2">
-                                <span className="text-slate-400 font-semibold uppercase">Cores:</span>
-                                <div className="flex items-center gap-1">
-                                  <div className="w-3.5 h-3.5 rounded-full border border-slate-700" style={{ backgroundColor: activeTheme.colors.bg }} title="Fundo" />
-                                  <div className="w-3.5 h-3.5 rounded-full border border-slate-700" style={{ backgroundColor: activeTheme.colors.cardBg }} title="Cartão" />
-                                  <div className="w-3.5 h-3.5 rounded-full border border-slate-700" style={{ backgroundColor: activeTheme.colors.accent }} title="Acento" />
-                                </div>
+                                <span className="text-slate-400 font-semibold uppercase">Estilo:</span>
+                                <span className="text-purple-300 font-medium">{visualStyle.trim() || 'Criativo & Exclusivo por IA'}</span>
                               </div>
-                              <span className="text-purple-300/90 font-mono truncate max-w-[200px]">{activeTheme.typography.headingFont}</span>
+                              <span className="text-slate-400 font-mono truncate max-w-[200px]">Design Autônomo por IA</span>
                             </div>
                           </div>
                         );

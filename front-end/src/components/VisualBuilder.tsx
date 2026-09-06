@@ -1090,15 +1090,31 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
 
     const safeJs = (activePage.js || '').replace(/<\/script/gi, '<\\/script');
 
+    const rawDesc = activePage.seoDescription || '';
+    const cleanDesc = (rawDesc.length > 250 || rawDesc.toLowerCase().includes('prompt') || rawDesc.toLowerCase().includes('diretríz') || rawDesc.toLowerCase().includes('diretriz')) 
+      ? `${project?.name || 'Website'} - ${activePage.name}. Website oficial.` 
+      : rawDesc.replace(/"/g, '&quot;');
+
     return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${activePage.seoTitle || activePage.name}</title>
-  <meta name="description" content="${activePage.seoDescription || ''}">
+  <meta name="description" content="${cleanDesc}">
+  <!-- CDNs e Tecnologias Injetadas -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300..800;1,300..800&family=Syne:wght@700;800&family=Space+Grotesk:wght@500;700&family=Outfit:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700;800;900&family=Cinzel:wght@600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+  <script src="https://unpkg.com/lenis@1.1.18/dist/lenis.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css"/>
+  <script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>
+  <script type="module" src="https://unpkg.com/@splinetool/viewer/build/spline-viewer.js"></script>
   <style id="studio-core-styles">
     * {
       box-sizing: border-box;
@@ -1107,20 +1123,20 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
       margin: 0;
       padding: 0;
       min-height: 100vh;
-      background: #ffffff;
-      color: #0f172a;
-      font-family: 'Inter', sans-serif;
+      background: #090d16;
+      color: #f8fafc;
+      font-family: 'Plus Jakarta Sans', 'Inter', sans-serif;
       position: relative;
     }
     h1, h2, h3, h4, h5, h6 {
-      font-family: 'Outfit', sans-serif;
+      font-family: 'Syne', 'Outfit', sans-serif;
     }
   </style>
   <style id="studio-user-styles">
     ${activePage.css || ''}
   </style>
 </head>
-<body>
+<body class="bg-slate-950 text-slate-100 min-h-screen">
   <div id="preview-root">
     ${activePage.html || ''}
   </div>
@@ -1128,19 +1144,48 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
     ${safeJs}
   </script>
   <script>
-    // Interceptor de navegação para Preview local multi-páginas
+    // Interceptor de navegação para Preview local multi-páginas (impede about:blank#blocked)
     window.__PROJECT_PAGES__ = ${safePagesJson};
 
     document.addEventListener('click', function(e) {
       var target = e.target.closest('a');
       if (!target) return;
-      var href = target.getAttribute('href');
-      if (!href || href.startsWith('http') || href.startsWith('mailto:') || href.startsWith('tel:') || href.startsWith('#')) return;
 
+      var rawHref = target.getAttribute('href') || target.href || '';
+      if (!rawHref || rawHref === '#' || rawHref.startsWith('javascript:')) return;
+
+      // Ignorar links de compartilhamento/contato externo
+      if (rawHref.startsWith('mailto:') || rawHref.startsWith('tel:')) return;
+      if (rawHref.startsWith('http://') || rawHref.startsWith('https://')) {
+        if (!rawHref.includes(window.location.host) && !rawHref.includes('blob:')) {
+          return;
+        }
+      }
+
+      // Prevenir navegação nativa no browser para evitar about:blank#blocked
       e.preventDefault();
-      var cleanSlug = href.replace(/^\//, '').replace(/\.html$/, '') || 'index';
+      e.stopPropagation();
+
+      var cleanSlug = rawHref
+        .replace(/^https?:\/\/[^\/]+/i, '')
+        .replace(/^blob:[^\/]+\//i, '')
+        .replace(/^\/+/, '')
+        .replace(/^pages\//, '')
+        .replace(/\.html$/i, '')
+        .replace(/\/$/, '')
+        .toLowerCase();
+
+      if (!cleanSlug) cleanSlug = 'index';
+
       var page = window.__PROJECT_PAGES__.find(function(p) {
-        return p.slug === cleanSlug || (cleanSlug === 'index' && p.isHomepage);
+        var pSlug = (p.slug || '').toLowerCase().replace(/^\/+/, '').replace(/\.html$/i, '');
+        var pName = (p.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+        return (
+          pSlug === cleanSlug ||
+          pName === cleanSlug ||
+          (cleanSlug === 'index' && p.isHomepage) ||
+          (cleanSlug === 'home' && p.isHomepage)
+        );
       });
 
       if (page) {
@@ -1150,11 +1195,27 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
         var root = document.getElementById('preview-root') || document.body;
         root.innerHTML = page.html || '';
         window.scrollTo({ top: 0, behavior: 'smooth' });
-        if (page.js) {
-          try { eval(page.js); } catch(err) { console.error(err); }
-        }
+
+        setTimeout(function() {
+          if (window.lucide) { try { lucide.createIcons(); } catch(err){} }
+          if (typeof Swiper !== 'undefined' && document.querySelector('.maps-reviews-swiper')) {
+            try {
+              new Swiper('.maps-reviews-swiper', {
+                effect: 'cards',
+                grabCursor: true,
+                pagination: { el: '.swiper-pagination', clickable: true },
+                autoplay: { delay: 4000, disableOnInteraction: false }
+              });
+            } catch(err){}
+          }
+          if (page.js) {
+            try { eval(page.js); } catch(err) { console.warn(err); }
+          }
+        }, 50);
+      } else {
+        console.warn('Página não encontrada para a rota:', rawHref);
       }
-    });
+    }, true);
   </script>
 </body>
 </html>`;

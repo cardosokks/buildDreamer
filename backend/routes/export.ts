@@ -18,6 +18,63 @@ async function streamToBuffer(stream: NodeJS.ReadableStream): Promise<Buffer> {
 }
 
 /**
+ * Verifica se um texto é uma instrução/prompt interno da IA para evitar exportá-lo na meta tag description
+ */
+function isPromptText(str?: string | null): boolean {
+  if (!str) return false;
+  const s = str.trim();
+  if (s.length > 250) return true;
+  const lower = s.toLowerCase();
+  return (
+    lower.includes('prompt') ||
+    lower.includes('diretríz') ||
+    lower.includes('diretriz') ||
+    lower.includes('obrigatori') ||
+    lower.includes('obrigatóri') ||
+    lower.includes('gere um website') ||
+    lower.includes('você é um') ||
+    lower.includes('theme engine') ||
+    lower.includes('instruç') ||
+    lower.includes('instruc') ||
+    lower.includes('bento grid') ||
+    lower.includes('spline-viewer') ||
+    lower.includes('tailwind css') ||
+    lower.includes('motor de injeção') ||
+    lower.includes('regras técnicas') ||
+    lower.includes('estrutura completa')
+  );
+}
+
+function getCleanMetaDescription(pageDesc: string | null | undefined, projDesc: string | null | undefined, projectName: string, pageTitle: string): string {
+  if (pageDesc && !isPromptText(pageDesc)) {
+    return pageDesc.replace(/"/g, '&quot;').trim();
+  }
+  if (projDesc && !isPromptText(projDesc)) {
+    return projDesc.replace(/"/g, '&quot;').trim();
+  }
+  return `${projectName} - ${pageTitle}. Website oficial com serviços, diferenciais e informações completas.`;
+}
+
+function stripPromptArtifacts(html: string): string {
+  if (!html) return '';
+  return html.replace(/<!--[\s\S]*?-->/g, (comment) => {
+    const lower = comment.toLowerCase();
+    if (
+      lower.includes('prompt') ||
+      lower.includes('diretríz') ||
+      lower.includes('diretriz') ||
+      lower.includes('instruç') ||
+      lower.includes('instruc') ||
+      lower.includes('gerar') ||
+      lower.includes('regra')
+    ) {
+      return '';
+    }
+    return comment;
+  });
+}
+
+/**
  * Normaliza links internos nas páginas HTML para funcionarem em qualquer hospedagem estática
  */
 function normalizeHtmlLinks(html: string, isHome: boolean, allPages: Array<{ slug: string; isHomepage: boolean }>): string {
@@ -177,12 +234,13 @@ router.get('/:projectId', async (req: AuthenticatedRequest, res: any) => {
       const jsFilename = `${page.slug}.js`;
 
       let normalizedPageHtml = normalizeHtmlLinks(page.html, isHome, project.pages);
+      normalizedPageHtml = stripPromptArtifacts(normalizedPageHtml);
       normalizedPageHtml = await processMediaInContent(normalizedPageHtml);
 
       let processedCss = await processMediaInContent(page.css || '');
 
       const finalTitle = page.seoTitle || page.title || page.name || project.name;
-      const finalDesc = page.seoDescription || page.description || project.description || '';
+      const finalDesc = getCleanMetaDescription(page.seoDescription || page.description, project.description, project.name, finalTitle);
 
       const htmlContent = `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -195,8 +253,19 @@ router.get('/:projectId', async (req: AuthenticatedRequest, res: any) => {
   <meta property="og:description" content="${finalDesc}">
   <meta property="og:type" content="website">
   ${processedFavicon ? `<link rel="icon" href="${processedFavicon}">` : ''}
+  <!-- CDNs e Tecnologias Injetadas -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300..800;1,300..800&family=Syne:wght@700;800&family=Space+Grotesk:wght@500;700&family=Outfit:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700;800;900&family=Cinzel:wght@600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+  <script src="https://unpkg.com/lenis@1.1.18/dist/lenis.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css"/>
+  <script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>
+  <script type="module" src="https://unpkg.com/@splinetool/viewer/build/spline-viewer.js"></script>
   <style>
     * {
       box-sizing: border-box;
@@ -205,19 +274,75 @@ router.get('/:projectId', async (req: AuthenticatedRequest, res: any) => {
       margin: 0;
       padding: 0;
       min-height: 100vh;
-      background: #ffffff;
-      color: #0f172a;
-      font-family: 'Inter', sans-serif;
+      background: #090d16;
+      color: #f8fafc;
+      font-family: 'Plus Jakarta Sans', 'Inter', sans-serif;
       position: relative;
     }
     h1, h2, h3, h4, h5, h6 {
-      font-family: 'Outfit', sans-serif;
+      font-family: 'Syne', 'Outfit', sans-serif;
     }
   </style>
   ${includeCss ? `<link rel="stylesheet" href="css/${cssFilename}">` : ''}
 </head>
-<body>
+<body class="bg-slate-950 text-slate-100 min-h-screen">
   ${normalizedPageHtml}
+
+  <!-- Scripts de Inicialização Global -->
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      // 1. Lucide Icons
+      if (window.lucide) { try { lucide.createIcons(); } catch(e){} }
+
+      // 2. Lenis Smooth Scroll
+      if (typeof Lenis !== 'undefined') {
+        try {
+          const lenis = new Lenis({ duration: 1.2, easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)) });
+          function raf(time) { lenis.raf(time); requestAnimationFrame(raf); }
+          requestAnimationFrame(raf);
+        } catch(e){}
+      }
+
+      // 3. GSAP ScrollTrigger Reveal
+      if (typeof gsap !== 'undefined' && typeof ScrollTrigger !== 'undefined') {
+        try {
+          gsap.registerPlugin(ScrollTrigger);
+          gsap.utils.toArray('.gsap-reveal').forEach(function(el) {
+            gsap.from(el, { opacity: 0, y: 35, duration: 0.8, ease: 'power2.out', scrollTrigger: { trigger: el, start: 'top 85%' } });
+          });
+        } catch(e){}
+      }
+
+      // 4. Swiper.js 3D Cards
+      if (typeof Swiper !== 'undefined') {
+        try {
+          if (document.querySelector('.maps-reviews-swiper')) {
+            new Swiper('.maps-reviews-swiper', {
+              effect: 'cards',
+              grabCursor: true,
+              pagination: { el: '.swiper-pagination', clickable: true },
+              autoplay: { delay: 4000, disableOnInteraction: false }
+            });
+          }
+        } catch(e){}
+      }
+
+      // 5. Dynamic Business Status Badge
+      function updateBusinessStatus() {
+        const statusEl = document.getElementById('business-status-badge');
+        if (statusEl) {
+          const hour = new Date().getHours();
+          const isOpen = hour >= 8 && hour < 21;
+          if (isOpen) {
+            statusEl.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping inline-block mr-1.5"></span><span class="text-emerald-400 font-bold">🟢 Aberto Agora</span>';
+          } else {
+            statusEl.innerHTML = '<span class="w-2 h-2 rounded-full bg-rose-500 inline-block mr-1.5"></span><span class="text-rose-400 font-bold">🔴 Fechado • Abre às 08:00</span>';
+          }
+        }
+      }
+      updateBusinessStatus();
+    });
+  </script>
   ${includeJs ? `<script src="js/${jsFilename}"></script>` : ''}
 </body>
 </html>`;
