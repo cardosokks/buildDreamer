@@ -11,6 +11,7 @@ interface CanvasProps {
   highlightPath?: string | null;
   hoverPath?: string | null;
   zoom?: number;
+  theme?: any;
   onElementSelect: (
     selector: string,
     styles: Record<string, string>,
@@ -40,6 +41,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   highlightPath,
   hoverPath,
   zoom = 100,
+  theme,
   onElementSelect,
   onInlineContentChange,
   onDeleteElement,
@@ -186,6 +188,27 @@ export const Canvas: React.FC<CanvasProps> = ({
       outline: 2px dashed #a855f7 !important;
       outline-offset: 2px !important;
       cursor: text !important;
+    }
+  </style>
+
+  <style id="studio-global-theme">
+    :root {
+      --brand-primary: ${theme?.accent || '#a855f7'};
+      --brand-accent: ${theme?.accent || '#a855f7'};
+      --brand-accent-glow: ${theme?.accentGlow || 'rgba(168, 85, 247, 0.35)'};
+      --brand-bg: ${theme?.bg || '#080a12'};
+      --brand-card: ${theme?.cardBg || '#101526'};
+      --brand-text-primary: ${theme?.textPrimary || '#f8fafc'};
+      --brand-text-secondary: ${theme?.textSecondary || '#94a3b8'};
+      --brand-border: ${theme?.border || 'rgba(168, 85, 247, 0.25)'};
+    }
+    body {
+      background-color: var(--brand-bg) !important;
+      color: var(--brand-text-primary) !important;
+      font-family: '${theme?.bodyFont ? theme.bodyFont.split(',')[0].trim() : 'Plus Jakarta Sans'}', sans-serif !important;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      font-family: '${theme?.headingFont ? theme.headingFont.split(',')[0].trim() : 'Syne'}', sans-serif !important;
     }
   </style>
 
@@ -746,6 +769,31 @@ export const Canvas: React.FC<CanvasProps> = ({
       window.addEventListener('message', function(msg) {
         if (!msg.data) return;
 
+        if (msg.data.type === 'UPDATE_THEME') {
+          const theme = msg.data.theme;
+          const themeStyles = document.getElementById('studio-global-theme');
+          if (themeStyles) {
+            themeStyles.textContent = ':root { ' +
+              '--brand-primary: ' + (theme?.accent || '#a855f7') + '; ' +
+              '--brand-accent: ' + (theme?.accent || '#a855f7') + '; ' +
+              '--brand-accent-glow: ' + (theme?.accentGlow || 'rgba(168, 85, 247, 0.35)') + '; ' +
+              '--brand-bg: ' + (theme?.bg || '#080a12') + '; ' +
+              '--brand-card: ' + (theme?.cardBg || '#101526') + '; ' +
+              '--brand-text-primary: ' + (theme?.textPrimary || '#f8fafc') + '; ' +
+              '--brand-text-secondary: ' + (theme?.textSecondary || '#94a3b8') + '; ' +
+              '--brand-border: ' + (theme?.border || 'rgba(168, 85, 247, 0.25)') + '; ' +
+            '} ' +
+            'body { ' +
+              'background-color: var(--brand-bg) !important; ' +
+              'color: var(--brand-text-primary) !important; ' +
+              'font-family: \'' + (theme?.bodyFont ? theme.bodyFont.split(',')[0].trim() : 'Plus Jakarta Sans') + '\', sans-serif !important; ' +
+            '} ' +
+            'h1, h2, h3, h4, h5, h6 { ' +
+              'font-family: \'' + (theme?.headingFont ? theme.headingFont.split(',')[0].trim() : 'Syne') + '\', sans-serif !important; ' +
+            '}';
+          }
+        }
+
         if (msg.data.type === 'UPDATE_HTML_SEAMLESS') {
           const scrollX = window.scrollX;
           const scrollY = window.scrollY;
@@ -841,7 +889,17 @@ export const Canvas: React.FC<CanvasProps> = ({
   </script>
 </body>
 </html>`;
-  }, []);
+  }, [theme]);
+
+  // Synchronize Theme Changes to IFrame
+  useEffect(() => {
+    const iframe = iframeRef.current;
+    if (!iframe || !isInitializedRef.current) return;
+    iframe.contentWindow?.postMessage({
+      type: 'UPDATE_THEME',
+      theme
+    }, '*');
+  }, [theme]);
 
   // Initialization & Live Content Sync
   useEffect(() => {

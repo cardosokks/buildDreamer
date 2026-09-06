@@ -63,6 +63,7 @@ model Project {
   favicon      String?
   navbarHtml   String          @default("")
   footerHtml   String          @default("")
+  theme        String?         // Objeto JSON contendo fontes, cores, estilos globais compartilhados
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
   members      ProjectMember[]

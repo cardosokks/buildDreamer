@@ -36,7 +36,8 @@ import {
   CheckCircle,
   X,
   ShieldCheck,
-  Plus
+  Plus,
+  Palette
 } from 'lucide-react';
 import { CreatePageModal, PageCreationData } from './CreatePageModal';
 import { getPageStarterTemplate } from '../lib/pageTemplates';
@@ -72,6 +73,7 @@ interface Page {
 interface ProjectData {
   id: string;
   name: string;
+  theme?: string;
   pages: Page[];
 }
 
@@ -90,11 +92,34 @@ interface HistoryState {
   description: string;
 }
 
+export interface ProjectThemeConfig {
+  bg: string;
+  cardBg: string;
+  accent: string;
+  accentGlow: string;
+  textPrimary: string;
+  textSecondary: string;
+  border: string;
+  headingFont: string;
+  bodyFont: string;
+}
+
 export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack, onOpenAIImprover }) => {
   const { token } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const notify = useNotification();
   const [project, setProject] = useState<ProjectData | null>(null);
+  const [projectTheme, setProjectTheme] = useState<ProjectThemeConfig>({
+    bg: '#080a12',
+    cardBg: '#101526',
+    accent: '#a855f7',
+    accentGlow: 'rgba(168, 85, 247, 0.35)',
+    textPrimary: '#f8fafc',
+    textSecondary: '#94a3b8',
+    border: 'rgba(168, 85, 247, 0.25)',
+    headingFont: 'Syne, sans-serif',
+    bodyFont: 'Plus Jakarta Sans, sans-serif'
+  });
   const [activePageId, setActivePageId] = useState<string>('');
   const activePageRef = useRef<Page | null>(null);
   const pendingSaveRef = useRef<Page | null>(null);
@@ -116,10 +141,11 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
   const [mediaGalleryTarget, setMediaGalleryTarget] = useState<'src' | 'ogImage' | null>(null);
 
   // Layout Panels (Persistência no LocalStorage)
-  const [activeLeftSidebar, setActiveLeftSidebar] = useState<'dom' | 'media' | null>(() => {
+  const [activeLeftSidebar, setActiveLeftSidebar] = useState<'dom' | 'media' | 'theme' | null>(() => {
     try {
       const stored = localStorage.getItem('vb_active_left_sidebar');
-      return stored !== null ? JSON.parse(stored) : 'dom';
+      const val = stored !== null ? JSON.parse(stored) : 'dom';
+      return (val === 'dom' || val === 'media' || val === 'theme') ? val : 'dom';
     } catch {
       return 'dom';
     }
@@ -196,6 +222,16 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
       if (!res.ok) throw new Error('Falha ao carregar projeto');
       const data = await res.json();
       setProject(data);
+      if (data.theme) {
+        try {
+          const parsed = JSON.parse(data.theme);
+          if (parsed && typeof parsed === 'object') {
+            setProjectTheme(prev => ({ ...prev, ...parsed }));
+          }
+        } catch (e) {
+          console.warn('Falha ao parsear tema do projeto:', e);
+        }
+      }
       if (data.name) {
         document.title = `${data.name} | Editor Visual BuildDreamer`;
       }
@@ -462,6 +498,31 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
       void flushQueuedSave();
     }, 500);
   }, [flushQueuedSave]);
+
+  const handleUpdateTheme = async (newTheme: ProjectThemeConfig) => {
+    setProjectTheme(newTheme);
+    try {
+      const res = await fetch(`${API_URL}/api/projects/${projectId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          theme: JSON.stringify(newTheme)
+        })
+      });
+      if (res.ok) {
+        setProject(prev => prev ? { ...prev, theme: JSON.stringify(newTheme) } : null);
+        notify.success('Tema global sincronizado com sucesso!', 'Tema Salvo');
+      } else {
+        throw new Error('Falha ao salvar tema no servidor');
+      }
+    } catch (err: any) {
+      console.error(err);
+      notify.error('Erro ao salvar tema global.', 'Erro');
+    }
+  };
 
   useEffect(() => {
     return () => {
@@ -1076,9 +1137,10 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
     notify.success(`Página "${data.name}" criada com sucesso!`, 'Página Criada');
   };
 
-  const getFullHtmlDocument = () => {
+  const getFullHtmlDocument = (forPreview: boolean = false) => {
     if (!activePage) return '';
     const safePagesJson = JSON.stringify((project?.pages || []).map(p => ({
+      id: p.id,
       name: p.name,
       slug: p.slug,
       isHomepage: p.isHomepage,
@@ -1094,6 +1156,55 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
     const cleanDesc = (rawDesc.length > 250 || rawDesc.toLowerCase().includes('prompt') || rawDesc.toLowerCase().includes('diretríz') || rawDesc.toLowerCase().includes('diretriz')) 
       ? `${project?.name || 'Website'} - ${activePage.name}. Website oficial.` 
       : rawDesc.replace(/"/g, '&quot;');
+
+    const previewHeaderHtml = forPreview ? `
+  <!-- Global Preview Navigation Header -->
+  <div id="studio-preview-nav" style="position: fixed; top: 0; left: 0; right: 0; height: 56px; background: rgba(9, 13, 22, 0.9); border-bottom: 1px solid rgba(168, 85, 247, 0.25); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); display: flex; align-items: center; justify-content: space-between; padding: 0 24px; z-index: 999999; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3); font-family: 'Plus Jakarta Sans', sans-serif;">
+    <div style="display: flex; align-items: center; gap: 12px;">
+      <div style="width: 32px; height: 32px; border-radius: 8px; background: linear-gradient(135deg, #a855f7 0%, #ec4899 100%); display: flex; align-items: center; justify-content: center; font-weight: bold; color: white; box-shadow: 0 4px 6px -1px rgba(168, 85, 247, 0.3);">
+        B
+      </div>
+      <div style="display: flex; flex-direction: column;">
+        <span style="font-weight: 700; color: #f8fafc; font-size: 13px; tracking-wide: 0.05em;">${project?.name || 'DreamBuild'}</span>
+        <span style="font-size: 9px; font-weight: 800; color: #a855f7; text-transform: uppercase; letter-spacing: 0.1em; display: inline-flex; align-items: center; gap: 4px;">
+          <span style="width: 5px; height: 5px; border-radius: 50%; background: #a855f7; display: inline-block;"></span> Modo Visualização
+        </span>
+      </div>
+    </div>
+    <nav style="display: flex; align-items: center; gap: 8px;">
+      ${(project?.pages || []).map(p => `
+        <button 
+          data-page-id="${p.id}"
+          data-page-slug="${p.slug}"
+          onclick="window.__NAVIGATE_TO_PAGE__('${p.id}')"
+          class="preview-nav-link ${p.id === activePage.id ? 'active' : ''}"
+          style="position: relative; padding: 6px 12px; border-radius: 8px; font-size: 11px; font-weight: 600; cursor: pointer; transition: all 0.2s ease; border: none; background: transparent; outline: none;"
+        >
+          ${p.name}
+          ${p.isHomepage ? '<span style="margin-left: 4px; font-size: 10px;">🏠</span>' : ''}
+        </button>
+      `).join('')}
+    </nav>
+  </div>
+` : '';
+
+    const previewStyles = forPreview ? `
+    body {
+      padding-top: 56px !important;
+    }
+    .preview-nav-link {
+      color: #94a3b8 !important;
+    }
+    .preview-nav-link:hover {
+      color: #f1f5f9 !important;
+      background-color: rgba(30, 41, 59, 0.5) !important;
+    }
+    .preview-nav-link.active {
+      color: #c084fc !important;
+      background-color: rgba(168, 85, 247, 0.1) !important;
+      box-shadow: inset 0 0 0 1px rgba(168, 85, 247, 0.2) !important;
+    }
+` : '';
 
     return `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -1131,12 +1242,14 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
     h1, h2, h3, h4, h5, h6 {
       font-family: 'Syne', 'Outfit', sans-serif;
     }
+    ${previewStyles}
   </style>
   <style id="studio-user-styles">
     ${activePage.css || ''}
   </style>
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen">
+  ${previewHeaderHtml}
   <div id="preview-root">
     ${activePage.html || ''}
   </div>
@@ -1154,7 +1267,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
         .toLowerCase()
         .trim()
         .replace(/^https?:\/\/[^\/]+/i, '')
-        .replace(/^blob:[^\/]+\//i, '')
+        .replace(/^blob:[^\/]+/i, '')
         .replace(/^pages\//i, '')
         .replace(/^\/+/, '')
         .replace(/\.html$/i, '')
@@ -1164,6 +1277,51 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/^-+|-+$/g, '');
     }
+
+    window.__NAVIGATE_TO_PAGE__ = function(pageId) {
+      var page = window.__PROJECT_PAGES__.find(function(p) { return p.id === pageId; });
+      if (!page) return;
+
+      document.title = page.title || page.name;
+      var userStyles = document.getElementById('studio-user-styles');
+      if (userStyles) userStyles.textContent = page.css || '';
+      var root = document.getElementById('preview-root') || document.body;
+      root.innerHTML = page.html || '';
+      window.scrollTo({ top: 0, behavior: 'instant' });
+
+      // Atualiza os links de navegação ativos no cabeçalho
+      document.querySelectorAll('.preview-nav-link').forEach(function(btn) {
+        if (btn.getAttribute('data-page-id') === pageId) {
+          btn.classList.add('active');
+        } else {
+          btn.classList.remove('active');
+        }
+      });
+
+      setTimeout(function() {
+        if (window.lucide && typeof lucide.createIcons === 'function') {
+          try { lucide.createIcons(); } catch(err){}
+        }
+        if (typeof Swiper !== 'undefined') {
+          document.querySelectorAll('.swiper, .maps-reviews-swiper').forEach(function(sEl) {
+            try {
+              new Swiper(sEl, {
+                effect: sEl.classList.contains('maps-reviews-swiper') ? 'cards' : 'slide',
+                grabCursor: true,
+                pagination: { el: sEl.querySelector('.swiper-pagination') || '.swiper-pagination', clickable: true },
+                autoplay: { delay: 4000, disableOnInteraction: false }
+              });
+            } catch(err){}
+          });
+        }
+        if (window.ScrollTrigger && typeof ScrollTrigger.refresh === 'function') {
+          try { ScrollTrigger.refresh(); } catch(err){}
+        }
+        if (page.js) {
+          try { eval(page.js); } catch(err) { console.warn('Erro ao executar JS da página:', err); }
+        }
+      }, 60);
+    };
 
     document.addEventListener('click', function(e) {
       var target = e.target.closest('a');
@@ -1220,36 +1378,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
       });
 
       if (page) {
-        document.title = page.title || page.name;
-        var userStyles = document.getElementById('studio-user-styles');
-        if (userStyles) userStyles.textContent = page.css || '';
-        var root = document.getElementById('preview-root') || document.body;
-        root.innerHTML = page.html || '';
-        window.scrollTo({ top: 0, behavior: 'instant' });
-
-        setTimeout(function() {
-          if (window.lucide && typeof lucide.createIcons === 'function') {
-            try { lucide.createIcons(); } catch(err){}
-          }
-          if (typeof Swiper !== 'undefined') {
-            document.querySelectorAll('.swiper, .maps-reviews-swiper').forEach(function(sEl) {
-              try {
-                new Swiper(sEl, {
-                  effect: sEl.classList.contains('maps-reviews-swiper') ? 'cards' : 'slide',
-                  grabCursor: true,
-                  pagination: { el: sEl.querySelector('.swiper-pagination') || '.swiper-pagination', clickable: true },
-                  autoplay: { delay: 4000, disableOnInteraction: false }
-                });
-              } catch(err){}
-            });
-          }
-          if (window.ScrollTrigger && typeof ScrollTrigger.refresh === 'function') {
-            try { ScrollTrigger.refresh(); } catch(err){}
-          }
-          if (page.js) {
-            try { eval(page.js); } catch(err) { console.warn('Erro ao executar JS da página:', err); }
-          }
-        }, 60);
+        window.__NAVIGATE_TO_PAGE__(page.id);
       } else {
         console.warn('Página não encontrada para a rota:', rawHref, 'Slug pesquisado:', targetSlug);
       }
@@ -1300,7 +1429,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
   }, [checkSystemNgrokStatus]);
 
   const handleOpenLivePreview = () => {
-    const content = getFullHtmlDocument();
+    const content = getFullHtmlDocument(true);
     const blob = new Blob([content], { type: 'text/html;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     window.open(url, '_blank');
@@ -1754,8 +1883,173 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
             } : undefined}
           />
         )}
+        {/* Left Sidebar 3 (Tema Global) */}
+        {activeLeftSidebar === 'theme' && (
+          <div className="w-80 h-full bg-slate-950 border-r border-slate-900/80 flex flex-col z-20 shadow-2xl relative">
+            <div className="p-4 border-b border-slate-900/80 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2">
+                <Palette className="w-4 h-4 text-purple-400" />
+                <h3 className="font-bold text-sm text-white">Tema Global</h3>
+              </div>
+              <button
+                onClick={() => setActiveLeftSidebar(null)}
+                className="p-1 text-slate-500 hover:text-white rounded-lg hover:bg-slate-900 cursor-pointer transition-all"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
 
-        {/* ─── Alternância de Sidebars Esquerdas (DOM e Banco de Mídias) ─── */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-5 no-scrollbar">
+              <div className="p-3 bg-purple-950/20 border border-purple-500/20 rounded-xl space-y-1">
+                <p className="text-[11px] font-semibold text-purple-300">💡 Tema de Marca Sincronizado</p>
+                <p className="text-[10px] text-slate-400 leading-relaxed">
+                  As cores e fontes definidas aqui são aplicadas instantaneamente em todas as páginas do seu projeto, garantindo consistência visual.
+                </p>
+              </div>
+
+              {/* Seção Tipografia */}
+              <div className="space-y-3.5">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Tipografia</h4>
+                
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Fonte de Títulos</label>
+                  <select
+                    value={projectTheme.headingFont}
+                    onChange={(e) => handleUpdateTheme({ ...projectTheme, headingFont: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-800 text-slate-200 text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-purple-500 cursor-pointer font-sans"
+                  >
+                    <option value="Syne, sans-serif">Syne (Moderna / Impacto)</option>
+                    <option value="Plus Jakarta Sans, sans-serif">Plus Jakarta Sans (Limpa / Tech)</option>
+                    <option value="Playfair Display, serif">Playfair Display (Elegante / Editorial)</option>
+                    <option value="Outfit, sans-serif">Outfit (Arredondada / Premium)</option>
+                    <option value="Cinzel, serif">Cinzel (Clássica / Luxo)</option>
+                    <option value="Space Grotesk, sans-serif">Space Grotesk (Geométrica / Tech)</option>
+                    <option value="Inter, sans-serif">Inter (Neutro / Corporativo)</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Fonte do Corpo</label>
+                  <select
+                    value={projectTheme.bodyFont}
+                    onChange={(e) => handleUpdateTheme({ ...projectTheme, bodyFont: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-800 text-slate-200 text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-purple-500 cursor-pointer font-sans"
+                  >
+                    <option value="Plus Jakarta Sans, sans-serif">Plus Jakarta Sans (Tech / Moderna)</option>
+                    <option value="Inter, sans-serif">Inter (Extrema Legibilidade)</option>
+                    <option value="Outfit, sans-serif">Outfit (Moderna / Arredondada)</option>
+                    <option value="Montserrat, sans-serif">Montserrat (Amigável / Espaçada)</option>
+                    <option value="Roboto, sans-serif">Roboto (Clássica / Neutra)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="h-px bg-slate-900" />
+
+              {/* Seção Cores */}
+              <div className="space-y-3.5">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Cores da Marca</h4>
+
+                {/* Primary/Accent */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Cor de Destaque / Botões</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="color"
+                      value={projectTheme.accent}
+                      onChange={(e) => handleUpdateTheme({ ...projectTheme, accent: e.target.value, accentGlow: e.target.value + '40' })}
+                      className="w-8 h-8 rounded-lg bg-transparent border border-slate-800 cursor-pointer overflow-hidden shrink-0"
+                    />
+                    <input
+                      type="text"
+                      value={projectTheme.accent}
+                      onChange={(e) => handleUpdateTheme({ ...projectTheme, accent: e.target.value })}
+                      className="flex-1 bg-slate-900 border border-slate-800 text-slate-300 text-xs rounded-xl px-3 py-1.5 font-mono uppercase focus:outline-none focus:border-purple-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Background */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Fundo da Página</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="color"
+                      value={projectTheme.bg}
+                      onChange={(e) => handleUpdateTheme({ ...projectTheme, bg: e.target.value })}
+                      className="w-8 h-8 rounded-lg bg-transparent border border-slate-800 cursor-pointer overflow-hidden shrink-0"
+                    />
+                    <input
+                      type="text"
+                      value={projectTheme.bg}
+                      onChange={(e) => handleUpdateTheme({ ...projectTheme, bg: e.target.value })}
+                      className="flex-1 bg-slate-900 border border-slate-800 text-slate-300 text-xs rounded-xl px-3 py-1.5 font-mono uppercase focus:outline-none focus:border-purple-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Cards / Containers */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Fundo de Blocos / Cards</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="color"
+                      value={projectTheme.cardBg}
+                      onChange={(e) => handleUpdateTheme({ ...projectTheme, cardBg: e.target.value })}
+                      className="w-8 h-8 rounded-lg bg-transparent border border-slate-800 cursor-pointer overflow-hidden shrink-0"
+                    />
+                    <input
+                      type="text"
+                      value={projectTheme.cardBg}
+                      onChange={(e) => handleUpdateTheme({ ...projectTheme, cardBg: e.target.value })}
+                      className="flex-1 bg-slate-900 border border-slate-800 text-slate-300 text-xs rounded-xl px-3 py-1.5 font-mono uppercase focus:outline-none focus:border-purple-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Text Primary */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Texto Principal</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="color"
+                      value={projectTheme.textPrimary}
+                      onChange={(e) => handleUpdateTheme({ ...projectTheme, textPrimary: e.target.value })}
+                      className="w-8 h-8 rounded-lg bg-transparent border border-slate-800 cursor-pointer overflow-hidden shrink-0"
+                    />
+                    <input
+                      type="text"
+                      value={projectTheme.textPrimary}
+                      onChange={(e) => handleUpdateTheme({ ...projectTheme, textPrimary: e.target.value })}
+                      className="flex-1 bg-slate-900 border border-slate-800 text-slate-300 text-xs rounded-xl px-3 py-1.5 font-mono uppercase focus:outline-none focus:border-purple-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Border */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Bordas / Divisores</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="color"
+                      value={projectTheme.border}
+                      onChange={(e) => handleUpdateTheme({ ...projectTheme, border: e.target.value })}
+                      className="w-8 h-8 rounded-lg bg-transparent border border-slate-800 cursor-pointer overflow-hidden shrink-0"
+                    />
+                    <input
+                      type="text"
+                      value={projectTheme.border}
+                      onChange={(e) => handleUpdateTheme({ ...projectTheme, border: e.target.value })}
+                      className="flex-1 bg-slate-900 border border-slate-800 text-slate-300 text-xs rounded-xl px-3 py-1.5 font-mono uppercase focus:outline-none focus:border-purple-500"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ─── Alternância de Sidebars Esquerdas (DOM, Banco de Mídias, Tema) ─── */}
         <div className="relative z-20 self-start mt-4 flex flex-col items-center gap-2 shrink-0">
           {/* Botão DOM */}
           <button
@@ -1791,6 +2085,24 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
           >
             <ImageIcon className="w-3 h-3" />
             <span className="text-[8px] font-bold tracking-widest uppercase" style={{ writingMode: 'vertical-rl', letterSpacing: '0.15em' }}>MÍDIA</span>
+          </button>
+
+          {/* Botão Tema */}
+          <button
+            onClick={() => setActiveLeftSidebar(prev => prev === 'theme' ? null : 'theme')}
+            title={activeLeftSidebar === 'theme' ? 'Minimizar tema global' : 'Configurar tema global (cores e fontes)'}
+            className={`
+              flex flex-col items-center justify-center gap-1
+              w-6 transition-all duration-200 cursor-pointer select-none rounded-r-xl
+              border-y border-r py-3 shrink-0
+              ${activeLeftSidebar === 'theme'
+                ? 'bg-gradient-to-b from-pink-600 to-rose-700 border-rose-500/60 text-rose-200 shadow-[2px_0_12px_rgba(244,63,94,0.3)]'
+                : 'bg-slate-900/80 border-slate-800 text-slate-500 hover:text-rose-300 hover:bg-slate-800 hover:border-rose-500/40'
+              }
+            `}
+          >
+            <Palette className="w-3 h-3" />
+            <span className="text-[8px] font-bold tracking-widest uppercase" style={{ writingMode: 'vertical-rl', letterSpacing: '0.15em' }}>TEMA</span>
           </button>
         </div>
         {/* Central Interactive Sandbox Canvas */}
@@ -1854,6 +2166,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
                 highlightPath={selectedPath}
                 hoverPath={hoverPath}
                 zoom={zoom}
+                theme={theme}
                 onElementSelect={(selector, styles, attrs, path, componentId) => {
                   setSelectedSelector(selector);
                   setSelectedStyles(styles);

@@ -49,6 +49,7 @@ interface MockProject {
   favicon?: string | null;
   navbarHtml: string;
   footerHtml: string;
+  theme?: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -412,6 +413,7 @@ class InMemoryDatabase {
         favicon: data.favicon || null,
         navbarHtml: data.navbarHtml || '',
         footerHtml: data.footerHtml || '',
+        theme: data.theme || null,
         createdAt: now,
         updatedAt: now
       };
