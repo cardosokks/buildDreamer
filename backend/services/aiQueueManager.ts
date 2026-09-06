@@ -381,8 +381,30 @@ Sua missão é criar a PÁGINA INICIAL (HOME) de altíssimo impacto e nível int
 DADOS DO PROJETO:
 - Nome do Negócio: ${resolvedBusinessName}
 - Segmento / Ramo de Atuação: ${resolvedSegment}
-- Estilo Visual & Paleta: ${resolvedStyle} | ${resolvedPalette}
+- Estilo Visual Solicitado: ${resolvedStyle || 'Livre & Exclusivo por IA'} | ${resolvedPalette || 'Sintetizada por IA'}
 - Instruções Específicas do Usuário: ${prompt}
+
+DIRETRIZES CRÍTICAS DE ESTILOS CSS POR SEGMENTO (PROIBIDO TEMAS HARDCODED OU REPETITIVOS):
+1. INJEÇÃO DE ESTILOS CSS BASEADOS INTEIRAMENTE NO SEGMENTO "${resolvedSegment}":
+   - É ESTRITAMENTE PROIBIDO reutilizar variáveis hardcoded estáticas ou cores padrão (como bg-slate-900 engessado em todos os sites)!
+   - Toda a identidade estética (cores de fundo, cartões, realces glow, gradientes, bordas e tipografia do Google Fonts) DEVE ser sintetizada sob medida com base no segmento "${resolvedSegment}".
+   - No início do campo "css", declare variáveis nativas no bloco :root especificamente para a marca "${resolvedBusinessName}":
+     :root {
+       --brand-primary: [Cor primária gerada para o nicho de ${resolvedSegment}];
+       --brand-accent: [Cor de acento/glow para botões e destaques do nicho];
+       --brand-bg: [Cor de fundo adequada ao segmento - clara, escura ou de tom pastel/terroso];
+       --brand-card: [Cor de fundo de cartões e painéis com glassmorphism do nicho];
+       --brand-text: [Cor dos textos principais];
+       --brand-border: [Cor das bordas com transparência adequada];
+       --font-heading: [Nome da fonte do Google Fonts selecionada para títulos do segmento];
+       --font-body: [Nome da fonte do Google Fonts selecionada para leitura do segmento];
+     }
+2. ADAPTAÇÃO VISUAL AO PÚBLICO DO SEGMENTO:
+   - Se Saúde/Médico/Clínica: cores assépticas (branco, ciano, azul-royal, verde-menta ou rosé), tipografia limpa humanista.
+   - Se Tecnologia/SaaS: cores futuristas (obsidian, indigo/ciano néon, violeta), tipografia geométrica em Bento Grid.
+   - Se Gastronomia/Artesanal: cores quentes (terracota, creme, café, verde-oliva), tipografia serifada aconchegante.
+   - Se Barbearia/Balada/Luxo: cores noturnas (obsidian, âmbar, dourado, vidro escuro), tipografia imponente.
+   - Se Esportes/Academia: alto contraste (preto profundo, amarelo-limão/néon), tipografia display em caixa alta.
 
 ROTAS DE NAVEGAÇÃO DO SITE (OBRIGATÓRIO incluir na Navbar e no Footer):
 ${navLinksDoc}
@@ -423,7 +445,7 @@ ESTRUTURA COMPLETA E OBRIGATÓRIA DA PÁGINA INICIAL:
 REGRAS TÉCNICAS E ARQUITETURA:
 - O retorno DEVE ser um objeto JSON estrito com as chaves: "html", "css", "js", "explanation".
 - HTML: apenas classes Tailwind semânticas. NUNCA coloque tags <style> ou <script> dentro do HTML.
-- CSS: regras extras de animação (@keyframes, glows, custom scrollbar).
+- CSS: defina o bloco :root no início com as variáveis da marca do segmento, mais regras extras de animação (@keyframes, glows, custom scrollbar).
 - JS: código puro com handlers de clique para abrir/fechar o menu mobile, abrir/fechar os accordions do FAQ, validação de envio de formulário com feedback visual, e contadores animados de números.
 `;
 
@@ -568,8 +590,9 @@ ESTILO VISUAL & PALETA:
 ${resolvedStyle} | ${resolvedPalette}
 
 DIRETRIZES DE IDENTIDADE VISUAL E REAPROVEITAMENTO:
-1. A subpágina DEVE manter a mesma identidade estética, tipografia e cores da Home.
-2. NAVBAR E FOOTER:
+1. A subpágina DEVE utilizar integralmente o mesmo esquema visual e variáveis CSS (:root) do segmento "${resolvedSegment}" criados para a Home.
+2. NUNCA aplique temas hardcoded estáticos ou cores genéricas fora da paleta do segmento da empresa.
+3. NAVBAR E FOOTER:
    - Utilize a mesma estrutura de Navbar e Footer da Home abaixo.
    - Na Navbar, destaque o link "${sub.name}" com classe ativa (ex: text-purple-400 font-bold ou border-b-2 border-purple-500).
 ${navbarHtml ? `\nNAVBAR BASE DA HOME:\n${navbarHtml}\n` : ''}

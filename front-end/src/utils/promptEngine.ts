@@ -351,11 +351,11 @@ DIRETRIZES OBRIGATÓRIAS DE DESIGN E COMPONENTES (ANTI-LAYOUT GENÉRICO)
 1. ZERO LAYOUT GENÉRICO (ANTI-TEMPLATE):
    - É ESTRITAMENTE PROIBIDO criar seções padronizadas de 3 colunas simples com cartões idênticos!
    - Utilize Bento Grids com variações de colspans/rowspans (ex: col-span-2, row-span-2) com cartões de tamanhos e destaques variados.
-   - Crie layouts assimétricos com profundidade visual, cartões em vidro fosco Glassmorphism (backdrop-blur-md bg-slate-900/60 border border-white/10), iluminação com gradientes radiais/glows e seções splitscreen dinâmicas.
+   - Crie layouts assimétricos com profundidade visual, cartões em vidro fosco Glassmorphism (backdrop-blur-md bg-[var(--brand-card)] border border-white/10), iluminação com gradientes radiais/glows e seções splitscreen dinâmicas.
 
 2. HERO SECTION DE ALTO IMPACTO:
-   - Elemento 3D / Glassmorphism Refinado: Inclua um objeto 3D interativo com a tag <spline-viewer url="https://prod.spline.design/6Wnt13RekM1bT46U/scene.splinecode"></spline-viewer> ou um container Hero com efeito Glassmorphism refinado (backdrop-blur-xl border border-white/10 shadow-[0_0_50px_rgba(139,92,246,0.2)]).
-   - Tipografia Impactante com Google Fonts: Utilize famílias tipográficas modernas como 'Syne', 'Plus Jakarta Sans', 'Space Grotesk' ou 'Outfit' para títulos imponentes em destaque.
+   - Elemento 3D / Glassmorphism Refinado: Inclua um objeto 3D interativo com a tag <spline-viewer url="https://prod.spline.design/6Wnt13RekM1bT46U/scene.splinecode"></spline-viewer> ou um container Hero com efeito Glassmorphism refinado (backdrop-blur-xl border border-white/10 shadow-[0_0_50px_var(--brand-accent)]).
+   - Tipografia Impactante com Google Fonts: Utilize famílias tipográficas do Google Fonts selecionadas para o segmento da empresa.
    - Badge Flutuante Interativo Duplo:
      a) Badge Google Maps: Exibindo Nota ${ratingStr} ★ (${reviewsCountNum} avaliações reais) com selo de verificação no Maps.
      b) Badge de Status em Tempo Real: Indicador LED pulsante "🟢 Aberto Agora" (calculado dinamicamente via JS).
@@ -364,7 +364,7 @@ DIRETRIZES OBRIGATÓRIAS DE DESIGN E COMPONENTES (ANTI-LAYOUT GENÉRICO)
    - Lenis Smooth Scroll: Inicialize o Lenis JS para rolagem ultra-suave na página inteira.
    - GSAP ScrollTrigger: Aplique GSAP ScrollTrigger nos elementos (.gsap-reveal) para que as seções e cartões surjam suavemente com animação de fade-up e escala ao rolar a página.
    - Swiper.js 3D: Configure o Swiper.js com efeito de cards (effect: 'cards') ou coverflow (effect: 'coverflow') para as seções de depoimentos e galeria.
-   - Microinterações de Hover: Botões com hover de brilho/glow (hover:shadow-[0_0_25px_var(--accent-glow)] hover:scale-105 transition-all duration-300) e cartões que se elevam ao passar o mouse (hover:-translate-y-2 hover:border-purple-500/50 transition-all duration-300).
+   - Microinterações de Hover: Botões com hover de brilho/glow (hover:shadow-[0_0_25px_var(--brand-accent)] hover:scale-105 transition-all duration-300) e cartões que se elevam ao passar o mouse (hover:-translate-y-2 hover:border-[var(--brand-accent)] transition-all duration-300).
 
 4. FIDELIDADE RIGOROSA AO ESTILO VISUAL SOLICITADO:
    - ${customStyleDirective}

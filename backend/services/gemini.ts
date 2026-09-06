@@ -480,11 +480,21 @@ export const generateAIResponse = async (
        - O campo "html" deve conter APENAS a estrutura visual com classes Tailwind semânticas.
        - NUNCA inclua tags <style>...</style> dentro do campo "html". Todo CSS customizado, animações @keyframes, efeitos de glow, glassmorphism ou regras extras DEVEM ficar exclusivamente no campo "css".
        - NUNCA inclua tags <script>...</script> dentro do campo "html". Toda interatividade, handlers de formulários, sliders, modais, observers de scroll ou animações Three.js/Canvas DEVEM ficar exclusivamente no campo "js".
-    2. PADRÃO ESTÉTICO & DESIGN SYSTEM UNIVERSAL:
-       - Use Tailwind CSS moderno, gradientes sutis, glassmorphism, tipografia elegante (Inter / Outfit) e design limpo.
-       - Garanta que o layout seja 100% responsivo para mobile (375px) e desktop (1280px).
-       - Mantenha IDs e classes semânticas.
-       - Preserve o container <div id="canvas-root"> como nó raiz do conteúdo.
+    2. ESTILOS CSS BASEADOS INTEIRAMENTE NO SEGMENTO DA EMPRESA (PROIBIDO TEMAS HARDCODED):
+       - É ESTRITAMENTE PROIBIDO utilizar variáveis de estilo hardcoded, temas estáticos engessados ou esquemas de cores pré-definidos que tornem os sites parecidos entre si!
+       - A IA DEVE analisar o segmento do negócio, a proposta comercial e o perfil do público-alvo para criar uma identidade visual (cores, gradientes, tipografia do Google Fonts, bordas e sombras) 100% personalizada e sob medida.
+       - INJEÇÃO DE VARIÁVEIS CSS DINÂMICAS: No campo "css", defina variáveis nativas no bloco :root baseadas exclusivamente no nicho do projeto:
+         :root {
+           --primary: [cor primária gerada para o segmento];
+           --accent: [cor de destaque/glow gerada para o segmento];
+           --bg-surface: [fundo claro/escuro/atmosférico apropriado ao segmento];
+           --card-bg: [fundo de cartões/glassmorphism do segmento];
+           --text-main: [cor principal de texto];
+           --border-color: [cor de borda com opacidade do segmento];
+         }
+       - TIPOGRAFIA EXCLUSIVA DO NICHO: Escolha fontes do Google Fonts perfeitamente alinhadas com o tom do nicho (ex: serifa requintada para luxo/gastronomia, sans-serif limpa/humanista para saúde/clínicas, fonte display/imponente para esportes/academias, geométrica para tech/SaaS).
+       - NUNCA repita a mesma paleta ou visual entre projetos de nichos diferentes.
+       - Garanta que o layout seja 100% responsivo para mobile (375px) e desktop (1280px) mantendo o container <div id="canvas-root"> como nó raiz do conteúdo.
     3. ARQUIVOS ANEXADOS & LOGOMARCAS:
        - Se o usuário enviou uma logomarca (imagem ou SVG), posicione-a com destaque e elegância na Navbar (<nav>/<header>), Rodapé (<footer>) ou seções hero.
        - Se o usuário enviou um arquivo de código ou navbar de referência, replique a estrutura com perfeição mantendo o design responsivo.

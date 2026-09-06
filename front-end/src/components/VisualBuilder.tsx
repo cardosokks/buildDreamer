@@ -1144,48 +1144,79 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
     ${safeJs}
   </script>
   <script>
-    // Interceptor de navegação para Preview local multi-páginas (impede about:blank#blocked)
+    // Interceptor de navegação avançado para Preview local multi-páginas (impede about:blank#blocked)
     window.__PROJECT_PAGES__ = ${safePagesJson};
+
+    function slugifyRoute(str) {
+      if (!str) return '';
+      try { str = decodeURIComponent(str); } catch(e){}
+      return String(str)
+        .toLowerCase()
+        .trim()
+        .replace(/^https?:\/\/[^\/]+/i, '')
+        .replace(/^blob:[^\/]+\//i, '')
+        .replace(/^pages\//i, '')
+        .replace(/^\/+/, '')
+        .replace(/\.html$/i, '')
+        .replace(/\/$/, '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+    }
 
     document.addEventListener('click', function(e) {
       var target = e.target.closest('a');
       if (!target) return;
 
-      var rawHref = target.getAttribute('href') || target.href || '';
-      if (!rawHref || rawHref === '#' || rawHref.startsWith('javascript:')) return;
+      var rawAttr = target.getAttribute('href') || '';
+      var rawHref = rawAttr || target.href || '';
+      if (!rawHref || rawHref === 'javascript:' || rawHref.startsWith('javascript:')) return;
 
-      // Ignorar links de compartilhamento/contato externo
-      if (rawHref.startsWith('mailto:') || rawHref.startsWith('tel:')) return;
-      if (rawHref.startsWith('http://') || rawHref.startsWith('https://')) {
-        if (!rawHref.includes(window.location.host) && !rawHref.includes('blob:')) {
+      // 1. Rolagens suaves internas para seções com ID (#secao)
+      if (rawAttr.startsWith('#') || (rawHref.includes('#') && !rawAttr.includes('.html'))) {
+        var hash = rawAttr.startsWith('#') ? rawAttr : ('#' + rawHref.split('#')[1]);
+        if (hash && hash !== '#') {
+          e.preventDefault();
+          e.stopPropagation();
+          var targetEl = document.querySelector(hash) || document.getElementById(hash.slice(1));
+          if (targetEl) {
+            targetEl.scrollIntoView({ behavior: 'smooth' });
+          }
           return;
         }
       }
 
-      // Prevenir navegação nativa no browser para evitar about:blank#blocked
+      // 2. Links externos (WhatsApp, redes sociais, telefone, e-mail)
+      if (rawHref.startsWith('mailto:') || rawHref.startsWith('tel:')) return;
+      if (rawHref.startsWith('http://') || rawHref.startsWith('https://')) {
+        var isExternal = true;
+        try {
+          var u = new URL(rawHref);
+          if (u.host === window.location.host || rawHref.includes('blob:')) {
+            isExternal = false;
+          }
+        } catch(err){}
+        if (isExternal) {
+          e.preventDefault();
+          window.open(rawHref, '_blank');
+          return;
+        }
+      }
+
+      // 3. Prevenir navegação nativa do browser para evitar about:blank#blocked no iframe/blob
       e.preventDefault();
       e.stopPropagation();
 
-      var cleanSlug = rawHref
-        .replace(/^https?:\/\/[^\/]+/i, '')
-        .replace(/^blob:[^\/]+\//i, '')
-        .replace(/^\/+/, '')
-        .replace(/^pages\//, '')
-        .replace(/\.html$/i, '')
-        .replace(/\/$/, '')
-        .toLowerCase();
-
-      if (!cleanSlug) cleanSlug = 'index';
+      var targetSlug = slugifyRoute(rawAttr || rawHref);
 
       var page = window.__PROJECT_PAGES__.find(function(p) {
-        var pSlug = (p.slug || '').toLowerCase().replace(/^\/+/, '').replace(/\.html$/i, '');
-        var pName = (p.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-');
-        return (
-          pSlug === cleanSlug ||
-          pName === cleanSlug ||
-          (cleanSlug === 'index' && p.isHomepage) ||
-          (cleanSlug === 'home' && p.isHomepage)
-        );
+        var pSlug = slugifyRoute(p.slug);
+        var pName = slugifyRoute(p.name);
+        if (targetSlug === 'index' || targetSlug === 'home' || targetSlug === 'inicio' || targetSlug === '') {
+          return p.isHomepage || pSlug === 'index' || pSlug === 'home' || pSlug === 'inicio';
+        }
+        return pSlug === targetSlug || pName === targetSlug;
       });
 
       if (page) {
@@ -1194,26 +1225,33 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
         if (userStyles) userStyles.textContent = page.css || '';
         var root = document.getElementById('preview-root') || document.body;
         root.innerHTML = page.html || '';
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+        window.scrollTo({ top: 0, behavior: 'instant' });
 
         setTimeout(function() {
-          if (window.lucide) { try { lucide.createIcons(); } catch(err){} }
-          if (typeof Swiper !== 'undefined' && document.querySelector('.maps-reviews-swiper')) {
-            try {
-              new Swiper('.maps-reviews-swiper', {
-                effect: 'cards',
-                grabCursor: true,
-                pagination: { el: '.swiper-pagination', clickable: true },
-                autoplay: { delay: 4000, disableOnInteraction: false }
-              });
-            } catch(err){}
+          if (window.lucide && typeof lucide.createIcons === 'function') {
+            try { lucide.createIcons(); } catch(err){}
+          }
+          if (typeof Swiper !== 'undefined') {
+            document.querySelectorAll('.swiper, .maps-reviews-swiper').forEach(function(sEl) {
+              try {
+                new Swiper(sEl, {
+                  effect: sEl.classList.contains('maps-reviews-swiper') ? 'cards' : 'slide',
+                  grabCursor: true,
+                  pagination: { el: sEl.querySelector('.swiper-pagination') || '.swiper-pagination', clickable: true },
+                  autoplay: { delay: 4000, disableOnInteraction: false }
+                });
+              } catch(err){}
+            });
+          }
+          if (window.ScrollTrigger && typeof ScrollTrigger.refresh === 'function') {
+            try { ScrollTrigger.refresh(); } catch(err){}
           }
           if (page.js) {
-            try { eval(page.js); } catch(err) { console.warn(err); }
+            try { eval(page.js); } catch(err) { console.warn('Erro ao executar JS da página:', err); }
           }
-        }, 50);
+        }, 60);
       } else {
-        console.warn('Página não encontrada para a rota:', rawHref);
+        console.warn('Página não encontrada para a rota:', rawHref, 'Slug pesquisado:', targetSlug);
       }
     }, true);
   </script>
