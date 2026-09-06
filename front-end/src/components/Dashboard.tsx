@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { API_URL, safeJson } from '../config';
+import { PromptPreviewModal } from './PromptPreviewModal';
 import {
   FolderPlus,
   Trash2,
@@ -809,11 +810,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
   const [selectedZipBase64, setSelectedZipBase64] = useState<string | null>(null);
   const [selectedZipName, setSelectedZipName] = useState<string>('');
 
-  // AI Prompt generation States
+  // AI Prompt generation States & Wizard Step
+  const [aiStep, setAiStep] = useState<'config' | 'preview_prompt'>('config');
+  const [aiFinalPrompt, setAiFinalPrompt] = useState('');
   const [businessName, setBusinessName] = useState('');
   const [segment, setSegment] = useState('');
-  const [visualStyle, setVisualStyle] = useState('moderno');
-  const [colorPalette, setColorPalette] = useState('dark-luxury');
+  const [visualStyle, setVisualStyle] = useState('');
+  const [colorPalette, setColorPalette] = useState('');
   const [aiSiteTypePreset, setAiSiteTypePreset] = useState<'institutional' | 'saas' | 'ecommerce' | 'landing' | 'custom'>('institutional');
   const [selectedPagesList, setSelectedPagesList] = useState<Array<{ name: string; slug: string; isHomepage?: boolean }>>([
     { name: 'Início', slug: 'index', isHomepage: true },
@@ -824,6 +827,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
   ]);
   const [customPageInput, setCustomPageInput] = useState('');
   const [targetLeadForProject, setTargetLeadForProject] = useState<Lead | null>(null);
+  const [linkToClient, setLinkToClient] = useState(false);
+  const [clientSearchQuery, setClientSearchQuery] = useState('');
 
   const applyAiSiteTypePreset = (preset: 'institutional' | 'saas' | 'ecommerce' | 'landing' | 'custom') => {
     setAiSiteTypePreset(preset);
@@ -4403,7 +4408,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
 
             {/* Modal Form inputs conditionally */}
             <form onSubmit={handleCreateProject} className="space-y-4">
-              {creationMode === 'zip' ? (
+              {creationMode === 'zip' && (
                 <div className="space-y-4">
                   <div>
                     <label className="block text-xs font-semibold uppercase tracking-wider text-slate-455 mb-2">Arquivo ZIP do Site</label>
@@ -4472,310 +4477,263 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                     />
                   </div>
                 </div>
-              ) : creationMode === 'ai' ? (
+              )}
+
+              {creationMode === 'ai' && (
                 <div className="space-y-5">
-                  {/* Top Banner Info */}
-                  <div className="p-3.5 bg-gradient-to-r from-purple-950/40 via-indigo-950/30 to-slate-900/50 border border-purple-500/30 rounded-xl flex items-start gap-3">
-                    <div className="p-2 bg-purple-600/20 text-purple-400 rounded-lg shrink-0 mt-0.5">
-                      <Sparkles className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <h4 className="text-xs font-bold text-purple-200">Gerador de Sites Multi-páginas com IA</h4>
-                      <p className="text-[11px] text-slate-300 leading-relaxed mt-0.5">
-                        A IA irá gerar a página principal (Home), extrair a identidade e o cabeçalho/rodapé padronizados, e construir cada subpágina mantendo 100% de consistência de design e rotas funcionais.
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Vincular Cliente / Lead Opcional */}
-                  <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5 flex items-center justify-between">
-                      <span>Vincular Cliente / Lead Salvo (Opcional)</span>
-                      {targetLeadForProject && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setTargetLeadForProject(null);
-                            setBusinessName('');
-                            setSegment('');
-                          }}
-                          className="text-[10px] text-red-400 hover:underline cursor-pointer"
-                        >
-                          Remover vínculo
-                        </button>
-                      )}
-                    </label>
-                    <select
-                      value={targetLeadForProject?.id || ''}
-                      onChange={(e) => {
-                        const selectedId = e.target.value;
-                        if (!selectedId) {
-                          setTargetLeadForProject(null);
-                          return;
-                        }
-                        const lead = savedLeads.find(l => l.id === selectedId) || leadsList.find(l => l.id === selectedId);
-                        if (lead) {
-                          setTargetLeadForProject(lead);
-                          setBusinessName(lead.name);
-                          setSegment(lead.category || 'Serviços');
-                          setNewProjectDesc(`Contato: ${lead.phone || 'N/A'} - ${lead.email || 'N/A'} - Endereço: ${lead.address || 'N/A'}`);
-                        }
-                      }}
-                      className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 focus:border-purple-500 rounded-xl focus:outline-none text-xs text-white"
-                    >
-                      <option value="">-- Nenhum cliente vinculado (Criar do zero) --</option>
-                      {savedLeads.map(lead => (
-                        <option key={lead.id} value={lead.id}>
-                          🏢 {lead.name} {lead.category ? `(${lead.category})` : ''} - {lead.phone || 'Sem tel'}
-                        </option>
-                      ))}
-                    </select>
-                    {targetLeadForProject && (
-                      <p className="text-[11px] text-emerald-400 mt-1 flex items-center gap-1">
-                        <UserCheck className="w-3.5 h-3.5" />
-                        Cliente <strong>{targetLeadForProject.name}</strong> anexado. As informações foram preenchidas automaticamente para a IA!
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Nome e Segmento */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
-                        Nome do Negócio / Empresa *
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="Ex: Bella Napoli Ristorante"
-                        value={businessName}
-                        onChange={(e) => setBusinessName(e.target.value)}
-                        className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 focus:border-purple-500 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500/30 text-xs text-white placeholder-slate-600"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
-                        Segmento de Atuação *
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="Ex: Restaurante Italiano, Advocacia, SaaS..."
-                        value={segment}
-                        onChange={(e) => setSegment(e.target.value)}
-                        className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 focus:border-purple-500 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500/30 text-xs text-white placeholder-slate-600"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Quick Niche Chips */}
-                  <div>
-                    <label className="block text-[11px] font-medium text-slate-400 mb-1.5">Sugestões rápidas de nicho:</label>
-                    <div className="flex flex-wrap gap-1.5">
-                      {[
-                        { label: '🍕 Gastronomia', seg: 'Restaurante e Gastronomia', preset: 'institutional', style: 'Dark Luxury com fotos gastronômicas atraentes' },
-                        { label: '⚖️ Advocacia', seg: 'Escritório de Advocacia e Consultoria Jurídica', preset: 'institutional', style: 'Corporate Navy elegante e alta autoridade' },
-                        { label: '🩺 Saúde & Clínica', seg: 'Clínica Médica e Odontológica', preset: 'institutional', style: 'Clean Emerald com sensação de bem-estar' },
-                        { label: '💻 SaaS & Tech', seg: 'Software como Serviço e Tecnologia', preset: 'saas', style: 'Modern Tech Indigo estilo Linear/Tailwind' },
-                        { label: '🏠 Imobiliária', seg: 'Imobiliária e Corretagem de Imóveis', preset: 'institutional', style: 'Moderno sofisticado com catálogo de imóveis' },
-                        { label: '🏋️ Fitness & Gym', seg: 'Academia e Treinamento Físico', preset: 'institutional', style: 'Dark Neon enérgico de alta conversão' },
-                        { label: '🛍️ E-commerce', seg: 'Loja e Catálogo de Produtos', preset: 'ecommerce', style: 'Modern Minimalist focado em produtos' },
-                        { label: '🎯 Landing Page', seg: 'Infoproduto e Curso Online', preset: 'landing', style: 'Direct Response de Alta Conversão' }
-                      ].map((item) => (
-                        <button
-                          key={item.label}
-                          type="button"
-                          onClick={() => {
-                            setSegment(item.seg);
-                            setVisualStyle(item.style);
-                            applyAiSiteTypePreset(item.preset as any);
-                          }}
-                          className="px-2.5 py-1 bg-slate-900/90 hover:bg-purple-900/40 border border-slate-800 hover:border-purple-500/40 text-[11px] text-slate-300 hover:text-white rounded-lg transition-all cursor-pointer"
-                        >
-                          {item.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Arquitetura de Múltiplas Páginas */}
-                  <div className="p-3.5 bg-slate-950/80 border border-slate-800/80 rounded-xl space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Layers className="w-4 h-4 text-purple-400" />
-                        <label className="text-xs font-bold uppercase tracking-wider text-slate-200">
-                          Estrutura de Páginas do Site ({selectedPagesList.length} páginas)
-                        </label>
+                  {aiStep === 'config' && (
+                    <>
+                      {/* Top Banner Info */}
+                      <div className="p-3.5 bg-gradient-to-r from-purple-950/40 via-indigo-950/30 to-slate-900/50 border border-purple-500/30 rounded-xl flex items-start gap-3">
+                        <div className="p-2 bg-purple-600/20 text-purple-400 rounded-lg shrink-0 mt-0.5">
+                          <Sparkles className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <h4 className="text-xs font-bold text-purple-200">Gerador de Sites Multi-páginas com IA</h4>
+                          <p className="text-[11px] text-slate-300 leading-relaxed mt-0.5">
+                            Defina a identidade, as páginas e as diretrizes visuais. No próximo passo, você poderá revisar e ajustar o prompt exato que será enviado para a IA.
+                          </p>
+                        </div>
                       </div>
-                      <span className="text-[10px] text-purple-300 font-semibold bg-purple-950/60 border border-purple-500/30 px-2 py-0.5 rounded-full">
-                        {aiSiteTypePreset === 'institutional' ? 'Institucional' : aiSiteTypePreset === 'saas' ? 'SaaS / Tech' : aiSiteTypePreset === 'ecommerce' ? 'Catálogo' : aiSiteTypePreset === 'landing' ? 'Landing Page' : 'Personalizado'}
-                      </span>
-                    </div>
 
-                    {/* Preset Selector */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => applyAiSiteTypePreset('institutional')}
-                        className={`py-1.5 px-2 text-[11px] font-semibold rounded-lg border transition-all cursor-pointer ${
-                          aiSiteTypePreset === 'institutional'
-                            ? 'bg-purple-600 text-white border-purple-500 shadow-sm'
-                            : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-white'
-                        }`}
-                      >
-                        🏢 Institucional (5)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => applyAiSiteTypePreset('saas')}
-                        className={`py-1.5 px-2 text-[11px] font-semibold rounded-lg border transition-all cursor-pointer ${
-                          aiSiteTypePreset === 'saas'
-                            ? 'bg-purple-600 text-white border-purple-500 shadow-sm'
-                            : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-white'
-                        }`}
-                      >
-                        🚀 SaaS & Tech (5)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => applyAiSiteTypePreset('ecommerce')}
-                        className={`py-1.5 px-2 text-[11px] font-semibold rounded-lg border transition-all cursor-pointer ${
-                          aiSiteTypePreset === 'ecommerce'
-                            ? 'bg-purple-600 text-white border-purple-500 shadow-sm'
-                            : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-white'
-                        }`}
-                      >
-                        🛍️ Catálogo (4)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => applyAiSiteTypePreset('landing')}
-                        className={`py-1.5 px-2 text-[11px] font-semibold rounded-lg border transition-all cursor-pointer ${
-                          aiSiteTypePreset === 'landing'
-                            ? 'bg-purple-600 text-white border-purple-500 shadow-sm'
-                            : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-white'
-                        }`}
-                      >
-                        🎯 Landing (1)
-                      </button>
-                    </div>
-
-                    {/* Selected Pages Chips list */}
-                    <div className="flex flex-wrap gap-2 pt-1">
-                      {selectedPagesList.map((page, idx) => (
-                        <div
-                          key={page.slug}
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border ${
-                            page.isHomepage
-                              ? 'bg-purple-950/70 border-purple-500/50 text-purple-200'
-                              : 'bg-slate-900 border-slate-700/80 text-slate-200'
-                          }`}
-                        >
-                          <span className="text-[10px] text-slate-400 font-mono">#{idx + 1}</span>
-                          <span>{page.name}</span>
-                          {page.isHomepage ? (
-                            <span className="text-[9px] bg-purple-500/30 text-purple-200 px-1 py-0.2 rounded">Principal</span>
-                          ) : (
+                      {/* Vincular Cliente / Lead */}
+                      <div className="p-3.5 bg-slate-950/80 border border-slate-800 rounded-xl space-y-3">
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs font-bold uppercase tracking-wider text-slate-200 flex items-center gap-2">
+                            <UserCheck className="w-4 h-4 text-purple-400" />
+                            Deseja vincular este projeto a um Cliente / Lead?
+                          </label>
+                          <div className="flex items-center gap-2">
                             <button
                               type="button"
-                              onClick={() => handleRemovePageFromAI(page.slug)}
-                              className="text-slate-400 hover:text-red-400 ml-0.5 cursor-pointer"
-                              title="Remover esta página"
+                              onClick={() => {
+                                setLinkToClient(true);
+                              }}
+                              className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+                                linkToClient ? 'bg-purple-600 text-white shadow-sm' : 'bg-slate-900 text-slate-400 hover:text-white'
+                              }`}
                             >
-                              <X className="w-3 h-3" />
+                              Sim
                             </button>
-                          )}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setLinkToClient(false);
+                                setTargetLeadForProject(null);
+                              }}
+                              className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+                                !linkToClient ? 'bg-slate-800 text-white shadow-sm' : 'bg-slate-900 text-slate-400 hover:text-white'
+                              }`}
+                            >
+                              Não
+                            </button>
+                          </div>
                         </div>
-                      ))}
-                    </div>
 
-                    {/* Add Custom Page Input */}
-                    <div className="flex items-center gap-2 pt-1">
-                      <input
-                        type="text"
-                        placeholder="Adicionar outra página (ex: Cardápio, Equipe, Galeria, Blog)..."
-                        value={customPageInput}
-                        onChange={(e) => setCustomPageInput(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            handleAddCustomPageToAI();
-                          }
-                        }}
-                        className="flex-1 px-3 py-1.5 bg-slate-900 border border-slate-800 focus:border-purple-500 rounded-lg focus:outline-none text-xs text-white placeholder-slate-600"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => handleAddCustomPageToAI()}
-                        disabled={!customPageInput.trim()}
-                        className="px-3 py-1.5 bg-slate-800 hover:bg-purple-600 disabled:opacity-40 disabled:hover:bg-slate-800 text-white text-xs font-semibold rounded-lg transition-all flex items-center gap-1 cursor-pointer"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                        Adicionar
-                      </button>
-                    </div>
-                  </div>
+                        {linkToClient && (
+                          <div className="space-y-2.5 pt-2 border-t border-slate-800/80">
+                            {targetLeadForProject ? (
+                              <div className="p-3 bg-emerald-950/30 border border-emerald-500/40 rounded-xl flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <div className="p-2 bg-emerald-600/20 text-emerald-400 rounded-lg">
+                                    <UserCheck className="w-4 h-4" />
+                                  </div>
+                                  <div>
+                                    <div className="text-xs font-bold text-white">{targetLeadForProject.name}</div>
+                                    <div className="text-[10px] text-slate-400">{targetLeadForProject.category || 'Cliente'} • {targetLeadForProject.phone || 'Sem telefone'}</div>
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => setTargetLeadForProject(null)}
+                                  className="text-xs text-red-400 hover:underline cursor-pointer font-medium"
+                                >
+                                  Trocar / Desvincular
+                                </button>
+                              </div>
+                            ) : (
+                              <>
+                                <div className="relative">
+                                  <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-500" />
+                                  <input
+                                    type="text"
+                                    placeholder="Pesquisar cliente por nome, telefone ou email..."
+                                    value={clientSearchQuery}
+                                    onChange={(e) => setClientSearchQuery(e.target.value)}
+                                    className="w-full pl-9 pr-3 py-2 bg-slate-900 border border-slate-800 focus:border-purple-500 rounded-xl focus:outline-none text-xs text-white placeholder-slate-500"
+                                  />
+                                </div>
 
-                  {/* Estilo Visual & Paletas de Cor */}
-                  <div className="space-y-2">
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400">
-                      Estilo Visual e Paleta de Cores
-                    </label>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                      {[
-                        { id: 'dark-luxury', name: '🌌 Dark Luxury', desc: 'Preto obsidiana, bordas neon e requinte' },
-                        { id: 'tech-indigo', name: '⚡ Modern Tech', desc: 'Azul índigo, Tailwind UI, alta clareza' },
-                        { id: 'corporate-navy', name: '🏛️ Corporate Navy', desc: 'Azul marinho, seriedade e autoridade' },
-                        { id: 'emerald-nature', name: '🌿 Emerald Health', desc: 'Verde esmeralda, saúde e frescor' },
-                        { id: 'warm-amber', name: '☀️ Warm Minimalist', desc: 'Minimalismo editorial e sofisticação' },
-                        { id: 'custom-style', name: '🎨 Personalizado', desc: 'Definido no campo abaixo' }
-                      ].map((pal) => (
-                        <button
-                          key={pal.id}
-                          type="button"
-                          onClick={() => {
-                            setColorPalette(pal.id);
-                            if (pal.id !== 'custom-style') {
-                              setVisualStyle(pal.desc);
-                            }
-                          }}
-                          className={`p-2.5 text-left rounded-xl border transition-all cursor-pointer ${
-                            colorPalette === pal.id
-                              ? 'bg-purple-950/40 border-purple-500 text-white shadow-sm'
-                              : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
-                          }`}
-                        >
-                          <div className="text-xs font-bold text-white">{pal.name}</div>
-                          <div className="text-[10px] text-slate-400 mt-0.5 line-clamp-1">{pal.desc}</div>
-                        </button>
-                      ))}
-                    </div>
+                                <div className="max-h-40 overflow-y-auto space-y-1 divide-y divide-slate-850">
+                                  {savedLeads
+                                    .filter(lead => 
+                                      lead.name.toLowerCase().includes(clientSearchQuery.toLowerCase()) ||
+                                      (lead.phone && lead.phone.includes(clientSearchQuery)) ||
+                                      (lead.email && lead.email.toLowerCase().includes(clientSearchQuery.toLowerCase())) ||
+                                      (lead.category && lead.category.toLowerCase().includes(clientSearchQuery.toLowerCase()))
+                                    )
+                                    .map(lead => (
+                                      <div
+                                        key={lead.id}
+                                        onClick={() => {
+                                          setTargetLeadForProject(lead);
+                                          setBusinessName(lead.name);
+                                          setSegment(lead.category || 'Serviços');
+                                          setNewProjectDesc(`Contato: ${lead.phone || 'N/A'} - ${lead.email || 'N/A'}`);
+                                        }}
+                                        className="p-2.5 hover:bg-slate-900/80 rounded-lg cursor-pointer transition-all flex items-center justify-between"
+                                      >
+                                        <div>
+                                          <div className="text-xs font-semibold text-white">🏢 {lead.name}</div>
+                                          <div className="text-[10px] text-slate-400">{lead.category || 'Serviços'} {lead.phone ? `• ${lead.phone}` : ''}</div>
+                                        </div>
+                                        <span className="text-[10px] bg-purple-950 text-purple-300 px-2 py-1 rounded-md border border-purple-500/30">
+                                          Vincular ➔
+                                        </span>
+                                      </div>
+                                    ))}
+                                  {savedLeads.length === 0 && (
+                                    <p className="text-xs text-slate-500 text-center py-3">Nenhum cliente salvo no CRM.</p>
+                                  )}
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        )}
+                      </div>
 
-                    <input
-                      type="text"
-                      placeholder="Diretrizes de estilo personalizadas (opcional)"
-                      value={visualStyle}
-                      onChange={(e) => setVisualStyle(e.target.value)}
-                      className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 focus:border-purple-500 rounded-xl focus:outline-none text-xs text-white placeholder-slate-600 mt-2"
-                    />
-                  </div>
+                      {/* Nome e Segmento */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+                            Nome do Negócio / Empresa *
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="Ex: Bella Napoli Ristorante"
+                            value={businessName}
+                            onChange={(e) => setBusinessName(e.target.value)}
+                            className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 focus:border-purple-500 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500/30 text-xs text-white placeholder-slate-600"
+                          />
+                        </div>
 
-                  {/* Instruções Extras */}
-                  <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
-                      Instruções e Seções Específicas (Opcional)
-                    </label>
-                    <textarea
-                      placeholder="Ex: Incluir botão de WhatsApp flutuante, tabela de preços comparativa, seção de depoimentos de clientes e formulário de contato com validação."
-                      value={newProjectDesc}
-                      onChange={(e) => setNewProjectDesc(e.target.value)}
-                      rows={2}
-                      className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 focus:border-purple-500 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500/30 text-xs text-white resize-none placeholder-slate-600"
-                    />
-                  </div>
+                        <div>
+                          <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+                            Segmento de Atuação *
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="Ex: Restaurante Italiano, Advocacia, SaaS..."
+                            value={segment}
+                            onChange={(e) => setSegment(e.target.value)}
+                            className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 focus:border-purple-500 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500/30 text-xs text-white placeholder-slate-600"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Arquitetura de Múltiplas Páginas */}
+                      <div className="p-3.5 bg-slate-950/80 border border-slate-800/80 rounded-xl space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Layers className="w-4 h-4 text-purple-400" />
+                            <label className="text-xs font-bold uppercase tracking-wider text-slate-200">
+                              Estrutura de Páginas do Site ({selectedPagesList.length} páginas)
+                            </label>
+                          </div>
+                        </div>
+
+                        {/* Selected Pages Chips list */}
+                        <div className="flex flex-wrap gap-2 pt-1">
+                          {selectedPagesList.map((page, idx) => (
+                            <div
+                              key={page.slug}
+                              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border ${
+                                page.isHomepage
+                                  ? 'bg-purple-950/70 border-purple-500/50 text-purple-200'
+                                  : 'bg-slate-900 border-slate-700/80 text-slate-200'
+                              }`}
+                            >
+                              <span className="text-[10px] text-slate-400 font-mono">#{idx + 1}</span>
+                              <span>{page.name}</span>
+                              {page.isHomepage ? (
+                                <span className="text-[9px] bg-purple-500/30 text-purple-200 px-1 py-0.2 rounded">Principal</span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemovePageFromAI(page.slug)}
+                                  className="text-slate-400 hover:text-red-400 ml-0.5 cursor-pointer"
+                                  title="Remover esta página"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Add Custom Page Input */}
+                        <div className="flex items-center gap-2 pt-1">
+                          <input
+                            type="text"
+                            placeholder="Adicionar outra página (ex: Cardápio, Equipe, Galeria, Blog)..."
+                            value={customPageInput}
+                            onChange={(e) => setCustomPageInput(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                handleAddCustomPageToAI();
+                              }
+                            }}
+                            className="flex-1 px-3 py-1.5 bg-slate-900 border border-slate-800 focus:border-purple-500 rounded-lg focus:outline-none text-xs text-white placeholder-slate-600"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleAddCustomPageToAI()}
+                            disabled={!customPageInput.trim()}
+                            className="px-3 py-1.5 bg-slate-800 hover:bg-purple-600 disabled:opacity-40 disabled:hover:bg-slate-800 text-white text-xs font-semibold rounded-lg transition-all flex items-center gap-1 cursor-pointer"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            Adicionar
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Estilo Visual & Identidade (Sem temas predefinidos para não atrapalhar o prompt) */}
+                      <div className="space-y-2">
+                        <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400">
+                          Estilo Visual e Identidade Proposta *
+                        </label>
+                        <textarea
+                          required
+                          placeholder="Descreva exatamente a identidade visual desejada (ex: Dark Luxury com gradientes em roxo néon, minimalista e sofisticado, tipografia moderna sem serifa...)"
+                          value={visualStyle}
+                          onChange={(e) => setVisualStyle(e.target.value)}
+                          rows={3}
+                          className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 focus:border-purple-500 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500/30 text-xs text-white resize-none placeholder-slate-600"
+                        />
+                      </div>
+
+                      {/* Instruções Extras */}
+                      <div>
+                        <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+                          Instruções e Seções Específicas (Opcional)
+                        </label>
+                        <textarea
+                          placeholder="Ex: Incluir botão de WhatsApp flutuante, tabela de preços comparativa, seção de depoimentos de clientes e formulário de contato com validação."
+                          value={newProjectDesc}
+                          onChange={(e) => setNewProjectDesc(e.target.value)}
+                          rows={2}
+                          className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 focus:border-purple-500 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500/30 text-xs text-white resize-none placeholder-slate-600"
+                        />
+                      </div>
+                    </>
+                  )}
                 </div>
-              ) : (
+              )}
+
+              {creationMode === 'scratch' && (
                 <div className="space-y-4">
                   <div>
                     <label className="block text-xs font-semibold uppercase tracking-wider text-slate-455 mb-2">Nome do Projeto</label>
@@ -4907,26 +4865,73 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                 </div>
               )}
 
-              <div className="flex items-center justify-end gap-3 pt-6 border-t border-slate-800/65">
-                <button
-                  type="button"
-                  onClick={() => setShowCreateModal(false)}
-                  className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-sm transition-colors cursor-pointer font-semibold"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={creating}
-                  className="px-5 py-2.5 bg-purple-700 hover:bg-purple-655 active:bg-purple-800 text-white font-semibold rounded-xl text-sm shadow-md transition-all cursor-pointer"
-                >
-                  {creating ? 'Criando...' : 'Confirmar e Criar'}
-                </button>
+              <div className="flex items-center justify-between pt-6 border-t border-slate-800/65">
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateModal(false)}
+                    className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-sm transition-colors cursor-pointer font-semibold"
+                  >
+                    Cancelar
+                  </button>
+
+                  {creationMode === 'ai' ? (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        if (!businessName.trim() || !segment.trim() || !visualStyle.trim()) {
+                          notify.warning('Preencha o Nome do Negócio, o Segmento e o Estilo Visual.', 'Campos Obrigatórios');
+                          return;
+                        }
+                        const pagesCount = selectedPagesList.length;
+                        const pagesNames = selectedPagesList.map(p => p.name).join(', ');
+                        const compiled = `Gere um website completo, espetacular e ultra profissional de ${pagesCount} página(s) (${pagesNames}) para a empresa "${businessName.trim()}".
+Segmento de Atuação: ${segment.trim()}.
+Estilo Visual & Identidade: ${visualStyle.trim()}.
+Instruções e Requisitos Específicos: ${newProjectDesc.trim() || 'Nenhuma instrução adicional'}.
+Siga rigorosamente a identidade e o prompt fornecidos pelo usuário, garantindo design exclusivo e altíssima conversão.`;
+                        setAiFinalPrompt(compiled);
+                        setAiStep('preview_prompt');
+                      }}
+                      className="px-5 py-2.5 bg-purple-600 hover:bg-purple-500 text-white font-semibold rounded-xl text-sm shadow-md transition-all cursor-pointer flex items-center gap-2"
+                    >
+                      Avançar: Ver Prompt Final da IA ➔
+                    </button>
+                  ) : (
+                    <button
+                      type="submit"
+                      disabled={creating}
+                      className="px-5 py-2.5 bg-purple-700 hover:bg-purple-600 disabled:opacity-50 text-white font-semibold rounded-xl text-sm shadow-md transition-all cursor-pointer"
+                    >
+                      {creating ? 'Criando...' : 'Confirmar e Criar'}
+                    </button>
+                  )}
               </div>
             </form>
           </div>
         </div>
       )}
+
+      {/* PromptPreviewModal for AI Generation */}
+      <PromptPreviewModal
+        isOpen={creationMode === 'ai' && aiStep === 'preview_prompt'}
+        onClose={() => {
+          setAiStep('config');
+          setShowCreateModal(false);
+        }}
+        prompt={aiFinalPrompt}
+        onPromptChange={setAiFinalPrompt}
+        onBack={() => setAiStep('config')}
+        onConfirm={() => {
+          const syntheticEvent = { preventDefault: () => {} } as React.FormEvent;
+          handleCreateProject(syntheticEvent);
+        }}
+        businessName={businessName}
+        segment={segment}
+        pagesCount={selectedPagesList.length}
+        pagesNames={selectedPagesList.map(p => p.name).join(', ')}
+        loading={creating}
+      />
 
       {/* Mobile Bottom Navigation Bar (Android / Smartphone) */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-[#0c0616]/95 border-t border-purple-500/20 backdrop-blur-lg flex items-center justify-around px-2 z-40 shadow-[0_-4px_20px_rgba(0,0,0,0.5)]">

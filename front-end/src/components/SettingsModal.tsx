@@ -241,18 +241,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
     setLoading(true);
     setSuccessMsg(null);
     
+    const finalGeminiKey = geminiKey.trim();
+    const finalOpenaiKey = openaiKey.trim();
+    const finalProxyUrl = proxyUrl.trim();
+    const finalNgrokToken = ngrokToken.trim();
+
     // Atualiza localmente
-    localStorage.setItem('gemini_api_key', geminiKey);
-    localStorage.setItem('openai_api_key', openaiKey);
-    localStorage.setItem('ai_proxy_url', proxyUrl);
-    localStorage.setItem('ngrok_authtoken', ngrokToken);
+    localStorage.setItem('gemini_api_key', finalGeminiKey);
+    localStorage.setItem('openai_api_key', finalOpenaiKey);
+    localStorage.setItem('ai_proxy_url', finalProxyUrl);
+    localStorage.setItem('ngrok_authtoken', finalNgrokToken);
 
     // Salva no banco de dados
     await saveToDatabase({
-      geminiApiKey: geminiKey,
-      openaiApiKey: openaiKey,
-      aiProxyUrl: proxyUrl,
-      ngrokAuthToken: ngrokToken
+      geminiApiKey: finalGeminiKey,
+      openaiApiKey: finalOpenaiKey,
+      aiProxyUrl: finalProxyUrl,
+      ngrokAuthToken: finalNgrokToken
     });
 
     setSuccessMsg('Configurações de IA, Proxy e Ngrok salvas com sucesso no banco de dados!');
@@ -524,7 +529,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                   <span className="text-[10px] text-amber-500 lowercase italic font-normal">(Recomendado)</span>
                 </label>
                 <input 
-                  type="password"
+                  type="text"
                   placeholder="AIzaSy..."
                   value={geminiKey}
                   onChange={(e) => setGeminiKey(e.target.value)}
@@ -577,7 +582,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                   <span className="text-[10px] text-cyan-600 font-mono font-normal">Acesso Global ao Dashboard</span>
                 </label>
                 <input 
-                  type="password"
+                  type="text"
                   placeholder="2xxxx_xxxxxxxxxxxxxxxxxxxx"
                   value={ngrokToken}
                   onChange={(e) => setNgrokToken(e.target.value)}
@@ -591,7 +596,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
               <div>
                 <label className={`block text-xs font-semibold uppercase tracking-wider mb-2 ${theme === 'light' ? 'text-slate-500' : 'text-slate-455'}`}>OpenAI API Key (Opcional)</label>
                 <input 
-                  type="password"
+                  type="text"
                   placeholder="sk-..."
                   value={openaiKey}
                   onChange={(e) => setOpenaiKey(e.target.value)}

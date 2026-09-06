@@ -719,7 +719,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
           'x-low-spec-mode': String(lowSpecMode)
         },
         body: JSON.stringify({ 
-          prompt: `${messageText}\n\nIMPORTANT: Return your response strictly as a JSON object with the following structure: { "components": ComponentNode[], "css": string, "js": string, "explanation": string }. Use the ComponentNode type defined as { id: string, type: 'container' | 'text' | 'image' | 'button' | 'section', props: { className?: string, style?: any, [key: string]: any }, children?: ComponentNode[], text?: string }. Do NOT return raw HTML.`, 
+          prompt: messageText, 
           pageId: currentRequestPageId, 
           model: preferredProvider === 'ollama' ? (localStorage.getItem('ollama_selected_model') || selectedModel) : selectedModel,
           applyToAll: isMultiTarget,
@@ -1155,55 +1155,70 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
         </div>
 
         {/* Controle do Escopo da Edição (Evita processar o site inteiro) */}
-        <div className="bg-slate-900/60 p-2 rounded-xl border border-slate-800/80 space-y-2">
+        <div className="bg-slate-900/40 p-2 rounded-xl border border-slate-800/60 space-y-2 transition-all">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">Escopo de Edição</span>
+            <label id="scope-label" className="text-[10px] font-semibold text-slate-400 tracking-wide">Alvo da IA</label>
             
-            <div className="flex items-center gap-1.5 bg-slate-950 p-0.5 rounded-lg border border-slate-850">
+            <div
+              className="flex items-center bg-slate-950 p-0.5 rounded-lg border border-slate-800"
+              role="radiogroup"
+              aria-labelledby="scope-label"
+            >
               <button
                 type="button"
+                role="radio"
+                aria-checked={editScope === 'all'}
                 onClick={() => setEditScope('all')}
-                className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer ${
+                className={`px-2.5 py-1 rounded text-[10px] font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 cursor-pointer ${
                   editScope === 'all'
-                    ? 'bg-purple-600 text-white shadow-sm font-extrabold'
-                    : 'text-slate-400 hover:text-white'
+                    ? 'bg-purple-600/20 text-purple-300'
+                    : 'text-slate-500 hover:text-slate-300'
                 }`}
               >
-                Página Inteira
+                Página Completa
               </button>
               <button
                 type="button"
+                role="radio"
+                aria-checked={editScope === 'section'}
                 onClick={() => setEditScope('section')}
-                className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer ${
+                className={`px-2.5 py-1 rounded text-[10px] font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 cursor-pointer ${
                   editScope === 'section'
-                    ? 'bg-purple-600 text-white shadow-sm font-extrabold'
-                    : 'text-slate-400 hover:text-white'
+                    ? 'bg-purple-600/20 text-purple-300'
+                    : 'text-slate-500 hover:text-slate-300'
                 }`}
               >
-                Apenas Seção
+                Uma Seção
               </button>
             </div>
           </div>
 
           {editScope === 'section' && (
-            <div className="space-y-1 animate-in fade-in slide-in-from-top-1 duration-150">
-              <label className="text-[9px] text-slate-500 font-bold block">Selecione a seção a ser modificada pelo prompt:</label>
+            <div className="space-y-1.5 animate-in fade-in slide-in-from-top-1 duration-200 mt-2">
+              <label htmlFor="section-select" className="sr-only">Selecione a seção</label>
               {detectedSections.length > 0 ? (
-                <select
-                  value={selectedSectionIndex ?? 0}
-                  onChange={(e) => setSelectedSectionIndex(Number(e.target.value))}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-1.5 text-[11px] text-slate-200 outline-none focus:border-purple-500 cursor-pointer"
-                >
-                  {detectedSections.map((sec) => (
-                    <option key={sec.index} value={sec.index}>
-                      {sec.label}
-                    </option>
-                  ))}
-                </select>
+                <div className="relative">
+                  <select
+                    id="section-select"
+                    value={selectedSectionIndex ?? 0}
+                    onChange={(e) => setSelectedSectionIndex(Number(e.target.value))}
+                    className="w-full appearance-none bg-slate-950 border border-slate-700/50 rounded-lg pl-3 pr-8 py-2 text-[11px] text-slate-300 outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 cursor-pointer transition-shadow"
+                    aria-label="Selecionar seção para edição"
+                  >
+                    {detectedSections.map((sec) => (
+                      <option key={sec.index} value={sec.index}>
+                        {sec.label}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-400">
+                    <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
+                  </div>
+                </div>
               ) : (
-                <div className="text-[10px] text-yellow-500/90 bg-yellow-950/20 px-2 py-1 rounded-lg border border-yellow-800/30 flex items-center gap-1.5">
+                <div className="text-[10px] text-yellow-400 bg-yellow-950/30 px-2.5 py-2 rounded-lg border border-yellow-700/30 flex items-center gap-2" role="alert">
                   <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                  Nenhuma seção detectada. Certifique-se de que a página possui blocos estruturais válidos.
+                  <span>Nenhuma seção identificada automaticamente.</span>
                 </div>
               )}
             </div>

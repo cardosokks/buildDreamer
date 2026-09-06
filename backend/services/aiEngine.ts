@@ -19,6 +19,7 @@ export async function executeAIRequest(
   context: { html: string; css: string; js: string },
   options: AIExecutionOptions = {}
 ): Promise<{
+  action_type?: string;
   explanation: string;
   html: string;
   css: string;
@@ -28,7 +29,7 @@ export async function executeAIRequest(
 }> {
   const provider = options.provider || (options.ollamaEndpoint ? 'ollama' : 'gemini');
 
-  // Rota 1: Ollama Local / Remoto
+  // Rota 1: Ollama Local / Remoto (Sem fallback automático para Gemini)
   if (provider === 'ollama') {
     if (options.onProgress) {
       options.onProgress({
@@ -44,55 +45,17 @@ export async function executeAIRequest(
 
     const skillsDirective = skillsToUse.map(s => `- ${s.name}: ${s.promptSnippet}`).join('\n');
 
-    try {
-      return await generateOllamaResponse(prompt, context, {
-        endpointUrl: options.ollamaEndpoint,
-        model: options.model || 'qwen2.5-coder:1.5b',
-        lowSpecMode: options.lowSpecMode !== false,
-        skillsDirective
-      });
-    } catch (ollamaErr: any) {
-      console.warn(`[AIEngine] Falha na execução com Ollama (${ollamaErr.message}). Redirecionando automaticamente para o Google Gemini como fallback de alta disponibilidade.`);
+    const ollamaRes = await generateOllamaResponse(prompt, context, {
+      endpointUrl: options.ollamaEndpoint,
+      model: options.model || 'qwen2.5-coder:1.5b',
+      lowSpecMode: options.lowSpecMode !== false,
+      skillsDirective
+    });
 
-      if (options.onProgress) {
-        options.onProgress({
-          status: 'attempting_fallback',
-          model: 'gemini-2.5-flash',
-          provider: 'gemini'
-        });
-      }
-
-      try {
-        const geminiResult = await generateAIResponse(
-          prompt,
-          context,
-          options.apiKey,
-          options.model,
-          options.registeredModels,
-          (model, idx, total) => {
-            if (options.onProgress) {
-              options.onProgress({
-                status: 'attempting',
-                model,
-                provider: 'gemini'
-              });
-            }
-          },
-          options.proxyUrl,
-          options.customSkills,
-          options.attachedFiles
-        );
-
-        return {
-          ...geminiResult,
-          explanation: `[Aviso do Sistema: Servidor Ollama local inacessível (Status 404/Inativo). Processado automaticamente via Google Gemini] ${geminiResult.explanation}`,
-          _usedProvider: 'gemini (fallback de Ollama)'
-        };
-      } catch (geminiErr: any) {
-        console.error(`[AIEngine] Falha tanto no Ollama quanto no Gemini fallback:`, geminiErr);
-        throw ollamaErr;
-      }
-    }
+    return {
+      ...ollamaRes,
+      _usedProvider: 'ollama'
+    };
   }
 
   // Rota 2: Google Gemini (com fallback entre modelos)

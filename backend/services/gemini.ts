@@ -177,6 +177,7 @@ export function resilientJsonParse(rawString: string): any {
 
     const cleaned = cleanHtmlExtractAssets(htmlContent, cssContent, jsContent);
     return {
+      action_type: obj.action_type || 'update_page',
       explanation: explanationContent,
       html: cleaned.html || htmlContent || '',
       css: cleaned.css || cssContent || '',
@@ -213,16 +214,18 @@ export function resilientJsonParse(rawString: string): any {
   }
 
   // 3. Extrator de propriedades nativo ultra robusto (Trata aspas escapadas e quebra de chaves)
+  const extActionType = extractJsonField(text, 'action_type');
   const extHtml = extractJsonField(text, 'html') || extractJsonField(text, 'code') || extractJsonField(text, 'codigo') || extractJsonField(text, 'markup') || extractJsonField(text, 'content');
   const extCss = extractJsonField(text, 'css') || extractJsonField(text, 'styles') || extractJsonField(text, 'style');
   const extJs = extractJsonField(text, 'js') || extractJsonField(text, 'script') || extractJsonField(text, 'scripts');
   const extExpl = extractJsonField(text, 'explanation') || extractJsonField(text, 'explicacao') || extractJsonField(text, 'desc') || extractJsonField(text, 'description');
 
-  if (extHtml !== null) {
-    const cleaned = cleanHtmlExtractAssets(extHtml, extCss || '', extJs || '');
+  if (extHtml !== null || extActionType === 'question_only' || extActionType === 'update_style_only') {
+    const cleaned = cleanHtmlExtractAssets(extHtml || '', extCss || '', extJs || '');
     return {
+      action_type: extActionType || (extHtml !== null ? 'update_page' : 'question_only'),
       explanation: extExpl || 'Conteúdo gerado via scanner resiliente.',
-      html: cleaned.html || extHtml,
+      html: cleaned.html || extHtml || '',
       css: cleaned.css || extCss || '',
       js: cleaned.js || extJs || '',
       navbar: undefined,
@@ -236,12 +239,24 @@ export function resilientJsonParse(rawString: string): any {
     if (extractedHtml && extractedHtml.trim().length > 10) {
       const cleaned = cleanHtmlExtractAssets(extractedHtml);
       return {
+        action_type: 'update_page',
         explanation: 'Código HTML atualizado diretamente.',
         html: cleaned.html,
         css: cleaned.css,
         js: cleaned.js
       };
     }
+  }
+
+  // 5. Se for puramente texto e sem formato, assume que é question_only
+  if (text.length > 5 && !text.includes('{') && !text.includes('<div')) {
+    return {
+      action_type: 'question_only',
+      explanation: text,
+      html: '',
+      css: '',
+      js: ''
+    };
   }
 
   throw new Error('Falha ao processar resposta JSON da IA.');
@@ -322,7 +337,7 @@ export const generateAIResponse = async (
   const activeKey = (customApiKey || process.env.GEMINI_API_KEY || '').trim();
   const proxyUrl = isValidHttpUrl(customProxyUrl) ? customProxyUrl!.trim() : defaultProxyUrl;
 
-  if (!activeKey) {
+  if (!activeKey || activeKey === 'null' || activeKey === 'undefined' || activeKey === '""') {
     throw new Error('Chave da API do Gemini não foi configurada. Por favor, acesse as Configurações para salvar uma API Key válida do Google Gemini ou escolha o Ollama local.');
   }
 
@@ -471,14 +486,19 @@ export const generateAIResponse = async (
     3. ARQUIVOS ANEXADOS & LOGOMARCAS:
        - Se o usuário enviou uma logomarca (imagem ou SVG), posicione-a com destaque e elegância na Navbar (<nav>/<header>), Rodapé (<footer>) ou seções hero.
        - Se o usuário enviou um arquivo de código ou navbar de referência, replique a estrutura com perfeição mantendo o design responsivo.
-    4. Retorne SEMPRE um objeto JSON estrito no formato abaixo:
+    4. TIPOS DE AÇÃO (action_type):
+       - "update_page": Use caso o usuário peça para alterar/adicionar algo na página inteira (ex: "adicione um botão whatsapp", "refaça o hero"). Retorne html, css e js completos.
+       - "update_style_only": Use caso o usuário peça apenas alterações globais de estilo (ex: "mude a cor para azul", "adicione animações"). Retorne o CSS modificado. Você pode omitir "html" e "js" ou retorná-los vazios.
+       - "question_only": Use caso o usuário faça uma pergunta geral ou peça dicas sem solicitar modificação imediata do código (ex: "como posso melhorar o SEO?", "qual paleta combina mais?"). Nesse caso, retorne as dicas detalhadas no campo "explanation" e omita html, css e js (ou deixe-os vazios).
+    5. Retorne SEMPRE um objeto JSON estrito no formato abaixo:
 
     Formato da Resposta JSON OBRIGATÓRIO:
     {
-      "explanation": "Breve resumo técnico e amigável das alterações aplicadas.",
-      "html": "<apenas nós HTML sem tags <style> nem <script>>",
-      "css": "/* Todo CSS adicional separado aqui */",
-      "js": "// Todo JavaScript funcional separado aqui"
+      "action_type": "update_page" | "update_style_only" | "question_only",
+      "explanation": "Breve resumo técnico, amigável ou a resposta para a dúvida do usuário.",
+      "html": "<apenas nós HTML sem tags <style> nem <script> (vazio se question_only)>",
+      "css": "/* Todo CSS adicional separado aqui (vazio se question_only) */",
+      "js": "// Todo JavaScript funcional separado aqui (vazio se question_only)"
     }
   `;
 
@@ -549,7 +569,7 @@ export const generateAIResponse = async (
           const urlObj = new URL(`https://generativelanguage.googleapis.com/${apiVersion}/models/${modelToTry}:generateContent`);
           
           // Suporte para Chave de API do Gemini e Bearer Token OAuth
-          const isOAuthToken = activeKey.startsWith('ya29.') || activeKey.startsWith('AQ.');
+          const isOAuthToken = activeKey.startsWith('ya29.');
           if (isOAuthToken) {
             fetchOptions.headers['Authorization'] = `Bearer ${activeKey}`;
           } else {
@@ -639,52 +659,48 @@ export const listGeminiModels = async (customApiKey?: string, customProxyUrl?: s
   const activeKey = (customApiKey || process.env.GEMINI_API_KEY || '').trim();
   const proxyUrl = isValidHttpUrl(customProxyUrl) ? customProxyUrl!.trim() : defaultProxyUrl;
 
-  const fallbackModels = [
-    { name: 'models/gemini-2.5-flash', displayName: 'Gemini 2.5 Flash', supportedGenerationMethods: ['generateContent'] },
-    { name: 'models/gemini-2.5-pro', displayName: 'Gemini 2.5 Pro', supportedGenerationMethods: ['generateContent'] },
-    { name: 'models/gemini-2.0-flash', displayName: 'Gemini 2.0 Flash', supportedGenerationMethods: ['generateContent'] },
-    { name: 'models/gemini-1.5-flash', displayName: 'Gemini 1.5 Flash', supportedGenerationMethods: ['generateContent'] },
-    { name: 'models/gemini-1.5-pro', displayName: 'Gemini 1.5 Pro', supportedGenerationMethods: ['generateContent'] }
-  ];
-
-  if (!activeKey) {
-    return fallbackModels;
+  if (!activeKey || activeKey === 'null' || activeKey === 'undefined' || activeKey === '""') {
+    throw new Error('Chave da API do Gemini não foi configurada. Por favor, informe uma API Key válida nas Configurações.');
   }
 
-  try {
-    const urlObj = new URL(`https://generativelanguage.googleapis.com/v1beta/models`);
-    
-    const fetchOptions: any = {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json' }
-    };
-
-    // Suporte para Chave de API do Gemini e Bearer Token OAuth
-    const isOAuthToken = activeKey.startsWith('ya29.') || activeKey.startsWith('AQ.');
-    if (isOAuthToken) {
-      fetchOptions.headers['Authorization'] = `Bearer ${activeKey}`;
-    } else {
-      fetchOptions.headers['x-goog-api-key'] = activeKey;
-      urlObj.searchParams.set('key', activeKey);
+  const urlObj = new URL(`https://generativelanguage.googleapis.com/v1beta/models`);
+  
+  const fetchOptions: any = {
+    method: 'GET',
+    headers: { 
+      'Content-Type': 'application/json'
     }
+  };
 
-    const apiUrl = urlObj.toString();
-
-    if (proxyUrl) {
-      fetchOptions.dispatcher = new ProxyAgent(proxyUrl);
-    }
-
-    const response = await undiciFetch(apiUrl, fetchOptions);
-    if (!response.ok) {
-      const errText = await response.text();
-      console.warn(`[Gemini API] Falha ao listar modelos do Google (HTTP ${response.status}: ${errText}). Usando modelos recomendados.`);
-      return fallbackModels;
-    }
-
-    const data: any = await response.json();
-    return data.models && data.models.length > 0 ? data.models : fallbackModels;
-  } catch (err: any) {
-    console.warn(`[Gemini API] Exceção ao listar modelos (${err.message}). Usando modelos recomendados.`);
-    return fallbackModels;
+  // Suporte para Chave de API do Gemini e Bearer Token OAuth
+  const isOAuthToken = activeKey.startsWith('ya29.');
+  if (isOAuthToken) {
+    fetchOptions.headers['Authorization'] = `Bearer ${activeKey}`;
+  } else {
+    fetchOptions.headers['x-goog-api-key'] = activeKey;
+    urlObj.searchParams.set('key', activeKey);
   }
+
+  const apiUrl = urlObj.toString();
+
+  if (proxyUrl) {
+    fetchOptions.dispatcher = new ProxyAgent(proxyUrl);
+  }
+
+  const response = await undiciFetch(apiUrl, fetchOptions);
+  if (!response.ok) {
+    const errText = await response.text();
+    let googleErrorMessage = errText;
+    try {
+      const parsedError = JSON.parse(errText);
+      googleErrorMessage = parsedError?.error?.message || errText;
+    } catch {}
+    throw new Error(`Erro ao listar modelos do Gemini (HTTP ${response.status}): ${googleErrorMessage}`);
+  }
+
+  const data: any = await response.json();
+  if (!data.models || !Array.isArray(data.models) || data.models.length === 0) {
+    throw new Error('A API do Gemini retornou uma lista vazia de modelos.');
+  }
+  return data.models;
 };

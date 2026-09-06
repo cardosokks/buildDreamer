@@ -2,7 +2,6 @@ import { prisma } from '../db';
 import { executeAIRequest } from './aiEngine';
 import { executeSiteRemaster } from './siteRemasterWorker';
 import { processPageAssets, extractNavbarAndFooter } from './siteRemaster';
-import { generateFallbackMultiPageSite } from './fallbackSiteGenerator';
 
 export interface AIQueueItem {
   id: string;
@@ -15,6 +14,7 @@ export interface AIQueueItem {
   error?: string;
   retryCount?: number;
   result?: {
+    action_type?: string;
     explanation: string;
     html?: string;
     css?: string;
@@ -447,71 +447,8 @@ REGRAS TÉCNICAS E ARQUITETURA:
         }
       );
     } catch (homeAiErr: any) {
-      console.warn(`[AIQueueManager] Chamada de IA para a Home falhou (${homeAiErr.message}). Ativando gerador inteligente de Design System para o site completo.`);
-      usedFallback = true;
-      
-      const fallbackPages = generateFallbackMultiPageSite({
-        businessName: resolvedBusinessName,
-        segment: resolvedSegment,
-        visualStyle: resolvedStyle,
-        colorPalette: resolvedPalette,
-        prompt,
-        pages: existingPages.map(p => ({ name: p.name, slug: p.slug, isHomepage: p.isHomepage }))
-      });
-
-      const updatedPagesList: Array<{ id: string; name: string; slug: string; html: string; css: string; js: string }> = [];
-
-      for (const p of existingPages) {
-        const generated = fallbackPages.find(fp => fp.slug === p.slug || (p.isHomepage && fp.isHomepage)) || fallbackPages[0];
-        if (generated) {
-          await prisma.page.update({
-            where: { id: p.id },
-            data: {
-              html: generated.html,
-              css: generated.css,
-              js: generated.js
-            }
-          });
-          updatedPagesList.push({
-            id: p.id,
-            name: p.name,
-            slug: p.slug,
-            html: generated.html,
-            css: generated.css,
-            js: generated.js
-          });
-        }
-      }
-
-      const homeFallback = fallbackPages.find(fp => fp.isHomepage || fp.slug === 'index') || fallbackPages[0];
-
-      await prisma.version.create({
-        data: {
-          name: `Geração Estrutural Multi-páginas (${totalPages} pág)`,
-          description: `Site profissional gerado com Design System integrado para "${resolvedBusinessName}": ${prompt.slice(0, 100)}`,
-          projectId,
-          snapshot: {
-            pages: updatedPagesList
-          }
-        }
-      });
-
-      const isKeyErr = /API key|chave|401|400|credentials/i.test(homeAiErr.message || '');
-      const warningNote = isKeyErr 
-        ? ' (Observação: Sua API Key do Google Gemini precisa ser cadastrada nas Configurações para desbloquear gerações e edições generativas sob demanda via chat).' 
-        : '';
-
-      item.result = {
-        explanation: `Site profissional para "${resolvedBusinessName}" com ${totalPages} página(s) estruturado com sucesso usando o Design System profissional integrado!${warningNote}`,
-        html: homeFallback?.html || homePage.html,
-        css: homeFallback?.css || homePage.css,
-        js: homeFallback?.js || homePage.js,
-        _usedModel: 'Design System Engine (Built-in)',
-        _usedProvider: 'BuildDreamer Core',
-        updatedPages: updatedPagesList
-      };
-
-      return;
+      console.warn(`[AIQueueManager] Chamada de IA para a Home falhou (${homeAiErr.message}). Interrompendo processo de geração.`);
+      throw homeAiErr;
     }
 
     if ((item.status as string) === 'cancelled') return;
@@ -692,38 +629,8 @@ REGRAS MANDATÓRIAS:
           js: updatedSubJs
         });
       } catch (subErr: any) {
-        console.warn(`[AIQueueManager] Erro na IA da subpágina ${sub.name} (${subErr.message}). Aplicando layout do Design System.`);
-        try {
-          const fallbackPages = generateFallbackMultiPageSite({
-            businessName: resolvedBusinessName,
-            segment: resolvedSegment,
-            visualStyle: resolvedStyle,
-            colorPalette: resolvedPalette,
-            prompt,
-            pages: existingPages.map(p => ({ name: p.name, slug: p.slug, isHomepage: p.isHomepage }))
-          });
-          const generatedSub = fallbackPages.find(fp => fp.slug === sub.slug) || fallbackPages[0];
-
-          await prisma.page.update({
-            where: { id: sub.id },
-            data: {
-              html: generatedSub.html,
-              css: generatedSub.css,
-              js: generatedSub.js
-            }
-          });
-
-          updatedPagesList.push({
-            id: sub.id,
-            name: sub.name,
-            slug: sub.slug,
-            html: generatedSub.html,
-            css: generatedSub.css,
-            js: generatedSub.js
-          });
-        } catch (innerErr) {
-          console.error(`[AIQueueManager] Erro crítico no fallback da subpágina ${sub.name}:`, innerErr);
-        }
+        console.warn(`[AIQueueManager] Erro na IA da subpágina ${sub.name} (${subErr.message}). Interrompendo processo.`);
+        throw subErr;
       }
     }
 
@@ -837,31 +744,48 @@ REGRAS MANDATÓRIAS:
         // Se foi cancelado após a chamada do modelo
         if ((item.status as string) === 'cancelled') return;
 
-        await prisma.page.update({
-          where: { id: currentPage.id },
-          data: {
-            html: res.html,
-            css: res.css,
-            js: res.js
-          }
-        });
+        let finalHtml = res.html || pageHtml;
+        let finalCss = res.css || currentPage.css || '';
+        let finalJs = res.js || currentPage.js || '';
+
+        if (res.action_type === 'question_only') {
+          finalHtml = pageHtml;
+          finalCss = currentPage.css || '';
+          finalJs = currentPage.js || '';
+        } else if (res.action_type === 'update_style_only') {
+          finalHtml = pageHtml;
+          finalCss = res.css || currentPage.css || '';
+          finalJs = res.js || currentPage.js || '';
+        }
+
+        if (res.action_type !== 'question_only') {
+          await prisma.page.update({
+            where: { id: currentPage.id },
+            data: {
+              html: finalHtml,
+              css: finalCss,
+              js: finalJs
+            }
+          });
+        }
 
         updatedPages.push({
           id: currentPage.id,
           name: currentPage.name,
           slug: currentPage.slug,
-          html: res.html,
-          css: res.css,
-          js: res.js
+          html: finalHtml,
+          css: finalCss,
+          js: finalJs
         });
 
         if (i === 0) finalExplanation = res.explanation;
       }
 
       const activeUpdated = updatedPages.find(p => p.id === pageId) || updatedPages[0];
+      const isQuestion = updatedPages.length > 0 && finalExplanation;
 
       item.result = {
-        explanation: `Todas as ${updatedPages.length} páginas selecionadas foram atualizadas com sucesso e sincronizadas com a nova instrução visual.\n\n${finalExplanation}`,
+        explanation: isQuestion ? finalExplanation : `Todas as ${updatedPages.length} páginas selecionadas foram processadas.\n\n${finalExplanation}`,
         html: activeUpdated?.html,
         css: activeUpdated?.css,
         js: activeUpdated?.js,
@@ -952,22 +876,32 @@ ${page.css || ''}
 
         if (item.status === 'cancelled') return;
 
-        // Fazer a mesclagem cirúrgica do HTML da seção modificada de volta na página original
-        const { wrapperOpen, sections, wrapperClose } = parsePageSections(pageHtml);
-        if (targetSectionIndex >= 0 && targetSectionIndex < sections.length) {
-          sections[targetSectionIndex] = result.html;
-          finalHtml = `${wrapperOpen}${sections.join('\n\n')}${wrapperClose}`;
-          console.log(`[AIQueueManager] Seção index ${targetSectionIndex} substituída com sucesso!`);
+        if (result.action_type === 'question_only') {
+          // Apenas responde, sem mesclar
+          finalHtml = pageHtml;
+          console.log(`[AIQueueManager] Modo question_only detectado (seção).`);
+        } else if (result.action_type === 'update_style_only') {
+          // Atualiza apenas CSS
+          finalHtml = pageHtml;
+          console.log(`[AIQueueManager] Modo update_style_only detectado (seção).`);
         } else {
-          // Fallback se o index estiver fora do intervalo (ex: página mudou no meio)
-          // Tenta substituir por correspondência exata do HTML original
-          const matchedIndex = sections.findIndex(s => s.trim() === targetSectionHtml.trim());
-          if (matchedIndex !== -1) {
-            sections[matchedIndex] = result.html;
+          // Fazer a mesclagem cirúrgica do HTML da seção modificada de volta na página original
+          const { wrapperOpen, sections, wrapperClose } = parsePageSections(pageHtml);
+          if (targetSectionIndex >= 0 && targetSectionIndex < sections.length) {
+            sections[targetSectionIndex] = result.html || sections[targetSectionIndex];
             finalHtml = `${wrapperOpen}${sections.join('\n\n')}${wrapperClose}`;
+            console.log(`[AIQueueManager] Seção index ${targetSectionIndex} substituída com sucesso!`);
           } else {
-            console.warn(`[AIQueueManager] Seção index ${targetSectionIndex} não encontrada na árvore atual de ${sections.length} seções. Salvando alteração direta.`);
-            finalHtml = result.html;
+            // Fallback se o index estiver fora do intervalo (ex: página mudou no meio)
+            // Tenta substituir por correspondência exata do HTML original
+            const matchedIndex = sections.findIndex(s => s.trim() === targetSectionHtml.trim());
+            if (matchedIndex !== -1) {
+              sections[matchedIndex] = result.html || sections[matchedIndex];
+              finalHtml = `${wrapperOpen}${sections.join('\n\n')}${wrapperClose}`;
+            } else {
+              console.warn(`[AIQueueManager] Seção index ${targetSectionIndex} não encontrada na árvore atual de ${sections.length} seções. Salvando alteração direta.`);
+              finalHtml = result.html || pageHtml;
+            }
           }
         }
 
@@ -997,19 +931,35 @@ ${page.css || ''}
 
         if (item.status === 'cancelled') return;
 
-        finalHtml = result.html;
-        finalCss = result.css;
-        finalJs = result.js;
+        if (result.action_type === 'question_only') {
+          // Não atualiza HTML, CSS e JS
+          finalHtml = pageHtml;
+          finalCss = page.css || '';
+          finalJs = page.js || '';
+          console.log(`[AIQueueManager] Modo question_only detectado, preservando página.`);
+        } else if (result.action_type === 'update_style_only') {
+          finalHtml = pageHtml; // Preserva o HTML atual
+          finalCss = result.css || page.css || '';
+          finalJs = result.js || page.js || '';
+          console.log(`[AIQueueManager] Modo update_style_only detectado.`);
+        } else {
+          finalHtml = result.html || pageHtml;
+          finalCss = result.css || '';
+          finalJs = result.js || '';
+        }
       }
 
-      await prisma.page.update({
-        where: { id: page.id },
-        data: {
-          html: finalHtml,
-          css: finalCss,
-          js: finalJs
-        }
-      });
+      // Se for apenas uma pergunta, evitamos a chamada de banco de dados se nada mudou
+      if (result.action_type !== 'question_only') {
+        await prisma.page.update({
+          where: { id: page.id },
+          data: {
+            html: finalHtml,
+            css: finalCss,
+            js: finalJs
+          }
+        });
+      }
 
       item.result = {
         explanation: result.explanation,
@@ -1017,7 +967,8 @@ ${page.css || ''}
         css: finalCss,
         js: finalJs,
         _usedModel: result._usedModel,
-        _usedProvider: result._usedProvider
+        _usedProvider: result._usedProvider,
+        action_type: result.action_type
       };
     }
   }

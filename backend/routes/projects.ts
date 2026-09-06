@@ -389,7 +389,9 @@ router.post('/', async (req: AuthenticatedRequest, res: any) => {
       const pagesCount = Array.isArray(pagesToGenerate) && pagesToGenerate.length > 0 ? pagesToGenerate.length : 1;
       const pagesNames = Array.isArray(pagesToGenerate) && pagesToGenerate.length > 0 ? pagesToGenerate.map((p: any) => p.name).join(', ') : 'Home';
       
-      const aiPromptMessage = `Gere um website completo, espetacular e ultra profissional de ${pagesCount} página(s) (${pagesNames}) para a empresa "${targetBusinessName}".
+      const aiPromptMessage = (description && description.trim().length > 25)
+        ? description
+        : `Gere um website completo, espetacular e ultra profissional de ${pagesCount} página(s) (${pagesNames}) para a empresa "${targetBusinessName}".
 Segmento: ${segment || 'Geral'}.
 Estilo Visual: ${siteStyle || 'Moderno'}.
 Paleta de Cores: ${colorPalette || 'Elegante'}.

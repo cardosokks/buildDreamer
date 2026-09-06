@@ -378,18 +378,23 @@ export const SettingsPage: React.FC = () => {
     setErrorMsg(null);
 
     try {
+      const finalGeminiKey = geminiKey.trim();
+      const finalOpenaiKey = openaiKey.trim();
+      const finalProxyUrl = proxyUrl.trim();
+      const finalNgrokToken = ngrokToken.trim();
+
       localStorage.setItem('preferred_ai_provider', aiProvider);
-      localStorage.setItem('gemini_api_key', geminiKey);
-      localStorage.setItem('openai_api_key', openaiKey);
-      localStorage.setItem('ai_proxy_url', proxyUrl);
-      localStorage.setItem('ngrok_authtoken', ngrokToken);
+      localStorage.setItem('gemini_api_key', finalGeminiKey);
+      localStorage.setItem('openai_api_key', finalOpenaiKey);
+      localStorage.setItem('ai_proxy_url', finalProxyUrl);
+      localStorage.setItem('ngrok_authtoken', finalNgrokToken);
 
       await saveToDatabase({
         preferredAiProvider: aiProvider,
-        geminiApiKey: geminiKey,
-        openaiApiKey: openaiKey,
-        aiProxyUrl: proxyUrl,
-        ngrokAuthToken: ngrokToken
+        geminiApiKey: finalGeminiKey,
+        openaiApiKey: finalOpenaiKey,
+        aiProxyUrl: finalProxyUrl,
+        ngrokAuthToken: finalNgrokToken
       });
 
       setSuccessMsg('Configurações de IA salvas com sucesso!');
@@ -804,7 +809,7 @@ export const SettingsPage: React.FC = () => {
                     <Key className="w-3.5 h-3.5 text-purple-400" /> Chave de API Google Gemini
                   </label>
                   <input
-                    type="password"
+                    type="text"
                     value={geminiKey}
                     onChange={(e) => setGeminiKey(e.target.value)}
                     placeholder="AIzaSy..."
@@ -833,7 +838,7 @@ export const SettingsPage: React.FC = () => {
                     <Key className="w-3.5 h-3.5 text-emerald-400" /> Chave OpenAI (Opcional)
                   </label>
                   <input
-                    type="password"
+                    type="text"
                     value={openaiKey}
                     onChange={(e) => setOpenaiKey(e.target.value)}
                     placeholder="sk-..."
@@ -862,7 +867,7 @@ export const SettingsPage: React.FC = () => {
                     <ShieldCheck className="w-3.5 h-3.5 text-cyan-400" /> Token Ngrok (Túneis Remotos)
                   </label>
                   <input
-                    type="password"
+                    type="text"
                     value={ngrokToken}
                     onChange={(e) => setNgrokToken(e.target.value)}
                     placeholder="Token do Ngrok para compartilhar previews..."
@@ -1371,7 +1376,7 @@ export const SettingsPage: React.FC = () => {
                   <div className="space-y-2">
                     <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Secret Key (Senha)</label>
                     <input
-                      type="password"
+                      type="text"
                       value={minioSecretKey}
                       onChange={(e) => setMinioSecretKey(e.target.value)}
                       placeholder="••••••••••••••••"

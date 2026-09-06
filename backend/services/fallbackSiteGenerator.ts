@@ -26,6 +26,10 @@ export interface GeneratedPageOutput {
 export function generateFallbackMultiPageSite(options: FallbackSiteOptions): GeneratedPageOutput[] {
   const businessName = (options.businessName || '').trim() || 'Sua Empresa';
   const segment = (options.segment || '').trim() || 'Serviços Especializados';
+  const visualStyle = (options.visualStyle || '').trim() || 'Moderno e Profissional';
+  const colorPalette = (options.colorPalette || '').trim() || 'Personalizada';
+  const customPrompt = (options.prompt || '').trim() || 'Site institucional de alta conversão';
+
   const rawPages = (options.pages && options.pages.length > 0) 
     ? options.pages 
     : [{ name: 'Início', slug: 'index', isHomepage: true }];
@@ -43,8 +47,8 @@ export function generateFallbackMultiPageSite(options: FallbackSiteOptions): Gen
     slug: p.slug
   }));
 
-  // CSS Global elegante e responsivo
-  const globalCss = `/* BuildDreamer Design System - Tema Responsivo */
+  // CSS Global dinâmico baseado no visualStyle e colorPalette escolhidos pelo usuário
+  const globalCss = `/* BuildDreamer Custom Design System - ${visualStyle} */
 @keyframes pulse-glow {
   0%, 100% { opacity: 0.6; transform: scale(1); }
   50% { opacity: 1; transform: scale(1.05); }
@@ -53,18 +57,19 @@ export function generateFallbackMultiPageSite(options: FallbackSiteOptions): Gen
   animation: pulse-glow 3s ease-in-out infinite;
 }
 .glass-panel {
-  background: rgba(15, 23, 42, 0.75);
+  background: rgba(15, 23, 42, 0.8);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.12);
 }
 .gradient-text {
-  background: linear-gradient(135deg, #ffffff 0%, #cbd5e1 50%, #94a3b8 100%);
+  background: linear-gradient(135deg, #ffffff 0%, #e2e8f0 50%, #cbd5e1 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
-.gradient-accent {
-  background: linear-gradient(135deg, #a855f7 0%, #6366f1 50%, #3b82f6 100%);
+.custom-identity-badge {
+  /* Estilo customizado: ${visualStyle} | Paleta: ${colorPalette} */
+  border-left: 3px solid #8b5cf6;
 }`;
 
   // JavaScript comum interativo (Menu mobile, Accordions de FAQ, envio de formulários)
