@@ -1,14 +1,21 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { z } from 'zod';
 import { useAuth } from '../context/AuthContext';
-import { Sparkles, Send, Bot, User, Check, Play, Undo2, Globe, Loader2, RotateCcw, AlertCircle, Layers, ChevronDown, CheckSquare, Square, Copy, Paperclip, X, Image as ImageIcon, FileCode } from 'lucide-react';
+import { 
+  Sparkles, Send, Bot, User, Check, Play, Undo2, Globe, Loader2, RotateCcw, 
+  AlertCircle, Layers, ChevronDown, CheckSquare, Square, Copy, Paperclip, X, 
+  Image as ImageIcon, FileCode, Compass, Sliders, HelpCircle, Palette, Wrench, Sparkle 
+} from 'lucide-react';
 import { API_URL } from '../config';
 
 const AiResultSchema = z.object({
-  components: z.array(z.any()), // To be refined with a full schema
+  action_type: z.string().optional(),
+  components: z.array(z.any()).optional(),
   css: z.string().optional().default(''),
   js: z.string().optional().default(''),
   explanation: z.string().optional().default(''),
+  navigation: z.any().optional(),
+  settings: z.any().optional(),
   _usedModel: z.string().optional(),
 });
 
@@ -33,6 +40,11 @@ interface ChatPanelProps {
   selectedSectionIndex?: number | null;
   setSelectedSectionIndex?: (index: number | null) => void;
   onSectionsDetected?: (sections: Array<{ index: number; label: string; html: string; tagName: string }>) => void;
+  onNavigatePage?: (targetSlugOrId: string) => void;
+  onToggleViewport?: (viewport: 'desktop' | 'tablet' | 'mobile') => void;
+  onOpenSEOModal?: () => void;
+  onUpdateSettings?: (settings: { seoTitle?: string; seoDescription?: string; projectName?: string }) => void;
+  onPromptStart?: () => void;
 }
 
 export interface AttachedFile {
@@ -45,8 +57,11 @@ export interface AttachedFile {
 interface Message {
   role: 'user' | 'assistant';
   text: string;
-  html?: string; // To be deprecated
-  components?: any[]; // New structure
+  actionType?: 'update_page' | 'update_style_only' | 'navigate' | 'settings' | 'question_only' | string;
+  navigation?: any;
+  settings?: any;
+  html?: string;
+  components?: any[];
   css?: string;
   js?: string;
   modelUsed?: string;
@@ -57,6 +72,83 @@ interface Message {
   attachedFiles?: AttachedFile[];
   id?: string;
 }
+
+const parseInlineFormatting = (str: string) => {
+  const parts = str.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith('**') && part.endsWith('**')) {
+      return <strong key={i} className="font-bold text-purple-200">{part.slice(2, -2)}</strong>;
+    }
+    if (part.startsWith('`') && part.endsWith('`')) {
+      return <code key={i} className="px-1 py-0.5 bg-slate-950 text-cyan-300 rounded text-[11px] font-mono border border-slate-800">{part.slice(1, -1)}</code>;
+    }
+    return part;
+  });
+};
+
+const renderFormattedMarkdown = (text: string) => {
+  if (!text) return null;
+  const codeBlockRegex = /```(\w*)\n([\s\S]*?)```/g;
+  const parts = [];
+  let lastIndex = 0;
+  let match;
+
+  while ((match = codeBlockRegex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push({ type: 'text', content: text.slice(lastIndex, match.index) });
+    }
+    parts.push({ type: 'code', lang: match[1], content: match[2].trim() });
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex < text.length) {
+    parts.push({ type: 'text', content: text.slice(lastIndex) });
+  }
+
+  return (
+    <div className="space-y-2 text-xs leading-relaxed font-sans">
+      {parts.map((part, pIdx) => {
+        if (part.type === 'code') {
+          return (
+            <div key={pIdx} className="my-2 rounded-xl bg-slate-950 border border-slate-800 p-2.5 font-mono text-[11px] text-purple-300 overflow-x-auto relative group">
+              <span className="absolute top-1 right-2 text-[9px] uppercase font-bold text-slate-500">{part.lang || 'code'}</span>
+              <pre className="whitespace-pre">{part.content}</pre>
+            </div>
+          );
+        }
+
+        const lines = part.content.split('\n');
+        return (
+          <div key={pIdx} className="space-y-1">
+            {lines.map((line, lIdx) => {
+              if (!line.trim()) return <div key={lIdx} className="h-1" />;
+              
+              if (line.trim().startsWith('- ') || line.trim().startsWith('* ')) {
+                const listText = line.trim().substring(2);
+                return (
+                  <div key={lIdx} className="flex items-start gap-1.5 pl-1 my-0.5">
+                    <span className="text-purple-400 font-bold shrink-0 mt-0.5">•</span>
+                    <span>{parseInlineFormatting(listText)}</span>
+                  </div>
+                );
+              }
+
+              if (line.trim().startsWith('#')) {
+                const headerText = line.trim().replace(/^#+\s*/, '');
+                return (
+                  <h4 key={lIdx} className="font-extrabold text-white text-xs tracking-wide pt-1 pb-0.5 border-b border-white/10">
+                    {parseInlineFormatting(headerText)}
+                  </h4>
+                );
+              }
+
+              return <p key={lIdx} className="whitespace-pre-wrap">{parseInlineFormatting(line)}</p>;
+            })}
+          </div>
+        );
+      })}
+    </div>
+  );
+};
 
 export const ChatPanel: React.FC<ChatPanelProps> = ({ 
   pageId, 
@@ -71,7 +163,12 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   setEditScope: externalSetEditScope,
   selectedSectionIndex: externalSelectedSectionIndex,
   setSelectedSectionIndex: externalSelectedSectionIndexSetter,
-  onSectionsDetected
+  onSectionsDetected,
+  onNavigatePage,
+  onToggleViewport,
+  onOpenSEOModal,
+  onUpdateSettings,
+  onPromptStart
 }) => {
   const { token } = useAuth();
   const chatStorageKey = projectId ? `chat_history_proj_${projectId}` : `chat_history_${pageId}`;
@@ -537,9 +634,16 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
               return;
             }
 
+            const detectedActionType = result.data.action_type || jobData.result?.action_type || 'update_page';
+            const navPayload = result.data.navigation || jobData.result?.navigation;
+            const settingsPayload = result.data.settings || jobData.result?.settings;
+
             const assistantMessage: Message = { 
               role: 'assistant', 
-              text: result.data.explanation || 'Alterações arquitetadas e geradas com sucesso.',
+              text: result.data.explanation || 'Solicitação processada com sucesso.',
+              actionType: detectedActionType,
+              navigation: navPayload,
+              settings: settingsPayload,
               components: result.data.components,
               css: result.data.css,
               js: result.data.js,
@@ -556,6 +660,24 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
               const finalMessages = [...freshMessages, assistantMessage];
               localStorage.setItem(storageKeyToUse, JSON.stringify(finalMessages));
               setMessages(finalMessages);
+            }
+
+            // Execução das ações do Controlador de Navegação
+            if (navPayload) {
+              if (navPayload.targetPageSlug && onNavigatePage) {
+                onNavigatePage(navPayload.targetPageSlug);
+              }
+              if (navPayload.viewport && onToggleViewport) {
+                onToggleViewport(navPayload.viewport);
+              }
+              if (navPayload.action === 'seo_modal' && onOpenSEOModal) {
+                onOpenSEOModal();
+              }
+            }
+
+            // Execução das ações do Controlador de Configurações
+            if (settingsPayload && onUpdateSettings) {
+              onUpdateSettings(settingsPayload);
             }
 
             // Se a alteração foi em todas as páginas, recarrega o projeto inteiro
@@ -667,6 +789,10 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     if ((!userMessage.trim() && currentFiles.length === 0) || loading) return;
 
     const messageText = userMessage.trim() || (currentFiles.length > 0 ? `Analise e aplique as referências dos ${currentFiles.length} arquivo(s) anexo(s).` : '');
+
+    if (onPromptStart) {
+      onPromptStart();
+    }
 
     setLastUserPrompt(messageText);
     const updatedMessages = [
@@ -977,7 +1103,39 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                   {(msg.isError || msg.text.startsWith('Erro:')) && (
                     <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
                   )}
-                  <p className="whitespace-pre-wrap flex-1">{msg.text}</p>
+                  <div className="flex-1">
+                    {msg.role === 'assistant' && msg.actionType && (
+                      <div className="mb-2">
+                        {msg.actionType === 'update_style_only' ? (
+                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-cyan-950/80 border border-cyan-500/40 text-cyan-300 text-[10px] font-bold shadow-sm">
+                            <Palette className="w-3 h-3 text-cyan-400" />
+                            Controlador de Estilo (CSS)
+                          </span>
+                        ) : msg.actionType === 'navigate' ? (
+                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 text-[10px] font-bold shadow-sm">
+                            <Compass className="w-3 h-3 text-emerald-400" />
+                            Controlador de Navegação
+                          </span>
+                        ) : msg.actionType === 'settings' ? (
+                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-950/80 border border-amber-500/40 text-amber-300 text-[10px] font-bold shadow-sm">
+                            <Sliders className="w-3 h-3 text-amber-400" />
+                            Controlador de Configurações
+                          </span>
+                        ) : msg.actionType === 'question_only' ? (
+                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-indigo-950/80 border border-indigo-500/40 text-indigo-300 text-[10px] font-bold shadow-sm">
+                            <HelpCircle className="w-3 h-3 text-indigo-400" />
+                            Controlador de Consulta
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-purple-950/80 border border-purple-500/40 text-purple-300 text-[10px] font-bold shadow-sm">
+                            <Wrench className="w-3 h-3 text-purple-400" />
+                            Controlador de Conteúdo
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    {msg.role === 'assistant' ? renderFormattedMarkdown(msg.text) : <p className="whitespace-pre-wrap">{msg.text}</p>}
+                  </div>
                 </div>
 
                 {/* Botão de Copiar Texto do Balão */}

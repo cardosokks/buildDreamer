@@ -182,6 +182,8 @@ export function resilientJsonParse(rawString: string): any {
       html: cleaned.html || htmlContent || '',
       css: cleaned.css || cssContent || '',
       js: cleaned.js || jsContent || '',
+      navigation: obj.navigation || undefined,
+      settings: obj.settings || undefined,
       navbar: obj.navbar || undefined,
       footer: obj.footer || undefined
     };
@@ -486,19 +488,32 @@ export const generateAIResponse = async (
     3. ARQUIVOS ANEXADOS & LOGOMARCAS:
        - Se o usuário enviou uma logomarca (imagem ou SVG), posicione-a com destaque e elegância na Navbar (<nav>/<header>), Rodapé (<footer>) ou seções hero.
        - Se o usuário enviou um arquivo de código ou navbar de referência, replique a estrutura com perfeição mantendo o design responsivo.
-    4. TIPOS DE AÇÃO (action_type):
-       - "update_page": Use caso o usuário peça para alterar/adicionar algo na página inteira (ex: "adicione um botão whatsapp", "refaça o hero"). Retorne html, css e js completos.
-       - "update_style_only": Use caso o usuário peça apenas alterações globais de estilo (ex: "mude a cor para azul", "adicione animações"). Retorne o CSS modificado. Você pode omitir "html" e "js" ou retorná-los vazios.
-       - "question_only": Use caso o usuário faça uma pergunta geral ou peça dicas sem solicitar modificação imediata do código (ex: "como posso melhorar o SEO?", "qual paleta combina mais?"). Nesse caso, retorne as dicas detalhadas no campo "explanation" e omita html, css e js (ou deixe-os vazios).
+    4. CONTROLADORES DE AÇÃO (action_type):
+       - "update_page": Edição de Conteúdo/Layout da página (ex: "adicione um botão whatsapp", "refaça o hero"). Retorne html, css e js.
+       - "update_style_only": Edição de Estilo/Cores (ex: "mude a cor para azul", "adicione animações no CSS"). Retorne o CSS modificado. Omita "html" e "js" ou retorne vazios.
+       - "navigate": Navegação ou Ação de Interface (ex: "vá para a página sobre", "mude para visualização mobile", "abra o SEO audit", "crie a página contato"). Omita html, css e js. Inclua o objeto "navigation".
+       - "settings": Configurações / SEO do Projeto ou Página (ex: "mude o título SEO da página para 'Home - Empresa'", "altere a descrição SEO"). Omita html, css e js. Inclua o objeto "settings".
+       - "question_only": Dúvidas ou Consultas Gerais (ex: "como melhorar o SEO?", "qual paleta combina com azul?"). Retorne a resposta detalhada no campo "explanation". Omita html, css e js.
+
     5. Retorne SEMPRE um objeto JSON estrito no formato abaixo:
 
     Formato da Resposta JSON OBRIGATÓRIO:
     {
-      "action_type": "update_page" | "update_style_only" | "question_only",
-      "explanation": "Breve resumo técnico, amigável ou a resposta para a dúvida do usuário.",
-      "html": "<apenas nós HTML sem tags <style> nem <script> (vazio se question_only)>",
-      "css": "/* Todo CSS adicional separado aqui (vazio se question_only) */",
-      "js": "// Todo JavaScript funcional separado aqui (vazio se question_only)"
+      "action_type": "update_page" | "update_style_only" | "navigate" | "settings" | "question_only",
+      "explanation": "Breve resumo técnico, resposta amigável ou resposta para a dúvida do usuário.",
+      "html": "<apenas nós HTML sem tags <style> nem <script> (vazio se não for update_page)>",
+      "css": "/* Todo CSS adicional separado aqui (vazio se question_only/navigate/settings) */",
+      "js": "// Todo JavaScript funcional separado aqui (vazio se question_only/navigate/settings)",
+      "navigation": {
+        "action": "switch_page" | "create_page" | "seo_modal" | "toggle_viewport",
+        "targetPageSlug": "slug-da-pagina",
+        "viewport": "desktop" | "tablet" | "mobile"
+      },
+      "settings": {
+        "seoTitle": "Título SEO para a página",
+        "seoDescription": "Descrição SEO para a página",
+        "projectName": "Nome do projeto se solicitado"
+      }
     }
   `;
 

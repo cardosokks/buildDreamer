@@ -24,6 +24,8 @@ export async function executeAIRequest(
   html: string;
   css: string;
   js: string;
+  navigation?: any;
+  settings?: any;
   _usedModel: string;
   _usedProvider: string;
 }> {

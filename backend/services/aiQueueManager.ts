@@ -19,6 +19,8 @@ export interface AIQueueItem {
     html?: string;
     css?: string;
     js?: string;
+    navigation?: any;
+    settings?: any;
     _usedModel?: string;
     _usedProvider?: string;
     updatedPages?: Array<{ id: string; name: string; slug: string; html: string; css: string; js: string }>;
@@ -931,12 +933,28 @@ ${page.css || ''}
 
         if (item.status === 'cancelled') return;
 
-        if (result.action_type === 'question_only') {
-          // Não atualiza HTML, CSS e JS
+        if (result.action_type === 'question_only' || result.action_type === 'navigate') {
+          // Não atualiza HTML, CSS e JS da página
           finalHtml = pageHtml;
           finalCss = page.css || '';
           finalJs = page.js || '';
-          console.log(`[AIQueueManager] Modo question_only detectado, preservando página.`);
+          console.log(`[AIQueueManager] Modo ${result.action_type} detectado, preservando estrutura da página.`);
+        } else if (result.action_type === 'settings') {
+          finalHtml = pageHtml;
+          finalCss = page.css || '';
+          finalJs = page.js || '';
+          if (result.settings) {
+            console.log(`[AIQueueManager] Modo settings detectado:`, result.settings);
+            if (result.settings.seoTitle || result.settings.seoDescription) {
+              await prisma.page.update({
+                where: { id: page.id },
+                data: {
+                  ...(result.settings.seoTitle ? { seoTitle: result.settings.seoTitle } : {}),
+                  ...(result.settings.seoDescription ? { seoDescription: result.settings.seoDescription } : {})
+                }
+              });
+            }
+          }
         } else if (result.action_type === 'update_style_only') {
           finalHtml = pageHtml; // Preserva o HTML atual
           finalCss = result.css || page.css || '';
@@ -949,8 +967,8 @@ ${page.css || ''}
         }
       }
 
-      // Se for apenas uma pergunta, evitamos a chamada de banco de dados se nada mudou
-      if (result.action_type !== 'question_only') {
+      // Se for apenas pergunta, navegação ou settings simples sem alteração de código HTML
+      if (result.action_type === 'update_page' || result.action_type === 'update_style_only') {
         await prisma.page.update({
           where: { id: page.id },
           data: {
@@ -966,6 +984,8 @@ ${page.css || ''}
         html: finalHtml,
         css: finalCss,
         js: finalJs,
+        navigation: result.navigation,
+        settings: result.settings,
         _usedModel: result._usedModel,
         _usedProvider: result._usedProvider,
         action_type: result.action_type

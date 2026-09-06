@@ -113,11 +113,16 @@ export const AIImprover: React.FC<AIImproverProps> = ({ projectId, onBack, onOpe
   const [queueLogs, setQueueLogs] = useState<string[]>([]);
   const [isPollingQueue, setIsPollingQueue] = useState(false);
 
+  // Dynamic Sidebar Resizing
+  const [sidebarWidth, setSidebarWidth] = useState<number>(420);
+  const [isResizingSidebar, setIsResizingSidebar] = useState<boolean>(false);
+
   // Split View Compare Before vs After
   const [showSplitView, setShowSplitView] = useState(false);
   const [originalHtml, setOriginalHtml] = useState('');
   const [originalCss, setOriginalCss] = useState('');
   const [originalJs, setOriginalJs] = useState('');
+  const [beforeSnapshot, setBeforeSnapshot] = useState<{ html: string; css: string; js: string; timestamp: string } | null>(null);
 
   // History Log for IA changes on this page session
   const [history, setHistory] = useState<{ id: string; timestamp: string; description: string; html: string; css: string; js: string }[]>([]);
@@ -126,6 +131,29 @@ export const AIImprover: React.FC<AIImproverProps> = ({ projectId, onBack, onOpe
   const [editScope, setEditScope] = useState<'all' | 'section'>('all');
   const [selectedSectionIndex, setSelectedSectionIndex] = useState<number | null>(null);
   const [detectedSections, setDetectedSections] = useState<any[]>([]);
+
+  // Window resize events for dynamic chat panel width
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizingSidebar) return;
+      const newWidth = Math.max(280, Math.min(e.clientX, 750));
+      setSidebarWidth(newWidth);
+    };
+
+    const handleMouseUp = () => {
+      setIsResizingSidebar(false);
+    };
+
+    if (isResizingSidebar) {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+    }
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizingSidebar]);
 
   // Listen to iframe interactive section click
   useEffect(() => {
@@ -178,9 +206,26 @@ export const AIImprover: React.FC<AIImproverProps> = ({ projectId, onBack, onOpe
         setOriginalHtml(home.html);
         setOriginalCss(home.css);
         setOriginalJs(home.js);
+        setBeforeSnapshot({
+          html: home.html,
+          css: home.css,
+          js: home.js,
+          timestamp: Date.now().toString()
+        });
       }
     } catch (err: any) {
       notify.error('Erro ao carregar detalhes do projeto.', 'Erro');
+    }
+  };
+
+  const handlePromptStart = () => {
+    if (activePage) {
+      setBeforeSnapshot({
+        html: activePage.html,
+        css: activePage.css,
+        js: activePage.js,
+        timestamp: Date.now().toString()
+      });
     }
   };
 
@@ -390,6 +435,12 @@ export const AIImprover: React.FC<AIImproverProps> = ({ projectId, onBack, onOpe
                   setOriginalHtml(sel.html);
                   setOriginalCss(sel.css);
                   setOriginalJs(sel.js);
+                  setBeforeSnapshot({
+                    html: sel.html,
+                    css: sel.css,
+                    js: sel.js,
+                    timestamp: Date.now().toString()
+                  });
                 }
               }}
               className="bg-slate-950 hover:bg-slate-900 border border-slate-800 text-xs font-semibold text-slate-200 rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-purple-500 cursor-pointer transition-all"
@@ -428,7 +479,10 @@ export const AIImprover: React.FC<AIImproverProps> = ({ projectId, onBack, onOpe
       <main className="flex-1 flex overflow-hidden min-h-0">
         
         {/* Left Interactive Workspace Panel */}
-        <div className="w-[450px] shrink-0 border-r border-slate-850 bg-slate-900 flex flex-col z-30 shadow-xl overflow-hidden">
+        <div 
+          style={{ width: `${sidebarWidth}px` }} 
+          className="shrink-0 border-r border-slate-850 bg-slate-900 flex flex-col z-30 shadow-xl overflow-hidden"
+        >
           {/* Tab Menu Header */}
           <div className="flex border-b border-slate-800 bg-slate-950 p-1 gap-1 shrink-0">
             <button
@@ -486,6 +540,20 @@ export const AIImprover: React.FC<AIImproverProps> = ({ projectId, onBack, onOpe
                   selectedSectionIndex={selectedSectionIndex}
                   setSelectedSectionIndex={setSelectedSectionIndex}
                   onSectionsDetected={setDetectedSections}
+                  onNavigatePage={(slugOrId) => {
+                    const found = project?.pages.find(p => p.slug === slugOrId || p.id === slugOrId);
+                    if (found) {
+                      setActivePageId(found.id);
+                      setBeforeSnapshot({
+                        html: found.html,
+                        css: found.css,
+                        js: found.js,
+                        timestamp: Date.now().toString()
+                      });
+                    }
+                  }}
+                  onToggleViewport={(vp) => setViewport(vp)}
+                  onPromptStart={handlePromptStart}
                 />
               </div>
             )}
@@ -621,8 +689,17 @@ export const AIImprover: React.FC<AIImproverProps> = ({ projectId, onBack, onOpe
           </div>
         </div>
 
+        {/* Resizer Divider between Chat & Preview */}
+        <div
+          onMouseDown={() => setIsResizingSidebar(true)}
+          className="w-2 hover:w-3 bg-slate-900 hover:bg-purple-600/80 cursor-col-resize transition-all shrink-0 z-40 flex items-center justify-center group select-none border-x border-slate-850"
+          title="Arraste para redimensionar o painel do chat e do preview"
+        >
+          <div className="w-1 h-8 bg-slate-700 group-hover:bg-white rounded-full transition-colors" />
+        </div>
+
         {/* Right Iframe Visualizer Panel */}
-        <div className="flex-1 flex flex-col bg-slate-950 p-6 overflow-hidden relative">
+        <div className="flex-1 flex flex-col bg-slate-950 p-6 overflow-hidden relative min-w-0">
           <div className="flex-1 flex justify-center items-center overflow-hidden w-full h-full relative">
             
             {showSplitView ? (
@@ -631,22 +708,34 @@ export const AIImprover: React.FC<AIImproverProps> = ({ projectId, onBack, onOpe
                 {/* BEFORE PREVIEW CONTAINER */}
                 <div className="flex-1 flex flex-col bg-slate-900 rounded-3xl border border-slate-850 overflow-hidden shadow-2xl relative min-w-0 h-full">
                   <div className="h-10 shrink-0 bg-slate-950 px-4 border-b border-slate-850 flex items-center justify-between">
-                    <span className="text-[10px] font-extrabold tracking-wider text-slate-400 uppercase">Original (Antes das melhorias)</span>
-                    <span className="w-2 h-2 rounded-full bg-slate-600" />
+                    <span className="text-[10px] font-extrabold tracking-wider text-slate-400 uppercase flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-slate-500" />
+                      Original (Antes das melhorias)
+                    </span>
+                    {beforeSnapshot && activePage && beforeSnapshot.html !== activePage.html && (
+                      <button
+                        onClick={() => handleApplyAIChanges([], beforeSnapshot.css, beforeSnapshot.js, activePageId)}
+                        className="text-[10px] bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold px-2 py-1 rounded-md transition-all cursor-pointer flex items-center gap-1 border border-slate-700"
+                        title="Restaurar este estado original no canvas"
+                      >
+                        <RotateCcw className="w-3 h-3 text-purple-400" />
+                        Restaurar Versão Antes
+                      </button>
+                    )}
                   </div>
                   <div className="flex-1 bg-white relative">
                     <iframe
-                      key="before-frame"
+                      key={`before-frame-${beforeSnapshot?.html?.length || originalHtml.length}-${beforeSnapshot?.timestamp || 'initial'}`}
                       srcDoc={`
                         <!DOCTYPE html>
                         <html>
                           <head>
                             <meta charset="utf-8">
                             <script src="https://cdn.tailwindcss.com"></script>
-                            <style>${originalCss}</style>
+                            <style>${beforeSnapshot?.css || originalCss}</style>
                           </head>
-                          <body class="bg-transparent m-0 p-0">${originalHtml}</body>
-                          <script>${originalJs}</script>
+                          <body class="bg-transparent m-0 p-0">${beforeSnapshot?.html || originalHtml}</body>
+                          <script>${beforeSnapshot?.js || originalJs}</script>
                         </html>
                       `}
                       className="w-full h-full border-none"
@@ -666,7 +755,7 @@ export const AIImprover: React.FC<AIImproverProps> = ({ projectId, onBack, onOpe
                   </div>
                   <div className="flex-1 bg-white relative">
                     <iframe
-                      key={`after-frame-${activePage?.html.length}`}
+                      key={`after-frame-${activePage?.html?.length || 0}-${activePage?.css?.length || 0}`}
                       srcDoc={`
                         <!DOCTYPE html>
                         <html>
