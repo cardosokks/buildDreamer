@@ -3,6 +3,9 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
+# Install openssl for Prisma generation
+RUN apk add --no-cache openssl
+
 # Copy dependency files
 COPY package*.json ./
 
@@ -19,8 +22,8 @@ RUN npm run build
 # Production runtime stage
 FROM node:20-alpine AS runner
 
-# Add libc6-compat for native dependencies like @ngrok/ngrok
-RUN apk add --no-cache libc6-compat
+# Add libc6-compat and openssl for native dependencies and Prisma
+RUN apk add --no-cache libc6-compat openssl
 
 WORKDIR /app
 
