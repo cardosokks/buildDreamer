@@ -19,51 +19,43 @@ export interface AISkill {
 
 export const DEFAULT_AI_SKILLS: AISkill[] = [
   {
-    id: 'skill-3d-canvas',
-    name: 'Elementos 3D & Efeitos Canvas WebGL',
-    category: '3d',
-    description: 'Integra esferas 3D flutuantes, partículas interativas em Canvas e efeitos de profundidade com iluminação dinâmica.',
-    promptSnippet: 'Incorpore elementos visuais 3D avançados: adicione no JS um canvas interativo com partículas flutuantes reativas ao mouse ou geometrias 3D abstratas (com iluminação neon, wireframe dinâmico e gradientes de profundidade). Crie sensação de tecnologia de ponta.',
-    enabled: true
-  },
-  {
-    id: 'skill-parallax-scroll',
-    name: 'Parallax & Scroll Animations (AOS/GSAP Style)',
-    category: 'animation',
-    description: 'Revelação suave de elementos na rolagem, efeito parallax em seções e cards, e barras de progresso.',
-    promptSnippet: 'Implemente animações ricas acionadas pelo scroll da página usando IntersectionObserver nativo no JS: elementos surgem com fade-up suave, stagger em listas de cards, efeito parallax suave em fundos e badges com scale sutil ao entrar na viewport. Classes no CSS com transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.6s.',
-    enabled: true
-  },
-  {
-    id: 'skill-hero-spectacular',
-    name: 'Hero Section Espetacular & Ultra Impacto',
-    category: 'hero',
-    description: 'Hero sections cinematográficas com tipografia imersiva, badges brilhantes, CTAs duplos com gradiente pulsante e glassmorphism.',
-    promptSnippet: 'Crie uma Hero Section espetacular de nível internacional: tipografia de impacto com gradientes de texto (bg-clip-text), subtítulo cativante, badges com micro-brilho neon pulsante ("✨ NOVO"), botão de CTA principal com gradiente vibrante e sombra expansiva, estatísticas em números destacados com contadores e cards flutuantes de prova social com glassmorphism.',
-    enabled: true
-  },
-  {
-    id: 'skill-micro-interactions',
-    name: 'Micro-Interações & Efeito Magnético / Glow',
-    category: 'animation',
-    description: 'Efeito de glow que segue o cursor nos cards, botões magnéticos e feedback háptico visual em todos os cliques.',
-    promptSnippet: 'Adicione micro-interações ultra responsivas: nos cards, aplique efeito de glow de borda no hover (border com gradiente ou spotlight que segue o cursor via JS simples), botões com leve elevação (hover:-translate-y-1) e clique suave (active:scale-95). Tooltips elegantes e feedback visual rico.',
-    enabled: true
-  },
-  {
-    id: 'skill-conversion-psychology',
-    name: 'Arquitetura de Alta Conversão (CRO)',
-    category: 'conversion',
-    description: 'Gatilhos de urgência sutil, prova social com estrelas, tabelas comparativas e CTAs fixos com botão WhatsApp direto.',
-    promptSnippet: 'Estruture o site com gatilhos psicológicos de alta conversão: selos de garantia ("⭐ 4.9/5 estrelas"), depoimentos com fotos circulares e nomes reais, comparativo "Sem nós vs Com nós", seção de FAQ com acordeão interativo no JS e botão flutuante de WhatsApp direto no canto inferior direito com pulso de atenção.',
-    enabled: true
-  },
-  {
-    id: 'skill-dark-luxury',
-    name: 'Design System Dark Luxury & Glassmorphism',
+    id: 'skill-tailwind-design',
+    name: 'Design System Tailwind UI & Glassmorphism Pro',
     category: 'layout',
-    description: 'Paletas luxuosas em tons de obsidian, violeta profundo, ouro champagne ou neon cyan com bordas translúcidas.',
-    promptSnippet: 'Utilize estética Dark Luxury de alto padrão: fundo em tons profundos (#07020d, #0b0714), painéis com glassmorphism translúcido (bg-slate-900/60 backdrop-blur-xl border border-purple-500/20), tipografia moderna (Outfit para títulos e Inter para textos) e contrastes meticulosamente calculados.',
+    description: 'Gera interfaces limpas, sofisticadas e profissionais com paletas harmoniosas, cartões em vidro fosco (glassmorphism), tipografia hierárquica refinada e espaçamento rítmico perfeito.',
+    promptSnippet: 'Utilize Tailwind CSS com estética moderna e profissional: fundo em tons sofisticados, painéis translúcidos (bg-slate-900/60 backdrop-blur-xl border border-slate-800), tipografia limpa, contrastes acessíveis e espaçamento generoso.',
+    enabled: true
+  },
+  {
+    id: 'skill-cro-hero',
+    name: 'Hero Section de Alto Impacto & CRO (Conversão)',
+    category: 'hero',
+    description: 'Desenvolve seções de topo imponentes com chamadas para ação (CTAs) magnéticas, badges de urgência, prova social imediata e cartões de conversão otimizados.',
+    promptSnippet: 'Crie uma Hero Section espetacular: título principal imponente em negrito, subtítulo persuasivo, badges de destaque, botões de ação primária (CTA) com gradiente e efeitos de hover suaves, além de prova social visível.',
+    enabled: true
+  },
+  {
+    id: 'skill-mobile-first',
+    name: 'Responsividade Total Mobile-First & Micro-interações',
+    category: 'animation',
+    description: 'Garante layout perfeitamente fluido em todas as telas (sm, md, lg, xl), menus hambúrguer funcionais, animações suaves e botões flutuantes interativos.',
+    promptSnippet: 'Garanta responsividade impecável mobile-first com classes grid/flex adaptativas (sm:grid-cols-2 lg:grid-cols-3), menu hambúrguer interativo para mobile e transições suaves em todos os elementos clicáveis.',
+    enabled: true
+  },
+  {
+    id: 'skill-modular-js',
+    name: 'JavaScript Modular & Interatividade Avançada',
+    category: 'custom',
+    description: 'Implementa acordeões de FAQ funcionais com rotação de ícones, formulários de contato com validação e feedback visual de envio, e contadores animados.',
+    promptSnippet: 'Adicione script JavaScript modular e funcional: manipulação de eventos para abrir/fechar menus mobile, alternar abas ou acordeões de FAQ, validar formulários de contato com mensagem de sucesso na tela e rolar suavemente entre âncoras.',
+    enabled: true
+  },
+  {
+    id: 'skill-multipage-sync',
+    name: 'Arquitetura Multi-Páginas Sincronizada',
+    category: 'layout',
+    description: 'Cria e sincroniza rotas consistentes entre Home, Sobre, Serviços, Contato e FAQ mantendo padrão visual unificado e navegação fluida.',
+    promptSnippet: 'Mantenha rigorosa consistência de navegação entre todas as páginas (Home, Sobre, Serviços, Contato), garantindo que o cabeçalho (navbar) e o rodapé (footer) compartilhem exatamente a mesma estrutura e links em todas as páginas.',
     enabled: true
   }
 ];
@@ -106,8 +98,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
             }
             return m;
           });
-          if (changed) localStorage.setItem('custom_gemini_models', JSON.stringify(parsed));
-          return parsed;
+          const unique = parsed.filter((m: any, idx: number, arr: any[]) => arr.findIndex(t => t.id === m.id) === idx);
+          if (changed || unique.length !== parsed.length) {
+            localStorage.setItem('custom_gemini_models', JSON.stringify(unique));
+          }
+          return unique;
         }
       } catch {}
     }

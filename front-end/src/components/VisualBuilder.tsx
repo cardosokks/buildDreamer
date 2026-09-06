@@ -35,8 +35,11 @@ import {
   Image as ImageIcon,
   CheckCircle,
   X,
-  ShieldCheck
+  ShieldCheck,
+  Plus
 } from 'lucide-react';
+import { CreatePageModal, PageCreationData } from './CreatePageModal';
+import { getPageStarterTemplate } from '../lib/pageTemplates';
 import { Sidebar } from './Sidebar';
 import type { ElementNode } from './Sidebar';
 import { Canvas } from './Canvas';
@@ -169,6 +172,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
   // Modais & Menus
   const [showCodeModal, setShowCodeModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
+  const [showCreatePageModal, setShowCreatePageModal] = useState(false);
   const [showRemasterPageModal, setShowRemasterPageModal] = useState(false);
   const [showSEOAuditModal, setShowSEOAuditModal] = useState(false);
   const [pageRemasterPrompt, setPageRemasterPrompt] = useState('Aprimore o design e layout desta página com Tailwind CSS mantendo estritamente todas as frases, textos e mídias originais.');
@@ -981,6 +985,97 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
     }
   };
 
+  const handleCreatePageSubmit = async (data: PageCreationData) => {
+    if (!project) return;
+
+    let finalHtml = '<div></div>';
+    let finalCss = '';
+    let finalJs = '';
+
+    if (data.templateType === 'ai' && data.aiPrompt) {
+      try {
+        const aiRes = await fetch(`${API_URL}/api/ai/generate-page`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            prompt: data.aiPrompt,
+            projectId: project.id,
+            name: data.name,
+            slug: data.slug
+          })
+        });
+
+        if (aiRes.ok) {
+          const aiData = await aiRes.json();
+          const createdPage = aiData.page || aiData;
+          setProject(prev => prev ? { ...prev, pages: [...prev.pages, createdPage] } : null);
+          setActivePageId(createdPage.id);
+          notify.success(`Página "${data.name}" gerada com IA!`, 'Página Criada');
+          return;
+        }
+      } catch (e) {
+        console.warn('Fallback para template estático ao falhar geração por IA', e);
+      }
+    }
+
+    if (data.templateType === 'duplicate' && data.duplicatePageId) {
+      const pageToClone = project.pages.find(p => p.id === data.duplicatePageId);
+      if (pageToClone) {
+        finalHtml = pageToClone.html || '';
+        finalCss = pageToClone.css || '';
+        finalJs = pageToClone.js || '';
+      }
+    } else {
+      const starter = getPageStarterTemplate(data.templateType, data.name, project.name);
+      finalHtml = starter.html;
+      finalCss = starter.css || '';
+      finalJs = starter.js || '';
+    }
+
+    const res = await fetch(`${API_URL}/api/pages`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        name: data.name,
+        slug: data.slug,
+        html: finalHtml,
+        css: finalCss,
+        js: finalJs,
+        isHomepage: data.isHomepage,
+        seoTitle: data.seoTitle,
+        seoDescription: data.seoDescription,
+        projectId: project.id
+      })
+    });
+
+    if (!res.ok) {
+      const errJson = await res.json().catch(() => ({}));
+      throw new Error(errJson.error || 'Erro ao criar página no servidor.');
+    }
+
+    const newP = await res.json();
+
+    setProject(prev => {
+      if (!prev) return null;
+      const updatedPages = data.isHomepage
+        ? prev.pages.map(p => ({ ...p, isHomepage: false }))
+        : [...prev.pages];
+      return {
+        ...prev,
+        pages: [...updatedPages, newP]
+      };
+    });
+
+    setActivePageId(newP.id);
+    notify.success(`Página "${data.name}" criada com sucesso!`, 'Página Criada');
+  };
+
   const getFullHtmlDocument = () => {
     if (!activePage) return '';
     const safePagesJson = JSON.stringify((project?.pages || []).map(p => ({
@@ -1137,7 +1232,31 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
           <div className="flex items-center gap-2 truncate">
             <span className="font-bold text-white tracking-wide text-xs sm:text-sm truncate">{project?.name || 'Studio'}</span>
             <span className="text-xs text-slate-600">/</span>
-            <span className="text-xs text-purple-400 font-medium font-mono truncate">{activePage?.name}</span>
+            
+            {/* Seletor Rápido de Páginas */}
+            <select
+              value={activePageId || ''}
+              onChange={(e) => {
+                if (e.target.value === '__NEW__') {
+                  setShowCreatePageModal(true);
+                } else {
+                  setActivePageId(e.target.value);
+                  setSelectedSelector(null);
+                  setSelectedPath(null);
+                }
+              }}
+              className="bg-purple-950/40 border border-purple-500/30 hover:border-purple-500/60 text-purple-300 font-semibold font-mono text-xs rounded-xl px-2.5 py-1 focus:outline-none focus:ring-1 focus:ring-purple-500 cursor-pointer shadow-sm transition-all"
+              title="Alternar entre as páginas do site"
+            >
+              {project?.pages?.map((p) => (
+                <option key={p.id} value={p.id} className="bg-slate-950 text-white">
+                  {p.isHomepage ? '★ ' : ''}{p.name} ({p.slug})
+                </option>
+              ))}
+              <option value="__NEW__" className="bg-slate-900 text-purple-300 font-bold">
+                + Criar Nova Página...
+              </option>
+            </select>
           </div>
         </div>
 
@@ -1394,20 +1513,8 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
               setSelectedSelector(null);
               setSelectedPath(null);
             }}
-            onCreatePage={async () => {
-              const name = prompt('Nome da nova página:');
-              if (!name) return;
-              const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-              const res = await fetch(`${API_URL}/api/pages`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                body: JSON.stringify({ name, slug, projectId })
-              });
-              if (res.ok) {
-                const newP = await res.json();
-                setProject(prev => prev ? { ...prev, pages: [...prev.pages, newP] } : null);
-                setActivePageId(newP.id);
-              }
+            onCreatePage={() => {
+              setShowCreatePageModal(true);
             }}
             onRenamePage={async (id, newName) => {
               if (!newName) return;
@@ -2000,6 +2107,16 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
           seoTitle={activePage.seoTitle}
           seoDescription={activePage.seoDescription}
           seoOgImage={activePage.seoOgImage}
+        />
+      )}
+
+      {/* Modal Padronizado Premium de Criação de Páginas */}
+      {project && (
+        <CreatePageModal
+          isOpen={showCreatePageModal}
+          onClose={() => setShowCreatePageModal(false)}
+          existingPages={project.pages || []}
+          onCreatePage={handleCreatePageSubmit}
         />
       )}
     </div>

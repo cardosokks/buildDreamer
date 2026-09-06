@@ -103,7 +103,7 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({ onSwitchToLogin }) =
             <img src="/logo.png" alt="Real Premise" className="w-full h-full object-cover" />
           </div>
           <h1 className="text-2xl font-black tracking-wider text-white">REAL PREMISE</h1>
-          <p className="text-xs text-pink-300/80 mt-1 font-mono tracking-widest uppercase">AI Botanical Studio</p>
+          <p className="text-xs text-pink-300/80 mt-1 font-mono tracking-widest uppercase">Website Editor</p>
         </div>
 
         <div className="w-full mb-5 text-center">

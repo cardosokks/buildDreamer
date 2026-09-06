@@ -8,7 +8,7 @@ const router = Router();
 router.post(['/projects/:projectId/pages', '/pages'], async (req: AuthenticatedRequest, res: any) => {
   try {
     const projectId = (req.params.projectId || req.body.projectId) as string;
-    const { name, slug, title, description, html, css, js } = req.body;
+    const { name, slug, title, description, seoTitle, seoDescription, html, css, js, isHomepage } = req.body;
 
     if (!projectId) {
       return res.status(400).json({ error: 'ProjectId is required' });
@@ -27,15 +27,26 @@ router.post(['/projects/:projectId/pages', '/pages'], async (req: AuthenticatedR
       return res.status(403).json({ error: 'Not authorized on this project' });
     }
 
+    if (isHomepage) {
+      // Unset previous homepage in this project
+      await prisma.page.updateMany({
+        where: { projectId, isHomepage: true },
+        data: { isHomepage: false }
+      });
+    }
+
     const page = await prisma.page.create({
       data: {
         name,
         slug,
-        title,
-        description,
+        title: title || name,
+        description: description || '',
+        seoTitle: seoTitle || title || name,
+        seoDescription: seoDescription || description || '',
         html: html || '<div></div>',
         css: css || '',
         js: js || '',
+        isHomepage: isHomepage === true,
         projectId
       },
       include: {

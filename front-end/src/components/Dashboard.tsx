@@ -26,6 +26,7 @@ import {
   GripVertical,
   Bookmark,
   BookmarkCheck,
+  BookmarkPlus,
   Sliders,
   Plus,
   SlidersHorizontal,
@@ -65,7 +66,13 @@ import {
   MonitorSmartphone,
   Store,
   UserCircle,
-  Rocket
+  Rocket,
+  Layers,
+  Palette,
+  Target,
+  Building2,
+  ShoppingBag,
+  ShieldCheck
 } from 'lucide-react';
 
 import { useTheme } from '../context/ThemeContext';
@@ -623,6 +630,40 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
     }
   };
 
+  const handleSaveAllLeadsToCRM = async (leadsToSave: Lead[]) => {
+    if (!leadsToSave || leadsToSave.length === 0) return;
+    try {
+      const unSavedLeads = leadsToSave.filter(lead => !savedLeads.some(l => l.id === lead.id || l.name === lead.name));
+      
+      if (unSavedLeads.length === 0) {
+        notify.info('Todos os estabelecimentos exibidos já estão salvos nos seus favoritos / CRM.', 'Já Salvos');
+        return;
+      }
+
+      const newSaved = [...savedLeads, ...unSavedLeads];
+      setSavedLeads(newSaved);
+      localStorage.setItem('builddreamer_saved_leads', JSON.stringify(newSaved));
+      syncSettingsToDatabase({ savedLeads: newSaved });
+
+      const res = await fetch(`${API_URL}/api/leads/bulk`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ leads: unSavedLeads })
+      });
+
+      if (res.ok) {
+        notify.success(`${unSavedLeads.length} novo(s) cliente(s) adicionado(s) ao CRM com sucesso!`, 'CRM Atualizado');
+      } else {
+        notify.success(`${unSavedLeads.length} cliente(s) salvo(s) localmente.`, 'Salvo');
+      }
+    } catch (err: any) {
+      notify.error(err.message || 'Erro ao salvar clientes no CRM', 'Erro');
+    }
+  };
+
   const handleAddManualLead = (e: React.FormEvent) => {
     e.preventDefault();
     if (!manualLeadName.trim()) {
@@ -771,8 +812,73 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
   // AI Prompt generation States
   const [businessName, setBusinessName] = useState('');
   const [segment, setSegment] = useState('');
-  const [visualStyle, setVisualStyle] = useState('');
+  const [visualStyle, setVisualStyle] = useState('moderno');
+  const [colorPalette, setColorPalette] = useState('dark-luxury');
+  const [aiSiteTypePreset, setAiSiteTypePreset] = useState<'institutional' | 'saas' | 'ecommerce' | 'landing' | 'custom'>('institutional');
+  const [selectedPagesList, setSelectedPagesList] = useState<Array<{ name: string; slug: string; isHomepage?: boolean }>>([
+    { name: 'Início', slug: 'index', isHomepage: true },
+    { name: 'Sobre Nós', slug: 'sobre' },
+    { name: 'Serviços', slug: 'servicos' },
+    { name: 'Contato', slug: 'contato' },
+    { name: 'FAQ', slug: 'faq' }
+  ]);
+  const [customPageInput, setCustomPageInput] = useState('');
   const [targetLeadForProject, setTargetLeadForProject] = useState<Lead | null>(null);
+
+  const applyAiSiteTypePreset = (preset: 'institutional' | 'saas' | 'ecommerce' | 'landing' | 'custom') => {
+    setAiSiteTypePreset(preset);
+    if (preset === 'institutional') {
+      setSelectedPagesList([
+        { name: 'Início', slug: 'index', isHomepage: true },
+        { name: 'Sobre Nós', slug: 'sobre' },
+        { name: 'Serviços', slug: 'servicos' },
+        { name: 'Contato', slug: 'contato' },
+        { name: 'FAQ', slug: 'faq' }
+      ]);
+    } else if (preset === 'saas') {
+      setSelectedPagesList([
+        { name: 'Início', slug: 'index', isHomepage: true },
+        { name: 'Recursos', slug: 'recursos' },
+        { name: 'Preços & Planos', slug: 'precos' },
+        { name: 'Depoimentos', slug: 'depoimentos' },
+        { name: 'Contato', slug: 'contato' }
+      ]);
+    } else if (preset === 'ecommerce') {
+      setSelectedPagesList([
+        { name: 'Início', slug: 'index', isHomepage: true },
+        { name: 'Catálogo de Produtos', slug: 'catalogo' },
+        { name: 'Sobre a Marca', slug: 'sobre' },
+        { name: 'Perguntas Frequentes', slug: 'faq' },
+        { name: 'Fale Conosco', slug: 'contato' }
+      ]);
+    } else if (preset === 'landing') {
+      setSelectedPagesList([
+        { name: 'Início', slug: 'index', isHomepage: true }
+      ]);
+    }
+  };
+
+  const handleAddCustomPageToAI = (pageNameRaw?: string) => {
+    const raw = (pageNameRaw || customPageInput).trim();
+    if (!raw) return;
+    const slug = raw.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    if (selectedPagesList.some(p => p.slug === slug)) {
+      notify.warning('Essa página já foi adicionada na lista.', 'Página Existente');
+      return;
+    }
+    setSelectedPagesList(prev => [...prev, { name: raw, slug }]);
+    setCustomPageInput('');
+    setAiSiteTypePreset('custom');
+  };
+
+  const handleRemovePageFromAI = (slugToRemove: string) => {
+    if (slugToRemove === 'index') {
+      notify.warning('A página Inicial (Home) é obrigatória para a estrutura do site.', 'Página Principal');
+      return;
+    }
+    setSelectedPagesList(prev => prev.filter(p => p.slug !== slugToRemove));
+    setAiSiteTypePreset('custom');
+  };
 
   // Rastreamento de projetos sendo gerados pela IA no momento (com persistência no LocalStorage)
   const [generatingProjectJobs, setGeneratingProjectJobs] = useState<Record<string, { status: string; currentModel?: string; attempt?: number; total?: number }>>(() => {
@@ -1118,17 +1224,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
             needsWebsite: l.hasWebsite === false || !l.website
           }));
           setLeadsList(mappedLeads);
-          
-          // AUTO-SAVE TO CRM
-          fetch(`${API_URL}/api/leads/bulk`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({ leads: mappedLeads })
-          }).catch(err => console.warn('Falha no salvamento automático:', err));
-
           return;
         }
       }
@@ -1159,7 +1254,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
     setBusinessName(lead.name);
     setSegment(leadQuery || lead.category || 'Comércio Local');
     setVisualStyle('moderno e escuro neon com foco em conversão');
-    setNewProjectDesc(`Site profissional focado em capturar clientes locais para ${lead.name}, endereço: ${lead.address}, telefone: ${lead.phone}.`);
+    setColorPalette('dark-luxury');
+    setAiSiteTypePreset('institutional');
+    setSelectedPagesList([
+      { name: 'Início', slug: 'index', isHomepage: true },
+      { name: 'Sobre Nós', slug: 'sobre' },
+      { name: 'Serviços', slug: 'servicos' },
+      { name: 'Contato', slug: 'contato' },
+      { name: 'FAQ', slug: 'faq' }
+    ]);
+    setNewProjectDesc(`Site profissional focado em capturar clientes locais para ${lead.name}, endereço: ${lead.address || ''}, telefone: ${lead.phone || ''}.`);
     setShowCreateModal(true);
   };
 
@@ -1473,7 +1577,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
           description: finalDesc,
           isAIPrompt: creationMode === 'ai',
           templateType: creationMode === 'template' ? selectedTemplate : undefined,
-          leadId: targetLeadForProject?.id || undefined
+          leadId: targetLeadForProject?.id || undefined,
+          pagesToGenerate: creationMode === 'ai' ? selectedPagesList : undefined,
+          siteStyle: visualStyle,
+          segment: segment,
+          colorPalette: colorPalette,
+          businessName: businessName.trim() || finalName
         })
       });
 
@@ -1568,6 +1677,63 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
     const proj = projects.find(p => p.id === id);
     if (proj) {
       setProjectToDelete(proj);
+    }
+  };
+
+  const handleRegenerateProject = async (projectId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    try {
+      setGeneratingProjectJobs(prev => ({
+        ...prev,
+        [projectId]: { status: 'processing', currentModel: 'IA (Regenerando)', attempt: 1, total: 1 }
+      }));
+
+      let registeredModelIds: string[] = [];
+      try {
+        const stored = localStorage.getItem('custom_gemini_models');
+        if (stored) registeredModelIds = JSON.parse(stored).map((m: any) => m.id);
+      } catch { }
+
+      const safeHeader = (val: string) => {
+        try { return btoa(unescape(encodeURIComponent(val))); } catch { return ''; }
+      };
+
+      const preferredProvider = localStorage.getItem('preferred_ai_provider') || 'gemini';
+      const selectedModel = preferredProvider === 'ollama' 
+        ? (localStorage.getItem('ollama_selected_model') || 'qwen2.5-coder:1.5b')
+        : (localStorage.getItem('last_selected_ai_model') || '');
+
+      const res = await fetch(`${API_URL}/api/projects/${projectId}/regenerate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'X-Gemini-Key': safeHeader(localStorage.getItem('gemini_api_key') || ''),
+          'X-Gemini-Models': safeHeader(JSON.stringify(registeredModelIds)),
+          'X-Proxy-Url': safeHeader(localStorage.getItem('ai_proxy_url') || ''),
+          'X-AI-Skills': safeHeader(localStorage.getItem('custom_ai_skills') || ''),
+          'X-AI-Provider': preferredProvider,
+          'X-AI-Model': safeHeader(selectedModel),
+          'X-Ollama-Endpoint': localStorage.getItem('ollama_endpoint') || 'http://localhost:11434',
+          'X-Ollama-Model': safeHeader(localStorage.getItem('ollama_selected_model') || ''),
+          'X-Ollama-Low-Spec': localStorage.getItem('ollama_low_spec_mode') || 'true'
+        }
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'Falha ao reiniciar geração do projeto');
+      }
+
+      notify.success('Geração de IA reiniciada utilizando as informações do cliente!', 'IA Reiniciada');
+      fetchProjects();
+    } catch (err: any) {
+      notify.error(err.message, 'Erro na Regeração');
+      setGeneratingProjectJobs(prev => {
+        const copy = { ...prev };
+        delete copy[projectId];
+        return copy;
+      });
     }
   };
 
@@ -2730,6 +2896,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                               <Edit2 className="w-3 h-3" />
                             </button>
                             <button
+                              onClick={(e) => handleRegenerateProject(project.id, e)}
+                              className="p-1.5 text-slate-500 hover:text-amber-400 rounded-lg hover:bg-amber-950/40 transition-all cursor-pointer"
+                              title="Gerar Novamente com IA (usando dados do cliente)"
+                            >
+                              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                            </button>
+                            <button
                               onClick={(e) => { e.stopPropagation(); handleDeleteProject(project.id, e); }}
                               className="p-1.5 text-slate-500 hover:text-red-400 rounded-lg hover:bg-red-950/30 transition-all cursor-pointer"
                               title="Excluir projeto"
@@ -3150,6 +3323,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                           </div>
 
                           <div className="flex items-center gap-3">
+                            {/* Botão para Salvar todos os clientes visíveis da busca no CRM */}
+                            {totalItems > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => handleSaveAllLeadsToCRM(filteredAndSorted)}
+                                className="px-3 py-1.5 bg-yellow-500 hover:bg-yellow-400 text-slate-950 font-bold rounded-xl text-xs transition-all flex items-center gap-1.5 cursor-pointer shadow-md"
+                                title="Salvar estes clientes no CRM"
+                              >
+                                <BookmarkPlus className="w-3.5 h-3.5" />
+                                <span>Salvar {totalItems} no CRM</span>
+                              </button>
+                            )}
+
                             {/* Seletor de itens por página */}
                             <div className="flex items-center gap-1.5 text-slate-400">
                               <span>Por página:</span>
@@ -4176,7 +4362,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
       {/* Create Project Modal */}
       {showCreateModal && (
         <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
-          <div className="w-full max-w-xl bg-[#0f0b18] border border-slate-800 rounded-2xl shadow-2xl p-6 max-h-[90vh] overflow-y-auto">
+          <div className="w-full max-w-2xl bg-[#0f0b18] border border-slate-800 rounded-2xl shadow-2xl p-6 max-h-[92vh] overflow-y-auto">
             <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
               <FolderPlus className="text-purple-400 w-6 h-6" />
               Criar Novo Site
@@ -4287,50 +4473,305 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                   </div>
                 </div>
               ) : creationMode === 'ai' ? (
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-slate-455 mb-2">Nome do Negócio</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="Ex: Bella Napoli"
-                      value={businessName}
-                      onChange={(e) => setBusinessName(e.target.value)}
-                      className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500/50 text-sm text-white"
-                    />
+                <div className="space-y-5">
+                  {/* Top Banner Info */}
+                  <div className="p-3.5 bg-gradient-to-r from-purple-950/40 via-indigo-950/30 to-slate-900/50 border border-purple-500/30 rounded-xl flex items-start gap-3">
+                    <div className="p-2 bg-purple-600/20 text-purple-400 rounded-lg shrink-0 mt-0.5">
+                      <Sparkles className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-purple-200">Gerador de Sites Multi-páginas com IA</h4>
+                      <p className="text-[11px] text-slate-300 leading-relaxed mt-0.5">
+                        A IA irá gerar a página principal (Home), extrair a identidade e o cabeçalho/rodapé padronizados, e construir cada subpágina mantendo 100% de consistência de design e rotas funcionais.
+                      </p>
+                    </div>
                   </div>
 
+                  {/* Vincular Cliente / Lead Opcional */}
                   <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-slate-455 mb-2">Segmento</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="Ex: Restaurante Italiano, Advocacia, SaaS de Marketing"
-                      value={segment}
-                      onChange={(e) => setSegment(e.target.value)}
-                      className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500/50 text-sm text-white"
-                    />
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5 flex items-center justify-between">
+                      <span>Vincular Cliente / Lead Salvo (Opcional)</span>
+                      {targetLeadForProject && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTargetLeadForProject(null);
+                            setBusinessName('');
+                            setSegment('');
+                          }}
+                          className="text-[10px] text-red-400 hover:underline cursor-pointer"
+                        >
+                          Remover vínculo
+                        </button>
+                      )}
+                    </label>
+                    <select
+                      value={targetLeadForProject?.id || ''}
+                      onChange={(e) => {
+                        const selectedId = e.target.value;
+                        if (!selectedId) {
+                          setTargetLeadForProject(null);
+                          return;
+                        }
+                        const lead = savedLeads.find(l => l.id === selectedId) || leadsList.find(l => l.id === selectedId);
+                        if (lead) {
+                          setTargetLeadForProject(lead);
+                          setBusinessName(lead.name);
+                          setSegment(lead.category || 'Serviços');
+                          setNewProjectDesc(`Contato: ${lead.phone || 'N/A'} - ${lead.email || 'N/A'} - Endereço: ${lead.address || 'N/A'}`);
+                        }
+                      }}
+                      className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 focus:border-purple-500 rounded-xl focus:outline-none text-xs text-white"
+                    >
+                      <option value="">-- Nenhum cliente vinculado (Criar do zero) --</option>
+                      {savedLeads.map(lead => (
+                        <option key={lead.id} value={lead.id}>
+                          🏢 {lead.name} {lead.category ? `(${lead.category})` : ''} - {lead.phone || 'Sem tel'}
+                        </option>
+                      ))}
+                    </select>
+                    {targetLeadForProject && (
+                      <p className="text-[11px] text-emerald-400 mt-1 flex items-center gap-1">
+                        <UserCheck className="w-3.5 h-3.5" />
+                        Cliente <strong>{targetLeadForProject.name}</strong> anexado. As informações foram preenchidas automaticamente para a IA!
+                      </p>
+                    )}
                   </div>
 
+                  {/* Nome e Segmento */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+                        Nome do Negócio / Empresa *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="Ex: Bella Napoli Ristorante"
+                        value={businessName}
+                        onChange={(e) => setBusinessName(e.target.value)}
+                        className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 focus:border-purple-500 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500/30 text-xs text-white placeholder-slate-600"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+                        Segmento de Atuação *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="Ex: Restaurante Italiano, Advocacia, SaaS..."
+                        value={segment}
+                        onChange={(e) => setSegment(e.target.value)}
+                        className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 focus:border-purple-500 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500/30 text-xs text-white placeholder-slate-600"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Quick Niche Chips */}
                   <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-slate-455 mb-2">Estilo Visual & Cores</label>
+                    <label className="block text-[11px] font-medium text-slate-400 mb-1.5">Sugestões rápidas de nicho:</label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {[
+                        { label: '🍕 Gastronomia', seg: 'Restaurante e Gastronomia', preset: 'institutional', style: 'Dark Luxury com fotos gastronômicas atraentes' },
+                        { label: '⚖️ Advocacia', seg: 'Escritório de Advocacia e Consultoria Jurídica', preset: 'institutional', style: 'Corporate Navy elegante e alta autoridade' },
+                        { label: '🩺 Saúde & Clínica', seg: 'Clínica Médica e Odontológica', preset: 'institutional', style: 'Clean Emerald com sensação de bem-estar' },
+                        { label: '💻 SaaS & Tech', seg: 'Software como Serviço e Tecnologia', preset: 'saas', style: 'Modern Tech Indigo estilo Linear/Tailwind' },
+                        { label: '🏠 Imobiliária', seg: 'Imobiliária e Corretagem de Imóveis', preset: 'institutional', style: 'Moderno sofisticado com catálogo de imóveis' },
+                        { label: '🏋️ Fitness & Gym', seg: 'Academia e Treinamento Físico', preset: 'institutional', style: 'Dark Neon enérgico de alta conversão' },
+                        { label: '🛍️ E-commerce', seg: 'Loja e Catálogo de Produtos', preset: 'ecommerce', style: 'Modern Minimalist focado em produtos' },
+                        { label: '🎯 Landing Page', seg: 'Infoproduto e Curso Online', preset: 'landing', style: 'Direct Response de Alta Conversão' }
+                      ].map((item) => (
+                        <button
+                          key={item.label}
+                          type="button"
+                          onClick={() => {
+                            setSegment(item.seg);
+                            setVisualStyle(item.style);
+                            applyAiSiteTypePreset(item.preset as any);
+                          }}
+                          className="px-2.5 py-1 bg-slate-900/90 hover:bg-purple-900/40 border border-slate-800 hover:border-purple-500/40 text-[11px] text-slate-300 hover:text-white rounded-lg transition-all cursor-pointer"
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Arquitetura de Múltiplas Páginas */}
+                  <div className="p-3.5 bg-slate-950/80 border border-slate-800/80 rounded-xl space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Layers className="w-4 h-4 text-purple-400" />
+                        <label className="text-xs font-bold uppercase tracking-wider text-slate-200">
+                          Estrutura de Páginas do Site ({selectedPagesList.length} páginas)
+                        </label>
+                      </div>
+                      <span className="text-[10px] text-purple-300 font-semibold bg-purple-950/60 border border-purple-500/30 px-2 py-0.5 rounded-full">
+                        {aiSiteTypePreset === 'institutional' ? 'Institucional' : aiSiteTypePreset === 'saas' ? 'SaaS / Tech' : aiSiteTypePreset === 'ecommerce' ? 'Catálogo' : aiSiteTypePreset === 'landing' ? 'Landing Page' : 'Personalizado'}
+                      </span>
+                    </div>
+
+                    {/* Preset Selector */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => applyAiSiteTypePreset('institutional')}
+                        className={`py-1.5 px-2 text-[11px] font-semibold rounded-lg border transition-all cursor-pointer ${
+                          aiSiteTypePreset === 'institutional'
+                            ? 'bg-purple-600 text-white border-purple-500 shadow-sm'
+                            : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-white'
+                        }`}
+                      >
+                        🏢 Institucional (5)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => applyAiSiteTypePreset('saas')}
+                        className={`py-1.5 px-2 text-[11px] font-semibold rounded-lg border transition-all cursor-pointer ${
+                          aiSiteTypePreset === 'saas'
+                            ? 'bg-purple-600 text-white border-purple-500 shadow-sm'
+                            : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-white'
+                        }`}
+                      >
+                        🚀 SaaS & Tech (5)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => applyAiSiteTypePreset('ecommerce')}
+                        className={`py-1.5 px-2 text-[11px] font-semibold rounded-lg border transition-all cursor-pointer ${
+                          aiSiteTypePreset === 'ecommerce'
+                            ? 'bg-purple-600 text-white border-purple-500 shadow-sm'
+                            : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-white'
+                        }`}
+                      >
+                        🛍️ Catálogo (4)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => applyAiSiteTypePreset('landing')}
+                        className={`py-1.5 px-2 text-[11px] font-semibold rounded-lg border transition-all cursor-pointer ${
+                          aiSiteTypePreset === 'landing'
+                            ? 'bg-purple-600 text-white border-purple-500 shadow-sm'
+                            : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-white'
+                        }`}
+                      >
+                        🎯 Landing (1)
+                      </button>
+                    </div>
+
+                    {/* Selected Pages Chips list */}
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      {selectedPagesList.map((page, idx) => (
+                        <div
+                          key={page.slug}
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border ${
+                            page.isHomepage
+                              ? 'bg-purple-950/70 border-purple-500/50 text-purple-200'
+                              : 'bg-slate-900 border-slate-700/80 text-slate-200'
+                          }`}
+                        >
+                          <span className="text-[10px] text-slate-400 font-mono">#{idx + 1}</span>
+                          <span>{page.name}</span>
+                          {page.isHomepage ? (
+                            <span className="text-[9px] bg-purple-500/30 text-purple-200 px-1 py-0.2 rounded">Principal</span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleRemovePageFromAI(page.slug)}
+                              className="text-slate-400 hover:text-red-400 ml-0.5 cursor-pointer"
+                              title="Remover esta página"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Add Custom Page Input */}
+                    <div className="flex items-center gap-2 pt-1">
+                      <input
+                        type="text"
+                        placeholder="Adicionar outra página (ex: Cardápio, Equipe, Galeria, Blog)..."
+                        value={customPageInput}
+                        onChange={(e) => setCustomPageInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleAddCustomPageToAI();
+                          }
+                        }}
+                        className="flex-1 px-3 py-1.5 bg-slate-900 border border-slate-800 focus:border-purple-500 rounded-lg focus:outline-none text-xs text-white placeholder-slate-600"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleAddCustomPageToAI()}
+                        disabled={!customPageInput.trim()}
+                        className="px-3 py-1.5 bg-slate-800 hover:bg-purple-600 disabled:opacity-40 disabled:hover:bg-slate-800 text-white text-xs font-semibold rounded-lg transition-all flex items-center gap-1 cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        Adicionar
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Estilo Visual & Paletas de Cor */}
+                  <div className="space-y-2">
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400">
+                      Estilo Visual e Paleta de Cores
+                    </label>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      {[
+                        { id: 'dark-luxury', name: '🌌 Dark Luxury', desc: 'Preto obsidiana, bordas neon e requinte' },
+                        { id: 'tech-indigo', name: '⚡ Modern Tech', desc: 'Azul índigo, Tailwind UI, alta clareza' },
+                        { id: 'corporate-navy', name: '🏛️ Corporate Navy', desc: 'Azul marinho, seriedade e autoridade' },
+                        { id: 'emerald-nature', name: '🌿 Emerald Health', desc: 'Verde esmeralda, saúde e frescor' },
+                        { id: 'warm-amber', name: '☀️ Warm Minimalist', desc: 'Minimalismo editorial e sofisticação' },
+                        { id: 'custom-style', name: '🎨 Personalizado', desc: 'Definido no campo abaixo' }
+                      ].map((pal) => (
+                        <button
+                          key={pal.id}
+                          type="button"
+                          onClick={() => {
+                            setColorPalette(pal.id);
+                            if (pal.id !== 'custom-style') {
+                              setVisualStyle(pal.desc);
+                            }
+                          }}
+                          className={`p-2.5 text-left rounded-xl border transition-all cursor-pointer ${
+                            colorPalette === pal.id
+                              ? 'bg-purple-950/40 border-purple-500 text-white shadow-sm'
+                              : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
+                          }`}
+                        >
+                          <div className="text-xs font-bold text-white">{pal.name}</div>
+                          <div className="text-[10px] text-slate-400 mt-0.5 line-clamp-1">{pal.desc}</div>
+                        </button>
+                      ))}
+                    </div>
+
                     <input
                       type="text"
-                      placeholder="Ex: Moderno, Minimalista, Cores Escuras e Roxo"
+                      placeholder="Diretrizes de estilo personalizadas (opcional)"
                       value={visualStyle}
                       onChange={(e) => setVisualStyle(e.target.value)}
-                      className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500/50 text-sm text-white"
+                      className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 focus:border-purple-500 rounded-xl focus:outline-none text-xs text-white placeholder-slate-600 mt-2"
                     />
                   </div>
 
+                  {/* Instruções Extras */}
                   <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-slate-455 mb-2">Instruções Extras</label>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+                      Instruções e Seções Específicas (Opcional)
+                    </label>
                     <textarea
-                      placeholder="Que seções deseja incluir? (Ex: Hero, Depoimentos, Cardápio)"
+                      placeholder="Ex: Incluir botão de WhatsApp flutuante, tabela de preços comparativa, seção de depoimentos de clientes e formulário de contato com validação."
                       value={newProjectDesc}
                       onChange={(e) => setNewProjectDesc(e.target.value)}
-                      rows={3}
-                      className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500/50 text-sm text-white resize-none"
+                      rows={2}
+                      className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 focus:border-purple-500 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500/30 text-xs text-white resize-none placeholder-slate-600"
                     />
                   </div>
                 </div>

@@ -52,8 +52,46 @@ export async function executeAIRequest(
         skillsDirective
       });
     } catch (ollamaErr: any) {
-      console.error(`[AIEngine] Falha na execução com Ollama:`, ollamaErr);
-      throw ollamaErr;
+      console.warn(`[AIEngine] Falha na execução com Ollama (${ollamaErr.message}). Redirecionando automaticamente para o Google Gemini como fallback de alta disponibilidade.`);
+
+      if (options.onProgress) {
+        options.onProgress({
+          status: 'attempting_fallback',
+          model: 'gemini-2.5-flash',
+          provider: 'gemini'
+        });
+      }
+
+      try {
+        const geminiResult = await generateAIResponse(
+          prompt,
+          context,
+          options.apiKey,
+          options.model,
+          options.registeredModels,
+          (model, idx, total) => {
+            if (options.onProgress) {
+              options.onProgress({
+                status: 'attempting',
+                model,
+                provider: 'gemini'
+              });
+            }
+          },
+          options.proxyUrl,
+          options.customSkills,
+          options.attachedFiles
+        );
+
+        return {
+          ...geminiResult,
+          explanation: `[Aviso do Sistema: Servidor Ollama local inacessível (Status 404/Inativo). Processado automaticamente via Google Gemini] ${geminiResult.explanation}`,
+          _usedProvider: 'gemini (fallback de Ollama)'
+        };
+      } catch (geminiErr: any) {
+        console.error(`[AIEngine] Falha tanto no Ollama quanto no Gemini fallback:`, geminiErr);
+        throw ollamaErr;
+      }
     }
   }
 

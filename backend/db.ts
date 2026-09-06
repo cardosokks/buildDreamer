@@ -118,6 +118,12 @@ interface MockProduct {
   id: string;
   name: string;
   price: number;
+  description?: string | null;
+  category?: string | null;
+  sku?: string | null;
+  status?: string | null;
+  billingType?: string | null;
+  costPrice?: number | null;
   siteUrl?: string | null;
   projectId?: string | null;
   userId: string;
@@ -515,6 +521,12 @@ class InMemoryDatabase {
         id,
         name: data.name,
         price: Number(data.price),
+        description: data.description !== undefined ? data.description : null,
+        category: data.category || 'Geral',
+        sku: data.sku || null,
+        status: data.status || 'ACTIVE',
+        billingType: data.billingType || 'ONE_TIME',
+        costPrice: data.costPrice !== undefined && data.costPrice !== null && data.costPrice !== '' ? Number(data.costPrice) : null,
         siteUrl: data.siteUrl || null,
         projectId: data.projectId || null,
         userId: data.userId,
@@ -815,7 +827,11 @@ class InMemoryDatabase {
 
   media = {
     findMany: async ({ where }: { where: any }) => {
-      return Array.from(this.medias.values()).filter(m => m.userId === where.userId);
+      return Array.from(this.medias.values()).filter(m => !where || !where.userId || m.userId === where.userId);
+    },
+    findUnique: async ({ where }: { where: { id: string } }) => {
+      const m = this.medias.get(where.id);
+      return m ? { ...m } : null;
     },
     create: async ({ data }: { data: any }) => {
       const id = `media_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
@@ -841,6 +857,21 @@ class InMemoryDatabase {
         return { ...m };
       }
       return null;
+    },
+    deleteMany: async ({ where }: { where: { id?: { in: string[] }, userId?: string } }) => {
+      let count = 0;
+      const ids = where?.id?.in || [];
+      const userId = where?.userId;
+      for (const [id, m] of this.medias.entries()) {
+        const matchesId = ids.length === 0 || ids.includes(id);
+        const matchesUser = !userId || m.userId === userId;
+        if (matchesId && matchesUser) {
+          this.medias.delete(id);
+          count++;
+        }
+      }
+      this.save();
+      return { count };
     }
   };
 

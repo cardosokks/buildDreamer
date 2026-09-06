@@ -7,7 +7,8 @@ import {
   startWebsiteScrapeJob, 
   processCustomRemasterGenerationJob,
   detectMedia,
-  extractAndBundlePageComponents
+  extractAndBundlePageComponents,
+  extractNavbarAndFooter
 } from '../services/siteRemaster';
 import { projectJobsQueue } from './projects';
 import { prisma } from '../db';
@@ -377,7 +378,7 @@ router.get('/chat-job/:jobId', (req, res: any) => {
   return res.json(job);
 });
 
-// POST /api/ai/generate-page - Gerar nova página do zero
+// POST /api/ai/generate-page - Gerar nova página do zero integrada ao projeto existente
 router.post('/generate-page', async (req: AuthenticatedRequest, res: any) => {
   try {
     const { prompt, projectId, name, slug } = req.body;
@@ -390,14 +391,63 @@ router.post('/generate-page', async (req: AuthenticatedRequest, res: any) => {
     const customModel = decodeHeader(req.headers['x-gemini-model']) || undefined;
     const ollamaEndpoint = decodeHeader(req.headers['x-ollama-endpoint']) || undefined;
 
+    // Buscar projeto e páginas existentes para manter 100% de consistência visual
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      include: { pages: true }
+    });
+
+    const homePage = project?.pages.find(p => p.isHomepage || p.slug === 'index') || project?.pages[0];
+    let navbarHtml = '';
+    let footerHtml = '';
+    let globalCss = '';
+    let globalJs = '';
+
+    if (homePage?.html) {
+      const extracted = extractNavbarAndFooter(homePage.html);
+      navbarHtml = extracted.navbarHtml;
+      footerHtml = extracted.footerHtml;
+      globalCss = homePage.css || '';
+      globalJs = homePage.js || '';
+    }
+
+    const pageSlug = slug || (name ? name.toLowerCase().replace(/[^a-z0-9]+/g, '-') : `page-${Date.now()}`);
+    const pageName = name || 'Nova Página';
+
+    const allRoutes = project?.pages ? [
+      ...project.pages.map(p => ({ name: p.name, href: p.isHomepage ? 'index.html' : `${p.slug}.html` })),
+      { name: pageName, href: `${pageSlug}.html` }
+    ] : [{ name: 'Home', href: 'index.html' }, { name: pageName, href: `${pageSlug}.html` }];
+
+    const navLinksDoc = allRoutes.map(r => `- "${r.name}" -> href="${r.href}"`).join('\n');
+
+    const fullPrompt = `
+Você é o Engenheiro Frontend Líder e Designer Master do projeto "${project?.name || 'Website'}".
+Sua tarefa é criar a subpágina "${pageName}" (slug: ${pageSlug}) com nível de excelência internacional.
+
+TEMA E OBJETIVO DA PÁGINA:
+${prompt}
+
+DIRETRIZES DE DESIGN SYSTEM:
+1. Mantenha a mesma identidade visual, paleta de cores e tipografia de alto padrão da página principal.
+2. NAVBAR E FOOTER:
+${navbarHtml ? `Utilize a estrutura de Navbar padronizada abaixo (destaque o link "${pageName}" como ativo):\n${navbarHtml}\n` : 'Crie um Header/Navbar moderno com links para as páginas.'}
+${footerHtml ? `Utilize o Footer padronizado abaixo:\n${footerHtml}\n` : 'Crie um Footer completo multicolunas.'}
+
+ROTAS DO SITE:
+${navLinksDoc}
+
+REGRAS:
+- Retorne JSON estrito: { "html": "...", "css": "...", "js": "...", "explanation": "..." }
+- HTML com classes Tailwind semânticas. NUNCA coloque tags <style> ou <script> dentro do HTML.
+- Inclua botão flutuante de WhatsApp e interações funcionais no JS.
+    `;
+
     const result = await executeAIRequest(
-      `Crie uma página completa de alta conversão e design ultra moderno com o tema: ${prompt}`,
-      { html: '<div id="canvas-root"></div>', css: '', js: '' },
+      fullPrompt,
+      { html: '<div id="canvas-root"></div>', css: globalCss, js: globalJs },
       { provider, apiKey: customApiKey, model: customModel, ollamaEndpoint }
     );
-
-    const pageSlug = slug || (name ? name.toLowerCase().replace(/[^a-z0-9]/g, '-') : `page-${Date.now()}`);
-    const pageName = name || 'Nova Página';
 
     const newPage = await prisma.page.create({
       data: {
@@ -405,8 +455,8 @@ router.post('/generate-page', async (req: AuthenticatedRequest, res: any) => {
         slug: pageSlug,
         title: pageName,
         html: result.html,
-        css: result.css,
-        js: result.js,
+        css: [globalCss, result.css || ''].filter(Boolean).join('\n\n'),
+        js: [globalJs, result.js || ''].filter(Boolean).join('\n\n'),
         projectId,
         isHomepage: false
       }

@@ -33,6 +33,12 @@ export const MediaLibrarySidebar: React.FC<MediaLibrarySidebarProps> = ({
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [deleting, setDeleting] = useState(false);
+  const [deleteConfirmModal, setDeleteConfirmModal] = useState<{
+    isOpen: boolean;
+    type: 'single' | 'batch';
+    id?: string;
+    count?: number;
+  }>({ isOpen: false, type: 'single' });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchMedia = async () => {
@@ -108,60 +114,70 @@ export const MediaLibrarySidebar: React.FC<MediaLibrarySidebarProps> = ({
     }
   };
 
-  const handleDeleteMedia = async (id: string, e: React.MouseEvent) => {
+  const handleDeleteMedia = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!window.confirm('Deseja excluir esta imagem da biblioteca permanentemente?')) return;
-
-    try {
-      const res = await fetch(`${API_URL}/api/media/${id}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) {
-        setMediaList(prev => prev.filter(m => m.id !== id));
-        setSelectedIds(prev => {
-          const next = new Set(prev);
-          next.delete(id);
-          return next;
-        });
-        notify.success('Imagem excluída com sucesso.', 'Exclusão');
-      } else {
-        notify.error('Falha ao excluir a imagem.', 'Erro');
-      }
-    } catch (err) {
-      console.error('Erro ao excluir mídia:', err);
-      notify.error('Erro de conexão ao excluir imagem.', 'Erro');
-    }
+    e.preventDefault();
+    setDeleteConfirmModal({ isOpen: true, type: 'single', id });
   };
 
-  const handleDeleteSelected = async () => {
+  const handleDeleteSelected = () => {
     if (selectedIds.size === 0) return;
-    if (!window.confirm(`Deseja excluir permanentemente as ${selectedIds.size} imagens selecionadas?`)) return;
+    setDeleteConfirmModal({ isOpen: true, type: 'batch', count: selectedIds.size });
+  };
 
-    setDeleting(true);
-    try {
-      const idsArray = Array.from(selectedIds);
-      const res = await fetch(`${API_URL}/api/media/batch-delete`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ ids: idsArray })
-      });
-
-      if (res.ok) {
-        setMediaList(prev => prev.filter(m => !selectedIds.has(m.id)));
-        setSelectedIds(new Set());
-        notify.success(`${idsArray.length} imagens excluídas com sucesso.`, 'Exclusão em Lote');
-      } else {
-        notify.error('Falha ao excluir imagens selecionadas.', 'Erro');
+  const executeDelete = async () => {
+    if (deleteConfirmModal.type === 'single' && deleteConfirmModal.id) {
+      const id = deleteConfirmModal.id;
+      setDeleteConfirmModal({ isOpen: false, type: 'single' });
+      try {
+        const res = await fetch(`${API_URL}/api/media/${id}`, {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+          setMediaList(prev => prev.filter(m => m.id !== id));
+          setSelectedIds(prev => {
+            const next = new Set(prev);
+            next.delete(id);
+            return next;
+          });
+          notify.success('Imagem excluída com sucesso.', 'Exclusão');
+        } else {
+          const errorData = await res.json().catch(() => ({}));
+          notify.error(errorData.error || 'Falha ao excluir a imagem do servidor.', 'Erro');
+        }
+      } catch (err) {
+        console.error('Erro ao excluir mídia:', err);
+        notify.error('Erro de conexão ao excluir imagem.', 'Erro');
       }
-    } catch (err) {
-      console.error('Erro na exclusão em lote:', err);
-      notify.error('Erro ao processar exclusão em lote.', 'Erro');
-    } finally {
-      setDeleting(false);
+    } else if (deleteConfirmModal.type === 'batch') {
+      const count = selectedIds.size;
+      setDeleteConfirmModal({ isOpen: false, type: 'single' });
+      setDeleting(true);
+      try {
+        const idsArray = Array.from(selectedIds);
+        const res = await fetch(`${API_URL}/api/media/batch-delete`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ ids: idsArray })
+        });
+
+        if (res.ok) {
+          setMediaList(prev => prev.filter(m => !selectedIds.has(m.id)));
+          setSelectedIds(new Set());
+          notify.success(`${count} imagens excluídas com sucesso.`, 'Exclusão em Lote');
+        } else {
+          notify.error('Falha ao excluir imagens selecionadas.', 'Erro');
+        }
+      } catch (err) {
+        console.error('Erro na exclusão em lote:', err);
+        notify.error('Erro ao processar exclusão em lote.', 'Erro');
+      } finally {
+        setDeleting(false);
+      }
     }
   };
 
@@ -368,24 +384,25 @@ export const MediaLibrarySidebar: React.FC<MediaLibrarySidebarProps> = ({
                     <button
                       type="button"
                       onClick={(e) => toggleSelectOne(media.id, e)}
-                      className={`absolute top-2 left-2 z-10 p-1 rounded-md transition-all shadow-sm ${
+                      className={`absolute top-2 left-2 z-20 p-1.5 rounded-lg transition-all shadow-md ${
                         isSelected 
                           ? 'bg-purple-600 text-white opacity-100' 
-                          : 'bg-black/50 text-white opacity-0 group-hover:opacity-100 hover:bg-black/70'
+                          : 'bg-slate-950/80 text-slate-300 border border-slate-800 opacity-0 group-hover:opacity-100 hover:bg-slate-900 hover:text-white'
                       }`}
                       title={isSelected ? "Desmarcar" : "Selecionar"}
                     >
                       {isSelected ? <CheckSquare className="w-3.5 h-3.5" /> : <Square className="w-3.5 h-3.5" />}
                     </button>
 
-                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5 p-2 backdrop-blur-[1px]">
+                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5 p-2 backdrop-blur-[1px] z-10">
                       {onInsertImageToCanvas && (
                         <button
+                          type="button"
                           onClick={(e) => {
                             e.stopPropagation();
                             onInsertImageToCanvas(fullUrl, media.name);
                           }}
-                          className="p-1.5 bg-purple-600 text-white rounded-lg hover:bg-purple-500 transition-colors shadow-sm"
+                          className="p-1.5 bg-purple-600 text-white rounded-lg hover:bg-purple-500 transition-colors shadow-sm cursor-pointer"
                           title="Inserir no Canvas do Editor"
                         >
                           <Plus className="w-3.5 h-3.5" />
@@ -393,16 +410,18 @@ export const MediaLibrarySidebar: React.FC<MediaLibrarySidebarProps> = ({
                       )}
 
                       <button
+                        type="button"
                         onClick={(e) => handleCopyUrl(media.url, media.id, e)}
-                        className="p-1.5 bg-slate-800 text-slate-200 rounded-lg hover:bg-slate-700 transition-colors"
+                        className="p-1.5 bg-slate-800 text-slate-200 rounded-lg hover:bg-slate-700 transition-colors cursor-pointer"
                         title="Copiar URL da imagem"
                       >
                         {copiedId === media.id ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                       </button>
 
                       <button
+                        type="button"
                         onClick={(e) => handleDeleteMedia(media.id, e)}
-                        className="p-1.5 bg-red-950/60 text-red-400 border border-red-500/30 rounded-lg hover:bg-red-900 transition-colors"
+                        className="p-1.5 bg-red-900/80 text-red-200 border border-red-500/40 rounded-lg hover:bg-red-600 hover:text-white transition-colors cursor-pointer shadow-sm"
                         title="Excluir da biblioteca"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -426,6 +445,48 @@ export const MediaLibrarySidebar: React.FC<MediaLibrarySidebarProps> = ({
           </div>
         )}
       </div>
+
+      {/* Modal de Confirmação de Exclusão */}
+      {deleteConfirmModal.isOpen && (
+        <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-[#120d1e] border border-purple-500/30 rounded-2xl p-6 max-w-sm w-full shadow-2xl space-y-4">
+            <div className="flex items-center gap-3 text-red-400">
+              <div className="p-2.5 bg-red-950/60 border border-red-500/30 rounded-xl">
+                <Trash2 className="w-5 h-5 text-red-400" />
+              </div>
+              <div>
+                <h4 className="text-white font-bold text-sm">Confirmar Exclusão</h4>
+                <p className="text-xs text-slate-400">Esta ação é permanente e irreversível</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              {deleteConfirmModal.type === 'single' 
+                ? 'Tem certeza de que deseja excluir permanentemente esta imagem da biblioteca?'
+                : `Tem certeza de que deseja excluir permanentemente as ${deleteConfirmModal.count} imagens selecionadas?`
+              }
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmModal({ isOpen: false, type: 'single' })}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-xl transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={executeDelete}
+                className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-xs font-bold rounded-xl transition-colors shadow-lg shadow-red-600/30 flex items-center gap-1.5 cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Sim, Excluir</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </aside>
   );
 };

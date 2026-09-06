@@ -20,7 +20,7 @@ router.get('/', async (req: AuthenticatedRequest, res) => {
 // Create a product
 router.post('/', async (req: AuthenticatedRequest, res) => {
   try {
-    const { name, price, siteUrl, projectId } = req.body;
+    const { name, price, description, category, sku, status, billingType, costPrice, siteUrl, projectId } = req.body;
     if (!name || price === undefined) {
       return res.status(400).json({ error: 'Nome e preço são obrigatórios' });
     }
@@ -29,8 +29,14 @@ router.post('/', async (req: AuthenticatedRequest, res) => {
       data: {
         name,
         price: Number(price),
-        siteUrl,
-        projectId,
+        description: description || null,
+        category: category || 'Geral',
+        sku: sku || null,
+        status: status || 'ACTIVE',
+        billingType: billingType || 'ONE_TIME',
+        costPrice: costPrice !== undefined && costPrice !== null && costPrice !== '' ? Number(costPrice) : null,
+        siteUrl: siteUrl || null,
+        projectId: projectId || null,
         userId: req.userId!
       }
     });
@@ -44,16 +50,23 @@ router.post('/', async (req: AuthenticatedRequest, res) => {
 router.put('/:id', async (req: AuthenticatedRequest, res) => {
   try {
     const { id } = req.params;
-    const { name, price, siteUrl, projectId } = req.body;
+    const { name, price, description, category, sku, status, billingType, costPrice, siteUrl, projectId } = req.body;
+
+    const updateData: any = {};
+    if (name !== undefined) updateData.name = name;
+    if (price !== undefined) updateData.price = Number(price);
+    if (description !== undefined) updateData.description = description;
+    if (category !== undefined) updateData.category = category;
+    if (sku !== undefined) updateData.sku = sku;
+    if (status !== undefined) updateData.status = status;
+    if (billingType !== undefined) updateData.billingType = billingType;
+    if (costPrice !== undefined) updateData.costPrice = costPrice !== null && costPrice !== '' ? Number(costPrice) : null;
+    if (siteUrl !== undefined) updateData.siteUrl = siteUrl;
+    if (projectId !== undefined) updateData.projectId = projectId;
 
     const product = await prisma.product.update({
       where: { id },
-      data: {
-        name,
-        price: price !== undefined ? Number(price) : undefined,
-        siteUrl,
-        projectId
-      }
+      data: updateData
     });
     res.json(product);
   } catch (error: any) {

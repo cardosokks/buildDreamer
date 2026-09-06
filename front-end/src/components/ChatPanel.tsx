@@ -340,8 +340,11 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
             }
             return m;
           });
-          if (changed) localStorage.setItem('custom_gemini_models', JSON.stringify(parsed));
-          return parsed;
+          const unique = parsed.filter((m: any, idx: number, arr: any[]) => arr.findIndex(t => t.id === m.id) === idx);
+          if (changed || unique.length !== parsed.length) {
+            localStorage.setItem('custom_gemini_models', JSON.stringify(unique));
+          }
+          return unique;
         }
       } catch {}
     }
@@ -422,14 +425,24 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       const stored = localStorage.getItem('custom_gemini_models');
       if (stored) {
         try {
-          const parsed = JSON.parse(stored);
+          let parsed = JSON.parse(stored);
           if (Array.isArray(parsed) && parsed.length > 0) {
-            setAvailableModels(parsed);
+            parsed = parsed.map((m: any) => {
+              if (m.id === 'gemini-1.5-flash' || m.id === 'gemini-2.0-flash' || m.id === 'gemini-1.0-pro') {
+                return { ...m, id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash' };
+              }
+              if (m.id === 'gemini-1.5-pro') {
+                return { ...m, id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro' };
+              }
+              return m;
+            });
+            const unique = parsed.filter((m: any, idx: number, arr: any[]) => arr.findIndex(t => t.id === m.id) === idx);
+            setAvailableModels(unique);
             const savedLastModel = localStorage.getItem('last_selected_ai_model');
-            if (savedLastModel && parsed.some((m: any) => m.id === savedLastModel)) {
+            if (savedLastModel && unique.some((m: any) => m.id === savedLastModel)) {
               setSelectedModel(savedLastModel);
-            } else if (!parsed.some((m: any) => m.id === selectedModel)) {
-              setSelectedModel(parsed[0].id);
+            } else if (!unique.some((m: any) => m.id === selectedModel)) {
+              setSelectedModel(unique[0].id);
             }
           }
         } catch {}
@@ -814,7 +827,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
             className="bg-slate-900 border border-slate-800 text-[10px] text-purple-300 font-mono rounded-lg px-2 py-1 focus:outline-none focus:border-purple-500 cursor-pointer max-w-[135px] truncate"
             title="Selecionar modelo de IA (lembrado automaticamente)"
           >
-            {availableModels.map(m => (
+            {availableModels.filter((m, index, self) => index === self.findIndex(t => t.id === m.id)).map(m => (
               <option key={m.id} value={m.id} className="bg-slate-950 text-white">
                 {m.name}
               </option>

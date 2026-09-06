@@ -174,19 +174,29 @@ router.delete('/:id', authenticateToken, async (req: AuthenticatedRequest, res: 
   try {
     const { id } = req.params;
 
-    const media = await prisma.media.findFirst({
-      where: { id, userId: req.userId }
+    const media = await prisma.media.findUnique({
+      where: { id }
     });
 
-    if (media) {
-      await prisma.media.delete({
-        where: { id }
-      });
+    if (!media) {
+      return res.status(404).json({ error: 'Imagem não encontrada.' });
     }
 
-    return res.json({ success: true, id });
+    if (media.userId && req.userId && media.userId !== req.userId) {
+      const user = await prisma.user.findUnique({ where: { id: req.userId } });
+      if (user?.role !== 'ADMIN' && user?.role !== 'SUPER_ADMIN') {
+        return res.status(403).json({ error: 'Permissão negada para excluir esta imagem.' });
+      }
+    }
+
+    await prisma.media.delete({
+      where: { id }
+    });
+
+    return res.json({ success: true, id, message: 'Imagem excluída com sucesso.' });
   } catch (error: any) {
-    return res.status(500).json({ error: error.message });
+    console.error(`[Media Route] Erro ao excluir mídia ${req.params.id}:`, error);
+    return res.status(500).json({ error: error.message || 'Falha ao excluir imagem do banco de dados.' });
   }
 });
 
@@ -197,15 +207,26 @@ router.post('/batch-delete', authenticateToken, async (req: AuthenticatedRequest
     if (!Array.isArray(ids) || ids.length === 0) {
       return res.status(400).json({ error: 'Lista de IDs inválida.' });
     }
-    await prisma.media.deleteMany({
-      where: {
-        id: { in: ids },
-        userId: req.userId
-      }
+
+    const user = req.userId ? await prisma.user.findUnique({ where: { id: req.userId } }) : null;
+    const isAdmin = user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN';
+
+    const whereCondition: any = {
+      id: { in: ids }
+    };
+
+    if (!isAdmin && req.userId) {
+      whereCondition.userId = req.userId;
+    }
+
+    const deleteResult = await prisma.media.deleteMany({
+      where: whereCondition
     });
-    return res.json({ success: true, count: ids.length });
+
+    return res.json({ success: true, count: deleteResult.count });
   } catch (error: any) {
-    return res.status(500).json({ error: error.message });
+    console.error('[Media Route] Erro na exclusão em lote:', error);
+    return res.status(500).json({ error: error.message || 'Falha ao excluir mídias em lote.' });
   }
 });
 

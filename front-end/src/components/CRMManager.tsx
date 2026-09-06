@@ -35,14 +35,7 @@ import { API_URL, safeJson } from '../config';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { useNotification } from '../context/NotificationContext';
-
-interface Product {
-  id: string;
-  name: string;
-  price: number;
-  siteUrl?: string;
-  projectId?: string;
-}
+import { ProductManagerModal, Product } from './ProductManagerModal';
 
 interface Sale {
   id: string;
@@ -483,10 +476,10 @@ export const CRMManager: React.FC<CRMManagerProps> = ({ onOpenRemasterModal, onO
           </button>
           <button
             onClick={() => setShowProductModal(true)}
-            className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer"
           >
             <Package className="w-3.5 h-3.5" />
-            Criar Produtos
+            Catálogo & Produtos
           </button>
           <button
             onClick={() => setShowHistoryModal(true)}
@@ -811,104 +804,24 @@ export const CRMManager: React.FC<CRMManagerProps> = ({ onOpenRemasterModal, onO
         </div>
       )}
       {/* Product Management Modal */}
-      {showProductModal && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="bg-[#0a0a0c] border border-slate-800 w-full max-w-xl rounded-3xl shadow-2xl p-6 space-y-6">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                <Package className="text-indigo-400 w-5 h-5" />
-                Gerenciar Produtos
-              </h3>
-              <button onClick={() => setShowProductModal(false)} className="text-slate-500 hover:text-white p-2 hover:bg-slate-800 rounded-xl cursor-pointer">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateProduct} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase">Nome do Produto</label>
-                  <input
-                    type="text"
-                    required
-                    value={productForm.name}
-                    onChange={e => setProductForm({...productForm, name: e.target.value})}
-                    className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white text-sm focus:border-indigo-500 focus:outline-none"
-                    placeholder="Ex: Site Institucional"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase">Preço (R$)</label>
-                  <input
-                    type="number"
-                    required
-                    value={productForm.price}
-                    onChange={e => setProductForm({...productForm, price: e.target.value})}
-                    className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white text-sm focus:border-indigo-500 focus:outline-none"
-                    placeholder="0.00"
-                  />
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-bold text-slate-500 uppercase">Vincular a um Site (Link ou Projeto)</label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={productForm.siteUrl}
-                    onChange={e => setProductForm({...productForm, siteUrl: e.target.value})}
-                    className="flex-1 px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white text-sm focus:border-indigo-500 focus:outline-none"
-                    placeholder="Cole o link ou selecione ao lado"
-                  />
-                  <select
-                    value={productForm.projectId}
-                    onChange={e => {
-                      const pid = e.target.value;
-                      const project = projects.find(p => p.id === pid);
-                      let siteUrl = productForm.siteUrl;
-                      if (project) {
-                        siteUrl = project.domain ? `https://${project.domain}` : `https://preview.meusite.com/${project.id}`;
-                      }
-                      setProductForm({
-                        ...productForm,
-                        projectId: pid,
-                        siteUrl: siteUrl
-                      });
-                    }}
-                    className="w-40 px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white cursor-pointer"
-                  >
-                    <option value="">Meus Sites</option>
-                    {projects.map(p => (
-                      <option key={p.id} value={p.id}>{p.name}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <button type="submit" className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl transition-all cursor-pointer">
-                Criar Produto
-              </button>
-            </form>
-
-            <div className="border-t border-slate-800 pt-4 max-h-60 overflow-y-auto space-y-2">
-              <h4 className="text-xs font-bold text-slate-400 uppercase mb-3 tracking-widest">Produtos Cadastrados</h4>
-              {products.length === 0 ? (
-                <div className="text-center py-4 text-slate-600 text-xs italic">Nenhum produto cadastrado.</div>
-              ) : products.map(p => (
-                <div key={p.id} className="flex items-center justify-between p-3 bg-slate-900/50 rounded-xl border border-slate-800 hover:border-indigo-500/30 transition-all">
-                  <div>
-                    <div className="text-sm font-bold text-white">{p.name}</div>
-                    <div className="text-xs text-slate-500">R$ {p.price.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
-                  </div>
-                  {p.siteUrl && (
-                    <a href={p.siteUrl} target="_blank" rel="noreferrer" className="p-2 text-indigo-400 hover:bg-indigo-400/10 rounded-lg transition-all" title="Ver Link">
-                      <ExternalLink className="w-4 h-4" />
-                    </a>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
+      <ProductManagerModal
+        isOpen={showProductModal}
+        onClose={() => setShowProductModal(false)}
+        products={products}
+        sales={sales}
+        projects={projects}
+        onRefreshProducts={fetchLeads}
+        onSelectProductForSale={(prod) => {
+          setShowProductModal(false);
+          setSaleForm({
+            leadId: selectedLead?.id || '',
+            productId: prod.id,
+            notes: ''
+          });
+          setShowSaleModal(true);
+        }}
+        onOpenProject={onOpenProject}
+      />
 
       {/* Sale Registration Modal */}
       {showSaleModal && (

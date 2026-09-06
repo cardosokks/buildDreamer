@@ -14,13 +14,38 @@ const decodeHeader = (val: string | string[] | undefined): string => {
   try { return decodeURIComponent(escape(atob(str))); } catch { return str; }
 };
 
-export const projectJobsQueue: Record<string, { 
-  status: 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled'; 
-  currentModel?: string;
-  attempt?: number;
-  total?: number;
-  error?: string;
-}> = {};
+export const projectJobsQueue: Record<string, any> = new Proxy({}, {
+  get(target, prop: string) {
+    if (typeof prop !== 'string') return undefined;
+    const activeJob = aiQueueManager.getActiveJob(prop);
+    if (activeJob) {
+      return {
+        status: activeJob.status,
+        currentModel: activeJob.currentModel,
+        error: activeJob.error
+      };
+    }
+    const queue = aiQueueManager.getQueueList(prop);
+    if (queue.length > 0) {
+      const last = queue[queue.length - 1];
+      return {
+        status: last.status,
+        currentModel: last.currentModel,
+        error: last.error
+      };
+    }
+    return undefined;
+  },
+  set(target, prop: string, value: any) {
+    if (typeof prop === 'string' && value && value.status === 'cancelled') {
+      const activeJob = aiQueueManager.getActiveJob(prop);
+      if (activeJob) {
+        aiQueueManager.cancelItem(prop, activeJob.id);
+      }
+    }
+    return true;
+  }
+});
 
 // Background task worker method
 async function processAIProjectGeneration(
@@ -131,8 +156,9 @@ router.get('/jobs', async (req: AuthenticatedRequest, res: any) => {
 // Cancel Job (alias via /jobs/:projectId/cancel)
 router.post('/jobs/:projectId/cancel', async (req: AuthenticatedRequest, res: any) => {
   const projectId = req.params.projectId as string;
-  if (projectJobsQueue[projectId]) {
-    projectJobsQueue[projectId].status = 'cancelled';
+  const activeJob = aiQueueManager.getActiveJob(projectId);
+  if (activeJob) {
+    aiQueueManager.cancelItem(projectId, activeJob.id);
   }
   return res.json({ message: 'Job cancelled successfully' });
 });
@@ -159,7 +185,7 @@ router.get('/', async (req: AuthenticatedRequest, res: any) => {
     });
 
     const enrichedProjects = projects.map(p => {
-      const activeJob = projectJobsQueue[p.id];
+      const activeJob = aiQueueManager.getActiveJob(p.id);
       return {
         ...p,
         aiJob: (activeJob && (activeJob.status === 'pending' || activeJob.status === 'processing')) ? activeJob : null
@@ -178,7 +204,19 @@ import { templates } from '../data/templates';
 // Create Project
 router.post('/', async (req: AuthenticatedRequest, res: any) => {
   try {
-    const { name, description, isAIPrompt, templateType, remasterWebsiteUrl, leadId } = req.body;
+    const {
+      name,
+      description,
+      isAIPrompt,
+      templateType,
+      remasterWebsiteUrl,
+      leadId,
+      pagesToGenerate,
+      siteStyle,
+      segment,
+      colorPalette,
+      businessName
+    } = req.body;
     if (!name) {
       return res.status(400).json({ error: 'Project name is required' });
     }
@@ -204,6 +242,35 @@ router.post('/', async (req: AuthenticatedRequest, res: any) => {
 </div>`;
     }
 
+    // Preparar lista de páginas iniciais
+    let pagesCreateData: any[] = [];
+    if (Array.isArray(pagesToGenerate) && pagesToGenerate.length > 0) {
+      pagesCreateData = pagesToGenerate.map((p: any, idx: number) => {
+        const isHome = !!p.isHomepage || p.slug === 'index' || idx === 0;
+        const pageName = p.name || (isHome ? 'Home' : `Página ${idx + 1}`);
+        const pageSlug = p.slug || (isHome ? 'index' : (p.name ? p.name.toLowerCase().replace(/[^a-z0-9]+/g, '-') : `pagina-${idx + 1}`));
+        return {
+          name: pageName,
+          slug: pageSlug,
+          title: pageName,
+          isHomepage: isHome,
+          html: initialHtml,
+          css: initialCss,
+          js: initialJs
+        };
+      });
+    } else {
+      pagesCreateData = [{
+        name: 'Home',
+        slug: 'index',
+        title: 'Home',
+        isHomepage: true,
+        html: initialHtml,
+        css: initialCss,
+        js: initialJs
+      }];
+    }
+
     const project = await prisma.project.create({
       data: {
         name,
@@ -215,15 +282,7 @@ router.post('/', async (req: AuthenticatedRequest, res: any) => {
           }
         },
         pages: {
-          create: {
-            name: 'Home',
-            slug: 'index',
-            title: 'Home',
-            isHomepage: true,
-            html: initialHtml,
-            css: initialCss,
-            js: initialJs
-          }
+          create: pagesCreateData
         }
       },
       include: {
@@ -304,41 +363,59 @@ router.post('/', async (req: AuthenticatedRequest, res: any) => {
 
     // 1. Caso seja remasterização/melhoria de site existente (analisa páginas e subpáginas)
     if (remasterWebsiteUrl) {
-      projectJobsQueue[project.id] = { status: 'pending' };
-      processWebsiteRemasterJob(
+      aiQueueManager.enqueue(
         project.id,
-        remasterWebsiteUrl,
-        name,
-        clientGeminiKey,
-        registeredModels,
-        clientProxyUrl,
-        (status, attempt, total) => {
-          projectJobsQueue[project.id] = {
-            status: 'processing',
-            currentModel: status,
-            attempt,
-            total
-          };
-        },
-        customSkills,
-        aiProvider,
-        ollamaEndpoint,
-        customModel,
-        lowSpecMode,
-        userId
-      ).then(() => {
-        projectJobsQueue[project.id] = { status: 'completed' };
-      }).catch((err) => {
-        projectJobsQueue[project.id] = { status: 'failed', error: err.message };
-      });
+        'site_remaster',
+        `Remasterizar site: ${remasterWebsiteUrl}`,
+        undefined,
+        {
+          remasterWebsiteUrl,
+          businessName: name,
+          customApiKey: clientGeminiKey,
+          registeredModels,
+          customProxyUrl: clientProxyUrl,
+          customSkills,
+          aiProvider,
+          ollamaEndpoint,
+          customModel,
+          lowSpecMode,
+          userId
+        }
+      );
     } 
     // 2. Geração normal com IA a partir de prompt
-    else if (isAIPrompt || description?.includes('Segmento:')) {
-      const aiPromptMessage = `Gere um mockup completo e profissional de site para a empresa "${name}". Descrição detalhada do negócio: ${description}. Crie uma paleta elegante, seções funcionais (Hero, Serviços, Contato, FAQ) e um design moderno responsivo.`;
+    else if (isAIPrompt || description?.includes('Segmento:') || (Array.isArray(pagesToGenerate) && pagesToGenerate.length > 0)) {
+      const targetBusinessName = (businessName || name || '').trim();
+      const pagesCount = Array.isArray(pagesToGenerate) && pagesToGenerate.length > 0 ? pagesToGenerate.length : 1;
+      const pagesNames = Array.isArray(pagesToGenerate) && pagesToGenerate.length > 0 ? pagesToGenerate.map((p: any) => p.name).join(', ') : 'Home';
       
-      // Enqueue job immediately on process memory thread
-      projectJobsQueue[project.id] = { status: 'pending' };
-      processAIProjectGeneration(project.id, aiPromptMessage, clientGeminiKey, customModel, registeredModels, clientProxyUrl, customSkills, aiProvider, ollamaEndpoint, lowSpecMode);
+      const aiPromptMessage = `Gere um website completo, espetacular e ultra profissional de ${pagesCount} página(s) (${pagesNames}) para a empresa "${targetBusinessName}".
+Segmento: ${segment || 'Geral'}.
+Estilo Visual: ${siteStyle || 'Moderno'}.
+Paleta de Cores: ${colorPalette || 'Elegante'}.
+Descrição e Objetivos: ${description || 'Site institucional de alta conversão'}.`;
+      
+      aiQueueManager.enqueue(
+        project.id,
+        'site_generation',
+        aiPromptMessage,
+        undefined,
+        {
+          customApiKey: clientGeminiKey,
+          customModel,
+          registeredModels,
+          customProxyUrl: clientProxyUrl,
+          customSkills,
+          aiProvider,
+          ollamaEndpoint,
+          lowSpecMode,
+          pagesToGenerate,
+          businessName: targetBusinessName,
+          segment,
+          visualStyle: siteStyle,
+          colorPalette
+        }
+      );
     }
 
     return res.status(201).json(project);
@@ -354,6 +431,125 @@ router.post('/:id/cancel', async (req: AuthenticatedRequest, res: any) => {
     projectJobsQueue[projectId].status = 'cancelled';
   }
   return res.json({ message: 'Job cancelled successfully' });
+});
+
+// Regenerate site with AI using project and lead information
+router.post('/:id/regenerate', async (req: AuthenticatedRequest, res: any) => {
+  try {
+    const userId = req.userId as string;
+    const projectId = req.params.id as string;
+
+    const project = await prisma.project.findFirst({
+      where: {
+        id: projectId,
+        members: { some: { userId } }
+      },
+      include: {
+        pages: true,
+        leads: true
+      }
+    });
+
+    if (!project) {
+      return res.status(404).json({ error: 'Projeto não encontrado' });
+    }
+
+    const attachedLead = project.leads && project.leads.length > 0 ? project.leads[0] : null;
+
+    let dbGeminiKey: string | undefined;
+    let dbProxyUrl: string | undefined;
+    let dbCustomModels: string[] | undefined;
+    let dbCustomSkills: any[] | undefined;
+
+    try {
+      const userSettings = await prisma.user.findUnique({
+        where: { id: userId },
+        select: {
+          geminiApiKey: true,
+          aiProxyUrl: true,
+          customAiModels: true,
+          customAiSkills: true,
+        }
+      });
+
+      if (userSettings) {
+        dbGeminiKey = userSettings.geminiApiKey || undefined;
+        dbProxyUrl = userSettings.aiProxyUrl || undefined;
+        if (userSettings.customAiModels) {
+          const parsedModels = typeof userSettings.customAiModels === 'string' ? JSON.parse(userSettings.customAiModels) : userSettings.customAiModels;
+          if (Array.isArray(parsedModels)) {
+            dbCustomModels = (parsedModels as any[]).map(m => typeof m === 'string' ? m : m.id);
+          }
+        }
+        if (userSettings.customAiSkills) {
+          const parsedSkills = typeof userSettings.customAiSkills === 'string' ? JSON.parse(userSettings.customAiSkills) : userSettings.customAiSkills;
+          if (Array.isArray(parsedSkills)) {
+            dbCustomSkills = parsedSkills as any[];
+          }
+        }
+      }
+    } catch {}
+
+    const clientGeminiKey = decodeHeader(req.headers['x-gemini-key'] || req.headers['X-Gemini-Key']) || dbGeminiKey || process.env.GEMINI_API_KEY;
+    const clientProxyUrl = decodeHeader(req.headers['x-proxy-url'] || req.headers['X-Proxy-Url']) || dbProxyUrl || process.env.AI_PROXY_URL;
+    let registeredModels: string[] | undefined = dbCustomModels;
+    try {
+      const rawModels = decodeHeader(req.headers['x-gemini-models'] || req.headers['X-Gemini-Models']);
+      if (rawModels) registeredModels = JSON.parse(rawModels);
+    } catch {}
+
+    let customSkills: any[] | undefined = dbCustomSkills;
+    try {
+      const rawSkills = decodeHeader(req.headers['x-ai-skills'] || req.headers['X-Ai-Skills'] || req.headers['X-AI-Skills']);
+      if (rawSkills) customSkills = JSON.parse(rawSkills);
+    } catch {}
+
+    const aiProvider = decodeHeader(req.headers['x-ai-provider'] || req.headers['X-Ai-Provider'] || req.headers['X-AI-Provider']);
+    const customModel = decodeHeader(req.headers['x-ai-model'] || req.headers['X-Ai-Model'] || req.headers['X-AI-Model'] || req.headers['x-ollama-model'] || req.headers['X-Ollama-Model']);
+    const ollamaEndpoint = decodeHeader(req.headers['x-ollama-endpoint'] || req.headers['X-Ollama-Endpoint']);
+    const lowSpecMode = (req.headers['x-ollama-low-spec'] || req.headers['X-Ollama-Low-Spec']) ? (req.headers['x-ollama-low-spec'] || req.headers['X-Ollama-Low-Spec']) === 'true' : undefined;
+
+    const targetBusinessName = attachedLead?.name || project.name;
+    const segment = attachedLead?.company || 'Comércio e Serviços';
+    const description = project.description || 'Site institucional de alta conversão';
+
+    const aiPromptMessage = `Gere um website completo, espetacular e ultra profissional de 4 páginas (Home, Sobre, Serviços, Contato) para a empresa "${targetBusinessName}".
+Segmento: ${segment}.
+Informações do Cliente: Telefone: ${attachedLead?.phone || 'N/A'}, Email: ${attachedLead?.email || 'N/A'}, Endereço: ${attachedLead?.address || 'N/A'}.
+Descrição e Objetivos: ${description}.`;
+
+    const pagesToGenerate = project.pages.map(p => ({
+      name: p.name,
+      slug: p.slug,
+      isHomepage: p.isHomepage
+    }));
+
+    aiQueueManager.enqueue(
+      project.id,
+      'site_generation',
+      aiPromptMessage,
+      undefined,
+      {
+        customApiKey: clientGeminiKey,
+        customModel,
+        registeredModels,
+        customProxyUrl: clientProxyUrl,
+        customSkills,
+        aiProvider,
+        ollamaEndpoint,
+        lowSpecMode,
+        pagesToGenerate,
+        businessName: targetBusinessName,
+        segment,
+        visualStyle: 'Moderno & Profissional',
+        colorPalette: 'Dark Luxury / Tech'
+      }
+    );
+
+    return res.json({ message: 'Regeração iniciada com sucesso', project });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
 });
 
 // List all active jobs

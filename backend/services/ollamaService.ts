@@ -86,7 +86,7 @@ export async function testOllamaConnection(endpointUrl: string = 'http://localho
 function handleOllamaErrorResponse(status: number, errText: string, model: string, endpoint: string): Error {
   const isHtml = errText.trim().startsWith('<') || errText.includes('<!DOCTYPE html>') || errText.includes('<html>');
   
-  if (status === 502 || status === 503 || status === 504 || isHtml) {
+  if (status === 404 || status === 502 || status === 503 || status === 504 || isHtml) {
     return new Error(
       `O serviço do Ollama local não está acessível (Status ${status}). ` +
       `Isso significa que o seu túnel de conexão (Ngrok/LocalTunnel) em "${endpoint}" está ativo, mas o servidor do Ollama local não respondeu.\n\n` +

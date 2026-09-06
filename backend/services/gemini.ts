@@ -258,51 +258,43 @@ export interface AISkill {
 
 export const DEFAULT_AI_SKILLS: AISkill[] = [
   {
-    id: 'skill-3d-canvas',
-    name: 'Elementos 3D & Efeitos Canvas WebGL',
-    category: '3d',
-    description: 'Integra esferas 3D flutuantes, partículas interativas em Canvas e efeitos de profundidade com iluminação dinâmica.',
-    promptSnippet: 'Incorpore elementos visuais 3D avançados: adicione no JS um canvas interativo com partículas flutuantes reativas ao mouse ou geometrias 3D abstratas (com iluminação neon, wireframe dinâmico e gradientes de profundidade). Crie sensação de tecnologia de ponta.',
-    enabled: true
-  },
-  {
-    id: 'skill-parallax-gsap',
-    name: 'Scroll Parallax & Transições Cinemáticas',
-    category: 'animation',
-    description: 'Efeitos de rolagem com velocidade diferencial, reveal suave de seções e zoom sutil em imagens.',
-    promptSnippet: 'Implemente efeitos de Parallax cinemático: crie animações ativadas pelo scroll (reveal com transform translateY e opacity gradual) e utilize transform-style preserve-3d em cards ao passar o cursor (micro-tilt 3D suave).',
-    enabled: true
-  },
-  {
-    id: 'skill-hero-masterpiece',
-    name: 'Hero Section de Alto Impacto & Glassmorphism',
-    category: 'hero',
-    description: 'Hero sections cinematográficas com tipografia imponente, badges luminosos, floating cards e CTAs com brilho pulsante.',
-    promptSnippet: 'Crie uma Hero Section espetacular: use tipografia com gradiente metálico (bg-clip text), badges translúcidos com iluminação neon sutil, cards flutuantes de estatísticas e um botão de ação primária (CTA) com efeito de glow pulsante e gradiente suave.',
-    enabled: true
-  },
-  {
-    id: 'skill-micro-interactions',
-    name: 'Micro-Interações & Feedback Visual Tátil',
-    category: 'animation',
-    description: 'Efeitos magnéticos nos botões, ripples suaves, indicadores de progresso de leitura e feedbacks táteis.',
-    promptSnippet: 'Adicione micro-interações refinadas: efeitos de hover magnéticos ou elevação nos botões, ripples visuais ao clicar, bordas com gradiente animado em cards em destaque e barra de progresso de scroll discreta no topo da página.',
-    enabled: true
-  },
-  {
-    id: 'skill-cro-conversion',
-    name: 'Gatilhos de Conversão (CRO) & Prova Social',
-    category: 'conversion',
-    description: 'Seções de depoimentos com estrelas douradas, contadores animados de métricas, cronômetros de urgência e WhatsApp flutuante.',
-    promptSnippet: 'Otimize a página para alta conversão (CRO): adicione contador numérico animado para métricas de sucesso, grade de depoimentos com fotos circulares e 5 estrelas douradas, garantia visual e botão flutuante do WhatsApp no canto inferior direito com pulso de atenção.',
-    enabled: true
-  },
-  {
-    id: 'skill-dark-luxury',
-    name: 'Design System Dark Luxury & Glassmorphism',
+    id: 'skill-tailwind-design',
+    name: 'Design System Tailwind UI & Glassmorphism Pro',
     category: 'layout',
-    description: 'Paletas luxuosas em tons de obsidian, violeta profundo, ouro champagne ou neon cyan com bordas translúcidas.',
-    promptSnippet: 'Utilize estética Dark Luxury de alto padrão: fundo em tons profundos (#07020d, #0b0714), painéis com glassmorphism translúcido (bg-slate-900/60 backdrop-blur-xl border border-purple-500/20), tipografia moderna (Outfit para títulos e Inter para textos) e contrastes meticulosamente calculados.',
+    description: 'Gera interfaces limpas, sofisticadas e profissionais com paletas harmoniosas, cartões em vidro fosco (glassmorphism), tipografia hierárquica refinada e espaçamento rítmico perfeito.',
+    promptSnippet: 'Utilize Tailwind CSS com estética moderna e profissional: fundo em tons sofisticados, painéis translúcidos (bg-slate-900/60 backdrop-blur-xl border border-slate-800), tipografia limpa, contrastes acessíveis e espaçamento generoso.',
+    enabled: true
+  },
+  {
+    id: 'skill-cro-hero',
+    name: 'Hero Section de Alto Impacto & CRO (Conversão)',
+    category: 'hero',
+    description: 'Desenvolve seções de topo imponentes com chamadas para ação (CTAs) magnéticas, badges de urgência, prova social imediata e cartões de conversão otimizados.',
+    promptSnippet: 'Crie uma Hero Section espetacular: título principal imponente em negrito, subtítulo persuasivo, badges de destaque, botões de ação primária (CTA) com gradiente e efeitos de hover suaves, além de prova social visível.',
+    enabled: true
+  },
+  {
+    id: 'skill-mobile-first',
+    name: 'Responsividade Total Mobile-First & Micro-interações',
+    category: 'animation',
+    description: 'Garante layout perfeitamente fluido em todas as telas (sm, md, lg, xl), menus hambúrguer funcionais, animações suaves e botões flutuantes interativos.',
+    promptSnippet: 'Garanta responsividade impecável mobile-first com classes grid/flex adaptativas (sm:grid-cols-2 lg:grid-cols-3), menu hambúrguer interativo para mobile e transições suaves em todos os elementos clicáveis.',
+    enabled: true
+  },
+  {
+    id: 'skill-modular-js',
+    name: 'JavaScript Modular & Interatividade Avançada',
+    category: 'code',
+    description: 'Implementa acordeões de FAQ funcionais com rotação de ícones, formulários de contato com validação e feedback visual de envio, e contadores animados.',
+    promptSnippet: 'Adicione script JavaScript modular e funcional: manipulação de eventos para abrir/fechar menus mobile, alternar abas ou acordeões de FAQ, validar formulários de contato com mensagem de sucesso na tela e rolar suavemente entre âncoras.',
+    enabled: true
+  },
+  {
+    id: 'skill-multipage-sync',
+    name: 'Arquitetura Multi-Páginas Sincronizada',
+    category: 'layout',
+    description: 'Cria e sincroniza rotas consistentes entre Home, Sobre, Serviços, Contato e FAQ mantendo padrão visual unificado e navegação fluida.',
+    promptSnippet: 'Mantenha rigorosa consistência de navegação entre todas as páginas (Home, Sobre, Serviços, Contato), garantindo que o cabeçalho (navbar) e o rodapé (footer) compartilhem exatamente a mesma estrutura e links em todas as páginas.',
     enabled: true
   }
 ];
@@ -330,6 +322,10 @@ export const generateAIResponse = async (
   const activeKey = (customApiKey || process.env.GEMINI_API_KEY || '').trim();
   const proxyUrl = isValidHttpUrl(customProxyUrl) ? customProxyUrl!.trim() : defaultProxyUrl;
 
+  if (!activeKey) {
+    throw new Error('Chave da API do Gemini não foi configurada. Por favor, acesse as Configurações para salvar uma API Key válida do Google Gemini ou escolha o Ollama local.');
+  }
+
   let candidateModels: string[] = [];
   
   // Sanitização de modelos (impede modelos descontinuados/especializados e garante uso dos modelos ativos Gemini 3.x)
@@ -344,29 +340,24 @@ export const generateAIResponse = async (
       return null;
     }
 
-    // Mapeamentos para modelos ativos (substitui modelos descontinuados ou instáveis que retornam 404/503)
+    // Mapeamentos para modelos ativos válidos da API do Gemini
     if (
-      clean.includes('gemini-1.5') || 
-      clean.includes('gemini-1.0') || 
-      clean.includes('gemini-2.0') ||
-      clean === 'gemini-2.5-flash' ||
-      clean === 'gemini-2.5-pro' ||
-      clean === 'gemini-pro' ||
+      clean.includes('gemini-3.') || 
       clean === 'gemini-flash-latest' ||
       clean === 'gemini-pro-latest'
     ) {
-      return 'gemini-3.6-flash';
+      return 'gemini-2.5-flash';
     }
 
     return clean;
   };
 
   const DEFAULT_MODELS = [
-    'gemini-3.6-flash',
-    'gemini-3.5-flash',
-    'gemini-3.7-flash',
-    'gemini-3.1-pro-preview',
-    'gemini-2.5-flash-lite'
+    'gemini-2.5-flash',
+    'gemini-2.5-pro',
+    'gemini-2.0-flash',
+    'gemini-1.5-flash',
+    'gemini-1.5-pro'
   ];
 
   if (registeredModels && Array.isArray(registeredModels) && registeredModels.length > 0) {
@@ -557,11 +548,12 @@ export const generateAIResponse = async (
 
           const urlObj = new URL(`https://generativelanguage.googleapis.com/${apiVersion}/models/${modelToTry}:generateContent`);
           
-          // Suporte híbrido para Chave de API tradicional (AIzaSy) e Bearer Token de Container (AQ.Ab...)
-          const isToken = activeKey.startsWith('AQ.') || !activeKey.startsWith('AIzaSy');
-          if (isToken) {
+          // Suporte para Chave de API do Gemini e Bearer Token OAuth
+          const isOAuthToken = activeKey.startsWith('ya29.') || activeKey.startsWith('AQ.');
+          if (isOAuthToken) {
             fetchOptions.headers['Authorization'] = `Bearer ${activeKey}`;
           } else {
+            fetchOptions.headers['x-goog-api-key'] = activeKey;
             urlObj.searchParams.set('key', activeKey);
           }
           
@@ -577,6 +569,17 @@ export const generateAIResponse = async (
               const parsedError = JSON.parse(errText);
               googleErrorMessage = parsedError?.error?.message || '';
             } catch {}
+
+            // Se for chave de API inválida / não autorizada, interrompe imediatamente com mensagem clara
+            if (response.status === 400 || response.status === 401) {
+              const isInvalidKey = errText.includes('API key not valid') || 
+                                   errText.includes('invalid authentication credentials') ||
+                                   googleErrorMessage.includes('API key not valid') ||
+                                   googleErrorMessage.includes('invalid authentication credentials');
+              if (isInvalidKey) {
+                throw new Error('A chave da API do Gemini configurada é inválida ou expirou. Por favor, acesse as Configurações para salvar uma API Key válida do Google Gemini.');
+              }
+            }
 
             // Se for 404, não adianta tentar novamente esta versão do modelo
             if (response.status === 404) {
@@ -636,37 +639,52 @@ export const listGeminiModels = async (customApiKey?: string, customProxyUrl?: s
   const activeKey = (customApiKey || process.env.GEMINI_API_KEY || '').trim();
   const proxyUrl = isValidHttpUrl(customProxyUrl) ? customProxyUrl!.trim() : defaultProxyUrl;
 
+  const fallbackModels = [
+    { name: 'models/gemini-2.5-flash', displayName: 'Gemini 2.5 Flash', supportedGenerationMethods: ['generateContent'] },
+    { name: 'models/gemini-2.5-pro', displayName: 'Gemini 2.5 Pro', supportedGenerationMethods: ['generateContent'] },
+    { name: 'models/gemini-2.0-flash', displayName: 'Gemini 2.0 Flash', supportedGenerationMethods: ['generateContent'] },
+    { name: 'models/gemini-1.5-flash', displayName: 'Gemini 1.5 Flash', supportedGenerationMethods: ['generateContent'] },
+    { name: 'models/gemini-1.5-pro', displayName: 'Gemini 1.5 Pro', supportedGenerationMethods: ['generateContent'] }
+  ];
+
   if (!activeKey) {
-    throw new Error("Chave da API do Gemini não fornecida.");
+    return fallbackModels;
   }
 
-  const urlObj = new URL(`https://generativelanguage.googleapis.com/v1beta/models`);
-  
-  const fetchOptions: any = {
-    method: 'GET',
-    headers: { 'Content-Type': 'application/json' }
-  };
+  try {
+    const urlObj = new URL(`https://generativelanguage.googleapis.com/v1beta/models`);
+    
+    const fetchOptions: any = {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' }
+    };
 
-  // Suporte híbrido para Chave de API tradicional (AIzaSy) e Bearer Token de Container (AQ.Ab...)
-  const isToken = activeKey.startsWith('AQ.') || !activeKey.startsWith('AIzaSy');
-  if (isToken) {
-    fetchOptions.headers['Authorization'] = `Bearer ${activeKey}`;
-  } else {
-    urlObj.searchParams.set('key', activeKey);
+    // Suporte para Chave de API do Gemini e Bearer Token OAuth
+    const isOAuthToken = activeKey.startsWith('ya29.') || activeKey.startsWith('AQ.');
+    if (isOAuthToken) {
+      fetchOptions.headers['Authorization'] = `Bearer ${activeKey}`;
+    } else {
+      fetchOptions.headers['x-goog-api-key'] = activeKey;
+      urlObj.searchParams.set('key', activeKey);
+    }
+
+    const apiUrl = urlObj.toString();
+
+    if (proxyUrl) {
+      fetchOptions.dispatcher = new ProxyAgent(proxyUrl);
+    }
+
+    const response = await undiciFetch(apiUrl, fetchOptions);
+    if (!response.ok) {
+      const errText = await response.text();
+      console.warn(`[Gemini API] Falha ao listar modelos do Google (HTTP ${response.status}: ${errText}). Usando modelos recomendados.`);
+      return fallbackModels;
+    }
+
+    const data: any = await response.json();
+    return data.models && data.models.length > 0 ? data.models : fallbackModels;
+  } catch (err: any) {
+    console.warn(`[Gemini API] Exceção ao listar modelos (${err.message}). Usando modelos recomendados.`);
+    return fallbackModels;
   }
-
-  const apiUrl = urlObj.toString();
-
-  if (proxyUrl) {
-    fetchOptions.dispatcher = new ProxyAgent(proxyUrl);
-  }
-
-  const response = await undiciFetch(apiUrl, fetchOptions);
-  if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`HTTP ${response.status}: ${errText}`);
-  }
-
-  const data: any = await response.json();
-  return data.models || [];
 };

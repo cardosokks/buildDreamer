@@ -1,12 +1,13 @@
 import { prisma } from '../db';
 import { executeAIRequest } from './aiEngine';
 import { executeSiteRemaster } from './siteRemasterWorker';
-import { processPageAssets } from './siteRemaster';
+import { processPageAssets, extractNavbarAndFooter } from './siteRemaster';
+import { generateFallbackMultiPageSite } from './fallbackSiteGenerator';
 
 export interface AIQueueItem {
   id: string;
   projectId: string;
-  type: 'chat_edit' | 'page_remaster' | 'site_remaster';
+  type: 'chat_edit' | 'page_remaster' | 'site_remaster' | 'site_generation';
   status: 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled';
   prompt: string;
   pageId?: string;
@@ -239,9 +240,514 @@ class ProjectQueue {
       await this.executePageRemaster(item);
     } else if (item.type === 'site_remaster') {
       await executeSiteRemaster(item);
+    } else if (item.type === 'site_generation') {
+      await this.executeSiteGeneration(item);
     } else {
       throw new Error(`Tipo de tarefa desconhecido: ${item.type}`);
     }
+  }
+
+  private async resolveApiKeyAndSettings(projectId: string, customApiKey?: string) {
+    // 1. Tentar buscar a chave salva no banco de dados do dono do projeto primeiro
+    try {
+      const proj = await prisma.project.findUnique({
+        where: { id: projectId },
+        select: { ownerId: true }
+      });
+      if (proj?.ownerId) {
+        const user = await prisma.user.findUnique({
+          where: { id: proj.ownerId },
+          select: { geminiApiKey: true }
+        });
+        if (user?.geminiApiKey) {
+          const dbKey = user.geminiApiKey.trim();
+          if (dbKey.length > 5 && dbKey !== 'undefined' && dbKey !== 'null') {
+            return dbKey;
+          }
+        }
+      }
+    } catch {}
+
+    // 2. Se não houver no banco, usar o customApiKey passado (desde que válido e não string 'undefined'/'null')
+    if (customApiKey) {
+      const rawKey = customApiKey.trim();
+      if (rawKey.length > 5 && rawKey !== 'undefined' && rawKey !== 'null') {
+        return rawKey;
+      }
+    }
+
+    // 3. Fallback para variável de ambiente
+    return process.env.GEMINI_API_KEY;
+  }
+
+  private async executeSiteGeneration(item: AIQueueItem) {
+    const { projectId, prompt, options = {} } = item;
+    if (!projectId) throw new Error('ID do projeto é obrigatório para geração de site.');
+
+    const {
+      customApiKey,
+      customModel,
+      registeredModels,
+      customProxyUrl,
+      customSkills,
+      aiProvider,
+      ollamaEndpoint,
+      lowSpecMode,
+      pagesToGenerate = [],
+      businessName,
+      segment,
+      visualStyle,
+      colorPalette
+    } = options;
+
+    const resolvedApiKey = await this.resolveApiKeyAndSettings(projectId, customApiKey);
+    const resolvedBusinessName = (businessName || '').trim() || 'Sua Empresa';
+    const resolvedSegment = (segment || '').trim() || 'Serviços Profissionais';
+    const resolvedStyle = (visualStyle || '').trim() || 'Ultra Moderno, Dark Luxury ou Clean Tech com alto contraste e elegância';
+    const resolvedPalette = (colorPalette || '').trim() || 'Paleta refinada com gradientes sutis e harmônicos';
+
+    // 1. Obter todas as páginas existentes no banco de dados para o projeto
+    let existingPages = await prisma.page.findMany({
+      where: { projectId },
+      orderBy: { createdAt: 'asc' }
+    });
+
+    // Se pagesToGenerate foi fornecido, cria no banco quaisquer páginas que ainda não existam
+    if (Array.isArray(pagesToGenerate) && pagesToGenerate.length > 0) {
+      for (let i = 0; i < pagesToGenerate.length; i++) {
+        const p = pagesToGenerate[i];
+        const isHome = !!p.isHomepage || p.slug === 'index' || i === 0;
+        const pageSlug = p.slug || (isHome ? 'index' : (p.name ? p.name.toLowerCase().replace(/[^a-z0-9]+/g, '-') : `page-${i + 1}`));
+        const pageName = p.name || (isHome ? 'Home' : `Página ${i + 1}`);
+
+        const alreadyExists = existingPages.some(ep => ep.slug === pageSlug || (isHome && ep.isHomepage));
+        if (!alreadyExists) {
+          const created = await prisma.page.create({
+            data: {
+              projectId,
+              name: pageName,
+              slug: pageSlug,
+              title: pageName,
+              isHomepage: isHome,
+              html: '<div class="min-h-screen bg-slate-900 text-white flex flex-col items-center justify-center p-8"><h2 class="text-2xl font-bold mb-2">Gerando página...</h2><p class="text-slate-400 text-sm">Construindo layout profissional com IA.</p></div>',
+              css: 'body { margin: 0; font-family: sans-serif; }',
+              js: ''
+            }
+          });
+          existingPages.push(created);
+        }
+      }
+    }
+
+    if (existingPages.length === 0) {
+      const home = await prisma.page.create({
+        data: {
+          projectId,
+          name: 'Home',
+          slug: 'index',
+          title: 'Home',
+          isHomepage: true,
+          html: '<div class="min-h-screen bg-slate-900 text-white flex flex-col items-center justify-center p-8"><h2 class="text-2xl font-bold mb-2">Gerando página...</h2><p class="text-slate-400 text-sm">Construindo layout profissional com IA.</p></div>',
+          css: 'body { margin: 0; font-family: sans-serif; }',
+          js: ''
+        }
+      });
+      existingPages.push(home);
+    }
+
+    const homePage = existingPages.find(p => p.isHomepage || p.slug === 'index') || existingPages[0];
+    const subPages = existingPages.filter(p => p.id !== homePage.id);
+    const totalPages = 1 + subPages.length;
+
+    item.scope = totalPages > 1 ? 'all' : 'single';
+    item.currentModel = `Iniciando geração do site (${totalPages} página${totalPages > 1 ? 's' : ''})...`;
+
+    // 2. Mapeamento de rotas de navegação para interligação perfeita entre páginas
+    const navigationRoutes = [
+      { name: homePage.name || 'Home', href: 'index.html', slug: homePage.slug },
+      ...subPages.map(p => ({ name: p.name, href: `${p.slug}.html`, slug: p.slug }))
+    ];
+    const navLinksDoc = navigationRoutes.map(r => `- "${r.name}" -> href="${r.href}"`).join('\n');
+
+    // 3. GERAÇÃO DA HOME (PÁGINA 1)
+    item.currentModel = `Construindo Página Inicial (1/${totalPages})...`;
+
+    const homePrompt = `
+Você é um Arquiteto de Software Frontend de Elite e Designer Master (especialista em Webflow, Tailwind UI, Framer e v0).
+Sua missão é criar a PÁGINA INICIAL (HOME) de altíssimo impacto e nível internacional para a empresa "${resolvedBusinessName}".
+
+DADOS DO PROJETO:
+- Nome do Negócio: ${resolvedBusinessName}
+- Segmento / Ramo de Atuação: ${resolvedSegment}
+- Estilo Visual & Paleta: ${resolvedStyle} | ${resolvedPalette}
+- Instruções Específicas do Usuário: ${prompt}
+
+ROTAS DE NAVEGAÇÃO DO SITE (OBRIGATÓRIO incluir na Navbar e no Footer):
+${navLinksDoc}
+
+ESTRUTURA COMPLETA E OBRIGATÓRIA DA PÁGINA INICIAL:
+1. HEADER / NAVBAR STICKY:
+   - Fundo translúcido com blur (ex: backdrop-blur-md bg-slate-900/80 border-b border-slate-800).
+   - Logomarca moderna com ícone estilizado e tipografia expressiva de ${resolvedBusinessName}.
+   - Links de navegação apontando EXATAMENTE para as rotas acima: ${navigationRoutes.map(r => `<a href="${r.href}">${r.name}</a>`).join(', ')}.
+   - Botão de Ação CTA em destaque no canto direito (ex: "Fale Conosco" / "Comece Agora" / "Solicitar Orçamento").
+   - Botão de menu mobile hambúrguer responsivo com interatividade funcional no JS.
+2. HERO SECTION MASTERPIECE:
+   - Eyebrow Badge (ex: "✨ Líder em ${resolvedSegment}" ou "✦ Soluções Inovadoras").
+   - Título imponente de alto contraste com gradiente sutil no texto (bg-clip-text).
+   - Subtítulo claro, persuasivo e focado na transformação do cliente.
+   - 2 Botões de CTA (Primário com gradiente pulsante + Secundário com contorno elegante e ícone).
+   - Prova social imediata: Avaliação 4.9/5 estrelas ⭐, avatares sobrepostos de clientes e estatística impactante (ex: "+5.000 clientes atendidos").
+   - Card/Mockup visual de alta definição com efeito de profundidade, glassmorphism e iluminação sutil.
+3. BARRA DE AUTORIDADE / CONFIANÇA (TRUST BAR):
+   - "Empresas e parceiros que confiam em nossa excelência" com logos/badges minimalistas.
+4. DIFERENCIAIS & RECURSOS (BENTO GRID MODERNO):
+   - 3 ou 4 cards assimétricos com hover animado, ícones expressivos, bordas com gradiente sutil e métricas destacadas.
+5. VITRINE DE SERVIÇOS / PRODUTOS:
+   - Cards detalhados dos principais serviços de ${resolvedBusinessName} com tags de categoria, lista de benefícios (✓) e link direcionando para "servicos.html" ou WhatsApp.
+6. SEÇÃO SOBRE & AUTORIDADE:
+   - Resumo da trajetória e missão de ${resolvedBusinessName}, pilares de valor e contadores numéricos (ex: 99.8% Satisfação, +10 Anos de Mercado). Link para "sobre.html".
+7. PROVA SOCIAL & DEPOIMENTOS:
+   - Grade de depoimentos com fotos circulares em alta qualidade (Unsplash), 5 estrelas douradas, nome, cargo e depoimento persuasivo.
+8. PERGUNTAS FREQUENTES (FAQ ACCORDION INTERATIVO):
+   - 4 ou 5 dúvidas essenciais do segmento de ${resolvedBusinessName}. O clique deve abrir/fechar suavemente via JavaScript funcional com rotação do chevron!
+9. CHAMADA FINAL PARA AÇÃO (CTA) & NEWSLETTER:
+   - Banner envolvente de fechamento incentivando contato imediato via formulário ou WhatsApp.
+10. BOTÃO FLUTUANTE DO WHATSAPP:
+    - Botão fixo no canto inferior direito com animação de pulso e link direto (href="https://wa.me/5511999999999?text=Ol%C3%A1,%20gostaria%20de%20mais%20informa%C3%A7%C3%B5es").
+11. FOOTER MULTICOLUNAS COMPLETO:
+    - Bio da empresa, links organizados para todas as páginas (${navigationRoutes.map(r => r.name).join(', ')}), redes sociais, aviso legal e copyright.
+
+REGRAS TÉCNICAS E ARQUITETURA:
+- O retorno DEVE ser um objeto JSON estrito com as chaves: "html", "css", "js", "explanation".
+- HTML: apenas classes Tailwind semânticas. NUNCA coloque tags <style> ou <script> dentro do HTML.
+- CSS: regras extras de animação (@keyframes, glows, custom scrollbar).
+- JS: código puro com handlers de clique para abrir/fechar o menu mobile, abrir/fechar os accordions do FAQ, validação de envio de formulário com feedback visual, e contadores animados de números.
+`;
+
+    let homeAiResponse: any = null;
+    let usedFallback = false;
+
+    try {
+      homeAiResponse = await executeAIRequest(
+        homePrompt,
+        { html: homePage.html, css: homePage.css, js: homePage.js },
+        {
+          provider: (aiProvider as any) || 'gemini',
+          apiKey: resolvedApiKey,
+          model: customModel,
+          registeredModels,
+          proxyUrl: customProxyUrl,
+          ollamaEndpoint,
+          lowSpecMode,
+          customSkills,
+          onProgress: (info) => {
+            item.currentModel = `Home: ${info.model || info.status}`;
+          }
+        }
+      );
+    } catch (homeAiErr: any) {
+      console.warn(`[AIQueueManager] Chamada de IA para a Home falhou (${homeAiErr.message}). Ativando gerador inteligente de Design System para o site completo.`);
+      usedFallback = true;
+      
+      const fallbackPages = generateFallbackMultiPageSite({
+        businessName: resolvedBusinessName,
+        segment: resolvedSegment,
+        visualStyle: resolvedStyle,
+        colorPalette: resolvedPalette,
+        prompt,
+        pages: existingPages.map(p => ({ name: p.name, slug: p.slug, isHomepage: p.isHomepage }))
+      });
+
+      const updatedPagesList: Array<{ id: string; name: string; slug: string; html: string; css: string; js: string }> = [];
+
+      for (const p of existingPages) {
+        const generated = fallbackPages.find(fp => fp.slug === p.slug || (p.isHomepage && fp.isHomepage)) || fallbackPages[0];
+        if (generated) {
+          await prisma.page.update({
+            where: { id: p.id },
+            data: {
+              html: generated.html,
+              css: generated.css,
+              js: generated.js
+            }
+          });
+          updatedPagesList.push({
+            id: p.id,
+            name: p.name,
+            slug: p.slug,
+            html: generated.html,
+            css: generated.css,
+            js: generated.js
+          });
+        }
+      }
+
+      const homeFallback = fallbackPages.find(fp => fp.isHomepage || fp.slug === 'index') || fallbackPages[0];
+
+      await prisma.version.create({
+        data: {
+          name: `Geração Estrutural Multi-páginas (${totalPages} pág)`,
+          description: `Site profissional gerado com Design System integrado para "${resolvedBusinessName}": ${prompt.slice(0, 100)}`,
+          projectId,
+          snapshot: {
+            pages: updatedPagesList
+          }
+        }
+      });
+
+      const isKeyErr = /API key|chave|401|400|credentials/i.test(homeAiErr.message || '');
+      const warningNote = isKeyErr 
+        ? ' (Observação: Sua API Key do Google Gemini precisa ser cadastrada nas Configurações para desbloquear gerações e edições generativas sob demanda via chat).' 
+        : '';
+
+      item.result = {
+        explanation: `Site profissional para "${resolvedBusinessName}" com ${totalPages} página(s) estruturado com sucesso usando o Design System profissional integrado!${warningNote}`,
+        html: homeFallback?.html || homePage.html,
+        css: homeFallback?.css || homePage.css,
+        js: homeFallback?.js || homePage.js,
+        _usedModel: 'Design System Engine (Built-in)',
+        _usedProvider: 'BuildDreamer Core',
+        updatedPages: updatedPagesList
+      };
+
+      return;
+    }
+
+    if ((item.status as string) === 'cancelled') return;
+
+    const updatedHomeHtml = homeAiResponse.html || homePage.html;
+    const updatedHomeCss = homeAiResponse.css || homePage.css;
+    const updatedHomeJs = homeAiResponse.js || homePage.js;
+
+    await prisma.page.update({
+      where: { id: homePage.id },
+      data: {
+        html: updatedHomeHtml,
+        css: updatedHomeCss,
+        js: updatedHomeJs
+      }
+    });
+
+    const updatedPagesList: Array<{ id: string; name: string; slug: string; html: string; css: string; js: string }> = [
+      {
+        id: homePage.id,
+        name: homePage.name,
+        slug: homePage.slug,
+        html: updatedHomeHtml,
+        css: updatedHomeCss,
+        js: updatedHomeJs
+      }
+    ];
+
+    // Extrair Navbar e Footer da Home para reaproveitamento padronizado nas subpáginas
+    const { navbarHtml, footerHtml } = extractNavbarAndFooter(updatedHomeHtml);
+
+    // 4. GERAÇÃO SEQUENCIAL DAS SUBPÁGINAS (SE HOUVER)
+    for (let idx = 0; idx < subPages.length; idx++) {
+      if ((item.status as string) === 'cancelled') return;
+
+      const sub = subPages[idx];
+      const pageNum = idx + 2;
+      item.currentModel = `Construindo ${sub.name} (${pageNum}/${totalPages})...`;
+
+      let subpageContextGuidance = '';
+      const lowerSubName = (sub.name + ' ' + sub.slug).toLowerCase();
+
+      if (lowerSubName.includes('sobre') || lowerSubName.includes('about') || lowerSubName.includes('quem')) {
+        subpageContextGuidance = `
+Esta é a PÁGINA SOBRE NÓS / INSTITUCIONAL.
+Estrutura obrigatória das seções centrais (entre a Navbar e o Rodapé):
+1. Hero Institucional com propósito, missão e visão inspiradora da ${resolvedBusinessName}.
+2. Linha do Tempo / História: Trajetória de evolução e marcos históricos.
+3. Nossos Pilares e Valores: 4 cards com ícones e princípios inegociáveis.
+4. Equipe Executiva / Liderança: Fotos profissionais de liderança (Unsplash), nomes, cargos e mini-bios.
+5. Certificações, Prêmios e Estatísticas de Impacto no Mercado.
+6. Seção de CTA convidando para conhecer os serviços ou agendar uma reunião.
+        `;
+      } else if (lowerSubName.includes('servi') || lowerSubName.includes('service') || lowerSubName.includes('solu')) {
+        subpageContextGuidance = `
+Esta é a PÁGINA DE SERVIÇOS & SOLUÇÕES.
+Estrutura obrigatória das seções centrais:
+1. Hero de Serviços: Título focado em resolver dores e acelerar resultados para o cliente de ${resolvedBusinessName}.
+2. Catálogo Completo de Serviços: Grade rica com cards detalhados, cada um contendo ícone, descrição aprofundada, tags de recursos, entregáveis inclusos (✓) e botão de contratação/orçamento.
+3. Processo em 4 Etapas ("Como Funciona / Metodologia"): Diagnóstico -> Planejamento -> Execução -> Resultados.
+4. Tabela de Comparação ou Diferenciais Técnicos em relação ao mercado.
+5. Garantia de Qualidade e Segurança.
+6. CTA final para solicitar proposta comercial personalizada.
+        `;
+      } else if (lowerSubName.includes('prec') || lowerSubName.includes('pric') || lowerSubName.includes('plan')) {
+        subpageContextGuidance = `
+Esta é a PÁGINA DE PREÇOS & PLANOS.
+Estrutura obrigatória das seções centrais:
+1. Hero de Preços: Clareza e transparência no investimento em ${resolvedBusinessName}.
+2. Seletor Interativo Mensal / Anual (com desconto de 20%) funcionando com script JavaScript.
+3. Tabela Comparativa de 3 Planos (ex: Básico, Pro / Mais Popular com destaque luminoso, Enterprise).
+4. Checklist completo de recursos incluídos em cada plano.
+5. FAQ sobre pagamentos, cancelamento, garantia de 30 dias e emissão de nota fiscal.
+6. Banner de Segurança e Suporte Dedicado.
+        `;
+      } else if (lowerSubName.includes('contat') || lowerSubName.includes('contact') || lowerSubName.includes('fale') || lowerSubName.includes('local')) {
+        subpageContextGuidance = `
+Esta é a PÁGINA DE CONTATO & ATENDIMENTO.
+Estrutura obrigatória das seções centrais:
+1. Hero de Contato: "Estamos prontos para atender você".
+2. Formulário Interativo Completo (Nome, E-mail, Telefone/WhatsApp, Assunto, Mensagem) com validação e feedback de envio no JS.
+3. Informações de Atendimento Direto: Botão grande de WhatsApp com clique direto, telefone comercial, e-mail de suporte, endereço físico e horários de funcionamento.
+4. Card Visual Interativo de Localização / Mapa.
+5. FAQ Rápido de Atendimento.
+        `;
+      } else if (lowerSubName.includes('faq') || lowerSubName.includes('duvid') || lowerSubName.includes('ajuda')) {
+        subpageContextGuidance = `
+Esta é a PÁGINA DE FAQ & CENTRAL DE AJUDA.
+Estrutura obrigatória das seções centrais:
+1. Hero de Suporte com barra de pesquisa interativa em JS para filtrar perguntas.
+2. Accordion Completo de Dúvidas dividido por categorias (Geral, Contratação, Pagamento, Prazos).
+3. Botão de Suporte Humano via WhatsApp ou Ticket caso a dúvida não seja respondida.
+        `;
+      } else if (lowerSubName.includes('port') || lowerSubName.includes('case') || lowerSubName.includes('galer')) {
+        subpageContextGuidance = `
+Esta é a PÁGINA DE PORTFÓLIO & CASOS DE SUCESSO.
+Estrutura obrigatória das seções centrais:
+1. Hero de Portfólio: Vitrine dos melhores projetos e resultados gerados por ${resolvedBusinessName}.
+2. Filtros de Categoria interativos com JavaScript.
+3. Grade de Projetos com imagens em alta resolução, métricas de resultado alcançadas e depoimento do cliente.
+4. CTA para iniciar um novo projeto com a empresa.
+        `;
+      } else {
+        subpageContextGuidance = `
+Esta é a subpágina "${sub.name}".
+Desenvolva uma página rica, altamente detalhada e relevante para "${sub.name}", com hero exclusivo, seções informativas com cards modernos, ilustrações/mídias em alta qualidade e chamadas para ação.
+        `;
+      }
+
+      const subPrompt = `
+Você é o Arquiteto Frontend Líder do site "${resolvedBusinessName}".
+Sua tarefa é gerar o código completo da subpágina "${sub.name}" (slug: ${sub.slug}).
+
+ESTILO VISUAL & PALETA:
+${resolvedStyle} | ${resolvedPalette}
+
+DIRETRIZES DE IDENTIDADE VISUAL E REAPROVEITAMENTO:
+1. A subpágina DEVE manter a mesma identidade estética, tipografia e cores da Home.
+2. NAVBAR E FOOTER:
+   - Utilize a mesma estrutura de Navbar e Footer da Home abaixo.
+   - Na Navbar, destaque o link "${sub.name}" com classe ativa (ex: text-purple-400 font-bold ou border-b-2 border-purple-500).
+${navbarHtml ? `\nNAVBAR BASE DA HOME:\n${navbarHtml}\n` : ''}
+${footerHtml ? `\nFOOTER BASE DA HOME:\n${footerHtml}\n` : ''}
+
+LINKS DE NAVEGAÇÃO ENTRE AS PÁGINAS DO SITE:
+${navLinksDoc}
+
+CONTEÚDO OBRIGATÓRIO DESTA SUBPÁGINA:
+${subpageContextGuidance}
+
+REGRAS MANDATÓRIAS:
+- Retorne JSON estrito: { "html": "...", "css": "...", "js": "...", "explanation": "..." }
+- HTML limpo com classes Tailwind semânticas. NUNCA coloque tags <style> ou <script> dentro do HTML.
+- Insira o botão flutuante de WhatsApp no canto inferior direito.
+- No JS, inclua os handlers de menu mobile, acordeões e validações de formulário.
+      `;
+
+      try {
+        const subAiResponse = await executeAIRequest(
+          subPrompt,
+          { html: sub.html, css: updatedHomeCss, js: updatedHomeJs },
+          {
+            provider: (aiProvider as any) || 'gemini',
+            apiKey: resolvedApiKey,
+            model: customModel,
+            registeredModels,
+            proxyUrl: customProxyUrl,
+            ollamaEndpoint,
+            lowSpecMode,
+            customSkills,
+            onProgress: (info) => {
+              item.currentModel = `${sub.name}: ${info.model || info.status}`;
+            }
+          }
+        );
+
+        if ((item.status as string) === 'cancelled') return;
+
+        const updatedSubHtml = subAiResponse.html || sub.html;
+        const updatedSubCss = [updatedHomeCss, subAiResponse.css || ''].filter(Boolean).join('\n\n');
+        const updatedSubJs = [updatedHomeJs, subAiResponse.js || ''].filter(Boolean).join('\n\n');
+
+        await prisma.page.update({
+          where: { id: sub.id },
+          data: {
+            html: updatedSubHtml,
+            css: updatedSubCss,
+            js: updatedSubJs
+          }
+        });
+
+        updatedPagesList.push({
+          id: sub.id,
+          name: sub.name,
+          slug: sub.slug,
+          html: updatedSubHtml,
+          css: updatedSubCss,
+          js: updatedSubJs
+        });
+      } catch (subErr: any) {
+        console.warn(`[AIQueueManager] Erro na IA da subpágina ${sub.name} (${subErr.message}). Aplicando layout do Design System.`);
+        try {
+          const fallbackPages = generateFallbackMultiPageSite({
+            businessName: resolvedBusinessName,
+            segment: resolvedSegment,
+            visualStyle: resolvedStyle,
+            colorPalette: resolvedPalette,
+            prompt,
+            pages: existingPages.map(p => ({ name: p.name, slug: p.slug, isHomepage: p.isHomepage }))
+          });
+          const generatedSub = fallbackPages.find(fp => fp.slug === sub.slug) || fallbackPages[0];
+
+          await prisma.page.update({
+            where: { id: sub.id },
+            data: {
+              html: generatedSub.html,
+              css: generatedSub.css,
+              js: generatedSub.js
+            }
+          });
+
+          updatedPagesList.push({
+            id: sub.id,
+            name: sub.name,
+            slug: sub.slug,
+            html: generatedSub.html,
+            css: generatedSub.css,
+            js: generatedSub.js
+          });
+        } catch (innerErr) {
+          console.error(`[AIQueueManager] Erro crítico no fallback da subpágina ${sub.name}:`, innerErr);
+        }
+      }
+    }
+
+    // 5. REGISTRAR VERSÃO DE BACKUP COMPLETA
+    await prisma.version.create({
+      data: {
+        name: `Geração Completa Multi-páginas (${totalPages} pág)`,
+        description: `Site profissional gerado com IA para "${resolvedBusinessName}": ${prompt.slice(0, 100)}`,
+        projectId,
+        snapshot: {
+          pages: updatedPagesList
+        }
+      }
+    });
+
+    item.result = {
+      explanation: `Site profissional para "${resolvedBusinessName}" com ${totalPages} página(s) gerado com sucesso!`,
+      html: updatedHomeHtml,
+      css: updatedHomeCss,
+      js: updatedHomeJs,
+      _usedModel: homeAiResponse._usedModel,
+      _usedProvider: homeAiResponse._usedProvider,
+      updatedPages: updatedPagesList
+    };
   }
 
   private async executeChatEdit(item: AIQueueItem) {
@@ -254,6 +760,8 @@ class ProjectQueue {
     });
 
     if (!page) throw new Error('Página não encontrada no banco de dados.');
+
+    const resolvedApiKey = await this.resolveApiKeyAndSettings(page.projectId, options.customApiKey || options.apiKey);
 
     const projectPages = page.project?.pages || [page];
     let pagesToProcess: typeof projectPages = [];
@@ -320,6 +828,7 @@ class ProjectQueue {
 
         const res = await executeAIRequest(pageSpecificPrompt, context, {
           ...options,
+          apiKey: resolvedApiKey,
           onProgress: (info) => {
             item.currentModel = `[${i + 1}/${pagesToProcess.length}] ${currentPage.name}: ${info.model || ''}`;
           }
@@ -435,6 +944,7 @@ ${page.css || ''}
 
         result = await executeAIRequest(sectionPrompt, context, {
           ...options,
+          apiKey: resolvedApiKey,
           onProgress: (info) => {
             item.currentModel = `${info.model || 'Processando'} (Seção: ${targetSectionLabel})`;
           }
@@ -479,6 +989,7 @@ ${page.css || ''}
 
         result = await executeAIRequest(prompt, context, {
           ...options,
+          apiKey: resolvedApiKey,
           onProgress: (info) => {
             item.currentModel = info.model;
           }
@@ -649,7 +1160,7 @@ class AIQueueManager {
 
   enqueue(
     projectId: string,
-    type: 'chat_edit' | 'page_remaster' | 'site_remaster',
+    type: 'chat_edit' | 'page_remaster' | 'site_remaster' | 'site_generation',
     prompt: string,
     pageId?: string,
     options?: any

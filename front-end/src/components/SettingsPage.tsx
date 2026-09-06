@@ -45,51 +45,43 @@ export interface AISkill {
 
 export const DEFAULT_AI_SKILLS: AISkill[] = [
   {
-    id: 'skill-3d-canvas',
-    name: 'Elementos 3D & Efeitos Canvas WebGL',
-    category: '3d',
-    description: 'Integra esferas 3D flutuantes, partículas interativas em Canvas e efeitos de profundidade com iluminação dinâmica.',
-    promptSnippet: 'Incorpore elementos visuais 3D avançados: adicione no JS um canvas interativo com partículas flutuantes reativas ao mouse ou geometrias 3D abstratas (com iluminação neon, wireframe dinâmico e gradientes de profundidade). Crie sensação de tecnologia de ponta.',
-    enabled: true
-  },
-  {
-    id: 'skill-parallax-gsap',
-    name: 'Scroll Parallax & Transições Cinemáticas',
-    category: 'animation',
-    description: 'Efeitos de rolagem com velocidade diferencial, reveal suave de seções e zoom sutil em imagens.',
-    promptSnippet: 'Implemente efeitos de Parallax cinemático: crie animações ativadas pelo scroll (reveal com transform translateY e opacity gradual) e utilize transform-style preserve-3d em cards ao passar o cursor (micro-tilt 3D suave).',
-    enabled: true
-  },
-  {
-    id: 'skill-hero-masterpiece',
-    name: 'Hero Section de Alto Impacto & Glassmorphism',
-    category: 'hero',
-    description: 'Hero sections cinematográficas com tipografia imponente, badges luminosos, floating cards e CTAs com brilho pulsante.',
-    promptSnippet: 'Crie uma Hero Section espetacular: use tipografia com gradiente metálico (bg-clip text), badges translúcidos com iluminação neon sutil, cards flutuantes de estatísticas e um botão de ação primária (CTA) com efeito de glow pulsante e gradiente suave.',
-    enabled: true
-  },
-  {
-    id: 'skill-micro-interactions',
-    name: 'Micro-Interações & Feedback Visual Tátil',
-    category: 'animation',
-    description: 'Efeitos magnéticos nos botões, ripples suaves, indicadores de progresso de leitura e feedbacks táteis.',
-    promptSnippet: 'Adicione micro-interações refinadas: efeitos de hover magnéticos ou elevação nos botões, ripples visuais ao clicar, bordas com gradiente animado em cards em destaque e barra de progresso de scroll discreta no topo da página.',
-    enabled: true
-  },
-  {
-    id: 'skill-cro-conversion',
-    name: 'Gatilhos de Conversão (CRO) & Prova Social',
-    category: 'conversion',
-    description: 'Seções de depoimentos com estrelas douradas, contadores animados de métricas, cronômetros de urgência e WhatsApp flutuante.',
-    promptSnippet: 'Otimize a página para alta conversão (CRO): adicione contador numérico animado para métricas de sucesso, grade de depoimentos com fotos circulares e 5 estrelas douradas, garantia visual e botão flutuante do WhatsApp no canto inferior direito com pulso de atenção.',
-    enabled: true
-  },
-  {
-    id: 'skill-dark-luxury',
-    name: 'Design System Dark Luxury & Glassmorphism',
+    id: 'skill-tailwind-design',
+    name: 'Design System Tailwind UI & Glassmorphism Pro',
     category: 'layout',
-    description: 'Paletas luxuosas em tons de obsidian, violeta profundo, ouro champagne ou neon cyan com bordas translúcidas.',
-    promptSnippet: 'Utilize estética Dark Luxury de alto padrão: fundo em tons profundos (#07020d, #0b0714), painéis com glassmorphism translúcido (bg-slate-900/60 backdrop-blur-xl border border-purple-500/20), tipografia moderna (Outfit para títulos e Inter para textos) e contrastes meticulosamente calculados.',
+    description: 'Gera interfaces limpas, sofisticadas e profissionais com paletas harmoniosas, cartões em vidro fosco (glassmorphism), tipografia hierárquica refinada e espaçamento rítmico perfeito.',
+    promptSnippet: 'Utilize Tailwind CSS com estética moderna e profissional: fundo em tons sofisticados, painéis translúcidos (bg-slate-900/60 backdrop-blur-xl border border-slate-800), tipografia limpa, contrastes acessíveis e espaçamento generoso.',
+    enabled: true
+  },
+  {
+    id: 'skill-cro-hero',
+    name: 'Hero Section de Alto Impacto & CRO (Conversão)',
+    category: 'hero',
+    description: 'Desenvolve seções de topo imponentes com chamadas para ação (CTAs) magnéticas, badges de urgência, prova social imediata e cartões de conversão otimizados.',
+    promptSnippet: 'Crie uma Hero Section espetacular: título principal imponente em negrito, subtítulo persuasivo, badges de destaque, botões de ação primária (CTA) com gradiente e efeitos de hover suaves, além de prova social visível.',
+    enabled: true
+  },
+  {
+    id: 'skill-mobile-first',
+    name: 'Responsividade Total Mobile-First & Micro-interações',
+    category: 'animation',
+    description: 'Garante layout perfeitamente fluido em todas as telas (sm, md, lg, xl), menus hambúrguer funcionais, animações suaves e botões flutuantes interativos.',
+    promptSnippet: 'Garanta responsividade impecável mobile-first com classes grid/flex adaptativas (sm:grid-cols-2 lg:grid-cols-3), menu hambúrguer interativo para mobile e transições suaves em todos os elementos clicáveis.',
+    enabled: true
+  },
+  {
+    id: 'skill-modular-js',
+    name: 'JavaScript Modular & Interatividade Avançada',
+    category: 'custom',
+    description: 'Implementa acordeões de FAQ funcionais com rotação de ícones, formulários de contato com validação e feedback visual de envio, e contadores animados.',
+    promptSnippet: 'Adicione script JavaScript modular e funcional: manipulação de eventos para abrir/fechar menus mobile, alternar abas ou acordeões de FAQ, validar formulários de contato com mensagem de sucesso na tela e rolar suavemente entre âncoras.',
+    enabled: true
+  },
+  {
+    id: 'skill-multipage-sync',
+    name: 'Arquitetura Multi-Páginas Sincronizada',
+    category: 'layout',
+    description: 'Cria e sincroniza rotas consistentes entre Home, Sobre, Serviços, Contato e FAQ mantendo padrão visual unificado e navegação fluida.',
+    promptSnippet: 'Mantenha rigorosa consistência de navegação entre todas as páginas (Home, Sobre, Serviços, Contato), garantindo que o cabeçalho (navbar) e o rodapé (footer) compartilhem exatamente a mesma estrutura e links em todas as páginas.',
     enabled: true
   }
 ];
