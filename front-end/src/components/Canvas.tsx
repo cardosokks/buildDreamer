@@ -249,9 +249,35 @@ export const Canvas: React.FC<CanvasProps> = ({
       const dimensionBadge = document.getElementById('studio-dimension-badge');
       const canvasRoot = document.getElementById('canvas-root');
 
+      function getElementId(el) {
+        if (!el) return '';
+        if (typeof el.id === 'string') return el.id;
+        if (el.id && typeof el.id === 'object' && typeof el.id.animVal === 'string') {
+          return el.id.animVal;
+        }
+        return '';
+      }
+
+      function getElementClassName(el) {
+        if (!el) return '';
+        if (typeof el.className === 'string') return el.className;
+        if (el.className && typeof el.className === 'object' && typeof el.className.animVal === 'string') {
+          return el.className.animVal;
+        }
+        const attrClass = el.getAttribute ? el.getAttribute('class') : null;
+        if (typeof attrClass === 'string') return attrClass;
+        return '';
+      }
+
+      function hasIdStartingWithStudio(node) {
+        if (!node) return false;
+        const idStr = getElementId(node);
+        return idStr.startsWith('studio-');
+      }
+
       function isInternalStudioNode(node) {
         if (!node || node === document.body || node === document.documentElement || node === canvasRoot) return true;
-        if (node.id && node.id.startsWith('studio-')) return true;
+        if (hasIdStartingWithStudio(node)) return true;
         if (node.closest && (node.closest('#studio-quick-toolbar') || node.closest('#studio-selection-box') || node.closest('#studio-hover-box'))) return true;
         return false;
       }
@@ -263,7 +289,7 @@ export const Canvas: React.FC<CanvasProps> = ({
         while (indexEl && indexEl !== canvasRoot && indexEl !== document.body) {
           const parent = indexEl.parentElement;
           if (!parent) break;
-          const validSiblings = Array.from(parent.children).filter(c => !c.id || !c.id.startsWith('studio-'));
+          const validSiblings = Array.from(parent.children).filter(c => !hasIdStartingWithStudio(c));
           const idx = validSiblings.indexOf(indexEl);
           if (idx !== -1) {
             indexParts.unshift(idx);
@@ -281,7 +307,7 @@ export const Canvas: React.FC<CanvasProps> = ({
         let el = root;
         for (const idx of parts) {
           if (!el) return null;
-          const validKids = Array.from(el.children).filter(c => !c.id || !c.id.startsWith('studio-'));
+          const validKids = Array.from(el.children).filter(c => !hasIdStartingWithStudio(c));
           if (idx < 0 || idx >= validKids.length) return null;
           el = validKids[idx];
         }
@@ -318,9 +344,11 @@ export const Canvas: React.FC<CanvasProps> = ({
         }
 
         const tag = currentSelected.tagName.toLowerCase();
-        const id = currentSelected.id ? '#' + currentSelected.id : '';
-        const cls = currentSelected.className && typeof currentSelected.className === 'string'
-          ? '.' + currentSelected.className.split(' ').filter(c => c && !c.startsWith('studio-'))[0]
+        const elementIdStr = getElementId(currentSelected);
+        const id = elementIdStr ? '#' + elementIdStr : '';
+        const elementClassStr = getElementClassName(currentSelected);
+        const cls = elementClassStr
+          ? '.' + elementClassStr.split(' ').filter(c => c && !c.startsWith('studio-'))[0]
           : '';
         const tagText = tag + id + (cls ? cls.slice(0, 14) : '');
 
@@ -379,11 +407,13 @@ export const Canvas: React.FC<CanvasProps> = ({
         // Build Selector Chain
         const selectorParts = [];
         let selEl = normalizedTarget;
-        while (selEl && selEl !== document.body && selEl.id !== 'canvas-root') {
+        while (selEl && selEl !== document.body && getElementId(selEl) !== 'canvas-root') {
           let name = selEl.nodeName.toLowerCase();
-          if (selEl.id) {
-            name += '#' + selEl.id;
-          } else if (selEl.className && typeof selEl.className === 'string') {
+          const selElId = getElementId(selEl);
+          const selElClass = getElementClassName(selEl);
+          if (selElId) {
+            name += '#' + selElId;
+          } else if (selElClass) {
             const cleanClasses = Array.from(selEl.classList || [])
               .filter(c => !c.startsWith('studio-'))
               .join('.');
@@ -531,9 +561,11 @@ export const Canvas: React.FC<CanvasProps> = ({
         const target = e.target;
         selectElement(target, false);
         const tag = target.tagName.toLowerCase();
-        const id = target.id ? '#' + target.id : '';
-        const cls = target.className && typeof target.className === 'string'
-          ? '.' + target.className.split(' ').filter(c => c && !c.startsWith('studio-'))[0]
+        const targetIdStr = getElementId(target);
+        const id = targetIdStr ? '#' + targetIdStr : '';
+        const targetClassStr = getElementClassName(target);
+        const cls = targetClassStr
+          ? '.' + targetClassStr.split(' ').filter(c => c && !c.startsWith('studio-'))[0]
           : '';
         const tagText = tag + id + (cls ? cls.slice(0, 14) : '');
         const path = getIndexPath(target);
@@ -1020,12 +1052,23 @@ export const Canvas: React.FC<CanvasProps> = ({
 
         case 'UPDATE_SELECTION_RECT':
           if (iframeRef.current) {
-            const iframeRect = iframeRef.current.getBoundingClientRect();
+            const iframe = iframeRef.current;
+            const iframeRect = iframe.getBoundingClientRect();
+            const w = iframe.offsetWidth;
+            const h = iframe.offsetHeight;
             const scale = zoom / 100;
-            const screenTop = iframeRect.top + event.data.rect.top * scale;
-            const screenLeft = iframeRect.left + event.data.rect.left * scale;
-            const screenBottom = iframeRect.top + event.data.rect.bottom * scale;
-            const screenRight = iframeRect.left + event.data.rect.right * scale;
+
+            // Encontra o centro do iframe transformado, que permanece invariante à escala
+            const cx = iframeRect.left + iframeRect.width / 2;
+            const cy = iframeRect.top + iframeRect.height / 2;
+
+            // Mapeia as coordenadas internas (rect.top, rect.left) para o sistema de coordenadas do parent,
+            // considerando a escala aplicada a partir do centro
+            const screenTop = cy + (event.data.rect.top - h / 2) * scale;
+            const screenLeft = cx + (event.data.rect.left - w / 2) * scale;
+            const screenBottom = cy + (event.data.rect.bottom - h / 2) * scale;
+            const screenRight = cx + (event.data.rect.right - w / 2) * scale;
+
             setSelectionRect({
               top: screenTop,
               left: screenLeft,
@@ -1046,10 +1089,18 @@ export const Canvas: React.FC<CanvasProps> = ({
 
         case 'OPEN_CONTEXT_MENU':
           if (iframeRef.current) {
-            const iframeRect = iframeRef.current.getBoundingClientRect();
+            const iframe = iframeRef.current;
+            const iframeRect = iframe.getBoundingClientRect();
+            const w = iframe.offsetWidth;
+            const h = iframe.offsetHeight;
             const scale = zoom / 100;
-            const screenX = iframeRect.left + event.data.x * scale;
-            const screenY = iframeRect.top + event.data.y * scale;
+
+            const cx = iframeRect.left + iframeRect.width / 2;
+            const cy = iframeRect.top + iframeRect.height / 2;
+
+            const screenX = cx + (event.data.x - w / 2) * scale;
+            const screenY = cy + (event.data.y - h / 2) * scale;
+
             setContextMenu({
               visible: true,
               x: screenX,

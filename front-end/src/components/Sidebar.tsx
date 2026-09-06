@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Type,
   Square,
@@ -137,6 +137,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set(['0', '1', '2', '3', '0.0', '0.1', '1.0']));
   const [dragSource, setDragSource] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState<string | null>(null);
+
+  // Auto-expand parent folders when selectedPath changes
+  useEffect(() => {
+    if (selectedPath) {
+      const parts = selectedPath.split('.');
+      if (parts.length > 1) {
+        setExpandedPaths(prev => {
+          const next = new Set(prev);
+          let current = '';
+          for (let i = 0; i < parts.length - 1; i++) {
+            current = current ? `${current}.${parts[i]}` : parts[i];
+            next.add(current);
+          }
+          return next;
+        });
+      }
+    }
+  }, [selectedPath]);
 
   // Template Manager State
   const [templateCategoryFilter, setTemplateCategoryFilter] = useState<string>('ALL');

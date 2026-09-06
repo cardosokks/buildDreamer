@@ -419,7 +419,15 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
     for (const idx of parts) {
       if (!current) return null;
       const validChildren: Element[] = Array.from(current.children).filter(
-        (c: Element) => !c.id.startsWith('studio-') && !c.classList.contains('studio-tool-btn')
+        (c: Element) => {
+          let idStr = '';
+          if (c.id && typeof c.id === 'string') {
+            idStr = c.id;
+          } else if (c.id && typeof c.id === 'object' && (c.id as any).animVal) {
+            idStr = (c.id as any).animVal;
+          }
+          return !idStr.startsWith('studio-') && !c.classList.contains('studio-tool-btn');
+        }
       );
       if (idx < 0 || idx >= validChildren.length) return null;
       current = validChildren[idx];
@@ -587,11 +595,12 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
     const doc = parseDocFromHtml(currentPage.html);
     const root = doc.getElementById('canvas-root') || doc.body;
     const el = getElementByPath(root, selectedPath);
-    if (el instanceof HTMLElement) {
+    if (el && 'style' in el) {
+      const styleableEl = el as any;
       if (value) {
-        el.style.setProperty(prop, value);
+        styleableEl.style.setProperty(prop, value);
       } else {
-        el.style.removeProperty(prop);
+        styleableEl.style.removeProperty(prop);
       }
       const newHtml = serializeBodyContent(doc);
       handleCodeChange('html', newHtml);
@@ -868,7 +877,13 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
       
       function nodeToElementNode(node: Element): ElementNode | null {
         // Ignora overlays de seleção internos se existirem no snapshot
-        if (node.id && node.id.startsWith('studio-')) return null;
+        let idStr = '';
+        if (node.id && typeof node.id === 'string') {
+          idStr = node.id;
+        } else if (node.id && typeof node.id === 'object' && (node.id as any).animVal) {
+          idStr = (node.id as any).animVal;
+        }
+        if (idStr.startsWith('studio-')) return null;
         if (node.classList && node.classList.contains('studio-tool-btn')) return null;
 
         const childNodes: ElementNode[] = [];
@@ -1158,30 +1173,21 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
       : rawDesc.replace(/"/g, '&quot;');
 
     const previewHeaderHtml = forPreview ? `
-  <!-- Global Preview Navigation Header -->
-  <div id="studio-preview-nav" style="position: fixed; top: 0; left: 0; right: 0; height: 56px; background: rgba(9, 13, 22, 0.9); border-bottom: 1px solid rgba(168, 85, 247, 0.25); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); display: flex; align-items: center; justify-content: space-between; padding: 0 24px; z-index: 999999; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3); font-family: 'Plus Jakarta Sans', sans-serif;">
-    <div style="display: flex; align-items: center; gap: 12px;">
-      <div style="width: 32px; height: 32px; border-radius: 8px; background: linear-gradient(135deg, #a855f7 0%, #ec4899 100%); display: flex; align-items: center; justify-content: center; font-weight: bold; color: white; box-shadow: 0 4px 6px -1px rgba(168, 85, 247, 0.3);">
-        B
-      </div>
-      <div style="display: flex; flex-direction: column;">
-        <span style="font-weight: 700; color: #f8fafc; font-size: 13px; tracking-wide: 0.05em;">${project?.name || 'DreamBuild'}</span>
-        <span style="font-size: 9px; font-weight: 800; color: #a855f7; text-transform: uppercase; letter-spacing: 0.1em; display: inline-flex; align-items: center; gap: 4px;">
-          <span style="width: 5px; height: 5px; border-radius: 50%; background: #a855f7; display: inline-block;"></span> Modo Visualização
-        </span>
-      </div>
+  <!-- Global Floating Preview Navigation (Bottom-Center) -->
+  <div id="studio-preview-floating-nav">
+    <div style="display: flex; align-items: center; gap: 8px; border-right: 1px dashed rgba(255, 255, 255, 0.15); padding-right: 12px; margin-right: 4px;">
+      <div style="width: 22px; height: 22px; border-radius: 6px; background: linear-gradient(135deg, #a855f7 0%, #ec4899 100%); display: flex; align-items: center; justify-content: center; font-weight: 800; color: white; font-size: 10px;">D</div>
+      <span style="font-weight: 700; color: #f8fafc; font-size: 11px; letter-spacing: 0.05em; white-space: nowrap;">Preview</span>
     </div>
-    <nav style="display: flex; align-items: center; gap: 8px;">
+    <nav style="display: flex; align-items: center; gap: 4px; max-width: 600px; overflow-x: auto; scrollbar-width: none;">
       ${(project?.pages || []).map(p => `
         <button 
           data-page-id="${p.id}"
           data-page-slug="${p.slug}"
-          onclick="window.__NAVIGATE_TO_PAGE__('${p.id}')"
           class="preview-nav-link ${p.id === activePage.id ? 'active' : ''}"
-          style="position: relative; padding: 6px 12px; border-radius: 8px; font-size: 11px; font-weight: 600; cursor: pointer; transition: all 0.2s ease; border: none; background: transparent; outline: none;"
         >
-          ${p.name}
-          ${p.isHomepage ? '<span style="margin-left: 4px; font-size: 10px;">🏠</span>' : ''}
+          ${p.isHomepage ? '<span>🏠</span>' : ''}
+          <span>${p.name}</span>
         </button>
       `).join('')}
     </nav>
@@ -1189,20 +1195,55 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
 ` : '';
 
     const previewStyles = forPreview ? `
-    body {
-      padding-top: 56px !important;
+    #studio-preview-floating-nav {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 999999;
+      background: rgba(9, 13, 22, 0.85);
+      border: 1px solid rgba(168, 85, 247, 0.25);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-radius: 9999px;
+      padding: 6px 14px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 0 15px rgba(168, 85, 247, 0.15);
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      opacity: 0.2; /* 80% transparente por padrão quando sem foco/mouse */
+      transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.3s ease;
+    }
+    #studio-preview-floating-nav:hover {
+      opacity: 1 !important; /* Totalmente visível no hover */
+      border-color: rgba(168, 85, 247, 0.6);
+      transform: translateX(-50%) translateY(-2px);
     }
     .preview-nav-link {
       color: #94a3b8 !important;
+      background: transparent;
+      border: none;
+      outline: none;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 11px;
+      padding: 6px 14px;
+      border-radius: 9999px;
+      white-space: nowrap;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      transition: all 0.2s ease;
     }
     .preview-nav-link:hover {
       color: #f1f5f9 !important;
-      background-color: rgba(30, 41, 59, 0.5) !important;
+      background-color: rgba(255, 255, 255, 0.08) !important;
     }
     .preview-nav-link.active {
       color: #c084fc !important;
-      background-color: rgba(168, 85, 247, 0.1) !important;
-      box-shadow: inset 0 0 0 1px rgba(168, 85, 247, 0.2) !important;
+      background-color: rgba(168, 85, 247, 0.12) !important;
+      box-shadow: inset 0 0 0 1px rgba(168, 85, 247, 0.3) !important;
     }
 ` : '';
 
@@ -1324,6 +1365,18 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
     };
 
     document.addEventListener('click', function(e) {
+      // Interceptação direta para os botões de navegação do Preview (evita conflito com links gerais)
+      var navBtn = e.target.closest('.preview-nav-link');
+      if (navBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        var pageId = navBtn.getAttribute('data-page-id');
+        if (pageId) {
+          window.__NAVIGATE_TO_PAGE__(pageId);
+        }
+        return;
+      }
+
       var target = e.target.closest('a');
       if (!target) return;
 
