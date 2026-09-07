@@ -51,6 +51,8 @@ import { ChatPanel } from './ChatPanel';
 import { SEOAuditModal } from './SEOAuditModal';
 import { API_URL, safeJson } from '../config';
 import { useNotification } from '../context/NotificationContext';
+import { parseDocFromHtml, serializeBodyContent, getElementByPath } from '../utils/domUtils';
+import { useElementEditor } from '../hooks/useElementEditor';
 
 import { InspectorPanel } from './InspectorPanel';
 import { findNodeById, updateComponentNode, removeNodeById, addNodeToParentById } from '../utils/tree';
@@ -393,47 +395,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
   }, [handleUndo, handleRedo, selectedPath, activePage]);
 
   // Helpers to parse and serialize DOM trees safely
-  const parseDocFromHtml = (htmlStr: string) => {
-    const parser = new DOMParser();
-    const cleanStr = String(htmlStr || '').trim();
-    // Se o HTML não tiver wrapper <div id="canvas-root">, envolve para manter a árvore normalizada
-    if (cleanStr.includes('id="canvas-root"')) {
-      return parser.parseFromString(cleanStr, 'text/html');
-    } else {
-      return parser.parseFromString(`<div id="canvas-root">${cleanStr}</div>`, 'text/html');
-    }
-  };
 
-  const serializeBodyContent = (doc: Document) => {
-    const canvasRoot = doc.getElementById('canvas-root');
-    if (canvasRoot) return canvasRoot.innerHTML;
-    return doc.body ? doc.body.innerHTML : '';
-  };
-
-  const getElementByPath = (root: Element, path: string): Element | null => {
-    if (path === undefined || path === null || path === '') return null;
-    const parts = String(path).split('.').map(p => parseInt(p, 10)).filter(n => !isNaN(n));
-    if (parts.length === 0) return null;
-
-    let current: Element | null = root;
-    for (const idx of parts) {
-      if (!current) return null;
-      const validChildren: Element[] = Array.from(current.children).filter(
-        (c: Element) => {
-          let idStr = '';
-          if (c.id && typeof c.id === 'string') {
-            idStr = c.id;
-          } else if (c.id && typeof c.id === 'object' && (c.id as any).animVal) {
-            idStr = (c.id as any).animVal;
-          }
-          return !idStr.startsWith('studio-') && !c.classList.contains('studio-tool-btn');
-        }
-      );
-      if (idx < 0 || idx >= validChildren.length) return null;
-      current = validChildren[idx];
-    }
-    return current;
-  };
 
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error'>('saved');
 
@@ -572,40 +534,31 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
     void flushQueuedSave();
   };
 
-  // Inline content editable change handler
-  const handleInlineTextChange = (path: string, newText: string) => {
-    const currentPage = activePageRef.current;
-    if (!currentPage) return;
-    const doc = parseDocFromHtml(currentPage.html);
-    const root = doc.getElementById('canvas-root') || doc.body;
-    const el = getElementByPath(root, path);
-    if (el) {
-      el.textContent = newText;
-      const newHtml = serializeBodyContent(doc);
-      handleCodeChange('html', newHtml);
-    }
-  };
+  const elementEditor = useElementEditor(
+    activePageRef,
+    handleCodeChange,
+    selectedPath,
+    selectedComponentId,
+    setSelectedPath,
+    setSelectedSelector,
+    setSelectedStyles,
+    setSelectedAttrs
+  );
+  const {
+    handleStyleChange,
+    handleInlineTextChange,
+    handleDuplicateElement,
+    handleAttrChange,
+    handleMoveElementDirection,
+    handleDeleteElement
+  } = elementEditor;
+  console.log('DEBUG: elementEditor is', elementEditor);
 
-  // Style change handler
-  const handleStyleChange = (prop: string, value: string) => {
-    const currentPage = activePageRef.current;
-    if (!currentPage || !selectedPath) return;
-    setSelectedStyles(prev => ({ ...prev, [prop]: value }));
+  // --- HANDLERS CENTRALIZED IN HOOKS ---
 
-    const doc = parseDocFromHtml(currentPage.html);
-    const root = doc.getElementById('canvas-root') || doc.body;
-    const el = getElementByPath(root, selectedPath);
-    if (el && 'style' in el) {
-      const styleableEl = el as any;
-      if (value) {
-        styleableEl.style.setProperty(prop, value);
-      } else {
-        styleableEl.style.removeProperty(prop);
-      }
-      const newHtml = serializeBodyContent(doc);
-      handleCodeChange('html', newHtml);
-    }
-  };
+  // --- OLD HANDLER REMOVED ---
+
+  // --- OLD HANDLER REMOVED ---
 
   const handleUpdateNode = (updatedNode: ComponentNode) => {
     if (!activePage) return;
@@ -624,82 +577,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
     handleCodeChange('components', newComponents);
   };
 
-  // Attribute change handler
-  const handleAttrChange = (attr: string, value: string) => {
-    const currentPage = activePageRef.current;
-    if (!currentPage || !selectedPath) return;
-    setSelectedAttrs(prev => ({ ...prev, [attr]: value }));
-
-    const doc = parseDocFromHtml(currentPage.html);
-    const root = doc.getElementById('canvas-root') || doc.body;
-    const el = getElementByPath(root, selectedPath);
-    if (el) {
-      if (attr === '_tag') return;
-      if (attr === '_textContent') {
-        el.innerHTML = value;
-      } else {
-        el.setAttribute(attr, value);
-      }
-      const newHtml = serializeBodyContent(doc);
-      handleCodeChange('html', newHtml);
-    }
-  };
-
-  // Move element up or down among siblings
-  const handleMoveElementDirection = (path: string, direction: 'up' | 'down') => {
-    const currentPage = activePageRef.current;
-    if (!currentPage || !path) return;
-    const doc = parseDocFromHtml(currentPage.html);
-    const root = doc.getElementById('canvas-root') || doc.body;
-    const el = getElementByPath(root, path);
-    if (!el || !el.parentElement) return;
-
-    const parent = el.parentElement;
-    const siblings = Array.from(parent.children);
-    const currentIndex = siblings.indexOf(el);
-
-    if (direction === 'up' && currentIndex > 0) {
-      parent.insertBefore(el, siblings[currentIndex - 1]);
-    } else if (direction === 'down' && currentIndex < siblings.length - 1) {
-      parent.insertBefore(el, siblings[currentIndex + 1].nextSibling);
-    } else {
-      return;
-    }
-
-    const newHtml = serializeBodyContent(doc);
-    handleCodeChange('html', newHtml);
-  };
-
-  // Element Delete
-  const handleDeleteElement = (path: string) => {
-    const currentPage = activePageRef.current;
-    if (!currentPage) return;
-    const doc = parseDocFromHtml(currentPage.html);
-    const root = doc.getElementById('canvas-root') || doc.body;
-    const el = getElementByPath(root, path);
-    if (el && el.parentElement) {
-      el.parentElement.removeChild(el);
-      const newHtml = serializeBodyContent(doc);
-      handleCodeChange('html', newHtml);
-      setSelectedPath(null);
-      setSelectedSelector(null);
-    }
-  };
-
-  // Element Duplicate
-  const handleDuplicateElement = (path: string) => {
-    const currentPage = activePageRef.current;
-    if (!currentPage) return;
-    const doc = parseDocFromHtml(currentPage.html);
-    const root = doc.getElementById('canvas-root') || doc.body;
-    const el = getElementByPath(root, path);
-    if (el && el.parentElement) {
-      const clone = el.cloneNode(true) as Element;
-      el.parentElement.insertBefore(clone, el.nextSibling);
-      const newHtml = serializeBodyContent(doc);
-      handleCodeChange('html', newHtml);
-    }
-  };
+  // --- OLD HANDLERS REMOVED ---
 
   // Element Reorder (before, after or inside)
   const handleMoveElement = (sourcePath: string, targetPath: string, position: 'before' | 'after' | 'inside' = 'inside') => {

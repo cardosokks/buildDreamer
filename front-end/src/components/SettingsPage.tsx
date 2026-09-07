@@ -30,7 +30,10 @@ import {
   Sliders,
   Laptop,
   Download,
-  Upload
+  Upload,
+  Palette,
+  Sun,
+  Moon
 } from 'lucide-react';
 import { API_URL } from '../config';
 
@@ -88,7 +91,7 @@ export const DEFAULT_AI_SKILLS: AISkill[] = [
 
 export const SettingsPage: React.FC = () => {
   const { token, user, login } = useAuth();
-  const { theme } = useTheme();
+  const { theme, toggleTheme } = useTheme();
   const [activeTab, setActiveTab] = useState<'profile' | 'ai' | 'ollama' | 'models' | 'skills' | 'minio' | 'system'>('ai');
   const [loading, setLoading] = useState(false);
   const [savingRemote, setSavingRemote] = useState(false);
@@ -1469,8 +1472,29 @@ export const SettingsPage: React.FC = () => {
                   Perfil do Usuário & Preferências
                 </h2>
                 <p className="text-xs text-slate-400 mt-1">
-                  Gerencie informações da conta e densidade da barra de ferramentas do construtor.
+                  Gerencie informações da conta, tema do sistema e densidade da barra de ferramentas do construtor.
                 </p>
+              </div>
+
+              {/* Tema Toggle */}
+              <div className="p-4 rounded-xl bg-slate-900/60 border border-purple-500/20 flex items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <span className="font-bold text-sm text-white flex items-center gap-2">
+                    <Palette className="w-4 h-4 text-purple-400" />
+                    Tema do Sistema ({theme === 'dark' ? 'Escuro' : 'Claro'})
+                  </span>
+                  <p className="text-xs text-slate-400">
+                    Alterne entre o modo escuro (profissional) e o modo claro (maior contraste).
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={toggleTheme}
+                  className="px-4 py-2 rounded-xl bg-purple-950/60 border border-purple-500/40 text-purple-300 hover:bg-purple-900/60 text-xs font-semibold flex items-center gap-2 transition-all"
+                >
+                  {theme === 'dark' ? <Moon className="w-3.5 h-3.5" /> : <Sun className="w-3.5 h-3.5" />}
+                  Alternar para {theme === 'dark' ? 'Claro' : 'Escuro'}
+                </button>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
