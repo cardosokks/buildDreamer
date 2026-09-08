@@ -1,9 +1,15 @@
-import React, { useEffect, useRef, useCallback, useState } from 'react';
+import React, { useEffect, useRef, useCallback, useState, useImperativeHandle, forwardRef } from 'react';
 import { createPortal } from 'react-dom';
 import { renderTreeToHtml } from '../utils/renderer';
 import { ComponentNode } from '../types/canvas';
 
-interface CanvasProps {
+export interface CanvasHandle {
+  applyStyle: (path: string, prop: string, value: string) => void;
+  applyAttr: (path: string, attr: string, value: string) => void;
+  requestOverlayUpdate: () => void;
+}
+
+export interface CanvasProps {
   html?: string;
   components?: ComponentNode[];
   css: string;
@@ -33,7 +39,7 @@ interface CanvasProps {
   ) => void;
 }
 
-export const Canvas: React.FC<CanvasProps> = ({
+export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({
   html,
   components,
   css,
@@ -50,9 +56,33 @@ export const Canvas: React.FC<CanvasProps> = ({
   onSelectParentElement,
   onHtmlChange,
   onInsertBlock
-}) => {
+}, ref) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const isInitializedRef = useRef(false);
+
+  useImperativeHandle(ref, () => ({
+    applyStyle: (path: string, prop: string, value: string) => {
+      iframeRef.current?.contentWindow?.postMessage({
+        type: 'APPLY_ELEMENT_STYLE',
+        path,
+        prop,
+        value
+      }, '*');
+    },
+    applyAttr: (path: string, attr: string, value: string) => {
+      iframeRef.current?.contentWindow?.postMessage({
+        type: 'APPLY_ELEMENT_ATTR',
+        path,
+        attr,
+        value
+      }, '*');
+    },
+    requestOverlayUpdate: () => {
+      iframeRef.current?.contentWindow?.postMessage({
+        type: 'REQUEST_UPDATE_RECT'
+      }, '*');
+    }
+  }), []);
   const lastHtmlSentRef = useRef<string>('');
   const lastCssSentRef = useRef<string>('');
   const [selectionRect, setSelectionRect] = useState<{ top: number; left: number; width: number; height: number; bottom: number; right: number } | null>(null);
@@ -217,7 +247,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   </style>
 </head>
 <body>
-  <div id="canvas-root">${rawHtml}</div>
+  ${(rawHtml && rawHtml.includes('id="canvas-root"')) ? rawHtml : `<div id="canvas-root">${rawHtml}</div>`}
 
   <!-- Selection Box Overlay & Handles -->
   <div id="studio-selection-box">
@@ -607,6 +637,37 @@ export const Canvas: React.FC<CanvasProps> = ({
       // ─── Incoming Actions From Parent ───
       window.addEventListener('message', function(msg) {
         if (!msg.data) return;
+
+        if (msg.data.type === 'APPLY_ELEMENT_STYLE' && msg.data.path) {
+          const el = getElementByIndexPath(msg.data.path);
+          if (el && el.style) {
+            if (msg.data.value !== undefined && msg.data.value !== null && msg.data.value !== '') {
+              el.style.setProperty(msg.data.prop, msg.data.value);
+            } else {
+              el.style.removeProperty(msg.data.prop);
+            }
+            if (currentSelected === el) {
+              updateOverlayPosition();
+            }
+          }
+        }
+
+        if (msg.data.type === 'APPLY_ELEMENT_ATTR' && msg.data.path) {
+          const el = getElementByIndexPath(msg.data.path);
+          if (el) {
+            if (msg.data.attr === '_textContent') {
+              el.textContent = msg.data.value;
+            } else if (msg.data.value !== undefined && msg.data.value !== null && msg.data.value !== '') {
+              el.setAttribute(msg.data.attr, msg.data.value);
+            } else {
+              el.removeAttribute(msg.data.attr);
+            }
+            if (currentSelected === el) {
+              updateOverlayPosition();
+            }
+          }
+        }
+
         if (msg.data.type === 'ACTION_SELECT_PARENT' && currentSelected) {
           const parent = currentSelected.parentElement;
           if (parent && !isInternalStudioNode(parent)) {
@@ -832,7 +893,19 @@ export const Canvas: React.FC<CanvasProps> = ({
           const root = document.getElementById('canvas-root');
 
           if (root && typeof msg.data.html === 'string') {
-            root.innerHTML = msg.data.html;
+            let htmlToSet = msg.data.html;
+            if (htmlToSet.includes('id="canvas-root"')) {
+              try {
+                const tempDoc = new DOMParser().parseFromString(htmlToSet, 'text/html');
+                const tempRoot = tempDoc.getElementById('canvas-root');
+                if (tempRoot) {
+                  if (tempRoot.className) root.className = tempRoot.className;
+                  if (tempRoot.getAttribute('style')) root.setAttribute('style', tempRoot.getAttribute('style') || '');
+                  htmlToSet = tempRoot.innerHTML;
+                }
+              } catch(e) {}
+            }
+            root.innerHTML = htmlToSet;
           }
 
           const userStyles = document.getElementById('studio-user-styles');
@@ -1129,6 +1202,21 @@ export const Canvas: React.FC<CanvasProps> = ({
     onInsertBlock
   ]);
 
+  // Synchronize selection bounding box on window resize or scroll
+  useEffect(() => {
+    const handleSync = () => {
+      if (selectionRect && iframeRef.current) {
+        iframeRef.current.contentWindow?.postMessage({ type: 'REQUEST_UPDATE_RECT' }, '*');
+      }
+    };
+    window.addEventListener('resize', handleSync);
+    window.addEventListener('scroll', handleSync, true);
+    return () => {
+      window.removeEventListener('resize', handleSync);
+      window.removeEventListener('scroll', handleSync, true);
+    };
+  }, [selectionRect]);
+
   const scale = zoom / 100;
 
   return (
@@ -1150,95 +1238,129 @@ export const Canvas: React.FC<CanvasProps> = ({
       </div>
 
       {selectionRect && createPortal(
-        <div
-          id="studio-quick-toolbar"
-          role="toolbar"
-          aria-label="Ações do Elemento"
-          className="fixed z-[999999] bg-[#0f0b18] border border-purple-500/50 rounded-xl px-2.5 py-1.5 shadow-2xl flex items-center gap-1.5 text-xs text-white select-none animate-in fade-in duration-100"
-          style={{
-            top: (() => {
-              let t = selectionRect.top - 46;
-              if (t < 8) t = selectionRect.bottom + 8;
-              return t;
-            })(),
-            left: Math.max(8, Math.min(selectionRect.left, window.innerWidth - 380))
-          }}
-        >
-          <span className="bg-purple-600 text-white font-mono text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider max-w-[120px] truncate">
-            {selectionTagText || 'element'}
-          </span>
-          <button
-            type="button"
-            onClick={() => {
-              iframeRef.current?.contentWindow?.postMessage({ type: 'ACTION_SELECT_PARENT' }, '*');
+        <>
+          {/* Interaction-Aware Selection Bounding Box */}
+          <div
+            id="studio-selection-bounding-box"
+            role="region"
+            aria-label="Elemento Selecionado"
+            className="fixed pointer-events-none z-[999990] transition-all duration-75"
+            style={{
+              top: `${selectionRect.top}px`,
+              left: `${selectionRect.left}px`,
+              width: `${Math.max(selectionRect.width, 2)}px`,
+              height: `${Math.max(selectionRect.height, 2)}px`,
+              border: '2px solid #a855f7',
+              boxShadow: '0 0 0 1px rgba(168, 85, 247, 0.4), 0 0 16px rgba(168, 85, 247, 0.3)',
+              borderRadius: '3px'
             }}
-            className="px-2 py-1 bg-slate-900 hover:bg-purple-600 border border-slate-700 hover:border-purple-400 rounded-lg font-medium transition-all cursor-pointer"
-            title="Selecionar Elemento Pai"
           >
-            ▲ Pai
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              if (activeElementPath && onMoveElementDirection) {
-                onMoveElementDirection(activeElementPath, 'up');
-                setTimeout(() => iframeRef.current?.contentWindow?.postMessage({ type: 'REQUEST_UPDATE_RECT' }, '*'), 50);
-              }
+            {/* Tag & Dimension Badge */}
+            <div className="absolute -top-5 left-0 bg-purple-600 text-white font-mono text-[10px] font-bold px-1.5 py-0.5 rounded shadow flex items-center gap-1.5 whitespace-nowrap pointer-events-auto">
+              <span>{selectionTagText || 'Elemento'}</span>
+              <span className="text-purple-200 text-[9px] font-normal">
+                {Math.round(selectionRect.width)}×{Math.round(selectionRect.height)}px
+              </span>
+            </div>
+
+            {/* Corner Resize Markers */}
+            <div className="absolute -top-1.5 -left-1.5 w-2.5 h-2.5 bg-white border-2 border-purple-600 rounded-sm shadow-sm pointer-events-none" />
+            <div className="absolute -top-1.5 -right-1.5 w-2.5 h-2.5 bg-white border-2 border-purple-600 rounded-sm shadow-sm pointer-events-none" />
+            <div className="absolute -bottom-1.5 -left-1.5 w-2.5 h-2.5 bg-white border-2 border-purple-600 rounded-sm shadow-sm pointer-events-none" />
+            <div className="absolute -bottom-1.5 -right-1.5 w-2.5 h-2.5 bg-white border-2 border-purple-600 rounded-sm shadow-sm pointer-events-none" />
+          </div>
+
+          {/* Quick Actions Floating Toolbar */}
+          <div
+            id="studio-quick-toolbar"
+            role="toolbar"
+            aria-label="Ações do Elemento"
+            className="fixed z-[999999] bg-[#0f0b18]/95 backdrop-blur-md border border-purple-500/50 rounded-xl px-2.5 py-1.5 shadow-2xl flex items-center gap-1.5 text-xs text-white select-none animate-in fade-in duration-100"
+            style={{
+              top: (() => {
+                let t = selectionRect.top - 46;
+                if (t < 8) t = selectionRect.bottom + 8;
+                return t;
+              })(),
+              left: Math.max(8, Math.min(selectionRect.left, window.innerWidth - 380))
             }}
-            className="px-2 py-1 bg-slate-900 hover:bg-purple-600 border border-slate-700 hover:border-purple-400 rounded-lg font-medium transition-all cursor-pointer"
-            title="Mover para Cima"
           >
-            ↑ Cima
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              if (activeElementPath && onMoveElementDirection) {
-                onMoveElementDirection(activeElementPath, 'down');
-                setTimeout(() => iframeRef.current?.contentWindow?.postMessage({ type: 'REQUEST_UPDATE_RECT' }, '*'), 50);
-              }
-            }}
-            className="px-2 py-1 bg-slate-900 hover:bg-purple-600 border border-slate-700 hover:border-purple-400 rounded-lg font-medium transition-all cursor-pointer"
-            title="Mover para Baixo"
-          >
-            ↓ Baixo
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              if (activeElementPath && onDuplicateElement) {
-                onDuplicateElement(activeElementPath);
-              }
-            }}
-            className="px-2 py-1 bg-slate-900 hover:bg-purple-600 border border-slate-700 hover:border-purple-400 rounded-lg font-medium transition-all cursor-pointer"
-            title="Duplicar Elemento"
-          >
-            📋 Duplicar
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              iframeRef.current?.contentWindow?.postMessage({ type: 'ACTION_START_INLINE_EDIT' }, '*');
-            }}
-            className="px-2 py-1 bg-slate-900 hover:bg-purple-600 border border-slate-700 hover:border-purple-400 rounded-lg font-medium transition-all cursor-pointer"
-            title="Editar Texto Diretamente"
-          >
-            ✏️ Texto
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              if (activeElementPath && onDeleteElement) {
-                onDeleteElement(activeElementPath);
-                setSelectionRect(null);
-              }
-            }}
-            className="px-2 py-1 bg-rose-950/40 hover:bg-rose-600 border border-rose-900/60 hover:border-rose-500 text-rose-300 hover:text-white rounded-lg font-medium transition-all cursor-pointer"
-            title="Excluir Elemento"
-          >
-            🗑️ Excluir
-          </button>
-        </div>,
+            <span className="bg-purple-600 text-white font-mono text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider max-w-[120px] truncate">
+              {selectionTagText || 'element'}
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                iframeRef.current?.contentWindow?.postMessage({ type: 'ACTION_SELECT_PARENT' }, '*');
+              }}
+              className="px-2 py-1 bg-slate-900 hover:bg-purple-600 border border-slate-700 hover:border-purple-400 rounded-lg font-medium transition-all cursor-pointer"
+              title="Selecionar Elemento Pai"
+            >
+              ▲ Pai
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (activeElementPath && onMoveElementDirection) {
+                  onMoveElementDirection(activeElementPath, 'up');
+                  setTimeout(() => iframeRef.current?.contentWindow?.postMessage({ type: 'REQUEST_UPDATE_RECT' }, '*'), 50);
+                }
+              }}
+              className="px-2 py-1 bg-slate-900 hover:bg-purple-600 border border-slate-700 hover:border-purple-400 rounded-lg font-medium transition-all cursor-pointer"
+              title="Mover para Cima"
+            >
+              ↑ Cima
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (activeElementPath && onMoveElementDirection) {
+                  onMoveElementDirection(activeElementPath, 'down');
+                  setTimeout(() => iframeRef.current?.contentWindow?.postMessage({ type: 'REQUEST_UPDATE_RECT' }, '*'), 50);
+                }
+              }}
+              className="px-2 py-1 bg-slate-900 hover:bg-purple-600 border border-slate-700 hover:border-purple-400 rounded-lg font-medium transition-all cursor-pointer"
+              title="Mover para Baixo"
+            >
+              ↓ Baixo
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (activeElementPath && onDuplicateElement) {
+                  onDuplicateElement(activeElementPath);
+                }
+              }}
+              className="px-2 py-1 bg-purple-600/30 hover:bg-purple-600 border border-purple-500/40 hover:border-purple-400 rounded-lg font-medium transition-all cursor-pointer"
+              title="Duplicar Elemento"
+            >
+              📋 Duplicar
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                iframeRef.current?.contentWindow?.postMessage({ type: 'ACTION_START_INLINE_EDIT' }, '*');
+              }}
+              className="px-2 py-1 bg-slate-900 hover:bg-purple-600 border border-slate-700 hover:border-purple-400 rounded-lg font-medium transition-all cursor-pointer"
+              title="Editar Texto Diretamente"
+            >
+              ✏️ Texto
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (activeElementPath && onDeleteElement) {
+                  onDeleteElement(activeElementPath);
+                  setSelectionRect(null);
+                }
+              }}
+              className="px-2 py-1 bg-rose-950/40 hover:bg-rose-600 border border-rose-900/60 hover:border-rose-500 text-rose-300 hover:text-white rounded-lg font-medium transition-all cursor-pointer"
+              title="Excluir Elemento"
+            >
+              🗑️ Excluir
+            </button>
+          </div>
+        </>,
         document.body
       )}
 
@@ -1326,4 +1448,6 @@ export const Canvas: React.FC<CanvasProps> = ({
       )}
     </div>
   );
-};
+});
+
+Canvas.displayName = 'Canvas';

@@ -43,7 +43,7 @@ import { CreatePageModal, PageCreationData } from './CreatePageModal';
 import { getPageStarterTemplate } from '../lib/pageTemplates';
 import { Sidebar } from './Sidebar';
 import type { ElementNode } from './Sidebar';
-import { Canvas } from './Canvas';
+import { Canvas, CanvasHandle } from './Canvas';
 import { PropertiesPanel } from './PropertiesPanel';
 import { CodeEditor } from './CodeEditor';
 import { MediaLibrarySidebar } from './MediaLibrarySidebar';
@@ -134,6 +134,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
   const [zoom, setZoom] = useState<number>(100);
 
   // Selection & Tree State
+  const canvasRef = useRef<CanvasHandle>(null);
   const [selectedSelector, setSelectedSelector] = useState<string | null>(null);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [selectedComponentId, setSelectedComponentId] = useState<string | null>(null);
@@ -542,7 +543,8 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
     setSelectedPath,
     setSelectedSelector,
     setSelectedStyles,
-    setSelectedAttrs
+    setSelectedAttrs,
+    canvasRef
   );
   const {
     handleStyleChange,
@@ -2089,6 +2091,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
 
             {activePage && (
               <Canvas
+                ref={canvasRef}
                 key={activePage.id}
                 html={activePage.html}
                 css={activePage.css}

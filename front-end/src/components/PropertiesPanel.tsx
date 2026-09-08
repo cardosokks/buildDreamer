@@ -30,6 +30,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { API_URL } from '../config';
 import { useNotification } from '../context/NotificationContext';
+import { CssPropertyInspector } from './CssPropertyInspector';
 
 const rgbToHex = (color: string): string => {
   if (!color || color === 'transparent' || color.startsWith('#')) return color;
@@ -228,12 +229,29 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const [dragOver, setDragOver] = useState<string | null>(null);
   const [dragOverPosition, setDragOverPosition] = useState<'before' | 'after' | 'inside' | null>(null);
 
-  // Troca automática para estilos se um elemento for selecionado enquanto na aba layers se desejado
+  // Troca automática para estilos se um elemento for selecionado
   useEffect(() => {
-    if (selectedSelector && panelTab === 'layers' && !selectedPath) {
+    if (selectedPath) {
       setPanelTab('styles');
     }
-  }, [selectedSelector]);
+  }, [selectedPath]);
+
+  // Auto-expand parents when selectedPath changes
+  useEffect(() => {
+    if (!selectedPath) return;
+    const parts = selectedPath.split('.');
+    if (parts.length > 1) {
+      setExpandedPaths(prev => {
+        const next = new Set(prev);
+        let acc = '';
+        for (let i = 0; i < parts.length - 1; i++) {
+          acc = acc ? `${acc}.${parts[i]}` : parts[i];
+          next.add(acc);
+        }
+        return next;
+      });
+    }
+  }, [selectedPath]);
 
   const toggleExpanded = (path: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -809,173 +827,16 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       ) : (
         /* PAINEL DE ESTILOS & INSPECTOR */
         <div className="flex-1 overflow-y-auto">
-          <div className="px-3.5 py-2.5 border-b border-slate-900 flex items-center justify-between gap-2 shrink-0 bg-slate-950/60">
-            <div className="flex items-center gap-2 min-w-0">
-              <Tag className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-              <span className="text-[11px] font-bold text-white font-mono truncate">
-                {selectedAttrs['_tag'] || 'div'}
-              </span>
-            </div>
-            <div className="flex items-center gap-1">
-              {selectedPath && onDuplicateElement && (
-                <button
-                  onClick={() => onDuplicateElement(selectedPath)}
-                  className="p-1 text-slate-400 hover:text-white rounded hover:bg-slate-800"
-                  title="Duplicar Elemento"
-                >
-                  <Copy className="w-3.5 h-3.5" />
-                </button>
-              )}
-              {selectedPath && onDeleteElement && (
-                <button
-                  onClick={() => onDeleteElement(selectedPath)}
-                  className="p-1 text-red-400 hover:bg-red-500/20 rounded"
-                  title="Excluir Elemento"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* CLASSES TAILWIND TAGS */}
-          <Section title="Classes Tailwind & CSS" icon={<Code className="w-3 h-3 text-cyan-400" />} defaultOpen={true}>
-            <form onSubmit={handleAddClass} className="flex gap-1">
-              <input
-                type="text"
-                placeholder="+ class (ex: p-4 rounded-xl)"
-                value={newClassInput}
-                onChange={e => setNewClassInput(e.target.value)}
-                className={`${inputCls} flex-1`}
-              />
-              <button type="submit" className="px-2.5 py-1 bg-purple-600 hover:bg-purple-500 text-white text-[10px] font-bold rounded-lg cursor-pointer">
-                Add
-              </button>
-            </form>
-            <div className="flex flex-wrap gap-1 mt-2">
-              {classList.map(cls => (
-                <span
-                  key={cls}
-                  className="inline-flex items-center gap-1 bg-purple-950/40 border border-purple-500/30 text-purple-300 text-[10px] font-mono px-2 py-0.5 rounded"
-                >
-                  {cls}
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveClass(cls)}
-                    className="hover:text-red-400 cursor-pointer ml-0.5"
-                  >
-                    ×
-                  </button>
-                </span>
-              ))}
-            </div>
-          </Section>
-
-          {/* LAYOUT & DISPLAY */}
-          <Section title="Layout & Display" icon={<Layers className="w-3 h-3 text-pink-400" />} defaultOpen={true}>
-            <div>
-              <Label>Display</Label>
-              <select className={selectCls} value={display} onChange={e => S('display', e.target.value)}>
-                <option value="block">Block</option>
-                <option value="flex">Flex</option>
-                <option value="grid">Grid</option>
-                <option value="inline-block">Inline-Block</option>
-                <option value="none">None (Oculto)</option>
-              </select>
-            </div>
-
-            {isFlex && (
-              <div className="space-y-2.5 pt-1">
-                <div>
-                  <Label>Flex Direction</Label>
-                  <select className={selectCls} value={get('flex-direction')} onChange={e => S('flex-direction', e.target.value)}>
-                    <option value="row">Row (Horizontal)</option>
-                    <option value="column">Column (Vertical)</option>
-                    <option value="row-reverse">Row Reverse</option>
-                    <option value="column-reverse">Column Reverse</option>
-                  </select>
-                </div>
-                <div>
-                  <Label>Justify Content</Label>
-                  <select className={selectCls} value={get('justify-content')} onChange={e => S('justify-content', e.target.value)}>
-                    <option value="flex-start">Start</option>
-                    <option value="center">Center</option>
-                    <option value="flex-end">End</option>
-                    <option value="space-between">Space Between</option>
-                    <option value="space-around">Space Around</option>
-                  </select>
-                </div>
-                <div>
-                  <Label>Align Items</Label>
-                  <select className={selectCls} value={get('align-items')} onChange={e => S('align-items', e.target.value)}>
-                    <option value="stretch">Stretch</option>
-                    <option value="flex-start">Flex Start</option>
-                    <option value="center">Center</option>
-                    <option value="flex-end">End</option>
-                  </select>
-                </div>
-                <UnitInput label="Gap" prop="gap" value={get('gap')} onChange={S} placeholder="16px" />
-              </div>
-            )}
-          </Section>
-
-          {/* TIPOGRAFIA */}
-          <Section title="Tipografia" icon={<Type className="w-3 h-3 text-yellow-400" />} defaultOpen={true}>
-            <div className="grid grid-cols-2 gap-2">
-              <UnitInput label="Tamanho da Fonte" prop="font-size" value={get('font-size')} onChange={S} placeholder="16px" />
-              <div>
-                <Label>Peso (Weight)</Label>
-                <select className={selectCls} value={get('font-weight')} onChange={e => S('font-weight', e.target.value)}>
-                  <option value="300">Light (300)</option>
-                  <option value="400">Regular (400)</option>
-                  <option value="500">Medium (500)</option>
-                  <option value="600">Semibold (600)</option>
-                  <option value="700">Bold (700)</option>
-                  <option value="800">Extrabold (800)</option>
-                </select>
-              </div>
-            </div>
-            <ColorInput label="Cor do Texto" prop="color" value={get('color')} onChange={S} />
-            <div>
-              <Label>Alinhamento do Texto</Label>
-              <div className="flex gap-1 bg-slate-900 border border-slate-800 rounded-lg p-0.5">
-                {[
-                  { icon: <AlignLeft className="w-3.5 h-3.5" />, val: 'left' },
-                  { icon: <AlignCenter className="w-3.5 h-3.5" />, val: 'center' },
-                  { icon: <AlignRight className="w-3.5 h-3.5" />, val: 'right' },
-                  { icon: <AlignJustify className="w-3.5 h-3.5" />, val: 'justify' }
-                ].map(item => (
-                  <button
-                    key={item.val}
-                    type="button"
-                    onClick={() => S('text-align', item.val)}
-                    className={`flex-1 flex items-center justify-center p-1 rounded transition-colors cursor-pointer ${
-                      get('text-align') === item.val ? 'bg-purple-600 text-white' : 'text-slate-500 hover:text-white'
-                    }`}
-                  >
-                    {item.icon}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </Section>
-
-          {/* CORES & FUNDO */}
-          <Section title="Fundo & Bordas" icon={<Palette className="w-3 h-3 text-emerald-400" />} defaultOpen={false}>
-            <ColorInput label="Cor de Fundo" prop="background-color" value={get('background-color')} onChange={S} />
-            <div className="grid grid-cols-2 gap-2">
-              <UnitInput label="Raio da Borda" prop="border-radius" value={get('border-radius')} onChange={S} placeholder="8px" />
-              <UnitInput label="Largura Borda" prop="border-width" value={get('border-width')} onChange={S} placeholder="1px" />
-            </div>
-            <ColorInput label="Cor da Borda" prop="border-color" value={get('border-color')} onChange={S} />
-          </Section>
-
-          {/* EFEITOS & SOMBRAS */}
-          <Section title="Efeitos & Sombras" icon={<Sparkles className="w-3 h-3 text-cyan-400" />} defaultOpen={false}>
-            <UnitInput label="Opacidade" prop="opacity" value={get('opacity')} onChange={S} placeholder="1 (0 a 1)" />
-            <UnitInput label="Sombra da Caixa (Box Shadow)" prop="box-shadow" value={get('box-shadow')} onChange={S} placeholder="0 10px 25px rgba(0,0,0,0.5)" />
-            <UnitInput label="Transformação (Transform)" prop="transform" value={get('transform')} onChange={S} placeholder="scale(1.05) rotate(0deg)" />
-          </Section>
+          <CssPropertyInspector
+            selectedPath={selectedPath}
+            selectedSelector={selectedSelector}
+            selectedStyles={selectedStyles}
+            selectedAttrs={selectedAttrs}
+            onStyleChange={onStyleChange}
+            onAttrChange={onAttrChange}
+            onDuplicateElement={onDuplicateElement}
+            onDeleteElement={onDeleteElement}
+          />
         </div>
       )}
     </aside>

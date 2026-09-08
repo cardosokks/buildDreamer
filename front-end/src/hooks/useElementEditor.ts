@@ -11,7 +11,8 @@ export const useElementEditor = (
     setSelectedPath: (path: string | null) => void,
     setSelectedSelector: (selector: string | null) => void,
     setSelectedStyles: React.Dispatch<React.SetStateAction<Record<string, string>>>,
-    setSelectedAttrs: React.Dispatch<React.SetStateAction<Record<string, string>>>
+    setSelectedAttrs: React.Dispatch<React.SetStateAction<Record<string, string>>>,
+    canvasRef?: React.RefObject<any>
 ) => {
 
     const handleStyleChange = useCallback((prop: string, value: string) => {
@@ -19,6 +20,11 @@ export const useElementEditor = (
         if (!currentPage || !selectedPath) return;
 
         setSelectedStyles(prev => ({ ...prev, [prop]: value }));
+
+        // 0. Immediate style application to active DOM element in canvas
+        if (canvasRef?.current?.applyStyle) {
+            canvasRef.current.applyStyle(selectedPath, prop, value);
+        }
 
         // 1. Update old HTML string if it exists
         const doc = parseDocFromHtml(currentPage.html);
@@ -84,6 +90,11 @@ export const useElementEditor = (
         
         setSelectedAttrs(prev => ({ ...prev, [attr]: value }));
     
+        // 0. Immediate attribute application to active DOM element in canvas
+        if (canvasRef?.current?.applyAttr) {
+            canvasRef.current.applyAttr(selectedPath, attr, value);
+        }
+
         // 1. Update old HTML string if it exists
         const doc = parseDocFromHtml(currentPage.html);
         const root = doc.getElementById('canvas-root') || doc.body;

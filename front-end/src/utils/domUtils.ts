@@ -11,7 +11,12 @@ export const parseDocFromHtml = (htmlStr: string) => {
 
 export const serializeBodyContent = (doc: Document) => {
   const canvasRoot = doc.getElementById('canvas-root');
-  if (canvasRoot) return canvasRoot.innerHTML;
+  if (canvasRoot) {
+    if (canvasRoot.getAttribute('class') || canvasRoot.getAttribute('style') || canvasRoot.attributes.length > 1) {
+      return canvasRoot.outerHTML;
+    }
+    return canvasRoot.innerHTML;
+  }
   return doc.body ? doc.body.innerHTML : '';
 };
 
