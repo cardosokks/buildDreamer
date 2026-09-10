@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import {
@@ -37,7 +37,13 @@ import {
   X,
   ShieldCheck,
   Plus,
-  Palette
+  Palette,
+  MousePointer2,
+  Layout,
+  Type,
+  AlignLeft,
+  Grid,
+  RotateCcw
 } from 'lucide-react';
 import { CreatePageModal, PageCreationData } from './CreatePageModal';
 import { getPageStarterTemplate } from '../lib/pageTemplates';
@@ -49,6 +55,9 @@ import { CodeEditor } from './CodeEditor';
 import { MediaLibrarySidebar } from './MediaLibrarySidebar';
 import { ChatPanel } from './ChatPanel';
 import { SEOAuditModal } from './SEOAuditModal';
+import { AIAuditModal } from './AIAuditModal';
+import { PageValidationModal } from './PageValidationModal';
+import { validatePage } from '../utils/pageValidator';
 import { API_URL, safeJson } from '../config';
 import { useNotification } from '../context/NotificationContext';
 import { parseDocFromHtml, serializeBodyContent, getElementByPath } from '../utils/domUtils';
@@ -84,6 +93,48 @@ interface VisualBuilderProps {
   onBack: () => void;
   onOpenAIImprover?: () => void;
 }
+
+const QuickAddMenu = ({ onAdd, onClose }: { onAdd: (html: string) => void, onClose: () => void }) => {
+  const commonElements = [
+    { title: 'Seção', icon: <Layout className="w-4 h-4" />, html: '<section style="padding: 80px 20px; background: #080a12; min-height: 200px; display: flex; flex-direction: column; align-items: center; justify-content: center;"></section>' },
+    { title: 'Título', icon: <Type className="w-4 h-4" />, html: '<h2 style="font-size: 32px; font-weight: 800; color: white; margin-bottom: 16px;">Novo Título de Impacto</h2>' },
+    { title: 'Texto', icon: <AlignLeft className="w-4 h-4" />, html: '<p style="font-size: 16px; color: #94a3b8; line-height: 1.6; margin-bottom: 16px;">Insira seu texto explicativo aqui. Você pode editar este conteúdo livremente no editor visual clicando duas vezes sobre ele.</p>' },
+    { title: 'Botão', icon: <Radio className="w-4 h-4" />, html: '<button style="padding: 14px 28px; background: #a855f7; color: white; border: none; border-radius: 12px; font-weight: 700; cursor: pointer; transition: all 0.2s;">Botão de Ação</button>' },
+    { title: 'Imagem', icon: <ImageIcon className="w-4 h-4" />, html: '<img src="https://images.unsplash.com/photo-1498050108023-c5249f4df085?auto=format&fit=crop&w=600&q=80" style="width: 100%; max-width: 500px; height: auto; border-radius: 16px; margin: 20px 0;" />' },
+    { title: 'Container', icon: <Square className="w-4 h-4" />, html: '<div style="padding: 32px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 20px; width: 100%; max-width: 800px; margin: 0 auto;"></div>' },
+  ];
+
+  return (
+    <div className="absolute bottom-20 left-1/2 -translate-x-1/2 w-72 bg-[#0f111a] border border-slate-800 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-200 z-[100]">
+      <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between bg-slate-950/80">
+        <div className="flex items-center gap-2">
+          <Plus className="w-3.5 h-3.5 text-purple-400" />
+          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-300">Inserir Elemento</span>
+        </div>
+        <button onClick={onClose} className="p-1 text-slate-500 hover:text-white transition-colors">
+          <X className="w-3.5 h-3.5" />
+        </button>
+      </div>
+      <div className="p-2.5 grid grid-cols-2 gap-2">
+        {commonElements.map((el, i) => (
+          <button
+            key={i}
+            onClick={() => onAdd(el.html)}
+            className="flex flex-col items-center gap-2 px-2 py-3 rounded-xl hover:bg-purple-600/10 text-slate-400 hover:text-purple-300 transition-all group border border-transparent hover:border-purple-500/20"
+          >
+            <div className="p-2.5 rounded-lg bg-slate-900 group-hover:bg-purple-600/20 text-slate-500 group-hover:text-purple-400 transition-colors">
+              {el.icon}
+            </div>
+            <span className="text-[10px] font-bold">{el.title}</span>
+          </button>
+        ))}
+      </div>
+      <div className="p-2 bg-slate-950/40 border-t border-slate-800">
+        <p className="text-[9px] text-slate-500 text-center italic">Arraste os blocos da lateral para layouts completos</p>
+      </div>
+    </div>
+  );
+};
 
 interface HistoryState {
   html: string;
@@ -142,6 +193,8 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
   const [selectedStyles, setSelectedStyles] = useState<Record<string, string>>({});
   const [selectedAttrs, setSelectedAttrs] = useState<Record<string, string>>({});
   const [mediaGalleryTarget, setMediaGalleryTarget] = useState<'src' | 'ogImage' | null>(null);
+  const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
+  const [isPreviewMode, setIsPreviewMode] = useState(false);
 
   // Layout Panels (Persistência no LocalStorage)
   const [activeLeftSidebar, setActiveLeftSidebar] = useState<'dom' | 'media' | 'theme' | null>(() => {
@@ -204,6 +257,10 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
   const [showCreatePageModal, setShowCreatePageModal] = useState(false);
   const [showRemasterPageModal, setShowRemasterPageModal] = useState(false);
   const [showSEOAuditModal, setShowSEOAuditModal] = useState(false);
+  const [showAIAuditModal, setShowAIAuditModal] = useState(false);
+  const [showValidationModal, setShowValidationModal] = useState(false);
+  const [isSaveTriggeredByValidation, setIsSaveTriggeredByValidation] = useState(false);
+  const [showCanvasGrid, setShowCanvasGrid] = useState(false);
   const [pageRemasterPrompt, setPageRemasterPrompt] = useState('Aprimore o design e layout desta página com Tailwind CSS mantendo estritamente todas as frases, textos e mídias originais.');
   const [remasteringPage, setRemasteringPage] = useState(false);
   const [showProjectMenuDropdown, setShowProjectMenuDropdown] = useState(false);
@@ -301,6 +358,12 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
       setActivePageId(activePage.id);
     }
   }, [activePage, activePageId]);
+
+  // Pontuação do Sistema de Validação da Página
+  const pageValidationScore = useMemo(() => {
+    if (!activePage) return 100;
+    return validatePage(activePage.html, activePage.css, projectTheme).score;
+  }, [activePage?.html, activePage?.css, projectTheme]);
 
   // Push Snapshot to Undo Stack
   const pushHistorySnapshot = useCallback((description: string) => {
@@ -519,10 +582,20 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
     queuePageSave(updatedPage);
   };
 
-  // Explicit Save Trigger
-  const handleManualSave = async () => {
+  // Explicit Save Trigger com Validação Integrada de Diretrizes, Cores e Acessibilidade
+  const handleManualSave = useCallback(async (bypassValidation: boolean = false) => {
     const currentPage = pendingSaveRef.current || activePageRef.current;
     if (!currentPage) return;
+
+    if (!bypassValidation) {
+      const result = validatePage(currentPage.html, currentPage.css, projectTheme);
+      // Se houver erros críticos ou pontuação < 90, abre o painel de validação pré-salvamento
+      if (result.totalCritical > 0 || result.score < 90) {
+        setIsSaveTriggeredByValidation(true);
+        setShowValidationModal(true);
+        return;
+      }
+    }
 
     manualSaveRequestedRef.current = true;
     pendingSaveRef.current = currentPage;
@@ -533,7 +606,29 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
     }
 
     void flushQueuedSave();
-  };
+  }, [flushQueuedSave, projectTheme]);
+
+  // Atallhos Globais do Teclado (Ctrl+S, ESC)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        return;
+      }
+
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        handleManualSave();
+      } else if (e.key === 'Escape') {
+        setSelectedSelector(null);
+        setSelectedPath(null);
+        setSelectedComponentId(null);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleManualSave]);
 
   const elementEditor = useElementEditor(
     activePageRef,
@@ -944,12 +1039,13 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
   const handleCreatePageSubmit = async (data: PageCreationData) => {
     if (!project) return;
 
-    let finalHtml = '<div></div>';
-    let finalCss = '';
-    let finalJs = '';
-
-    if (data.templateType === 'ai' && data.aiPrompt) {
+    // Tentar gerar a página via IA para garantir personalização total sob o tema e prompt do projeto
+    if (data.templateType !== 'duplicate') {
       try {
+        const aiPromptText = data.templateType === 'ai' && data.aiPrompt 
+          ? data.aiPrompt 
+          : `Crie a página "${data.name}" (${data.templateType}) totalmente customizada para a proposta do projeto "${project.name}". Garanta conteúdo relevante sem nenhum texto placeholder e reutilize a identidade visual e menu da Home.`;
+
         const aiRes = await fetch(`${API_URL}/api/ai/generate-page`, {
           method: 'POST',
           headers: {
@@ -957,10 +1053,11 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
             'Authorization': `Bearer ${token}`
           },
           body: JSON.stringify({
-            prompt: data.aiPrompt,
+            prompt: aiPromptText,
             projectId: project.id,
             name: data.name,
-            slug: data.slug
+            slug: data.slug,
+            templateType: data.templateType
           })
         });
 
@@ -969,13 +1066,17 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
           const createdPage = aiData.page || aiData;
           setProject(prev => prev ? { ...prev, pages: [...prev.pages, createdPage] } : null);
           setActivePageId(createdPage.id);
-          notify.success(`Página "${data.name}" gerada com IA!`, 'Página Criada');
+          notify.success(`Página "${data.name}" criada e alinhada ao tema com IA!`, 'Página Criada com Sucesso');
           return;
         }
       } catch (e) {
         console.warn('Fallback para template estático ao falhar geração por IA', e);
       }
     }
+
+    let finalHtml = '<div></div>';
+    let finalCss = '';
+    let finalJs = '';
 
     if (data.templateType === 'duplicate' && data.duplicatePageId) {
       const pageToClone = project.pages.find(p => p.id === data.duplicatePageId);
@@ -1380,7 +1481,8 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
     <div className="h-screen w-screen bg-[var(--bg-app)] flex flex-col font-sans text-slate-100 overflow-hidden select-none">
       
       {/* ─── Top Studio Navbar ─── */}
-      <header className="h-14 border-b border-slate-900/80 bg-[var(--bg-app)] flex items-center justify-between px-3 md:px-4 shrink-0 z-30 shadow-md">
+      {!isPreviewMode ? (
+        <header className="h-14 border-b border-slate-900/80 bg-[var(--bg-app)] flex items-center justify-between px-3 md:px-4 shrink-0 z-30 shadow-md">
         <div className="flex items-center gap-3 min-w-0">
           <button 
             onClick={onBack}
@@ -1422,26 +1524,55 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
         </div>
 
         {/* Viewports & Breakpoints Controller (Menu Unificado Dropdown) */}
-        <div className="flex items-center">
-          <div className="relative">
-            <select
-              value={viewport}
-              onChange={(e) => setViewport(e.target.value as any)}
-              className="bg-slate-950/90 hover:bg-slate-900 border border-slate-850 hover:border-purple-500/40 text-xs font-semibold text-slate-200 rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-purple-500 cursor-pointer shadow-sm flex items-center transition-all"
-              title="Ajustar visualização de tela (Responsividade)"
-            >
-              <option value="desktop" className="bg-slate-950 text-white">🖥️ Desktop (100%)</option>
-              <option value="tablet" className="bg-slate-950 text-white">📱 Tablet (768px)</option>
-              <option value="mobile" className="bg-slate-950 text-white">📲 Mobile (375px)</option>
-            </select>
-          </div>
+        <div className="flex items-center gap-1.5 bg-slate-950/80 border border-slate-900 rounded-xl p-1">
+          <button
+            onClick={() => setViewport('desktop')}
+            className={`p-1.5 rounded-lg transition-all cursor-pointer ${viewport === 'desktop' ? 'bg-purple-600/30 text-purple-300 shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}
+            title="Desktop View (100%)"
+          >
+            <Monitor className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => setViewport('tablet')}
+            className={`p-1.5 rounded-lg transition-all cursor-pointer ${viewport === 'tablet' ? 'bg-purple-600/30 text-purple-300 shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}
+            title="Tablet View (768px)"
+          >
+            <Tablet className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => setViewport('mobile')}
+            className={`p-1.5 rounded-lg transition-all cursor-pointer ${viewport === 'mobile' ? 'bg-purple-600/30 text-purple-300 shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}
+            title="Mobile View (375px)"
+          >
+            <Smartphone className="w-4 h-4" />
+          </button>
         </div>
 
         {/* Actions & Utilities */}
         <div className="flex items-center gap-2">
+          {/* Botão de Validação de Diretrizes, Cores e Acessibilidade */}
+          <button
+            onClick={() => {
+              setIsSaveTriggeredByValidation(false);
+              setShowValidationModal(true);
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-purple-500/40 text-purple-300 rounded-xl text-xs font-semibold transition-all cursor-pointer shadow-sm"
+            title="Validar Diretrizes de Design, Cores e Acessibilidade (WCAG 2.1 AA)"
+          >
+            <ShieldCheck className="w-3.5 h-3.5 text-purple-400" />
+            <span className="hidden md:inline">Validar</span>
+            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full border font-mono ${
+              pageValidationScore >= 90 ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/40'
+                : pageValidationScore >= 65 ? 'bg-amber-950/80 text-amber-300 border-amber-500/40'
+                : 'bg-rose-950/80 text-rose-300 border-rose-500/40'
+            }`}>
+              {pageValidationScore}%
+            </span>
+          </button>
+
           {/* Botão Unificado: Salvar Manual + Feedback visual da Bolinha de Status */}
           <button
-            onClick={handleManualSave}
+            onClick={() => handleManualSave(false)}
             disabled={saveStatus === 'saving'}
             className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm border ${
               saveStatus === 'saving'
@@ -1466,6 +1597,14 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
 
           {/* Undo / Redo */}
           <div className="hidden md:flex items-center gap-1 bg-slate-950/80 border border-slate-900 rounded-xl p-1">
+            <button
+              onClick={() => setIsPreviewMode(!isPreviewMode)}
+              className={`p-1.5 rounded-lg transition-all cursor-pointer ${isPreviewMode ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}`}
+              title={isPreviewMode ? 'Voltar ao Modo Edição' : 'Visualização Prévia'}
+            >
+              {isPreviewMode ? <MousePointer2 className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+            </button>
+            <div className="w-px h-4 bg-slate-800 mx-0.5" />
             <button
               onClick={handleUndo}
               disabled={undoStack.length === 0}
@@ -1571,6 +1710,16 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
             className="hidden" 
           />
 
+          {/* Botão de Auditoria de Integridade & Qualidade com IA */}
+          <button
+            onClick={() => setShowAIAuditModal(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-purple-950/80 via-indigo-950/80 to-slate-900 hover:from-purple-900 hover:to-indigo-900 border border-purple-500/30 text-purple-200 rounded-xl text-xs font-semibold transition-all cursor-pointer shadow-sm hover:shadow-purple-500/20"
+            title="Auditoria de Integridade com IA (Temas, Placeholders e Links)"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+            <span className="hidden md:inline">Auditoria IA</span>
+          </button>
+
           {/* Botão de Auditoria SEO & Acessibilidade */}
           <button
             onClick={() => setShowSEOAuditModal(true)}
@@ -1661,6 +1810,15 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
           </button>
         </div>
       </header>
+    ) : (
+      <button
+        onClick={() => setIsPreviewMode(false)}
+        className="fixed top-6 right-6 z-[1000] bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-full shadow-2xl flex items-center gap-2 font-bold text-xs transition-all hover:scale-105 active:scale-95 animate-in slide-in-from-top-4 duration-300 cursor-pointer"
+      >
+        <MousePointer2 className="w-4 h-4" />
+        Sair da Visualização
+      </button>
+    )}
 
       {/* ─── Main Editor Workspace Layout ─── */}
       <div className="flex-1 flex overflow-hidden relative">
@@ -1746,6 +1904,8 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
             onSelectLayer={(selector, path) => {
               setSelectedSelector(selector);
               setSelectedPath(path);
+              setShowStylesPanel(true);
+              canvasRef.current?.selectElement?.(path);
             }}
             onHoverLayer={(path) => setHoverPath(path)}
             onDeleteElement={handleDeleteElement}
@@ -1983,64 +2143,68 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
         )}
 
         {/* ─── Alternância de Sidebars Esquerdas (DOM, Banco de Mídias, Tema) ─── */}
-        <div className="relative z-20 self-start mt-4 flex flex-col items-center gap-2 shrink-0">
-          {/* Botão DOM */}
-          <button
-            onClick={() => setActiveLeftSidebar(prev => prev === 'dom' ? null : 'dom')}
-            title={activeLeftSidebar === 'dom' ? 'Minimizar painel de páginas (DOM)' : 'Abrir painel de páginas (DOM)'}
-            className={`
-              flex flex-col items-center justify-center gap-1
-              w-6 transition-all duration-200 cursor-pointer select-none rounded-r-xl
-              border-y border-r py-3 shrink-0
-              ${activeLeftSidebar === 'dom'
-                ? 'bg-gradient-to-b from-purple-700 to-purple-900 border-purple-600/60 text-purple-200 shadow-[2px_0_12px_rgba(168,85,247,0.3)]'
-                : 'bg-slate-900/80 border-slate-800 text-slate-500 hover:text-purple-300 hover:bg-slate-800 hover:border-purple-500/40'
-              }
-            `}
-          >
-            <PanelLeft className="w-3 h-3" />
-            <span className="text-[8px] font-bold tracking-widest uppercase" style={{ writingMode: 'vertical-rl', letterSpacing: '0.15em' }}>DOM</span>
-          </button>
+        {!isPreviewMode && (
+          <div className="relative z-20 self-start mt-4 flex flex-col items-center gap-2 shrink-0">
+            {/* Botão DOM */}
+            <button
+              onClick={() => setActiveLeftSidebar(prev => prev === 'dom' ? null : 'dom')}
+              title={activeLeftSidebar === 'dom' ? 'Minimizar painel de páginas (DOM)' : 'Abrir painel de páginas (DOM)'}
+              className={`
+                flex flex-col items-center justify-center gap-1
+                w-6 transition-all duration-200 cursor-pointer select-none rounded-r-xl
+                border-y border-r py-3 shrink-0
+                ${activeLeftSidebar === 'dom'
+                  ? 'bg-gradient-to-b from-purple-700 to-purple-900 border-purple-600/60 text-purple-200 shadow-[2px_0_12px_rgba(168,85,247,0.3)]'
+                  : 'bg-slate-900/80 border-slate-800 text-slate-500 hover:text-purple-300 hover:bg-slate-800 hover:border-purple-500/40'
+                }
+              `}
+            >
+              <PanelLeft className="w-3 h-3" />
+              <span className="text-[8px] font-bold tracking-widest uppercase" style={{ writingMode: 'vertical-rl', letterSpacing: '0.15em' }}>DOM</span>
+            </button>
 
-          {/* Botão Mídia (Posicionado exatamente abaixo do ícone da DOM) */}
-          <button
-            onClick={() => setActiveLeftSidebar(prev => prev === 'media' ? null : 'media')}
-            title={activeLeftSidebar === 'media' ? 'Minimizar banco de imagens' : 'Abrir banco de imagens e upload'}
-            className={`
-              flex flex-col items-center justify-center gap-1
-              w-6 transition-all duration-200 cursor-pointer select-none rounded-r-xl
-              border-y border-r py-3 shrink-0
-              ${activeLeftSidebar === 'media'
-                ? 'bg-gradient-to-b from-cyan-600 to-indigo-700 border-cyan-500/60 text-cyan-200 shadow-[2px_0_12px_rgba(6,182,212,0.3)]'
-                : 'bg-slate-900/80 border-slate-800 text-slate-500 hover:text-cyan-300 hover:bg-slate-800 hover:border-cyan-500/40'
-              }
-            `}
-          >
-            <ImageIcon className="w-3 h-3" />
-            <span className="text-[8px] font-bold tracking-widest uppercase" style={{ writingMode: 'vertical-rl', letterSpacing: '0.15em' }}>MÍDIA</span>
-          </button>
+            {/* Botão Mídia (Posicionado exatamente abaixo do ícone da DOM) */}
+            <button
+              onClick={() => setActiveLeftSidebar(prev => prev === 'media' ? null : 'media')}
+              title={activeLeftSidebar === 'media' ? 'Minimizar banco de imagens' : 'Abrir banco de imagens e upload'}
+              className={`
+                flex flex-col items-center justify-center gap-1
+                w-6 transition-all duration-200 cursor-pointer select-none rounded-r-xl
+                border-y border-r py-3 shrink-0
+                ${activeLeftSidebar === 'media'
+                  ? 'bg-gradient-to-b from-cyan-600 to-indigo-700 border-cyan-500/60 text-cyan-200 shadow-[2px_0_12px_rgba(6,182,212,0.3)]'
+                  : 'bg-slate-900/80 border-slate-800 text-slate-500 hover:text-cyan-300 hover:bg-slate-800 hover:border-cyan-500/40'
+                }
+              `}
+            >
+              <ImageIcon className="w-3 h-3" />
+              <span className="text-[8px] font-bold tracking-widest uppercase" style={{ writingMode: 'vertical-rl', letterSpacing: '0.15em' }}>MÍDIA</span>
+            </button>
 
-          {/* Botão Tema */}
-          <button
-            onClick={() => setActiveLeftSidebar(prev => prev === 'theme' ? null : 'theme')}
-            title={activeLeftSidebar === 'theme' ? 'Minimizar tema global' : 'Configurar tema global (cores e fontes)'}
-            className={`
-              flex flex-col items-center justify-center gap-1
-              w-6 transition-all duration-200 cursor-pointer select-none rounded-r-xl
-              border-y border-r py-3 shrink-0
-              ${activeLeftSidebar === 'theme'
-                ? 'bg-gradient-to-b from-pink-600 to-rose-700 border-rose-500/60 text-rose-200 shadow-[2px_0_12px_rgba(244,63,94,0.3)]'
-                : 'bg-slate-900/80 border-slate-800 text-slate-500 hover:text-rose-300 hover:bg-slate-800 hover:border-rose-500/40'
-              }
-            `}
-          >
-            <Palette className="w-3 h-3" />
-            <span className="text-[8px] font-bold tracking-widest uppercase" style={{ writingMode: 'vertical-rl', letterSpacing: '0.15em' }}>TEMA</span>
-          </button>
-        </div>
+            {/* Botão Tema */}
+            <button
+              onClick={() => setActiveLeftSidebar(prev => prev === 'theme' ? null : 'theme')}
+              title={activeLeftSidebar === 'theme' ? 'Minimizar tema global' : 'Configurar tema global (cores e fontes)'}
+              className={`
+                flex flex-col items-center justify-center gap-1
+                w-6 transition-all duration-200 cursor-pointer select-none rounded-r-xl
+                border-y border-r py-3 shrink-0
+                ${activeLeftSidebar === 'theme'
+                  ? 'bg-gradient-to-b from-pink-600 to-rose-700 border-rose-500/60 text-rose-200 shadow-[2px_0_12px_rgba(244,63,94,0.3)]'
+                  : 'bg-slate-900/80 border-slate-800 text-slate-500 hover:text-rose-300 hover:bg-slate-800 hover:border-rose-500/40'
+                }
+              `}
+            >
+              <Palette className="w-3 h-3" />
+              <span className="text-[8px] font-bold tracking-widest uppercase" style={{ writingMode: 'vertical-rl', letterSpacing: '0.15em' }}>TEMA</span>
+            </button>
+          </div>
+        )}
         {/* Central Interactive Sandbox Canvas */}
         <main 
-          className="flex-1 flex justify-center items-center overflow-auto bg-[#07020d] p-3 md:p-6 min-w-0"
+          className={`flex-1 flex flex-col justify-between items-center overflow-auto p-3 md:p-6 min-w-0 relative ${
+            showCanvasGrid ? 'bg-[#07020d] bg-[radial-gradient(#1e1b4b_1px,transparent_1px)] [background-size:20px_20px]' : 'bg-[#07020d]'
+          }`}
           onWheel={(e) => {
             if (e.altKey) {
               e.preventDefault();
@@ -2052,11 +2216,109 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
             }
           }}
         >
+          {/* Top Floating Control Bar over Central Canvas */}
+          {!isPreviewMode && (
+            <div className="z-30 mb-3 flex items-center gap-2 px-3 py-1.5 bg-slate-950/90 border border-slate-800/80 backdrop-blur-md rounded-2xl shadow-xl shrink-0">
+              {/* Viewport Selectors */}
+              <div className="flex items-center gap-1 bg-slate-900/80 p-1 rounded-xl border border-slate-800">
+                <button
+                  onClick={() => setViewport('desktop')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                    viewport === 'desktop' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
+                  }`}
+                  title="Visão Desktop (100%)"
+                >
+                  <Monitor className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Desktop</span>
+                </button>
+                <button
+                  onClick={() => setViewport('tablet')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                    viewport === 'tablet' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
+                  }`}
+                  title="Visão Tablet (768px)"
+                >
+                  <Tablet className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">768px</span>
+                </button>
+                <button
+                  onClick={() => setViewport('mobile')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                    viewport === 'mobile' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
+                  }`}
+                  title="Visão Mobile (375px)"
+                >
+                  <Smartphone className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">375px</span>
+                </button>
+              </div>
+
+              <div className="w-px h-4 bg-slate-800" />
+
+              {/* Zoom Controls */}
+              <div className="flex items-center gap-1 bg-slate-900/80 p-1 rounded-xl border border-slate-800">
+                <button
+                  onClick={() => setZoom(z => Math.max(50, z - 10))}
+                  className="p-1 text-slate-400 hover:text-white rounded-lg transition-colors cursor-pointer"
+                  title="Reduzir Zoom (Alt + Wheel Down)"
+                >
+                  <ZoomOut className="w-3.5 h-3.5" />
+                </button>
+                <span className="text-[11px] font-mono font-bold text-slate-300 px-1 min-w-[36px] text-center">
+                  {zoom}%
+                </span>
+                <button
+                  onClick={() => setZoom(z => Math.min(150, z + 10))}
+                  className="p-1 text-slate-400 hover:text-white rounded-lg transition-colors cursor-pointer"
+                  title="Aumentar Zoom (Alt + Wheel Up)"
+                >
+                  <ZoomIn className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={() => setZoom(100)}
+                  className="p-1 text-slate-400 hover:text-white rounded-lg transition-colors cursor-pointer"
+                  title="Resetar Zoom (100%)"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                </button>
+              </div>
+
+              <div className="w-px h-4 bg-slate-800 hidden sm:block" />
+
+              {/* Grid Toggle */}
+              <button
+                onClick={() => setShowCanvasGrid(!showCanvasGrid)}
+                className={`p-1.5 rounded-xl border transition-all cursor-pointer hidden sm:flex items-center gap-1 ${
+                  showCanvasGrid ? 'bg-purple-950/80 border-purple-500/50 text-purple-300' : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
+                }`}
+                title="Alternar Grade Guia de Alinhamento"
+              >
+                <Grid className="w-3.5 h-3.5" />
+              </button>
+
+              {/* Quick Validation Badge */}
+              <button
+                onClick={() => {
+                  setIsSaveTriggeredByValidation(false);
+                  setShowValidationModal(true);
+                }}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                  pageValidationScore >= 90 ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300 hover:bg-emerald-900/60'
+                    : pageValidationScore >= 65 ? 'bg-amber-950/60 border-amber-500/40 text-amber-300 hover:bg-amber-900/60'
+                    : 'bg-rose-950/60 border-rose-500/40 text-rose-300 hover:bg-rose-900/60'
+                }`}
+                title="Status de Acessibilidade & Diretrizes"
+              >
+                <ShieldCheck className="w-3.5 h-3.5" />
+                <span className="font-mono">{pageValidationScore}%</span>
+              </button>
+            </div>
+          )}
+
           <div 
-            className="transition-all duration-200 h-full flex items-center justify-center relative"
+            className="transition-all duration-200 flex-1 w-full flex flex-col items-center justify-center relative min-h-0"
             style={{
-              width: viewport === 'mobile' ? '375px' : viewport === 'tablet' ? '768px' : '100%',
-              height: '100%'
+              maxWidth: viewport === 'mobile' ? '375px' : viewport === 'tablet' ? '768px' : '100%',
             }}
           >
             {/* Overlay de carregamento com IA */}
@@ -2107,20 +2369,57 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
                   setSelectedAttrs(attrs);
                   setSelectedPath(path);
                   setSelectedComponentId(componentId);
+                  if (path) {
+                    setShowStylesPanel(true);
+                  }
                 }}
                 onInlineContentChange={handleInlineTextChange}
                 onDeleteElement={handleDeleteElement}
                 onDuplicateElement={handleDuplicateElement}
                 onMoveElementDirection={handleMoveElementDirection}
+                onSelectParentElement={(path) => {
+                  const parts = path.split('.');
+                  if (parts.length > 1) {
+                    parts.pop();
+                    const parentPath = parts.join('.');
+                    setSelectedPath(parentPath);
+                    canvasRef.current?.selectElement?.(parentPath);
+                  }
+                }}
                 onHtmlChange={(newHtml) => handleCodeChange('html', newHtml)}
                 onInsertBlock={handleInsertBlock}
+              />
+            )}
+
+            {/* Quick Add Floating Button (WordPress/Wix style) */}
+            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 pointer-events-auto">
+              <button
+                onClick={() => setIsQuickAddOpen(!isQuickAddOpen)}
+                className={`
+                  w-10 h-10 rounded-full flex items-center justify-center shadow-2xl transition-all duration-300 cursor-pointer
+                  ${isQuickAddOpen 
+                    ? 'bg-rose-600 rotate-45 hover:bg-rose-500' 
+                    : 'bg-purple-600 hover:bg-purple-500 hover:scale-110 active:scale-95 shadow-purple-600/30'
+                  }
+                `}
+                title="Adicionar Elemento"
+              >
+                <Plus className="w-5 h-5 text-white" />
+              </button>
+            </div>
+
+            {isQuickAddOpen && (
+              <QuickAddMenu 
+                onAdd={(html) => handleInsertBlock(html)} 
+                onClose={() => setIsQuickAddOpen(false)} 
               />
             )}
           </div>
         </main>
 
         {/* Right Inspector & Properties Panel */}
-        <div className="relative flex items-start">
+        {!isPreviewMode && (
+          <div className="relative flex items-start">
           {/* ─── Toggle da Sidebar Direita (Propriedades) ─── */}
           <button
             onClick={() => setShowStylesPanel(!showStylesPanel)}
@@ -2167,6 +2466,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
               onSelectLayer={(selector, path) => {
                 setSelectedSelector(selector);
                 setSelectedPath(path);
+                canvasRef.current?.selectElement?.(path);
               }}
               onHoverLayer={(path) => setHoverPath(path)}
               onSaveSelectionAsTemplate={handleSaveSelectionAsTemplate}
@@ -2184,6 +2484,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
           </div>
           )}
         </div>
+        )}
       </div>
 
       {/* ─── Modal de Código Fonte Completo ─── */}
@@ -2443,6 +2744,27 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
         </div>
       )}
 
+      {/* Modal de Validação de Diretrizes, Cores e Acessibilidade */}
+      {activePage && (
+        <PageValidationModal
+          isOpen={showValidationModal}
+          onClose={() => setShowValidationModal(false)}
+          pageHtml={activePage.html}
+          pageCss={activePage.css}
+          pageName={activePage.name}
+          projectTheme={projectTheme}
+          onApplyFixes={(newHtml, newCss) => {
+            handleCodeChange('html', newHtml);
+            if (newCss !== activePage.css) handleCodeChange('css', newCss);
+            notify.success('Correções de diretrizes e acessibilidade aplicadas!', 'Validação');
+          }}
+          onConfirmSave={() => {
+            handleManualSave(true);
+          }}
+          isSaveTriggered={isSaveTriggeredByValidation}
+        />
+      )}
+
       {/* SEO & Accessibility Audit Modal */}
       {activePage && (
         <SEOAuditModal
@@ -2455,6 +2777,17 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
           seoOgImage={activePage.seoOgImage}
         />
       )}
+
+      {/* Modal de Auditoria de Integridade e Qualidade IA */}
+      <AIAuditModal
+        isOpen={showAIAuditModal}
+        onClose={() => setShowAIAuditModal(false)}
+        projectId={projectId}
+        token={token}
+        onPagesUpdated={(updatedPages) => {
+          setProject(prev => prev ? { ...prev, pages: updatedPages } : null);
+        }}
+      />
 
       {/* Modal Padronizado Premium de Criação de Páginas */}
       {project && (

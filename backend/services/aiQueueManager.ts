@@ -666,7 +666,46 @@ REGRAS MANDATÓRIAS:
       }
     }
 
-    // 5. REGISTRAR VERSÃO DE BACKUP COMPLETA
+    // 5. PASSO DE AUDITORIA E SELO DE QUALIDADE POR IA (VERIFICAÇÃO DE INTEGRIDADE)
+    item.currentModel = 'Auditando integridade e selando qualidade das páginas com IA...';
+    try {
+      for (const pageItem of updatedPagesList) {
+        if (pageItem.html.toLowerCase().includes('lorem ipsum') || pageItem.html.includes('href="#"')) {
+          const auditFixPrompt = `
+Você é o Auditor de Qualidade Final do site "${resolvedBusinessName}".
+Revise e aperfeiçoe o código da página "${pageItem.name}".
+1. Substitua qualquer 'Lorem Ipsum' por texto real, persuasion e relevante sobre o negócio.
+2. Corrija links quebrados para apontar para rotas válidas de navegação (${navigationRoutes.map(r => r.href).join(', ')}).
+3. Mantenha a mesma estrutura HTML, Tailwind CSS e scripts intactos.
+          `;
+          const fixedRes = await executeAIRequest(
+            auditFixPrompt,
+            { html: pageItem.html, css: pageItem.css, js: pageItem.js },
+            {
+              provider: (aiProvider as any) || 'gemini',
+              apiKey: resolvedApiKey,
+              model: customModel,
+              registeredModels,
+              proxyUrl: customProxyUrl,
+              ollamaEndpoint,
+              lowSpecMode,
+              customSkills
+            }
+          );
+          if (fixedRes.html) {
+            pageItem.html = fixedRes.html;
+            await prisma.page.update({
+              where: { id: pageItem.id },
+              data: { html: fixedRes.html }
+            });
+          }
+        }
+      }
+    } catch (auditErr: any) {
+      console.warn('[AIQueueManager] Aviso na auditoria final:', auditErr.message);
+    }
+
+    // 6. REGISTRAR VERSÃO DE BACKUP COMPLETA
     await prisma.version.create({
       data: {
         name: `Geração Completa Multi-páginas (${totalPages} pág)`,

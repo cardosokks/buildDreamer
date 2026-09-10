@@ -1,5 +1,11 @@
 import React, { useEffect, useRef, useCallback, useState, useImperativeHandle, forwardRef } from 'react';
 import { createPortal } from 'react-dom';
+import { 
+  Trash2, Copy, ChevronUp, ChevronDown, 
+  ArrowUp, ArrowDown, Plus, X, 
+  Type, Layout, AlignLeft, Square, Radio, 
+  Image as ImageIcon 
+} from 'lucide-react';
 import { renderTreeToHtml } from '../utils/renderer';
 import { ComponentNode } from '../types/canvas';
 
@@ -7,6 +13,8 @@ export interface CanvasHandle {
   applyStyle: (path: string, prop: string, value: string) => void;
   applyAttr: (path: string, attr: string, value: string) => void;
   requestOverlayUpdate: () => void;
+  selectElement: (path: string) => void;
+  getIframe: () => HTMLIFrameElement | null;
 }
 
 export interface CanvasProps {
@@ -18,6 +26,7 @@ export interface CanvasProps {
   hoverPath?: string | null;
   zoom?: number;
   theme?: any;
+  isPreviewMode?: boolean;
   onElementSelect: (
     selector: string,
     styles: Record<string, string>,
@@ -48,6 +57,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({
   hoverPath,
   zoom = 100,
   theme,
+  isPreviewMode = false,
   onElementSelect,
   onInlineContentChange,
   onDeleteElement,
@@ -81,7 +91,14 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({
       iframeRef.current?.contentWindow?.postMessage({
         type: 'REQUEST_UPDATE_RECT'
       }, '*');
-    }
+    },
+    selectElement: (path: string) => {
+      iframeRef.current?.contentWindow?.postMessage({
+        type: 'SELECT_ELEMENT_BY_PATH',
+        path
+      }, '*');
+    },
+    getIframe: () => iframeRef.current
   }), []);
   const lastHtmlSentRef = useRef<string>('');
   const lastCssSentRef = useRef<string>('');
@@ -269,6 +286,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({
       let currentSelected = null;
       let currentSelectedPath = null;
       let isEditingInline = false;
+      let isPreviewMode = false;
       let resizeObserver = null;
 
       const selectionBox = document.getElementById('studio-selection-box');
@@ -390,7 +408,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({
         }, '*');
       }
 
-      function removeSelection() {
+      function clearCurrentSelectionState() {
         if (isEditingInline && currentSelected) {
           currentSelected.removeAttribute('contenteditable');
           isEditingInline = false;
@@ -401,6 +419,10 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({
         currentSelected = null;
         currentSelectedPath = null;
         if (selectionBox) selectionBox.style.display = 'none';
+      }
+
+      function removeSelection() {
+        clearCurrentSelectionState();
         window.parent.postMessage({ type: 'HIDE_SELECTION_RECT' }, '*');
       }
 
@@ -414,7 +436,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({
         }
         if (!normalizedTarget || isInternalStudioNode(normalizedTarget)) return;
 
-        removeSelection();
+        clearCurrentSelectionState();
         currentSelected = normalizedTarget;
         currentSelectedPath = getIndexPath(normalizedTarget);
 
@@ -527,6 +549,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({
 
         if (selectionBox) selectionBox.style.display = 'none';
         if (quickToolbar) quickToolbar.style.display = 'none';
+        window.parent.postMessage({ type: 'HIDE_SELECTION_RECT' }, '*');
 
         const onBlur = () => {
           target.removeAttribute('contenteditable');
@@ -559,6 +582,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({
 
       // ─── Click Listener ───
       document.addEventListener('click', function(e) {
+        if (isPreviewMode) return;
         if (e.target.closest('#studio-quick-toolbar') || e.target.closest('.studio-resize-handle')) {
           return;
         }
@@ -577,7 +601,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({
 
       // ─── Double Click for Direct Inline Text Editing ───
       document.addEventListener('dblclick', function(e) {
-        if (isInternalStudioNode(e.target)) return;
+        if (isInternalStudioNode(e.target) || isPreviewMode) return;
         e.preventDefault();
         e.stopPropagation();
         startInlineEdit(e.target);
@@ -585,7 +609,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({
 
       // ─── Context Menu Listener (Right-click) ───
       document.addEventListener('contextmenu', function(e) {
-        if (isInternalStudioNode(e.target)) return;
+        if (isInternalStudioNode(e.target) || isPreviewMode) return;
         e.preventDefault();
         e.stopPropagation();
         const target = e.target;
@@ -611,7 +635,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({
 
       // ─── Hover Listener (FIXED coords) ───
       document.body.addEventListener('mousemove', function(e) {
-        if (isEditingInline) {
+        if (isEditingInline || isPreviewMode) {
           if (hoverBox) hoverBox.style.display = 'none';
           return;
         }
@@ -637,6 +661,21 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({
       // ─── Incoming Actions From Parent ───
       window.addEventListener('message', function(msg) {
         if (!msg.data) return;
+
+        if (msg.data.type === 'SET_PREVIEW_MODE') {
+          isPreviewMode = msg.data.enabled;
+          if (isPreviewMode) {
+            removeSelection();
+            if (hoverBox) hoverBox.style.display = 'none';
+          }
+        }
+
+        if (msg.data.type === 'SELECT_ELEMENT_BY_PATH' && msg.data.path) {
+          const el = getElementByIndexPath(msg.data.path);
+          if (el) {
+            selectElement(el, false); // false to not notify parent again if we want, but actually we DO want to notify parent to get styles
+          }
+        }
 
         if (msg.data.type === 'APPLY_ELEMENT_STYLE' && msg.data.path) {
           const el = getElementByIndexPath(msg.data.path);
@@ -936,6 +975,10 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({
             removeSelection();
             return;
           }
+          if (currentSelectedPath === path && currentSelected && currentSelected.isConnected) {
+            updateOverlayPosition();
+            return;
+          }
           const el = getElementByIndexPath(path);
           if (el) {
             selectElement(el, true);
@@ -1047,12 +1090,23 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({
       }, '*');
     };
 
+    const sendPreviewMode = () => {
+      iframe.contentWindow?.postMessage({
+        type: 'SET_PREVIEW_MODE',
+        enabled: isPreviewMode
+      }, '*');
+    };
+
     if (iframe.contentDocument?.readyState === 'complete') {
       sendHighlight();
+      sendPreviewMode();
     } else {
-      iframe.addEventListener('load', sendHighlight, { once: true });
+      iframe.addEventListener('load', () => {
+        sendHighlight();
+        sendPreviewMode();
+      }, { once: true });
     }
-  }, [highlightPath]);
+  }, [highlightPath, isPreviewMode]);
 
   // Sync Hover Path from Layers tree
   useEffect(() => {
@@ -1127,28 +1181,20 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({
           if (iframeRef.current) {
             const iframe = iframeRef.current;
             const iframeRect = iframe.getBoundingClientRect();
-            const w = iframe.offsetWidth;
-            const h = iframe.offsetHeight;
             const scale = zoom / 100;
 
-            // Encontra o centro do iframe transformado, que permanece invariante à escala
-            const cx = iframeRect.left + iframeRect.width / 2;
-            const cy = iframeRect.top + iframeRect.height / 2;
-
-            // Mapeia as coordenadas internas (rect.top, rect.left) para o sistema de coordenadas do parent,
-            // considerando a escala aplicada a partir do centro
-            const screenTop = cy + (event.data.rect.top - h / 2) * scale;
-            const screenLeft = cx + (event.data.rect.left - w / 2) * scale;
-            const screenBottom = cy + (event.data.rect.bottom - h / 2) * scale;
-            const screenRight = cx + (event.data.rect.right - w / 2) * scale;
+            const screenTop = iframeRect.top + event.data.rect.top * scale;
+            const screenLeft = iframeRect.left + event.data.rect.left * scale;
+            const screenWidth = event.data.rect.width * scale;
+            const screenHeight = event.data.rect.height * scale;
 
             setSelectionRect({
               top: screenTop,
               left: screenLeft,
-              width: event.data.rect.width * scale,
-              height: event.data.rect.height * scale,
-              bottom: screenBottom,
-              right: screenRight
+              width: screenWidth,
+              height: screenHeight,
+              bottom: screenTop + screenHeight,
+              right: screenLeft + screenWidth
             });
             setSelectionTagText(event.data.tagText);
             setActiveElementPath(event.data.path);
@@ -1237,7 +1283,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({
         />
       </div>
 
-      {selectionRect && createPortal(
+      {selectionRect && !isPreviewMode && createPortal(
         <>
           {/* Interaction-Aware Selection Bounding Box */}
           <div
@@ -1279,85 +1325,96 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({
             style={{
               top: (() => {
                 let t = selectionRect.top - 46;
-                if (t < 8) t = selectionRect.bottom + 8;
-                return t;
+                if (t < 64) {
+                  t = selectionRect.bottom + 10;
+                }
+                return Math.max(64, Math.min(t, window.innerHeight - 52));
               })(),
-              left: Math.max(8, Math.min(selectionRect.left, window.innerWidth - 380))
+              left: Math.max(16, Math.min(selectionRect.left, window.innerWidth - 340))
             }}
           >
-            <span className="bg-purple-600 text-white font-mono text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider max-w-[120px] truncate">
-              {selectionTagText || 'element'}
-            </span>
+            <div className="flex items-center gap-1.5 border-r border-slate-800 pr-2 mr-0.5">
+              <span className="bg-purple-600/30 text-purple-300 font-mono text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider max-w-[90px] truncate">
+                {selectionTagText || 'elemento'}
+              </span>
+            </div>
             <button
               type="button"
               onClick={() => {
-                iframeRef.current?.contentWindow?.postMessage({ type: 'ACTION_SELECT_PARENT' }, '*');
+                if (onSelectParentElement && (activeElementPath || highlightPath)) {
+                  onSelectParentElement(activeElementPath || highlightPath || '');
+                } else {
+                  iframeRef.current?.contentWindow?.postMessage({ type: 'ACTION_SELECT_PARENT' }, '*');
+                }
               }}
-              className="px-2 py-1 bg-slate-900 hover:bg-purple-600 border border-slate-700 hover:border-purple-400 rounded-lg font-medium transition-all cursor-pointer"
+              className="p-1.5 hover:bg-purple-600/20 text-slate-300 hover:text-purple-300 rounded-lg transition-all cursor-pointer"
               title="Selecionar Elemento Pai"
             >
-              ▲ Pai
+              <ChevronUp className="w-4 h-4" />
             </button>
             <button
               type="button"
               onClick={() => {
-                if (activeElementPath && onMoveElementDirection) {
-                  onMoveElementDirection(activeElementPath, 'up');
+                const targetPath = activeElementPath || highlightPath;
+                if (targetPath && onMoveElementDirection) {
+                  onMoveElementDirection(targetPath, 'up');
                   setTimeout(() => iframeRef.current?.contentWindow?.postMessage({ type: 'REQUEST_UPDATE_RECT' }, '*'), 50);
                 }
               }}
-              className="px-2 py-1 bg-slate-900 hover:bg-purple-600 border border-slate-700 hover:border-purple-400 rounded-lg font-medium transition-all cursor-pointer"
-              title="Mover para Cima"
+              className="p-1.5 hover:bg-purple-600/20 text-slate-300 hover:text-purple-300 rounded-lg transition-all cursor-pointer"
+              title="Subir elemento (Mover para Cima)"
             >
-              ↑ Cima
+              <ArrowUp className="w-4 h-4" />
             </button>
             <button
               type="button"
               onClick={() => {
-                if (activeElementPath && onMoveElementDirection) {
-                  onMoveElementDirection(activeElementPath, 'down');
+                const targetPath = activeElementPath || highlightPath;
+                if (targetPath && onMoveElementDirection) {
+                  onMoveElementDirection(targetPath, 'down');
                   setTimeout(() => iframeRef.current?.contentWindow?.postMessage({ type: 'REQUEST_UPDATE_RECT' }, '*'), 50);
                 }
               }}
-              className="px-2 py-1 bg-slate-900 hover:bg-purple-600 border border-slate-700 hover:border-purple-400 rounded-lg font-medium transition-all cursor-pointer"
-              title="Mover para Baixo"
+              className="p-1.5 hover:bg-purple-600/20 text-slate-300 hover:text-purple-300 rounded-lg transition-all cursor-pointer"
+              title="Descer elemento (Mover para Baixo)"
             >
-              ↓ Baixo
+              <ArrowDown className="w-4 h-4" />
             </button>
             <button
               type="button"
               onClick={() => {
-                if (activeElementPath && onDuplicateElement) {
-                  onDuplicateElement(activeElementPath);
+                const targetPath = activeElementPath || highlightPath;
+                if (targetPath && onDuplicateElement) {
+                  onDuplicateElement(targetPath);
+                  setTimeout(() => iframeRef.current?.contentWindow?.postMessage({ type: 'REQUEST_UPDATE_RECT' }, '*'), 100);
                 }
               }}
-              className="px-2 py-1 bg-purple-600/30 hover:bg-purple-600 border border-purple-500/40 hover:border-purple-400 rounded-lg font-medium transition-all cursor-pointer"
-              title="Duplicar Elemento"
+              className="p-1.5 hover:bg-purple-600/20 text-slate-300 hover:text-purple-300 rounded-lg transition-all cursor-pointer"
+              title="Clonar elemento (Duplicar)"
             >
-              📋 Duplicar
+              <Copy className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => iframeRef.current?.contentWindow?.postMessage({ type: 'ACTION_START_INLINE_EDIT' }, '*')}
+              className="p-1.5 hover:bg-purple-600/20 text-slate-300 hover:text-purple-300 rounded-lg transition-all cursor-pointer"
+              title="Editar texto inline"
+            >
+              <Type className="w-4 h-4" />
             </button>
             <button
               type="button"
               onClick={() => {
-                iframeRef.current?.contentWindow?.postMessage({ type: 'ACTION_START_INLINE_EDIT' }, '*');
-              }}
-              className="px-2 py-1 bg-slate-900 hover:bg-purple-600 border border-slate-700 hover:border-purple-400 rounded-lg font-medium transition-all cursor-pointer"
-              title="Editar Texto Diretamente"
-            >
-              ✏️ Texto
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                if (activeElementPath && onDeleteElement) {
-                  onDeleteElement(activeElementPath);
+                const targetPath = activeElementPath || highlightPath;
+                if (targetPath && onDeleteElement) {
+                  onDeleteElement(targetPath);
                   setSelectionRect(null);
                 }
               }}
-              className="px-2 py-1 bg-rose-950/40 hover:bg-rose-600 border border-rose-900/60 hover:border-rose-500 text-rose-300 hover:text-white rounded-lg font-medium transition-all cursor-pointer"
-              title="Excluir Elemento"
+              className="p-1.5 hover:bg-rose-600/20 text-slate-300 hover:text-rose-400 rounded-lg transition-all cursor-pointer"
+              title="Excluir elemento"
             >
-              🗑️ Excluir
+              <Trash2 className="w-4 h-4" />
             </button>
           </div>
         </>,

@@ -59,19 +59,20 @@ export const useElementEditor = (
     const handleInlineTextChange = useCallback((path: string, newText: string) => {
         const currentPage = activePageRef.current;
         if (!currentPage) return;
+        setSelectedAttrs(prev => ({ ...prev, _textContent: newText }));
         const doc = parseDocFromHtml(currentPage.html);
         const root = doc.getElementById('canvas-root') || doc.body;
         const el = getElementByPath(root, path);
         if (el) {
-            el.textContent = newText;
+            el.innerHTML = newText;
             const newHtml = serializeBodyContent(doc);
             handleCodeChange('html', newHtml);
         }
-    }, [activePageRef, handleCodeChange]);
+    }, [activePageRef, handleCodeChange, setSelectedAttrs]);
 
     const handleDuplicateElement = useCallback((path: string) => {
         const currentPage = activePageRef.current;
-        if (!currentPage) return;
+        if (!currentPage || !path) return;
         
         const doc = parseDocFromHtml(currentPage.html);
         const root = doc.getElementById('canvas-root') || doc.body;
@@ -81,8 +82,17 @@ export const useElementEditor = (
             el.parentElement.insertBefore(clone, el.nextSibling);
             const newHtml = serializeBodyContent(doc);
             handleCodeChange('html', newHtml);
+
+            // Seleciona imediatamente o elemento recém-duplicado
+            const pathParts = path.split('.');
+            const currentIndex = parseInt(pathParts[pathParts.length - 1], 10);
+            if (!isNaN(currentIndex)) {
+                pathParts[pathParts.length - 1] = String(currentIndex + 1);
+                const nextPath = pathParts.join('.');
+                setSelectedPath(nextPath);
+            }
         }
-    }, [activePageRef, handleCodeChange]);
+    }, [activePageRef, handleCodeChange, setSelectedPath]);
 
     const handleAttrChange = useCallback((attr: string, value: string) => {
         const currentPage = activePageRef.current;
@@ -101,7 +111,7 @@ export const useElementEditor = (
         const el = getElementByPath(root, selectedPath);
         if (el) {
           if (attr === '_textContent') {
-            el.textContent = value;
+            el.innerHTML = value;
           } else {
             el.setAttribute(attr, value);
           }
@@ -118,7 +128,7 @@ export const useElementEditor = (
           });
           handleCodeChange('components', newComponents);
         }
-    }, [activePageRef, handleCodeChange, selectedPath, selectedComponentId, setSelectedAttrs]);
+    }, [activePageRef, handleCodeChange, selectedPath, selectedComponentId, setSelectedAttrs, canvasRef]);
 
     const handleMoveElementDirection = useCallback((path: string, direction: 'up' | 'down') => {
         const currentPage = activePageRef.current;
@@ -135,14 +145,22 @@ export const useElementEditor = (
     
           if (direction === 'up' && currentIndex > 0) {
             parent.insertBefore(el, siblings[currentIndex - 1]);
+            const pathParts = path.split('.');
+            pathParts[pathParts.length - 1] = String(currentIndex - 1);
+            const newPath = pathParts.join('.');
+            setSelectedPath(newPath);
           } else if (direction === 'down' && currentIndex < siblings.length - 1) {
             parent.insertBefore(el, siblings[currentIndex + 1].nextSibling);
+            const pathParts = path.split('.');
+            pathParts[pathParts.length - 1] = String(currentIndex + 1);
+            const newPath = pathParts.join('.');
+            setSelectedPath(newPath);
           }
           
           const newHtml = serializeBodyContent(doc);
           handleCodeChange('html', newHtml);
         }
-    }, [activePageRef, handleCodeChange]);
+    }, [activePageRef, handleCodeChange, setSelectedPath]);
 
     const handleDeleteElement = useCallback((path: string) => {
         const currentPage = activePageRef.current;

@@ -22,6 +22,8 @@ import {
   Tag,
   Trash2,
   Copy,
+  ArrowUp,
+  ArrowDown,
   Edit3,
   Upload,
   Image as ImageIcon,
@@ -673,7 +675,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             </div>
           </div>
         </div>
-      ) : !selectedSelector ? (
+      ) : !selectedSelector && !selectedPath ? (
         <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
           <Settings className="w-8 h-8 text-slate-700 mx-auto mb-2 animate-pulse" />
           <p className="text-xs text-slate-500 italic">Selecione um elemento no canvas<br />ou na árvore DOM para editar</p>
@@ -685,16 +687,54 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             <div className="flex items-center gap-2">
               <Tag className="w-4 h-4 text-purple-400" />
               <span className="text-xs font-bold text-white font-mono">{tag}</span>
+              {selectedAttrs['id'] && (
+                <span className="text-[10px] text-purple-300 font-mono bg-purple-950/60 px-1.5 py-0.5 rounded border border-purple-500/30">
+                  #{selectedAttrs['id']}
+                </span>
+              )}
             </div>
-            {selectedPath && onDeleteElement && (
-              <button
-                onClick={() => onDeleteElement(selectedPath)}
-                className="p-1 text-red-400 hover:bg-red-500/20 rounded transition-colors"
-                title="Excluir Elemento"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
-            )}
+            <div className="flex items-center gap-1">
+              {selectedPath && onMoveElementDirection && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => onMoveElementDirection(selectedPath, 'up')}
+                    className="p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded transition-colors"
+                    title="Subir Elemento"
+                  >
+                    <ArrowUp className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onMoveElementDirection(selectedPath, 'down')}
+                    className="p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded transition-colors"
+                    title="Descer Elemento"
+                  >
+                    <ArrowDown className="w-3.5 h-3.5" />
+                  </button>
+                </>
+              )}
+              {selectedPath && onDuplicateElement && (
+                <button
+                  type="button"
+                  onClick={() => onDuplicateElement(selectedPath)}
+                  className="p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded transition-colors"
+                  title="Duplicar Elemento"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                </button>
+              )}
+              {selectedPath && onDeleteElement && (
+                <button
+                  type="button"
+                  onClick={() => onDeleteElement(selectedPath)}
+                  className="p-1 text-red-400 hover:bg-red-500/20 rounded transition-colors"
+                  title="Excluir Elemento"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Edição de Texto / Conteúdo do Elemento (Apenas para elementos textuais reais) */}
@@ -836,6 +876,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             onAttrChange={onAttrChange}
             onDuplicateElement={onDuplicateElement}
             onDeleteElement={onDeleteElement}
+            onMoveElementDirection={onMoveElementDirection}
           />
         </div>
       )}

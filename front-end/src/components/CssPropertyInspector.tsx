@@ -15,6 +15,8 @@ import {
   Tag,
   Trash2,
   Copy,
+  ArrowUp,
+  ArrowDown,
   ChevronDown,
   ChevronRight,
   Sliders
@@ -29,6 +31,7 @@ export interface CssPropertyInspectorProps {
   onAttrChange: (attr: string, value: string) => void;
   onDuplicateElement?: (path: string) => void;
   onDeleteElement?: (path: string) => void;
+  onMoveElementDirection?: (path: string, direction: 'up' | 'down') => void;
 }
 
 const rgbToHex = (color: string): string => {
@@ -158,7 +161,8 @@ export const CssPropertyInspector: React.FC<CssPropertyInspectorProps> = ({
   onStyleChange,
   onAttrChange,
   onDuplicateElement,
-  onDeleteElement
+  onDeleteElement,
+  onMoveElementDirection
 }) => {
   // State-managed styles mapping
   const [localStyles, setLocalStyles] = useState<Record<string, string>>(selectedStyles || {});
@@ -227,6 +231,26 @@ export const CssPropertyInspector: React.FC<CssPropertyInspectorProps> = ({
           )}
         </div>
         <div className="flex items-center gap-1 shrink-0">
+          {selectedPath && onMoveElementDirection && (
+            <>
+              <button
+                type="button"
+                onClick={() => onMoveElementDirection(selectedPath, 'up')}
+                className="p-1.5 text-slate-400 hover:text-white rounded hover:bg-slate-800 transition-colors cursor-pointer"
+                title="Subir Elemento"
+              >
+                <ArrowUp className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => onMoveElementDirection(selectedPath, 'down')}
+                className="p-1.5 text-slate-400 hover:text-white rounded hover:bg-slate-800 transition-colors cursor-pointer"
+                title="Descer Elemento"
+              >
+                <ArrowDown className="w-3.5 h-3.5" />
+              </button>
+            </>
+          )}
           {selectedPath && onDuplicateElement && (
             <button
               type="button"

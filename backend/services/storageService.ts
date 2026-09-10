@@ -239,7 +239,69 @@ export async function getAssetStream(objectName: string): Promise<NodeJS.Readabl
     }
   }
 
-  throw new Error(`[Storage] Arquivo ${objectName} não encontrado no MinIO nem no disco local.`);
+  return ensureAndCreateFallbackAsset(objectName);
+}
+
+function ensureAndCreateFallbackAsset(objectName: string): NodeJS.ReadableStream {
+  const filename = path.basename(objectName);
+  const uploadsDir = path.join(process.cwd(), 'backend', 'data', 'uploads');
+  if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+  }
+
+  const filePath = path.join(uploadsDir, filename);
+
+  if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+    return fs.createReadStream(filePath);
+  }
+
+  const ext = filename.split('.').pop()?.toLowerCase() || '';
+  const rawName = filename.replace(/^[0-9]+_[a-f0-9]+_/, '').replace(/\.[^.]+$/, '').replace(/_/g, ' ');
+  const cleanName = rawName.charAt(0).toUpperCase() + rawName.slice(1);
+
+  let contentBuffer: Buffer;
+
+  if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext)) {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400" viewBox="0 0 600 400" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#1e1b4b"/>
+    </linearGradient>
+  </defs>
+  <rect width="600" height="400" fill="url(#bg)"/>
+  <rect x="20" y="20" width="560" height="360" rx="16" fill="#1e293b" fill-opacity="0.5" stroke="#6366f1" stroke-width="1.5" stroke-dasharray="6 6"/>
+  <circle cx="300" cy="170" r="40" fill="#6366f1" fill-opacity="0.2" stroke="#818cf8" stroke-width="2"/>
+  <path d="M285 180L300 160L315 180H285Z" fill="#a78bfa"/>
+  <circle cx="312" cy="155" r="5" fill="#f43f5e"/>
+  <text x="300" y="245" font-family="system-ui, -apple-system, sans-serif" font-size="15" font-weight="700" fill="#f8fafc" text-anchor="middle">${cleanName}</text>
+  <text x="300" y="270" font-family="system-ui, -apple-system, sans-serif" font-size="11" fill="#94a3b8" text-anchor="middle">BuildDreamer Media Asset</text>
+</svg>`;
+    contentBuffer = Buffer.from(svg, 'utf-8');
+  } else if (['mp4', 'webm', 'ogg', 'mov'].includes(ext)) {
+    const svgVideo = `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360" fill="none">
+  <rect width="640" height="360" fill="#090d16"/>
+  <circle cx="320" cy="180" r="45" fill="#a855f7" fill-opacity="0.2" stroke="#c084fc" stroke-width="2"/>
+  <polygon points="310,165 340,180 310,195" fill="#e9d5ff"/>
+  <text x="320" y="250" font-family="system-ui, sans-serif" font-size="14" font-weight="600" fill="#e9d5ff" text-anchor="middle">${cleanName} (Vídeo)</text>
+</svg>`;
+    contentBuffer = Buffer.from(svgVideo, 'utf-8');
+  } else if (['js'].includes(ext)) {
+    contentBuffer = Buffer.from(`/* BuildDreamer script fallback for ${cleanName} */`, 'utf-8');
+  } else if (['css'].includes(ext)) {
+    contentBuffer = Buffer.from(`/* BuildDreamer css fallback for ${cleanName} */`, 'utf-8');
+  } else {
+    contentBuffer = Buffer.from(`BuildDreamer asset: ${cleanName}`, 'utf-8');
+  }
+
+  try {
+    fs.writeFileSync(filePath, contentBuffer);
+    console.warn(`[Storage Fallback] Arquivo ausente criado localmente com sucesso: ${filename}`);
+  } catch (e: any) {
+    console.error(`[Storage Fallback] Erro ao gravar fallback para ${filename}:`, e.message);
+  }
+
+  return fs.createReadStream(filePath);
 }
 
 export async function uploadAssetToStorage(
