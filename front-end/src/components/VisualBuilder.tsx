@@ -1,0 +1,2804 @@
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
+import {
+  ArrowLeft,
+  Eye,
+  Download,
+  Code2,
+  Undo2,
+  Redo2,
+  Check,
+  PanelLeftClose,
+  PanelRightClose,
+  PanelLeft,
+  PanelRight,
+  ChevronLeft,
+  ChevronRight,
+  MessageSquare,
+  Sparkles,
+  Smartphone,
+  Tablet,
+  Monitor,
+  ZoomIn,
+  ZoomOut,
+  ExternalLink,
+  Copy,
+  Sun,
+  Moon,
+  Globe,
+  Radio,
+  Square,
+  ChevronDown,
+  Loader2,
+  Upload,
+  Image as ImageIcon,
+  CheckCircle,
+  X,
+  ShieldCheck,
+  Plus,
+  Palette,
+  MousePointer2,
+  Layout,
+  Type,
+  AlignLeft,
+  Grid,
+  RotateCcw
+} from 'lucide-react';
+import { CreatePageModal, PageCreationData } from './CreatePageModal';
+import { getPageStarterTemplate } from '../lib/pageTemplates';
+import { Sidebar } from './Sidebar';
+import type { ElementNode } from './Sidebar';
+import { Canvas, CanvasHandle } from './Canvas';
+import { PropertiesPanel } from './PropertiesPanel';
+import { CodeEditor } from './CodeEditor';
+import { MediaLibrarySidebar } from './MediaLibrarySidebar';
+import { ChatPanel } from './ChatPanel';
+import { SEOAuditModal } from './SEOAuditModal';
+import { AIAuditModal } from './AIAuditModal';
+import { PageValidationModal } from './PageValidationModal';
+import { validatePage } from '../utils/pageValidator';
+import { API_URL, safeJson } from '../config';
+import { useNotification } from '../context/NotificationContext';
+import { parseDocFromHtml, serializeBodyContent, getElementByPath } from '../utils/domUtils';
+import { useElementEditor } from '../hooks/useElementEditor';
+
+import { InspectorPanel } from './InspectorPanel';
+import { findNodeById, updateComponentNode, removeNodeById, addNodeToParentById } from '../utils/tree';
+import { ComponentNode } from '../types/canvas';
+
+interface Page {
+  id: string;
+  name: string;
+  slug: string;
+  html: string; // Keep for now for compatibility, will deprecate
+  css: string;
+  js: string;
+  components?: ComponentNode[]; // New JSON tree structure
+  seoTitle?: string;
+  seoDescription?: string;
+  seoOgImage?: string;
+  isHomepage: boolean;
+}
+
+interface ProjectData {
+  id: string;
+  name: string;
+  theme?: string;
+  pages: Page[];
+}
+
+interface VisualBuilderProps {
+  projectId: string;
+  onBack: () => void;
+  onOpenAIImprover?: () => void;
+}
+
+const QuickAddMenu = ({ onAdd, onClose }: { onAdd: (html: string) => void, onClose: () => void }) => {
+  const commonElements = [
+    { title: 'Seção', icon: <Layout className="w-4 h-4" />, html: '<section style="padding: 80px 20px; background: #080a12; min-height: 200px; display: flex; flex-direction: column; align-items: center; justify-content: center;"></section>' },
+    { title: 'Título', icon: <Type className="w-4 h-4" />, html: '<h2 style="font-size: 32px; font-weight: 800; color: white; margin-bottom: 16px;">Novo Título de Impacto</h2>' },
+    { title: 'Texto', icon: <AlignLeft className="w-4 h-4" />, html: '<p style="font-size: 16px; color: #94a3b8; line-height: 1.6; margin-bottom: 16px;">Insira seu texto explicativo aqui. Você pode editar este conteúdo livremente no editor visual clicando duas vezes sobre ele.</p>' },
+    { title: 'Botão', icon: <Radio className="w-4 h-4" />, html: '<button style="padding: 14px 28px; background: #a855f7; color: white; border: none; border-radius: 12px; font-weight: 700; cursor: pointer; transition: all 0.2s;">Botão de Ação</button>' },
+    { title: 'Imagem', icon: <ImageIcon className="w-4 h-4" />, html: '<img src="https://images.unsplash.com/photo-1498050108023-c5249f4df085?auto=format&fit=crop&w=600&q=80" style="width: 100%; max-width: 500px; height: auto; border-radius: 16px; margin: 20px 0;" />' },
+    { title: 'Container', icon: <Square className="w-4 h-4" />, html: '<div style="padding: 32px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 20px; width: 100%; max-width: 800px; margin: 0 auto;"></div>' },
+  ];
+
+  return (
+    <div className="absolute bottom-20 left-1/2 -translate-x-1/2 w-72 bg-[#0f111a] border border-slate-800 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-200 z-[100]">
+      <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between bg-slate-950/80">
+        <div className="flex items-center gap-2">
+          <Plus className="w-3.5 h-3.5 text-purple-400" />
+          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-300">Inserir Elemento</span>
+        </div>
+        <button onClick={onClose} className="p-1 text-slate-500 hover:text-white transition-colors">
+          <X className="w-3.5 h-3.5" />
+        </button>
+      </div>
+      <div className="p-2.5 grid grid-cols-2 gap-2">
+        {commonElements.map((el, i) => (
+          <button
+            key={i}
+            onClick={() => onAdd(el.html)}
+            className="flex flex-col items-center gap-2 px-2 py-3 rounded-xl hover:bg-purple-600/10 text-slate-400 hover:text-purple-300 transition-all group border border-transparent hover:border-purple-500/20"
+          >
+            <div className="p-2.5 rounded-lg bg-slate-900 group-hover:bg-purple-600/20 text-slate-500 group-hover:text-purple-400 transition-colors">
+              {el.icon}
+            </div>
+            <span className="text-[10px] font-bold">{el.title}</span>
+          </button>
+        ))}
+      </div>
+      <div className="p-2 bg-slate-950/40 border-t border-slate-800">
+        <p className="text-[9px] text-slate-500 text-center italic">Arraste os blocos da lateral para layouts completos</p>
+      </div>
+    </div>
+  );
+};
+
+interface HistoryState {
+  html: string;
+  css: string;
+  js: string;
+  components?: ComponentNode[];
+  timestamp: string;
+  description: string;
+}
+
+export interface ProjectThemeConfig {
+  bg: string;
+  cardBg: string;
+  accent: string;
+  accentGlow: string;
+  textPrimary: string;
+  textSecondary: string;
+  border: string;
+  headingFont: string;
+  bodyFont: string;
+}
+
+export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack, onOpenAIImprover }) => {
+  const { token } = useAuth();
+  const { theme, toggleTheme } = useTheme();
+  const notify = useNotification();
+  const [project, setProject] = useState<ProjectData | null>(null);
+  const [projectTheme, setProjectTheme] = useState<ProjectThemeConfig>({
+    bg: '#080a12',
+    cardBg: '#101526',
+    accent: '#a855f7',
+    accentGlow: 'rgba(168, 85, 247, 0.35)',
+    textPrimary: '#f8fafc',
+    textSecondary: '#94a3b8',
+    border: 'rgba(168, 85, 247, 0.25)',
+    headingFont: 'Syne, sans-serif',
+    bodyFont: 'Plus Jakarta Sans, sans-serif'
+  });
+  const [activePageId, setActivePageId] = useState<string>('');
+  const activePageRef = useRef<Page | null>(null);
+  const pendingSaveRef = useRef<Page | null>(null);
+  const saveInFlightRef = useRef(false);
+  const saveTimerRef = useRef<number | null>(null);
+  const manualSaveRequestedRef = useRef(false);
+  
+  // Breakpoints & Viewports
+  const [viewport, setViewport] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
+  const [zoom, setZoom] = useState<number>(100);
+
+  // Selection & Tree State
+  const canvasRef = useRef<CanvasHandle>(null);
+  const [selectedSelector, setSelectedSelector] = useState<string | null>(null);
+  const [selectedPath, setSelectedPath] = useState<string | null>(null);
+  const [selectedComponentId, setSelectedComponentId] = useState<string | null>(null);
+  const [hoverPath, setHoverPath] = useState<string | null>(null);
+  const [selectedStyles, setSelectedStyles] = useState<Record<string, string>>({});
+  const [selectedAttrs, setSelectedAttrs] = useState<Record<string, string>>({});
+  const [mediaGalleryTarget, setMediaGalleryTarget] = useState<'src' | 'ogImage' | null>(null);
+  const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
+  const [isPreviewMode, setIsPreviewMode] = useState(false);
+
+  // Layout Panels (Persistência no LocalStorage)
+  const [activeLeftSidebar, setActiveLeftSidebar] = useState<'dom' | 'media' | 'theme' | null>(() => {
+    try {
+      const stored = localStorage.getItem('vb_active_left_sidebar');
+      const val = stored !== null ? JSON.parse(stored) : 'dom';
+      return (val === 'dom' || val === 'media' || val === 'theme') ? val : 'dom';
+    } catch {
+      return 'dom';
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('vb_active_left_sidebar', JSON.stringify(activeLeftSidebar));
+    } catch {}
+  }, [activeLeftSidebar]);
+
+  const [showSidebar, setShowSidebar] = useState<boolean>(true);
+
+  const [showStylesPanel, setShowStylesPanel] = useState<boolean>(() => {
+    try {
+      const stored = localStorage.getItem('vb_show_styles_panel');
+      return stored !== null ? JSON.parse(stored) : true;
+    } catch {
+      return true;
+    }
+  });
+
+  const [showChat, setShowChat] = useState<boolean>(() => {
+    try {
+      const stored = localStorage.getItem('vb_show_chat');
+      return stored !== null ? JSON.parse(stored) : true;
+    } catch {
+      return true;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('vb_show_sidebar', JSON.stringify(showSidebar));
+    } catch {}
+  }, [showSidebar]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('vb_show_styles_panel', JSON.stringify(showStylesPanel));
+    } catch {}
+  }, [showStylesPanel]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('vb_show_chat', JSON.stringify(showChat));
+    } catch {}
+  }, [showChat]);
+
+  // Modais & Menus
+  const [showCodeModal, setShowCodeModal] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [showCreatePageModal, setShowCreatePageModal] = useState(false);
+  const [showRemasterPageModal, setShowRemasterPageModal] = useState(false);
+  const [showSEOAuditModal, setShowSEOAuditModal] = useState(false);
+  const [showAIAuditModal, setShowAIAuditModal] = useState(false);
+  const [showValidationModal, setShowValidationModal] = useState(false);
+  const [isSaveTriggeredByValidation, setIsSaveTriggeredByValidation] = useState(false);
+  const [showCanvasGrid, setShowCanvasGrid] = useState(false);
+  const [pageRemasterPrompt, setPageRemasterPrompt] = useState('Aprimore o design e layout desta página com Tailwind CSS mantendo estritamente todas as frases, textos e mídias originais.');
+  const [remasteringPage, setRemasteringPage] = useState(false);
+  const [showProjectMenuDropdown, setShowProjectMenuDropdown] = useState(false);
+  const [copiedCode, setCopiedCode] = useState(false);
+  const [activeExportTab, setActiveExportTab] = useState<'html' | 'css' | 'js'>('html');
+
+  // History Undo/Redo Stacks
+  const [undoStack, setUndoStack] = useState<HistoryState[]>([]);
+  const [redoStack, setRedoStack] = useState<HistoryState[]>([]);
+
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [aiJobStatus, setAiJobStatus] = useState<string | null>(null);
+
+  const fetchProjectDetails = async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/projects/${projectId}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error('Falha ao carregar projeto');
+      const data = await res.json();
+      setProject(data);
+      if (data.theme) {
+        try {
+          const parsed = JSON.parse(data.theme);
+          if (parsed && typeof parsed === 'object') {
+            setProjectTheme(prev => ({ ...prev, ...parsed }));
+          }
+        } catch (e) {
+          console.warn('Falha ao parsear tema do projeto:', e);
+        }
+      }
+      if (data.name) {
+        document.title = `${data.name} | Editor Visual BuildDreamer`;
+      }
+      if (data.pages && data.pages.length > 0 && !activePageId) {
+        const home = data.pages.find((p: Page) => p.isHomepage) || data.pages[0];
+        setActivePageId(home.id);
+      }
+    } catch (err: any) {
+      console.error(err);
+    }
+  };
+
+  // Monitorar se há uma geração com IA em andamento no projeto
+  useEffect(() => {
+    let interval: any = null;
+
+    const checkJob = async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/projects/jobs/${projectId}/status`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!res.ok) return;
+        const job = await safeJson(res);
+        
+        if (job.status === 'processing' || job.status === 'pending') {
+          setAiGenerating(true);
+          if (job.currentModel) {
+            setAiJobStatus(`Criando site com ${job.currentModel} (tentativa ${job.attempt}/${job.total})...`);
+          } else {
+            setAiJobStatus('A IA está construindo a estrutura e o design do site...');
+          }
+        } else if (job.status === 'completed') {
+          if (aiGenerating) {
+            setAiGenerating(false);
+            setAiJobStatus(null);
+            fetchProjectDetails();
+          }
+          if (interval) clearInterval(interval);
+        } else if (job.status === 'failed') {
+          setAiGenerating(false);
+          setAiJobStatus(null);
+          if (interval) clearInterval(interval);
+        }
+      } catch {}
+    };
+
+    checkJob();
+    interval = setInterval(checkJob, 2000);
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [projectId, token, aiGenerating]);
+
+  useEffect(() => {
+    fetchProjectDetails();
+  }, [projectId]);
+
+  const activePage = project?.pages.find(p => p.id === activePageId) || (project?.pages && project.pages.length > 0 ? project.pages[0] : null);
+
+  useEffect(() => {
+    activePageRef.current = activePage || null;
+    if (activePage && activePage.id !== activePageId) {
+      setActivePageId(activePage.id);
+    }
+  }, [activePage, activePageId]);
+
+  // Pontuação do Sistema de Validação da Página
+  const pageValidationScore = useMemo(() => {
+    if (!activePage) return 100;
+    return validatePage(activePage.html, activePage.css, projectTheme).score;
+  }, [activePage?.html, activePage?.css, projectTheme]);
+
+  // Push Snapshot to Undo Stack
+  const pushHistorySnapshot = useCallback((description: string) => {
+    if (!activePage) return;
+    setUndoStack(prev => [
+      ...prev.slice(-30),
+      {
+        html: activePage.html,
+        css: activePage.css,
+        js: activePage.js,
+        components: activePage.components,
+        timestamp: new Date().toLocaleTimeString(),
+        description
+      }
+    ]);
+    setRedoStack([]);
+  }, [activePage]);
+
+  // Handle Undo
+  const handleUndo = useCallback(() => {
+    if (undoStack.length === 0 || !activePage) return;
+    const last = undoStack[undoStack.length - 1];
+    setUndoStack(prev => prev.slice(0, -1));
+    setRedoStack(prev => [
+      ...prev,
+      {
+        html: activePage.html,
+        css: activePage.css,
+        js: activePage.js,
+        components: activePage.components,
+        timestamp: new Date().toLocaleTimeString(),
+        description: 'Undo State'
+      }
+    ]);
+
+    setProject(prev => prev ? {
+      ...prev,
+      pages: prev.pages.map(p => p.id === activePage.id ? { ...p, html: last.html, css: last.css, js: last.js, components: last.components } : p)
+    } : null);
+  }, [undoStack, activePage]);
+
+  // Handle Redo
+  const handleRedo = useCallback(() => {
+    if (redoStack.length === 0 || !activePage) return;
+    const next = redoStack[redoStack.length - 1];
+    setRedoStack(prev => prev.slice(0, -1));
+    setUndoStack(prev => [
+      ...prev,
+      {
+        html: activePage.html,
+        css: activePage.css,
+        js: activePage.js,
+        components: activePage.components,
+        timestamp: new Date().toLocaleTimeString(),
+        description: 'Redo State'
+      }
+    ]);
+
+    setProject(prev => prev ? {
+      ...prev,
+      pages: prev.pages.map(p => p.id === activePage.id ? { ...p, html: next.html, css: next.css, js: next.js, components: next.components } : p)
+    } : null);
+  }, [redoStack, activePage]);
+
+  // Global Keyboard Shortcuts (Ctrl+Z, Ctrl+Y, Escape, Delete, Ctrl+S)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const isInput = ['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement)?.tagName);
+      
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        handleUndo();
+      } else if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' || (e.key.toLowerCase() === 'z' && e.shiftKey))) {
+        e.preventDefault();
+        handleRedo();
+      } else if (e.key === 'Escape') {
+        setSelectedSelector(null);
+        setSelectedPath(null);
+      } else if ((e.key === 'Delete' || e.key === 'Backspace') && !isInput && selectedPath) {
+        e.preventDefault();
+        handleDeleteElement(selectedPath);
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd' && !isInput && selectedPath) {
+        e.preventDefault();
+        handleDuplicateElement(selectedPath);
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        handleManualSave();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleUndo, handleRedo, selectedPath, activePage]);
+
+  // Helpers to parse and serialize DOM trees safely
+
+
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error'>('saved');
+
+  const persistPage = useCallback(async (pageToSave: Page, showSuccessToast: boolean) => {
+    const res = await fetch(`${API_URL}/api/pages/${pageToSave.id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        html: pageToSave.html,
+        css: pageToSave.css,
+        js: pageToSave.js,
+        seoTitle: pageToSave.seoTitle,
+        seoDescription: pageToSave.seoDescription
+      })
+    });
+
+    if (!res.ok) {
+      throw new Error('Falha ao salvar alterações da página');
+    }
+
+    if (showSuccessToast) {
+      notify.success(`Página "${pageToSave.name}" salva com sucesso!`, 'Salvo');
+    }
+  }, [token, notify]);
+
+  const flushQueuedSave = useCallback(async () => {
+    if (saveInFlightRef.current) return;
+    const pageToSave = pendingSaveRef.current;
+    if (!pageToSave) return;
+
+    pendingSaveRef.current = null;
+    saveInFlightRef.current = true;
+    const shouldShowToast = manualSaveRequestedRef.current;
+
+    try {
+      setSaveStatus('saving');
+      await persistPage(pageToSave, shouldShowToast);
+      setSaveStatus('saved');
+      if (shouldShowToast) {
+        manualSaveRequestedRef.current = false;
+      }
+    } catch (e: any) {
+      console.error('Erro ao sincronizar com banco de dados:', e);
+      setSaveStatus('error');
+      if (shouldShowToast) {
+        manualSaveRequestedRef.current = false;
+        notify.error(e?.message || 'Falha ao salvar página.', 'Erro');
+      }
+    } finally {
+      saveInFlightRef.current = false;
+      if (pendingSaveRef.current) {
+        void flushQueuedSave();
+      }
+    }
+  }, [persistPage, notify]);
+
+  const queuePageSave = useCallback((pageToSave: Page) => {
+    pendingSaveRef.current = pageToSave;
+    setSaveStatus('saving');
+
+    if (saveTimerRef.current !== null) {
+      window.clearTimeout(saveTimerRef.current);
+    }
+
+    saveTimerRef.current = window.setTimeout(() => {
+      saveTimerRef.current = null;
+      void flushQueuedSave();
+    }, 500);
+  }, [flushQueuedSave]);
+
+  const handleUpdateTheme = async (newTheme: ProjectThemeConfig) => {
+    setProjectTheme(newTheme);
+    try {
+      const res = await fetch(`${API_URL}/api/projects/${projectId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          theme: JSON.stringify(newTheme)
+        })
+      });
+      if (res.ok) {
+        setProject(prev => prev ? { ...prev, theme: JSON.stringify(newTheme) } : null);
+        notify.success('Tema global sincronizado com sucesso!', 'Tema Salvo');
+      } else {
+        throw new Error('Falha ao salvar tema no servidor');
+      }
+    } catch (err: any) {
+      console.error(err);
+      notify.error('Erro ao salvar tema global.', 'Erro');
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current !== null) {
+        window.clearTimeout(saveTimerRef.current);
+      }
+    };
+  }, []);
+
+  // Update Page Code with Database Sync
+  const handleCodeChange = async (type: 'html' | 'css' | 'js' | 'components', value: any) => {
+    const currentPage = activePageRef.current;
+    if (!currentPage) return;
+    pushHistorySnapshot(`Edição de ${type.toUpperCase()}`);
+    const updatedPage = { ...currentPage, [type]: value };
+    activePageRef.current = updatedPage;
+
+    setProject(prev => prev ? {
+      ...prev,
+      pages: prev.pages.map(p => p.id === updatedPage.id ? updatedPage : p)
+    } : null);
+
+    queuePageSave(updatedPage);
+  };
+
+  // Explicit Save Trigger com Validação Integrada de Diretrizes, Cores e Acessibilidade
+  const handleManualSave = useCallback(async (bypassValidation: boolean = false) => {
+    const currentPage = pendingSaveRef.current || activePageRef.current;
+    if (!currentPage) return;
+
+    if (!bypassValidation) {
+      const result = validatePage(currentPage.html, currentPage.css, projectTheme);
+      // Se houver erros críticos ou pontuação < 90, abre o painel de validação pré-salvamento
+      if (result.totalCritical > 0 || result.score < 90) {
+        setIsSaveTriggeredByValidation(true);
+        setShowValidationModal(true);
+        return;
+      }
+    }
+
+    manualSaveRequestedRef.current = true;
+    pendingSaveRef.current = currentPage;
+
+    if (saveTimerRef.current !== null) {
+      window.clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+
+    void flushQueuedSave();
+  }, [flushQueuedSave, projectTheme]);
+
+  // Atallhos Globais do Teclado (Ctrl+S, ESC)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        return;
+      }
+
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        handleManualSave();
+      } else if (e.key === 'Escape') {
+        setSelectedSelector(null);
+        setSelectedPath(null);
+        setSelectedComponentId(null);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleManualSave]);
+
+  const elementEditor = useElementEditor(
+    activePageRef,
+    handleCodeChange,
+    selectedPath,
+    selectedComponentId,
+    setSelectedPath,
+    setSelectedSelector,
+    setSelectedStyles,
+    setSelectedAttrs,
+    canvasRef
+  );
+  const {
+    handleStyleChange,
+    handleInlineTextChange,
+    handleDuplicateElement,
+    handleAttrChange,
+    handleMoveElementDirection,
+    handleDeleteElement
+  } = elementEditor;
+  console.log('DEBUG: elementEditor is', elementEditor);
+
+  // --- HANDLERS CENTRALIZED IN HOOKS ---
+
+  // --- OLD HANDLER REMOVED ---
+
+  // --- OLD HANDLER REMOVED ---
+
+  const handleUpdateNode = (updatedNode: ComponentNode) => {
+    if (!activePage) return;
+    const newComponents = updateComponentNode(activePage.components || [], updatedNode.id, () => updatedNode);
+    handleCodeChange('components', newComponents);
+  };
+
+  const handleMoveNode = (sourceId: string, targetParentId: string, index: number) => {
+    if (!activePage) return;
+    const components = activePage.components || [];
+    const nodeToMove = findNodeById(components, sourceId);
+    if (!nodeToMove) return;
+
+    const componentsRemoved = removeNodeById(components, sourceId);
+    const newComponents = addNodeToParentById(componentsRemoved, targetParentId, nodeToMove, index);
+    handleCodeChange('components', newComponents);
+  };
+
+  // --- OLD HANDLERS REMOVED ---
+
+  // Element Reorder (before, after or inside)
+  const handleMoveElement = (sourcePath: string, targetPath: string, position: 'before' | 'after' | 'inside' = 'inside') => {
+    const currentPage = activePageRef.current;
+    if (!currentPage || sourcePath === targetPath) return;
+    if (targetPath.startsWith(sourcePath + '.')) return;
+    const doc = parseDocFromHtml(currentPage.html);
+    const root = doc.getElementById('canvas-root') || doc.body;
+    const srcEl = getElementByPath(root, sourcePath);
+    const tgtEl = getElementByPath(root, targetPath);
+    if (srcEl && tgtEl && srcEl.parentElement) {
+      srcEl.parentElement.removeChild(srcEl);
+      if (position === 'before' && tgtEl.parentElement) {
+        tgtEl.parentElement.insertBefore(srcEl, tgtEl);
+      } else if (position === 'after' && tgtEl.parentElement) {
+        tgtEl.parentElement.insertBefore(srcEl, tgtEl.nextSibling);
+      } else {
+        tgtEl.appendChild(srcEl);
+      }
+      const newHtml = serializeBodyContent(doc);
+      handleCodeChange('html', newHtml);
+      setSelectedPath(null);
+      setSelectedSelector(null);
+    }
+  };
+
+  // Insert template block at exact dropped position or append
+  const handleInsertBlock = (
+    htmlBlock: string, 
+    cssBlock?: string, 
+    targetPath?: string, 
+    position: 'before' | 'after' | 'inside' | 'append' = 'append'
+  ) => {
+    const currentPage = activePageRef.current;
+    if (!currentPage) return;
+    const doc = parseDocFromHtml(currentPage.html);
+    const root = doc.getElementById('canvas-root') || doc.body;
+
+    // Criar nós a partir do bloco HTML
+    const tempContainer = doc.createElement('div');
+    tempContainer.innerHTML = htmlBlock.trim();
+    const newElements = Array.from(tempContainer.children);
+
+    if (newElements.length === 0) return;
+
+    if (targetPath && position !== 'append') {
+      const tgtEl = getElementByPath(root, targetPath);
+      if (tgtEl) {
+        if (position === 'before' && tgtEl.parentElement) {
+          newElements.forEach(el => tgtEl.parentElement!.insertBefore(el, tgtEl));
+        } else if (position === 'after' && tgtEl.parentElement) {
+          newElements.forEach(el => tgtEl.parentElement!.insertBefore(el, tgtEl.nextSibling));
+        } else {
+          newElements.forEach(el => tgtEl.appendChild(el));
+        }
+      } else {
+        newElements.forEach(el => root.appendChild(el));
+      }
+    } else {
+      newElements.forEach(el => root.appendChild(el));
+    }
+
+    const newHtml = serializeBodyContent(doc);
+    const newCss = cssBlock ? `${currentPage.css || ''}\n${cssBlock}` : currentPage.css;
+    handleCodeChange('html', newHtml);
+    if (cssBlock) handleCodeChange('css', newCss);
+  };
+
+  // Save selected element as a custom template
+  const handleSaveSelectionAsTemplate = (title: string, category: string) => {
+    const currentPage = activePageRef.current;
+    if (!currentPage || !selectedPath) return;
+    const doc = parseDocFromHtml(currentPage.html);
+    const root = doc.getElementById('canvas-root') || doc.body;
+    const el = getElementByPath(root, selectedPath);
+    if (!el) {
+      notify.warning('Elemento selecionado não foi encontrado no documento.', 'Não Encontrado');
+      return;
+    }
+
+    const templateHtml = el.outerHTML;
+    const newTemplate = {
+      id: `tmpl-${Date.now()}`,
+      title: title.trim() || 'Template Personalizado',
+      category: category.trim() || 'Personalizados',
+      html: templateHtml,
+      createdAt: Date.now()
+    };
+
+    try {
+      const stored = localStorage.getItem('studio_custom_templates');
+      const list = stored ? JSON.parse(stored) : [];
+      list.unshift(newTemplate);
+      localStorage.setItem('studio_custom_templates', JSON.stringify(list));
+      notify.success(`Template "${newTemplate.title}" salvo com sucesso na biblioteca!`, 'Salvo com Sucesso');
+    } catch {
+      notify.error('Erro ao salvar template localmente.', 'Erro ao Salvar');
+    }
+  };
+
+  // SEO updates
+  const handlePageSeoChange = async (key: 'title' | 'description' | 'ogImage', value: string) => {
+    if (!activePage) return;
+    try {
+      const updateData: any = {};
+      if (key === 'title') updateData.seoTitle = value;
+      if (key === 'description') updateData.seoDescription = value;
+      if (key === 'ogImage') updateData.seoOgImage = value;
+
+      await fetch(`${API_URL}/api/pages/${activePage.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(updateData)
+      });
+
+      setProject(prev => prev ? {
+        ...prev,
+        pages: prev.pages.map(p => p.id === activePage.id ? { 
+          ...p, 
+          [key === 'title' ? 'seoTitle' : key === 'description' ? 'seoDescription' : 'seoOgImage']: value 
+        } : p)
+      } : null);
+    } catch (e) {
+      console.error("Erro ao salvar SEO:", e);
+    }
+  };
+
+  // AI Copilot Change Application
+  const handleApplyAIChanges = async (newHtml: string, newCss: string, newJs: string, targetPageId?: string) => {
+    const pageIdToUpdate = targetPageId || activePage?.id;
+    if (!pageIdToUpdate) return;
+    pushHistorySnapshot("Alterações aplicadas pelo AI Copilot");
+    
+    // Atualiza o estado local imediatamente para feedback instantâneo na UI
+    setProject(prev => prev ? {
+      ...prev,
+      pages: prev.pages.map(p => p.id === pageIdToUpdate ? { ...p, html: newHtml, css: newCss, js: newJs } : p)
+    } : null);
+
+    try {
+      // Envia a atualização para o backend e aguarda a conclusão antes de sincronizar novamente
+      const res = await fetch(`${API_URL}/api/pages/${pageIdToUpdate}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ html: newHtml, css: newCss, js: newJs })
+      });
+
+      if (!res.ok) {
+        throw new Error('Falha ao salvar as alterações no servidor');
+      }
+
+      // Agora que a persistência foi confirmada pelo backend, sincroniza os detalhes do projeto com segurança
+      await fetchProjectDetails();
+    } catch (err: any) {
+      console.error("Erro ao aplicar alterações da IA:", err);
+      notify.error("Não foi possível salvar as alterações da IA no servidor. Tente novamente.", "Erro de Sincronização");
+    }
+  };
+
+  // Parse HTML into recursive DOM Layer tree
+  const parseHtmlToLayers = (htmlString: string): ElementNode[] => {
+    if (!htmlString) return [];
+    try {
+      const parser = new DOMParser();
+      const cleanStr = String(htmlString || '').trim();
+      const doc = cleanStr.includes('id="canvas-root"') 
+        ? parser.parseFromString(cleanStr, 'text/html')
+        : parser.parseFromString(`<div id="canvas-root">${cleanStr}</div>`, 'text/html');
+      
+      function nodeToElementNode(node: Element): ElementNode | null {
+        // Ignora overlays de seleção internos se existirem no snapshot
+        let idStr = '';
+        if (node.id && typeof node.id === 'string') {
+          idStr = node.id;
+        } else if (node.id && typeof node.id === 'object' && (node.id as any).animVal) {
+          idStr = (node.id as any).animVal;
+        }
+        if (idStr.startsWith('studio-')) return null;
+        if (node.classList && node.classList.contains('studio-tool-btn')) return null;
+
+        const childNodes: ElementNode[] = [];
+        for (let i = 0; i < node.children.length; i++) {
+          const parsedChild = nodeToElementNode(node.children[i]);
+          if (parsedChild) childNodes.push(parsedChild);
+        }
+        
+        return {
+          tag: node.tagName.toLowerCase(),
+          id: node.id || undefined,
+          className: (typeof node.className === 'string' ? node.className : node.getAttribute('class')) || undefined,
+          children: childNodes.length > 0 ? childNodes : undefined
+        };
+      }
+
+      const canvasRoot = doc.getElementById('canvas-root');
+      const rootElements = canvasRoot ? Array.from(canvasRoot.children) : Array.from(doc.body.children);
+      return rootElements
+        .map(nodeToElementNode)
+        .filter((n): n is ElementNode => n !== null);
+    } catch (e) {
+      console.error("Falha ao gerar árvore DOM:", e);
+      return [];
+    }
+  };
+
+  const layers = activePage ? parseHtmlToLayers(activePage.html) : [];
+
+  // Download Project as complete ZIP package (including Dockerfile, docker-compose, pages, css, js)
+  const [exportOptions, setExportOptions] = useState({
+    pages: true,
+    css: true,
+    js: true,
+    docker: true,
+    readme: true
+  });
+  const [downloadingZip, setDownloadingZip] = useState(false);
+
+  const handleDownloadZip = async () => {
+    if (!project) return;
+    setDownloadingZip(true);
+    try {
+      const queryParams = new URLSearchParams({
+        pages: String(exportOptions.pages),
+        css: String(exportOptions.css),
+        js: String(exportOptions.js),
+        docker: String(exportOptions.docker),
+        readme: String(exportOptions.readme)
+      }).toString();
+
+      const res = await fetch(`${API_URL}/api/export/${project.id}?${queryParams}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (!res.ok) throw new Error('Falha ao exportar pacote ZIP');
+
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `projeto-${project.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      a.remove();
+    } catch (e) {
+      console.error(e);
+      notify.error('Erro ao gerar pacote de exportação ZIP.', 'Exportar Projeto');
+    } finally {
+      setDownloadingZip(false);
+    }
+  };
+
+  const [importingZip, setImportingZip] = useState(false);
+  const zipFileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImportZipFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !project) return;
+
+    if (!file.name.endsWith('.zip')) {
+      notify.warning('Selecione um arquivo .zip válido.', 'Formato do Arquivo');
+      return;
+    }
+
+    setImportingZip(true);
+    try {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const base64 = reader.result as string;
+        const res = await fetch(`${API_URL}/api/projects/import-zip`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            targetProjectId: project.id,
+            zipBase64: base64
+          })
+        });
+
+        if (!res.ok) {
+          const errData = await safeJson(res);
+          throw new Error(errData.error || 'Falha ao importar arquivo ZIP.');
+        }
+
+        notify.success('Arquivo ZIP importado com sucesso para este projeto!', 'Projeto Importado');
+        fetchProjectDetails();
+      };
+      reader.readAsDataURL(file);
+    } catch (err: any) {
+      notify.error(err.message || 'Erro ao processar o arquivo ZIP.', 'Erro no Processamento');
+    } finally {
+      setImportingZip(false);
+      if (zipFileInputRef.current) zipFileInputRef.current.value = '';
+    }
+  };
+
+  const handleRemasterPage = async () => {
+    if (!activePage) return;
+    setRemasteringPage(true);
+    try {
+      const preferredProvider = localStorage.getItem('preferred_ai_provider') || 'gemini';
+      const selectedModel = preferredProvider === 'ollama' 
+        ? (localStorage.getItem('ollama_selected_model') || 'qwen2.5-coder:1.5b')
+        : (localStorage.getItem('last_selected_ai_model') || '');
+
+      const safeHeader = (val: string) => {
+        try { return btoa(unescape(encodeURIComponent(val))); } catch { return ''; }
+      };
+
+      const res = await fetch(`${API_URL}/api/ai/page/remaster`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'X-Gemini-Key': safeHeader(localStorage.getItem('gemini_api_key') || ''),
+          'X-Proxy-Url': safeHeader(localStorage.getItem('ai_proxy_url') || ''),
+          'X-AI-Provider': preferredProvider,
+          'X-AI-Model': safeHeader(selectedModel),
+          'X-Ollama-Endpoint': localStorage.getItem('ollama_endpoint') || 'http://localhost:11434'
+        },
+        body: JSON.stringify({
+          pageId: activePage.id,
+          customPrompt: pageRemasterPrompt
+        })
+      });
+
+      if (!res.ok) {
+        const err = await safeJson(res);
+        throw new Error(err.error || 'Falha ao remasterizar página com IA.');
+      }
+
+      const data = await safeJson(res);
+      if (data.queued) {
+        notify.success('Tarefa de remasterização enviada para a fila sequencial do projeto!', 'Adicionado à Fila');
+        setShowChat(true); // Abre o chat copilot para o usuário acompanhar o progresso em tempo real
+      } else if (data.page) {
+        setProject(prev => prev ? {
+          ...prev,
+          pages: prev.pages.map(p => p.id === data.page.id ? data.page : p)
+        } : null);
+        notify.success('Página remasterizada com sucesso mantendo todas as mídias e frases!', 'Página Remasterizada');
+      }
+
+      setShowRemasterPageModal(false);
+    } catch (err: any) {
+      notify.error(`Erro ao remasterizar: ${err.message}`, 'Falha de Remasterização');
+    } finally {
+      setRemasteringPage(false);
+    }
+  };
+
+  const handleCreatePageSubmit = async (data: PageCreationData) => {
+    if (!project) return;
+
+    // Tentar gerar a página via IA para garantir personalização total sob o tema e prompt do projeto
+    if (data.templateType !== 'duplicate') {
+      try {
+        const aiPromptText = data.templateType === 'ai' && data.aiPrompt 
+          ? data.aiPrompt 
+          : `Crie a página "${data.name}" (${data.templateType}) totalmente customizada para a proposta do projeto "${project.name}". Garanta conteúdo relevante sem nenhum texto placeholder e reutilize a identidade visual e menu da Home.`;
+
+        const aiRes = await fetch(`${API_URL}/api/ai/generate-page`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            prompt: aiPromptText,
+            projectId: project.id,
+            name: data.name,
+            slug: data.slug,
+            templateType: data.templateType
+          })
+        });
+
+        if (aiRes.ok) {
+          const aiData = await aiRes.json();
+          const createdPage = aiData.page || aiData;
+          setProject(prev => prev ? { ...prev, pages: [...prev.pages, createdPage] } : null);
+          setActivePageId(createdPage.id);
+          notify.success(`Página "${data.name}" criada e alinhada ao tema com IA!`, 'Página Criada com Sucesso');
+          return;
+        }
+      } catch (e) {
+        console.warn('Fallback para template estático ao falhar geração por IA', e);
+      }
+    }
+
+    let finalHtml = '<div></div>';
+    let finalCss = '';
+    let finalJs = '';
+
+    if (data.templateType === 'duplicate' && data.duplicatePageId) {
+      const pageToClone = project.pages.find(p => p.id === data.duplicatePageId);
+      if (pageToClone) {
+        finalHtml = pageToClone.html || '';
+        finalCss = pageToClone.css || '';
+        finalJs = pageToClone.js || '';
+      }
+    } else {
+      const starter = getPageStarterTemplate(data.templateType, data.name, project.name);
+      finalHtml = starter.html;
+      finalCss = starter.css || '';
+      finalJs = starter.js || '';
+    }
+
+    const res = await fetch(`${API_URL}/api/pages`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        name: data.name,
+        slug: data.slug,
+        html: finalHtml,
+        css: finalCss,
+        js: finalJs,
+        isHomepage: data.isHomepage,
+        seoTitle: data.seoTitle,
+        seoDescription: data.seoDescription,
+        projectId: project.id
+      })
+    });
+
+    if (!res.ok) {
+      const errJson = await res.json().catch(() => ({}));
+      throw new Error(errJson.error || 'Erro ao criar página no servidor.');
+    }
+
+    const newP = await res.json();
+
+    setProject(prev => {
+      if (!prev) return null;
+      const updatedPages = data.isHomepage
+        ? prev.pages.map(p => ({ ...p, isHomepage: false }))
+        : [...prev.pages];
+      return {
+        ...prev,
+        pages: [...updatedPages, newP]
+      };
+    });
+
+    setActivePageId(newP.id);
+    notify.success(`Página "${data.name}" criada com sucesso!`, 'Página Criada');
+  };
+
+  const getFullHtmlDocument = (forPreview: boolean = false) => {
+    if (!activePage) return '';
+    const safePagesJson = JSON.stringify((project?.pages || []).map(p => ({
+      id: p.id,
+      name: p.name,
+      slug: p.slug,
+      isHomepage: p.isHomepage,
+      html: p.html,
+      css: p.css,
+      js: p.js,
+      title: p.seoTitle || p.name
+    }))).replace(/</g, '\\u003c');
+
+    const safeJs = (activePage.js || '').replace(/<\/script/gi, '<\\/script');
+
+    const rawDesc = activePage.seoDescription || '';
+    const cleanDesc = (rawDesc.length > 250 || rawDesc.toLowerCase().includes('prompt') || rawDesc.toLowerCase().includes('diretríz') || rawDesc.toLowerCase().includes('diretriz')) 
+      ? `${project?.name || 'Website'} - ${activePage.name}. Website oficial.` 
+      : rawDesc.replace(/"/g, '&quot;');
+
+    const previewHeaderHtml = forPreview ? `
+  <!-- Global Floating Preview Navigation (Bottom-Center) -->
+  <div id="studio-preview-floating-nav">
+    <div style="display: flex; align-items: center; gap: 8px; border-right: 1px dashed rgba(255, 255, 255, 0.15); padding-right: 12px; margin-right: 4px;">
+      <div style="width: 22px; height: 22px; border-radius: 6px; background: linear-gradient(135deg, #a855f7 0%, #ec4899 100%); display: flex; align-items: center; justify-content: center; font-weight: 800; color: white; font-size: 10px;">D</div>
+      <span style="font-weight: 700; color: #f8fafc; font-size: 11px; letter-spacing: 0.05em; white-space: nowrap;">Preview</span>
+    </div>
+    <nav style="display: flex; align-items: center; gap: 4px; max-width: 600px; overflow-x: auto; scrollbar-width: none;">
+      ${(project?.pages || []).map(p => `
+        <button 
+          data-page-id="${p.id}"
+          data-page-slug="${p.slug}"
+          class="preview-nav-link ${p.id === activePage.id ? 'active' : ''}"
+        >
+          ${p.isHomepage ? '<span>🏠</span>' : ''}
+          <span>${p.name}</span>
+        </button>
+      `).join('')}
+    </nav>
+  </div>
+` : '';
+
+    const previewStyles = forPreview ? `
+    #studio-preview-floating-nav {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 999999;
+      background: rgba(9, 13, 22, 0.85);
+      border: 1px solid rgba(168, 85, 247, 0.25);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-radius: 9999px;
+      padding: 6px 14px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 0 15px rgba(168, 85, 247, 0.15);
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      opacity: 0.2; /* 80% transparente por padrão quando sem foco/mouse */
+      transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.3s ease;
+    }
+    #studio-preview-floating-nav:hover {
+      opacity: 1 !important; /* Totalmente visível no hover */
+      border-color: rgba(168, 85, 247, 0.6);
+      transform: translateX(-50%) translateY(-2px);
+    }
+    .preview-nav-link {
+      color: #94a3b8 !important;
+      background: transparent;
+      border: none;
+      outline: none;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 11px;
+      padding: 6px 14px;
+      border-radius: 9999px;
+      white-space: nowrap;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      transition: all 0.2s ease;
+    }
+    .preview-nav-link:hover {
+      color: #f1f5f9 !important;
+      background-color: rgba(255, 255, 255, 0.08) !important;
+    }
+    .preview-nav-link.active {
+      color: #c084fc !important;
+      background-color: rgba(168, 85, 247, 0.12) !important;
+      box-shadow: inset 0 0 0 1px rgba(168, 85, 247, 0.3) !important;
+    }
+` : '';
+
+    return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${activePage.seoTitle || activePage.name}</title>
+  <meta name="description" content="${cleanDesc}">
+  <!-- CDNs e Tecnologias Injetadas -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300..800;1,300..800&family=Syne:wght@700;800&family=Space+Grotesk:wght@500;700&family=Outfit:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700;800;900&family=Cinzel:wght@600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+  <script src="https://unpkg.com/lenis@1.1.18/dist/lenis.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css"/>
+  <script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>
+  <script type="module" src="https://unpkg.com/@splinetool/viewer/build/spline-viewer.js"></script>
+  <style id="studio-core-styles">
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      padding: 0;
+      min-height: 100vh;
+      background: #090d16;
+      color: #f8fafc;
+      font-family: 'Plus Jakarta Sans', 'Inter', sans-serif;
+      position: relative;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      font-family: 'Syne', 'Outfit', sans-serif;
+    }
+    ${previewStyles}
+  </style>
+  <style id="studio-user-styles">
+    ${activePage.css || ''}
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen">
+  ${previewHeaderHtml}
+  <div id="preview-root">
+    ${activePage.html || ''}
+  </div>
+  <script>
+    ${safeJs}
+  </script>
+  <script>
+    // Interceptor de navegação avançado para Preview local multi-páginas (impede about:blank#blocked)
+    window.__PROJECT_PAGES__ = ${safePagesJson};
+
+    function slugifyRoute(str) {
+      if (!str) return '';
+      try { str = decodeURIComponent(str); } catch(e){}
+      return String(str)
+        .toLowerCase()
+        .trim()
+        .replace(/^https?:\/\/[^\/]+/i, '')
+        .replace(/^blob:[^\/]+/i, '')
+        .replace(/^pages\//i, '')
+        .replace(/^\/+/, '')
+        .replace(/\.html$/i, '')
+        .replace(/\/$/, '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+    }
+
+    window.__NAVIGATE_TO_PAGE__ = function(pageId) {
+      var page = window.__PROJECT_PAGES__.find(function(p) { return p.id === pageId; });
+      if (!page) return;
+
+      document.title = page.title || page.name;
+      var userStyles = document.getElementById('studio-user-styles');
+      if (userStyles) userStyles.textContent = page.css || '';
+      var root = document.getElementById('preview-root') || document.body;
+      root.innerHTML = page.html || '';
+      window.scrollTo({ top: 0, behavior: 'instant' });
+
+      // Atualiza os links de navegação ativos no cabeçalho
+      document.querySelectorAll('.preview-nav-link').forEach(function(btn) {
+        if (btn.getAttribute('data-page-id') === pageId) {
+          btn.classList.add('active');
+        } else {
+          btn.classList.remove('active');
+        }
+      });
+
+      setTimeout(function() {
+        if (window.lucide && typeof lucide.createIcons === 'function') {
+          try { lucide.createIcons(); } catch(err){}
+        }
+        if (typeof Swiper !== 'undefined') {
+          document.querySelectorAll('.swiper, .maps-reviews-swiper').forEach(function(sEl) {
+            try {
+              new Swiper(sEl, {
+                effect: sEl.classList.contains('maps-reviews-swiper') ? 'cards' : 'slide',
+                grabCursor: true,
+                pagination: { el: sEl.querySelector('.swiper-pagination') || '.swiper-pagination', clickable: true },
+                autoplay: { delay: 4000, disableOnInteraction: false }
+              });
+            } catch(err){}
+          });
+        }
+        if (window.ScrollTrigger && typeof ScrollTrigger.refresh === 'function') {
+          try { ScrollTrigger.refresh(); } catch(err){}
+        }
+        if (page.js) {
+          try { eval(page.js); } catch(err) { console.warn('Erro ao executar JS da página:', err); }
+        }
+      }, 60);
+    };
+
+    document.addEventListener('click', function(e) {
+      // Interceptação direta para os botões de navegação do Preview (evita conflito com links gerais)
+      var navBtn = e.target.closest('.preview-nav-link');
+      if (navBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        var pageId = navBtn.getAttribute('data-page-id');
+        if (pageId) {
+          window.__NAVIGATE_TO_PAGE__(pageId);
+        }
+        return;
+      }
+
+      var target = e.target.closest('a');
+      if (!target) return;
+
+      var rawAttr = target.getAttribute('href') || '';
+      var rawHref = rawAttr || target.href || '';
+      if (!rawHref || rawHref === 'javascript:' || rawHref.startsWith('javascript:')) return;
+
+      // 1. Rolagens suaves internas para seções com ID (#secao)
+      if (rawAttr.startsWith('#') || (rawHref.includes('#') && !rawAttr.includes('.html'))) {
+        var hash = rawAttr.startsWith('#') ? rawAttr : ('#' + rawHref.split('#')[1]);
+        if (hash && hash !== '#') {
+          e.preventDefault();
+          e.stopPropagation();
+          var targetEl = document.querySelector(hash) || document.getElementById(hash.slice(1));
+          if (targetEl) {
+            targetEl.scrollIntoView({ behavior: 'smooth' });
+          }
+          return;
+        }
+      }
+
+      // 2. Links externos (WhatsApp, redes sociais, telefone, e-mail)
+      if (rawHref.startsWith('mailto:') || rawHref.startsWith('tel:')) return;
+      if (rawHref.startsWith('http://') || rawHref.startsWith('https://')) {
+        var isExternal = true;
+        try {
+          var u = new URL(rawHref);
+          if (u.host === window.location.host || rawHref.includes('blob:')) {
+            isExternal = false;
+          }
+        } catch(err){}
+        if (isExternal) {
+          e.preventDefault();
+          window.open(rawHref, '_blank');
+          return;
+        }
+      }
+
+      // 3. Prevenir navegação nativa do browser para evitar about:blank#blocked no iframe/blob
+      e.preventDefault();
+      e.stopPropagation();
+
+      var targetSlug = slugifyRoute(rawAttr || rawHref);
+
+      var page = window.__PROJECT_PAGES__.find(function(p) {
+        var pSlug = slugifyRoute(p.slug);
+        var pName = slugifyRoute(p.name);
+        if (targetSlug === 'index' || targetSlug === 'home' || targetSlug === 'inicio' || targetSlug === '') {
+          return p.isHomepage || pSlug === 'index' || pSlug === 'home' || pSlug === 'inicio';
+        }
+        return pSlug === targetSlug || pName === targetSlug;
+      });
+
+      if (page) {
+        window.__NAVIGATE_TO_PAGE__(page.id);
+      } else {
+        console.warn('Página não encontrada para a rota:', rawHref, 'Slug pesquisado:', targetSlug);
+      }
+    }, true);
+  </script>
+</body>
+</html>`;
+  };
+
+  const handleDownloadSingleHtml = () => {
+    const content = getFullHtmlDocument();
+    const blob = new Blob([content], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${activePage?.slug || 'index'}.html`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const [ngrokActive, setNgrokActive] = useState(false);
+  const [ngrokUrl, setNgrokUrl] = useState<string | null>(null);
+  const [showPreviewMenu, setShowPreviewMenu] = useState(false);
+
+  // Consulta se o sistema está online no Ngrok
+  const checkSystemNgrokStatus = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/ngrok/status`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.active && data.url) {
+          setNgrokActive(true);
+          setNgrokUrl(data.url);
+        } else {
+          setNgrokActive(false);
+          setNgrokUrl(null);
+        }
+      }
+    } catch {}
+  }, [token]);
+
+  useEffect(() => {
+    checkSystemNgrokStatus();
+    const interval = setInterval(checkSystemNgrokStatus, 4000);
+    return () => clearInterval(interval);
+  }, [checkSystemNgrokStatus]);
+
+  const handleOpenLivePreview = () => {
+    const content = getFullHtmlDocument(true);
+    const blob = new Blob([content], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+    setShowPreviewMenu(false);
+  };
+
+  const handleOpenNgrokPreview = () => {
+    if (!ngrokUrl) return;
+    const pageRoute = activePage ? `/builder/${projectId}` : '';
+    window.open(`${ngrokUrl}${pageRoute}`, '_blank');
+    setShowPreviewMenu(false);
+  };
+
+  return (
+    <div className="h-screen w-screen bg-[var(--bg-app)] flex flex-col font-sans text-slate-100 overflow-hidden select-none">
+      
+      {/* ─── Top Studio Navbar ─── */}
+      {!isPreviewMode ? (
+        <header className="h-14 border-b border-slate-900/80 bg-[var(--bg-app)] flex items-center justify-between px-3 md:px-4 shrink-0 z-30 shadow-md">
+        <div className="flex items-center gap-3 min-w-0">
+          <button 
+            onClick={onBack}
+            className="p-1.5 hover:bg-slate-900 text-slate-400 hover:text-white rounded-lg transition-colors cursor-pointer"
+            title="Voltar ao Dashboard"
+          >
+            <ArrowLeft className="w-4 h-4" />
+          </button>
+
+          <div className="flex items-center gap-2 truncate">
+            <span className="font-bold text-white tracking-wide text-xs sm:text-sm truncate">{project?.name || 'Studio'}</span>
+            <span className="text-xs text-slate-600">/</span>
+            
+            {/* Seletor Rápido de Páginas */}
+            <select
+              value={activePageId || ''}
+              onChange={(e) => {
+                if (e.target.value === '__NEW__') {
+                  setShowCreatePageModal(true);
+                } else {
+                  setActivePageId(e.target.value);
+                  setSelectedSelector(null);
+                  setSelectedPath(null);
+                }
+              }}
+              className="bg-purple-950/40 border border-purple-500/30 hover:border-purple-500/60 text-purple-300 font-semibold font-mono text-xs rounded-xl px-2.5 py-1 focus:outline-none focus:ring-1 focus:ring-purple-500 cursor-pointer shadow-sm transition-all"
+              title="Alternar entre as páginas do site"
+            >
+              {project?.pages?.map((p) => (
+                <option key={p.id} value={p.id} className="bg-slate-950 text-white">
+                  {p.isHomepage ? '★ ' : ''}{p.name} ({p.slug})
+                </option>
+              ))}
+              <option value="__NEW__" className="bg-slate-900 text-purple-300 font-bold">
+                + Criar Nova Página...
+              </option>
+            </select>
+          </div>
+        </div>
+
+        {/* Viewports & Breakpoints Controller (Menu Unificado Dropdown) */}
+        <div className="flex items-center gap-1.5 bg-slate-950/80 border border-slate-900 rounded-xl p-1">
+          <button
+            onClick={() => setViewport('desktop')}
+            className={`p-1.5 rounded-lg transition-all cursor-pointer ${viewport === 'desktop' ? 'bg-purple-600/30 text-purple-300 shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}
+            title="Desktop View (100%)"
+          >
+            <Monitor className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => setViewport('tablet')}
+            className={`p-1.5 rounded-lg transition-all cursor-pointer ${viewport === 'tablet' ? 'bg-purple-600/30 text-purple-300 shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}
+            title="Tablet View (768px)"
+          >
+            <Tablet className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => setViewport('mobile')}
+            className={`p-1.5 rounded-lg transition-all cursor-pointer ${viewport === 'mobile' ? 'bg-purple-600/30 text-purple-300 shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}
+            title="Mobile View (375px)"
+          >
+            <Smartphone className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Actions & Utilities */}
+        <div className="flex items-center gap-2">
+          {/* Botão de Validação de Diretrizes, Cores e Acessibilidade */}
+          <button
+            onClick={() => {
+              setIsSaveTriggeredByValidation(false);
+              setShowValidationModal(true);
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-purple-500/40 text-purple-300 rounded-xl text-xs font-semibold transition-all cursor-pointer shadow-sm"
+            title="Validar Diretrizes de Design, Cores e Acessibilidade (WCAG 2.1 AA)"
+          >
+            <ShieldCheck className="w-3.5 h-3.5 text-purple-400" />
+            <span className="hidden md:inline">Validar</span>
+            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full border font-mono ${
+              pageValidationScore >= 90 ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/40'
+                : pageValidationScore >= 65 ? 'bg-amber-950/80 text-amber-300 border-amber-500/40'
+                : 'bg-rose-950/80 text-rose-300 border-rose-500/40'
+            }`}>
+              {pageValidationScore}%
+            </span>
+          </button>
+
+          {/* Botão Unificado: Salvar Manual + Feedback visual da Bolinha de Status */}
+          <button
+            onClick={() => handleManualSave(false)}
+            disabled={saveStatus === 'saving'}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm border ${
+              saveStatus === 'saving'
+                ? 'bg-yellow-950/40 border-yellow-500/40 text-yellow-300'
+                : saveStatus === 'error'
+                ? 'bg-red-950/40 border-red-500/40 text-red-300 hover:bg-red-900/40'
+                : 'bg-slate-900 hover:bg-slate-800 border-slate-800 text-slate-200 hover:border-purple-500/40'
+            }`}
+            title="Salvar Alterações (Ctrl+S)"
+          >
+            <span
+              className={`w-2 h-2 rounded-full shrink-0 ${
+                saveStatus === 'saving'
+                  ? 'bg-yellow-400 animate-ping'
+                  : saveStatus === 'error'
+                  ? 'bg-red-400 shadow-[0_0_8px_#ef4444]'
+                  : 'bg-emerald-400 shadow-[0_0_8px_#10b981]'
+              }`}
+            />
+            <span>{saveStatus === 'saving' ? 'Salvando...' : saveStatus === 'error' ? 'Erro ao Salvar' : 'Salvar'}</span>
+          </button>
+
+          {/* Undo / Redo */}
+          <div className="hidden md:flex items-center gap-1 bg-slate-950/80 border border-slate-900 rounded-xl p-1">
+            <button
+              onClick={() => setIsPreviewMode(!isPreviewMode)}
+              className={`p-1.5 rounded-lg transition-all cursor-pointer ${isPreviewMode ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}`}
+              title={isPreviewMode ? 'Voltar ao Modo Edição' : 'Visualização Prévia'}
+            >
+              {isPreviewMode ? <MousePointer2 className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+            </button>
+            <div className="w-px h-4 bg-slate-800 mx-0.5" />
+            <button
+              onClick={handleUndo}
+              disabled={undoStack.length === 0}
+              className="p-1.5 text-slate-400 hover:text-white disabled:opacity-30 rounded-lg cursor-pointer"
+              title="Desfazer (Ctrl+Z)"
+            >
+              <Undo2 className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={handleRedo}
+              disabled={redoStack.length === 0}
+              className="p-1.5 text-slate-400 hover:text-white disabled:opacity-30 rounded-lg cursor-pointer"
+              title="Refazer (Ctrl+Y)"
+            >
+              <Redo2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          {/* Botão Unificado para abrir a página dedicada de Otimização & Chat com IA */}
+          {onOpenAIImprover && (
+            <button
+              onClick={onOpenAIImprover}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white text-xs font-bold shadow-md shadow-purple-600/30 hover:shadow-purple-600/50 hover:scale-[1.02] transition-all cursor-pointer"
+              title="Abrir o Copilot de IA e a Fila de Melhorias Automáticas"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-yellow-300 animate-pulse" />
+              <span>✨ IA & Chat</span>
+            </button>
+          )}
+
+          {/* Botão Unificado de Preview (Local + Ngrok) */}
+          <div className="relative">
+            {ngrokActive && ngrokUrl ? (
+              <div className="flex items-center">
+                <button
+                  onClick={handleOpenLivePreview}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-950/60 hover:bg-cyan-900/60 border border-cyan-500/50 rounded-l-xl text-xs font-semibold text-cyan-300 transition-all cursor-pointer shadow-sm"
+                  title="Abrir Preview Local em Nova Aba"
+                >
+                  <Eye className="w-3.5 h-3.5 text-cyan-400" />
+                  <span className="hidden sm:inline">Preview</span>
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse ml-0.5" title="Ngrok Online" />
+                </button>
+
+                <button
+                  onClick={() => setShowPreviewMenu(!showPreviewMenu)}
+                  className="p-1.5 bg-cyan-950/60 hover:bg-cyan-900/60 border border-l-0 border-cyan-500/50 rounded-r-xl text-cyan-300 transition-all cursor-pointer"
+                  title="Mais Opções de Preview (Local / Link Ngrok)"
+                >
+                  <ChevronDown className="w-3.5 h-3.5 text-cyan-400" />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={handleOpenLivePreview}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-cyan-500/40 text-cyan-300 rounded-xl text-xs font-semibold transition-all cursor-pointer shadow-sm"
+                title="Abrir Preview Local em Nova Aba"
+              >
+                <Eye className="w-3.5 h-3.5 text-cyan-400" />
+                <span className="hidden sm:inline">Preview</span>
+              </button>
+            )}
+
+            {/* Menu Dropdown de Preview quando Ngrok estiver ativo */}
+            {showPreviewMenu && ngrokActive && ngrokUrl && (
+              <div className="absolute right-0 top-full mt-1.5 w-60 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl p-1.5 z-50 space-y-1 backdrop-blur-md animate-in fade-in zoom-in-95 duration-100">
+                <button
+                  onClick={handleOpenLivePreview}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-slate-200 hover:bg-slate-800 hover:text-white rounded-lg transition-colors cursor-pointer text-left"
+                >
+                  <ExternalLink className="w-4 h-4 text-cyan-400 shrink-0" />
+                  <div>
+                    <span className="block font-bold">Preview Local</span>
+                    <span className="text-[10px] text-slate-400">Em tempo real nesta máquina</span>
+                  </div>
+                </button>
+
+                <button
+                  onClick={handleOpenNgrokPreview}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-emerald-300 hover:bg-emerald-950/40 rounded-lg transition-colors cursor-pointer text-left"
+                >
+                  <Globe className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <div>
+                    <span className="block font-bold flex items-center gap-1.5">
+                      Link Público Ngrok
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                    </span>
+                    <span className="text-[10px] text-emerald-400/80 font-mono truncate block max-w-[170px]">
+                      {ngrokUrl.replace('https://', '')}
+                    </span>
+                  </div>
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Hidden ZIP File Input */}
+          <input 
+            type="file" 
+            ref={zipFileInputRef} 
+            onChange={handleImportZipFile} 
+            accept=".zip" 
+            className="hidden" 
+          />
+
+          {/* Botão de Auditoria de Integridade & Qualidade com IA */}
+          <button
+            onClick={() => setShowAIAuditModal(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-purple-950/80 via-indigo-950/80 to-slate-900 hover:from-purple-900 hover:to-indigo-900 border border-purple-500/30 text-purple-200 rounded-xl text-xs font-semibold transition-all cursor-pointer shadow-sm hover:shadow-purple-500/20"
+            title="Auditoria de Integridade com IA (Temas, Placeholders e Links)"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+            <span className="hidden md:inline">Auditoria IA</span>
+          </button>
+
+          {/* Botão de Auditoria SEO & Acessibilidade */}
+          <button
+            onClick={() => setShowSEOAuditModal(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-purple-500/40 text-purple-300 rounded-xl text-xs font-semibold transition-all cursor-pointer shadow-sm"
+            title="Auditoria de SEO, Acessibilidade WCAG e Boas Práticas"
+          >
+            <ShieldCheck className="w-3.5 h-3.5 text-purple-400" />
+            <span className="hidden md:inline">Auditoria SEO</span>
+          </button>
+
+          {/* Menu Dropdown de Projeto (Importar / Exportار Código / Exportar ZIP) */}
+          <div className="relative">
+            <button 
+              onClick={() => setShowProjectMenuDropdown(!showProjectMenuDropdown)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 font-bold text-xs text-white rounded-xl transition-all shadow-[0_0_15px_rgba(168,85,247,0.25)] cursor-pointer"
+              title="Opções de Importação e Exportação do Projeto"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Projeto</span>
+              <ChevronDown className="w-3 h-3 opacity-80" />
+            </button>
+
+            {showProjectMenuDropdown && (
+              <div className="absolute right-0 top-full mt-1.5 w-60 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl p-1.5 z-50 space-y-1 backdrop-blur-md animate-in fade-in zoom-in-95 duration-100">
+                <button
+                  onClick={() => {
+                    setShowProjectMenuDropdown(false);
+                    setShowExportModal(true);
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-purple-600 hover:text-white rounded-lg transition-colors cursor-pointer text-left group"
+                >
+                  <Download className="w-4 h-4 text-purple-400 group-hover:text-white shrink-0" />
+                  <div>
+                    <span className="block">Exportar Site / Pacote ZIP</span>
+                    <span className="text-[10px] text-slate-400 group-hover:text-purple-100 font-normal">Baixar HTML, CSS, JS e Docker</span>
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setShowProjectMenuDropdown(false);
+                    zipFileInputRef.current?.click();
+                  }}
+                  disabled={importingZip}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-indigo-600 hover:text-white rounded-lg transition-colors cursor-pointer text-left group"
+                >
+                  {importingZip ? (
+                    <Loader2 className="w-4 h-4 text-cyan-400 animate-spin shrink-0" />
+                  ) : (
+                    <Upload className="w-4 h-4 text-cyan-400 group-hover:text-white shrink-0" />
+                  )}
+                  <div>
+                    <span className="block">{importingZip ? 'Importando...' : 'Importar Arquivo .ZIP'}</span>
+                    <span className="text-[10px] text-slate-400 group-hover:text-indigo-100 font-normal">Carregar páginas de um ZIP</span>
+                  </div>
+                </button>
+
+                <div className="border-t border-slate-800 my-1" />
+
+                <button
+                  onClick={() => {
+                    setShowProjectMenuDropdown(false);
+                    setShowCodeModal(true);
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-800 hover:text-white rounded-lg transition-colors cursor-pointer text-left"
+                >
+                  <Code2 className="w-4 h-4 text-amber-400 shrink-0" />
+                  <div>
+                    <span className="block">Inspecionar Código</span>
+                    <span className="text-[10px] text-slate-400 font-normal">Ver e copiar HTML/CSS/JS</span>
+                  </div>
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Botão de Alternar Modo Escuro / Modo Claro */}
+          <button
+            onClick={toggleTheme}
+            className={`p-1.5 rounded-xl border transition-all cursor-pointer flex items-center gap-1 ${
+              theme === 'light'
+                ? 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-800 shadow-sm'
+                : 'bg-slate-900 hover:bg-slate-800 border-slate-800 text-amber-300 shadow-sm'
+            }`}
+            title={theme === 'dark' ? 'Mudar para Modo Claro' : 'Mudar para Modo Escuro'}
+          >
+            {theme === 'dark' ? <Sun className="w-3.5 h-3.5 text-amber-400" /> : <Moon className="w-3.5 h-3.5 text-indigo-600" />}
+          </button>
+        </div>
+      </header>
+    ) : (
+      <button
+        onClick={() => setIsPreviewMode(false)}
+        className="fixed top-6 right-6 z-[1000] bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-full shadow-2xl flex items-center gap-2 font-bold text-xs transition-all hover:scale-105 active:scale-95 animate-in slide-in-from-top-4 duration-300 cursor-pointer"
+      >
+        <MousePointer2 className="w-4 h-4" />
+        Sair da Visualização
+      </button>
+    )}
+
+      {/* ─── Main Editor Workspace Layout ─── */}
+      <div className="flex-1 flex overflow-hidden relative">
+        {/* Left Sidebar 1 (Páginas + DOM Tree) */}
+        {activeLeftSidebar === 'dom' && project && activePage && (
+          <Sidebar
+            pages={project.pages}
+            activePageId={activePageId}
+            onSelectPage={(id) => {
+              setActivePageId(id);
+              setSelectedSelector(null);
+              setSelectedPath(null);
+            }}
+            onCreatePage={() => {
+              setShowCreatePageModal(true);
+            }}
+            onRenamePage={async (id, newName) => {
+              if (!newName) return;
+              const newSlug = newName.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+              try {
+                const res = await fetch(`${API_URL}/api/pages/${id}`, {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                  body: JSON.stringify({ name: newName, slug: newSlug })
+                });
+                if (res.ok) {
+                  setProject(prev => prev ? {
+                    ...prev,
+                    pages: prev.pages.map(p => p.id === id ? { ...p, name: newName, slug: newSlug } : p)
+                  } : null);
+                }
+              } catch (e) {
+                console.error('Erro ao renomear página:', e);
+              }
+            }}
+            onDuplicatePage={async (id) => {
+              const pToDup = project.pages.find(p => p.id === id);
+              if (!pToDup) return;
+              const res = await fetch(`${API_URL}/api/pages`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({
+                  name: `${pToDup.name} (Cópia)`,
+                  slug: `${pToDup.slug}-copia`,
+                  html: pToDup.html,
+                  css: pToDup.css,
+                  js: pToDup.js,
+                  projectId
+                })
+              });
+              if (res.ok) {
+                const dup = await res.json();
+                setProject(prev => prev ? { ...prev, pages: [...prev.pages, dup] } : null);
+                setActivePageId(dup.id);
+              }
+            }}
+            onDeletePage={async (id) => {
+              if (!confirm('Deseja excluir esta página permanentemente?')) return;
+              await fetch(`${API_URL}/api/pages/${id}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+              });
+              setProject(prev => prev ? { ...prev, pages: prev.pages.filter(p => p.id !== id) } : null);
+              if (activePageId === id) {
+                const remaining = project.pages.filter(p => p.id !== id);
+                if (remaining.length > 0) setActivePageId(remaining[0].id);
+              }
+            }}
+            onSetHomepage={async (id) => {
+              const res = await fetch(`${API_URL}/api/pages/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({ isHomepage: true })
+              });
+              if (res.ok) {
+                setProject(prev => prev ? {
+                  ...prev,
+                  pages: prev.pages.map(p => ({ ...p, isHomepage: p.id === id }))
+                } : null);
+              }
+            }}
+            layers={layers}
+            onSelectLayer={(selector, path) => {
+              setSelectedSelector(selector);
+              setSelectedPath(path);
+              setShowStylesPanel(true);
+              canvasRef.current?.selectElement?.(path);
+            }}
+            onHoverLayer={(path) => setHoverPath(path)}
+            onDeleteElement={handleDeleteElement}
+            onDuplicateElement={handleDuplicateElement}
+            onMoveElement={handleMoveElement}
+            onMoveElementDirection={handleMoveElementDirection}
+            onInsertBlock={handleInsertBlock}
+            onSaveSelectionAsTemplate={handleSaveSelectionAsTemplate}
+            selectedPath={selectedPath}
+          />
+        )}
+
+        {/* Left Sidebar 2 (Banco de Imagens & Uploads) */}
+        {activeLeftSidebar === 'media' && (
+          <MediaLibrarySidebar
+            onClose={() => {
+              setActiveLeftSidebar(null);
+              setMediaGalleryTarget(null);
+            }}
+            onSelectImage={mediaGalleryTarget ? (url) => {
+              if (mediaGalleryTarget === 'ogImage') {
+                handlePageSeoChange('ogImage', url);
+                notify.success('Imagem de prévia (OG Image) atualizada com sucesso!', 'SEO Atualizado');
+              } else if (mediaGalleryTarget === 'src') {
+                handleAttrChange('src', url);
+                notify.success('Imagem alterada no elemento selecionado!', 'Mídia Atualizada');
+              }
+              setMediaGalleryTarget(null);
+              setActiveLeftSidebar(null);
+            } : undefined}
+            onInsertImageToCanvas={!mediaGalleryTarget ? (url, name) => {
+              if (!activePage) return;
+
+              // Se houver um elemento selecionado no canvas
+              if (selectedPath) {
+                const doc = parseDocFromHtml(activePage.html);
+                const root = doc.getElementById('canvas-root') || doc.body;
+                const el = getElementByPath(root, selectedPath);
+
+                if (el) {
+                  if (el.tagName.toLowerCase() === 'img') {
+                    // Se for um elemento de imagem <img>, altera a fonte
+                    el.setAttribute('src', url);
+                    el.setAttribute('alt', name);
+                    const newHtml = serializeBodyContent(doc);
+                    handleCodeChange('html', newHtml);
+                    notify.success(`Imagem "${name}" trocada no elemento selecionado!`, 'Mídia Atualizada');
+                    return;
+                  } else {
+                    // Se for uma div/container, adiciona a tag img dentro dele
+                    const imgEl = doc.createElement('img');
+                    imgEl.setAttribute('src', url);
+                    imgEl.setAttribute('alt', name);
+                    imgEl.setAttribute('class', 'w-full h-auto max-w-full rounded-xl shadow-md my-4');
+                    el.appendChild(imgEl);
+                    const newHtml = serializeBodyContent(doc);
+                    handleCodeChange('html', newHtml);
+                    notify.success(`Imagem "${name}" adicionada dentro do elemento selecionado!`, 'Mídia Adicionada');
+                    return;
+                  }
+                }
+              }
+
+              // Se nenhum elemento específico estiver selecionado
+              const imgHtml = `<img src="${url}" alt="${name}" class="w-full h-auto max-w-full rounded-xl shadow-md my-4" />`;
+              handleInsertBlock(imgHtml);
+              notify.success(`Imagem "${name}" adicionada ao site!`, 'Mídia Inserida');
+            } : undefined}
+          />
+        )}
+        {/* Left Sidebar 3 (Tema Global) */}
+        {activeLeftSidebar === 'theme' && (
+          <div className="w-80 h-full bg-slate-950 border-r border-slate-900/80 flex flex-col z-20 shadow-2xl relative">
+            <div className="p-4 border-b border-slate-900/80 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2">
+                <Palette className="w-4 h-4 text-purple-400" />
+                <h3 className="font-bold text-sm text-white">Tema Global</h3>
+              </div>
+              <button
+                onClick={() => setActiveLeftSidebar(null)}
+                className="p-1 text-slate-500 hover:text-white rounded-lg hover:bg-slate-900 cursor-pointer transition-all"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-5 no-scrollbar">
+              <div className="p-3 bg-purple-950/20 border border-purple-500/20 rounded-xl space-y-1">
+                <p className="text-[11px] font-semibold text-purple-300">💡 Tema de Marca Sincronizado</p>
+                <p className="text-[10px] text-slate-400 leading-relaxed">
+                  As cores e fontes definidas aqui são aplicadas instantaneamente em todas as páginas do seu projeto, garantindo consistência visual.
+                </p>
+              </div>
+
+              {/* Seção Tipografia */}
+              <div className="space-y-3.5">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Tipografia</h4>
+                
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Fonte de Títulos</label>
+                  <select
+                    value={projectTheme.headingFont}
+                    onChange={(e) => handleUpdateTheme({ ...projectTheme, headingFont: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-800 text-slate-200 text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-purple-500 cursor-pointer font-sans"
+                  >
+                    <option value="Syne, sans-serif">Syne (Moderna / Impacto)</option>
+                    <option value="Plus Jakarta Sans, sans-serif">Plus Jakarta Sans (Limpa / Tech)</option>
+                    <option value="Playfair Display, serif">Playfair Display (Elegante / Editorial)</option>
+                    <option value="Outfit, sans-serif">Outfit (Arredondada / Premium)</option>
+                    <option value="Cinzel, serif">Cinzel (Clássica / Luxo)</option>
+                    <option value="Space Grotesk, sans-serif">Space Grotesk (Geométrica / Tech)</option>
+                    <option value="Inter, sans-serif">Inter (Neutro / Corporativo)</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Fonte do Corpo</label>
+                  <select
+                    value={projectTheme.bodyFont}
+                    onChange={(e) => handleUpdateTheme({ ...projectTheme, bodyFont: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-800 text-slate-200 text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-purple-500 cursor-pointer font-sans"
+                  >
+                    <option value="Plus Jakarta Sans, sans-serif">Plus Jakarta Sans (Tech / Moderna)</option>
+                    <option value="Inter, sans-serif">Inter (Extrema Legibilidade)</option>
+                    <option value="Outfit, sans-serif">Outfit (Moderna / Arredondada)</option>
+                    <option value="Montserrat, sans-serif">Montserrat (Amigável / Espaçada)</option>
+                    <option value="Roboto, sans-serif">Roboto (Clássica / Neutra)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="h-px bg-slate-900" />
+
+              {/* Seção Cores */}
+              <div className="space-y-3.5">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Cores da Marca</h4>
+
+                {/* Primary/Accent */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Cor de Destaque / Botões</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="color"
+                      value={projectTheme.accent}
+                      onChange={(e) => handleUpdateTheme({ ...projectTheme, accent: e.target.value, accentGlow: e.target.value + '40' })}
+                      className="w-8 h-8 rounded-lg bg-transparent border border-slate-800 cursor-pointer overflow-hidden shrink-0"
+                    />
+                    <input
+                      type="text"
+                      value={projectTheme.accent}
+                      onChange={(e) => handleUpdateTheme({ ...projectTheme, accent: e.target.value })}
+                      className="flex-1 bg-slate-900 border border-slate-800 text-slate-300 text-xs rounded-xl px-3 py-1.5 font-mono uppercase focus:outline-none focus:border-purple-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Background */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Fundo da Página</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="color"
+                      value={projectTheme.bg}
+                      onChange={(e) => handleUpdateTheme({ ...projectTheme, bg: e.target.value })}
+                      className="w-8 h-8 rounded-lg bg-transparent border border-slate-800 cursor-pointer overflow-hidden shrink-0"
+                    />
+                    <input
+                      type="text"
+                      value={projectTheme.bg}
+                      onChange={(e) => handleUpdateTheme({ ...projectTheme, bg: e.target.value })}
+                      className="flex-1 bg-slate-900 border border-slate-800 text-slate-300 text-xs rounded-xl px-3 py-1.5 font-mono uppercase focus:outline-none focus:border-purple-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Cards / Containers */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Fundo de Blocos / Cards</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="color"
+                      value={projectTheme.cardBg}
+                      onChange={(e) => handleUpdateTheme({ ...projectTheme, cardBg: e.target.value })}
+                      className="w-8 h-8 rounded-lg bg-transparent border border-slate-800 cursor-pointer overflow-hidden shrink-0"
+                    />
+                    <input
+                      type="text"
+                      value={projectTheme.cardBg}
+                      onChange={(e) => handleUpdateTheme({ ...projectTheme, cardBg: e.target.value })}
+                      className="flex-1 bg-slate-900 border border-slate-800 text-slate-300 text-xs rounded-xl px-3 py-1.5 font-mono uppercase focus:outline-none focus:border-purple-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Text Primary */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Texto Principal</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="color"
+                      value={projectTheme.textPrimary}
+                      onChange={(e) => handleUpdateTheme({ ...projectTheme, textPrimary: e.target.value })}
+                      className="w-8 h-8 rounded-lg bg-transparent border border-slate-800 cursor-pointer overflow-hidden shrink-0"
+                    />
+                    <input
+                      type="text"
+                      value={projectTheme.textPrimary}
+                      onChange={(e) => handleUpdateTheme({ ...projectTheme, textPrimary: e.target.value })}
+                      className="flex-1 bg-slate-900 border border-slate-800 text-slate-300 text-xs rounded-xl px-3 py-1.5 font-mono uppercase focus:outline-none focus:border-purple-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Border */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Bordas / Divisores</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="color"
+                      value={projectTheme.border}
+                      onChange={(e) => handleUpdateTheme({ ...projectTheme, border: e.target.value })}
+                      className="w-8 h-8 rounded-lg bg-transparent border border-slate-800 cursor-pointer overflow-hidden shrink-0"
+                    />
+                    <input
+                      type="text"
+                      value={projectTheme.border}
+                      onChange={(e) => handleUpdateTheme({ ...projectTheme, border: e.target.value })}
+                      className="flex-1 bg-slate-900 border border-slate-800 text-slate-300 text-xs rounded-xl px-3 py-1.5 font-mono uppercase focus:outline-none focus:border-purple-500"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ─── Alternância de Sidebars Esquerdas (DOM, Banco de Mídias, Tema) ─── */}
+        {!isPreviewMode && (
+          <div className="relative z-20 self-start mt-4 flex flex-col items-center gap-2 shrink-0">
+            {/* Botão DOM */}
+            <button
+              onClick={() => setActiveLeftSidebar(prev => prev === 'dom' ? null : 'dom')}
+              title={activeLeftSidebar === 'dom' ? 'Minimizar painel de páginas (DOM)' : 'Abrir painel de páginas (DOM)'}
+              className={`
+                flex flex-col items-center justify-center gap-1
+                w-6 transition-all duration-200 cursor-pointer select-none rounded-r-xl
+                border-y border-r py-3 shrink-0
+                ${activeLeftSidebar === 'dom'
+                  ? 'bg-gradient-to-b from-purple-700 to-purple-900 border-purple-600/60 text-purple-200 shadow-[2px_0_12px_rgba(168,85,247,0.3)]'
+                  : 'bg-slate-900/80 border-slate-800 text-slate-500 hover:text-purple-300 hover:bg-slate-800 hover:border-purple-500/40'
+                }
+              `}
+            >
+              <PanelLeft className="w-3 h-3" />
+              <span className="text-[8px] font-bold tracking-widest uppercase" style={{ writingMode: 'vertical-rl', letterSpacing: '0.15em' }}>DOM</span>
+            </button>
+
+            {/* Botão Mídia (Posicionado exatamente abaixo do ícone da DOM) */}
+            <button
+              onClick={() => setActiveLeftSidebar(prev => prev === 'media' ? null : 'media')}
+              title={activeLeftSidebar === 'media' ? 'Minimizar banco de imagens' : 'Abrir banco de imagens e upload'}
+              className={`
+                flex flex-col items-center justify-center gap-1
+                w-6 transition-all duration-200 cursor-pointer select-none rounded-r-xl
+                border-y border-r py-3 shrink-0
+                ${activeLeftSidebar === 'media'
+                  ? 'bg-gradient-to-b from-cyan-600 to-indigo-700 border-cyan-500/60 text-cyan-200 shadow-[2px_0_12px_rgba(6,182,212,0.3)]'
+                  : 'bg-slate-900/80 border-slate-800 text-slate-500 hover:text-cyan-300 hover:bg-slate-800 hover:border-cyan-500/40'
+                }
+              `}
+            >
+              <ImageIcon className="w-3 h-3" />
+              <span className="text-[8px] font-bold tracking-widest uppercase" style={{ writingMode: 'vertical-rl', letterSpacing: '0.15em' }}>MÍDIA</span>
+            </button>
+
+            {/* Botão Tema */}
+            <button
+              onClick={() => setActiveLeftSidebar(prev => prev === 'theme' ? null : 'theme')}
+              title={activeLeftSidebar === 'theme' ? 'Minimizar tema global' : 'Configurar tema global (cores e fontes)'}
+              className={`
+                flex flex-col items-center justify-center gap-1
+                w-6 transition-all duration-200 cursor-pointer select-none rounded-r-xl
+                border-y border-r py-3 shrink-0
+                ${activeLeftSidebar === 'theme'
+                  ? 'bg-gradient-to-b from-pink-600 to-rose-700 border-rose-500/60 text-rose-200 shadow-[2px_0_12px_rgba(244,63,94,0.3)]'
+                  : 'bg-slate-900/80 border-slate-800 text-slate-500 hover:text-rose-300 hover:bg-slate-800 hover:border-rose-500/40'
+                }
+              `}
+            >
+              <Palette className="w-3 h-3" />
+              <span className="text-[8px] font-bold tracking-widest uppercase" style={{ writingMode: 'vertical-rl', letterSpacing: '0.15em' }}>TEMA</span>
+            </button>
+          </div>
+        )}
+        {/* Central Interactive Sandbox Canvas */}
+        <main 
+          className={`flex-1 flex flex-col justify-between items-center overflow-auto p-3 md:p-6 min-w-0 relative ${
+            showCanvasGrid ? 'bg-[#07020d] bg-[radial-gradient(#1e1b4b_1px,transparent_1px)] [background-size:20px_20px]' : 'bg-[#07020d]'
+          }`}
+          onWheel={(e) => {
+            if (e.altKey) {
+              e.preventDefault();
+              if (e.deltaY < 0) {
+                setZoom(z => Math.min(150, z + 5));
+              } else {
+                setZoom(z => Math.max(50, z - 5));
+              }
+            }
+          }}
+        >
+          {/* Top Floating Control Bar over Central Canvas */}
+          {!isPreviewMode && (
+            <div className="z-30 mb-3 flex items-center gap-2 px-3 py-1.5 bg-slate-950/90 border border-slate-800/80 backdrop-blur-md rounded-2xl shadow-xl shrink-0">
+              {/* Viewport Selectors */}
+              <div className="flex items-center gap-1 bg-slate-900/80 p-1 rounded-xl border border-slate-800">
+                <button
+                  onClick={() => setViewport('desktop')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                    viewport === 'desktop' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
+                  }`}
+                  title="Visão Desktop (100%)"
+                >
+                  <Monitor className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Desktop</span>
+                </button>
+                <button
+                  onClick={() => setViewport('tablet')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                    viewport === 'tablet' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
+                  }`}
+                  title="Visão Tablet (768px)"
+                >
+                  <Tablet className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">768px</span>
+                </button>
+                <button
+                  onClick={() => setViewport('mobile')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                    viewport === 'mobile' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
+                  }`}
+                  title="Visão Mobile (375px)"
+                >
+                  <Smartphone className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">375px</span>
+                </button>
+              </div>
+
+              <div className="w-px h-4 bg-slate-800" />
+
+              {/* Zoom Controls */}
+              <div className="flex items-center gap-1 bg-slate-900/80 p-1 rounded-xl border border-slate-800">
+                <button
+                  onClick={() => setZoom(z => Math.max(50, z - 10))}
+                  className="p-1 text-slate-400 hover:text-white rounded-lg transition-colors cursor-pointer"
+                  title="Reduzir Zoom (Alt + Wheel Down)"
+                >
+                  <ZoomOut className="w-3.5 h-3.5" />
+                </button>
+                <span className="text-[11px] font-mono font-bold text-slate-300 px-1 min-w-[36px] text-center">
+                  {zoom}%
+                </span>
+                <button
+                  onClick={() => setZoom(z => Math.min(150, z + 10))}
+                  className="p-1 text-slate-400 hover:text-white rounded-lg transition-colors cursor-pointer"
+                  title="Aumentar Zoom (Alt + Wheel Up)"
+                >
+                  <ZoomIn className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={() => setZoom(100)}
+                  className="p-1 text-slate-400 hover:text-white rounded-lg transition-colors cursor-pointer"
+                  title="Resetar Zoom (100%)"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                </button>
+              </div>
+
+              <div className="w-px h-4 bg-slate-800 hidden sm:block" />
+
+              {/* Grid Toggle */}
+              <button
+                onClick={() => setShowCanvasGrid(!showCanvasGrid)}
+                className={`p-1.5 rounded-xl border transition-all cursor-pointer hidden sm:flex items-center gap-1 ${
+                  showCanvasGrid ? 'bg-purple-950/80 border-purple-500/50 text-purple-300' : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
+                }`}
+                title="Alternar Grade Guia de Alinhamento"
+              >
+                <Grid className="w-3.5 h-3.5" />
+              </button>
+
+              {/* Quick Validation Badge */}
+              <button
+                onClick={() => {
+                  setIsSaveTriggeredByValidation(false);
+                  setShowValidationModal(true);
+                }}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                  pageValidationScore >= 90 ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300 hover:bg-emerald-900/60'
+                    : pageValidationScore >= 65 ? 'bg-amber-950/60 border-amber-500/40 text-amber-300 hover:bg-amber-900/60'
+                    : 'bg-rose-950/60 border-rose-500/40 text-rose-300 hover:bg-rose-900/60'
+                }`}
+                title="Status de Acessibilidade & Diretrizes"
+              >
+                <ShieldCheck className="w-3.5 h-3.5" />
+                <span className="font-mono">{pageValidationScore}%</span>
+              </button>
+            </div>
+          )}
+
+          <div 
+            className="transition-all duration-200 flex-1 w-full flex flex-col items-center justify-center relative min-h-0"
+            style={{
+              maxWidth: viewport === 'mobile' ? '375px' : viewport === 'tablet' ? '768px' : '100%',
+            }}
+          >
+            {/* Overlay de carregamento com IA */}
+            {aiGenerating && (
+              <div className="absolute inset-0 z-40 bg-black/85 backdrop-blur-md rounded-2xl flex flex-col items-center justify-center p-6 text-center shadow-2xl border border-amber-500/30">
+                <div className="w-16 h-16 rounded-full border-2 border-amber-500/50 p-1 mb-4 animate-spin shadow-[0_0_25px_rgba(229,185,95,0.5)] flex items-center justify-center">
+                  <Sparkles className="w-8 h-8 text-amber-400 animate-pulse" />
+                </div>
+                <h3 className="text-lg font-bold text-white mb-2 tracking-wide">Construindo Site com Inteligência Artificial</h3>
+                <p className="text-xs text-amber-300/80 max-w-md font-mono mb-4 animate-pulse">
+                  {aiJobStatus || 'Gerando estrutura de alta conversão, paleta e seções sob medida...'}
+                </p>
+                <div className="w-48 h-1.5 bg-slate-800 rounded-full overflow-hidden mb-4">
+                  <div className="w-full h-full bg-gradient-to-r from-amber-400 via-rose-400 to-amber-500 animate-pulse" />
+                </div>
+                <button
+                  onClick={() => {
+                    fetch(`${API_URL}/api/projects/${projectId}/cancel`, {
+                      method: 'POST',
+                      headers: { 'Authorization': `Bearer ${token}` }
+                    }).then(() => {
+                      setAiGenerating(false);
+                      setAiJobStatus(null);
+                    });
+                  }}
+                  className="px-3 py-1.5 bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-500/30 rounded-lg text-xs font-bold transition-all cursor-pointer hover:scale-105 active:scale-95"
+                >
+                  Cancelar geração
+                </button>
+              </div>
+            )}
+
+            {activePage && (
+              <Canvas
+                ref={canvasRef}
+                key={activePage.id}
+                html={activePage.html}
+                css={activePage.css}
+                js={activePage.js}
+                components={activePage.components}
+                highlightPath={selectedPath}
+                hoverPath={hoverPath}
+                zoom={zoom}
+                theme={theme}
+                onElementSelect={(selector, styles, attrs, path, componentId) => {
+                  setSelectedSelector(selector);
+                  setSelectedStyles(styles);
+                  setSelectedAttrs(attrs);
+                  setSelectedPath(path);
+                  setSelectedComponentId(componentId);
+                  if (path) {
+                    setShowStylesPanel(true);
+                  }
+                }}
+                onInlineContentChange={handleInlineTextChange}
+                onDeleteElement={handleDeleteElement}
+                onDuplicateElement={handleDuplicateElement}
+                onMoveElementDirection={handleMoveElementDirection}
+                onSelectParentElement={(path) => {
+                  const parts = path.split('.');
+                  if (parts.length > 1) {
+                    parts.pop();
+                    const parentPath = parts.join('.');
+                    setSelectedPath(parentPath);
+                    canvasRef.current?.selectElement?.(parentPath);
+                  }
+                }}
+                onHtmlChange={(newHtml) => handleCodeChange('html', newHtml)}
+                onInsertBlock={handleInsertBlock}
+              />
+            )}
+
+            {/* Quick Add Floating Button (WordPress/Wix style) */}
+            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 pointer-events-auto">
+              <button
+                onClick={() => setIsQuickAddOpen(!isQuickAddOpen)}
+                className={`
+                  w-10 h-10 rounded-full flex items-center justify-center shadow-2xl transition-all duration-300 cursor-pointer
+                  ${isQuickAddOpen 
+                    ? 'bg-rose-600 rotate-45 hover:bg-rose-500' 
+                    : 'bg-purple-600 hover:bg-purple-500 hover:scale-110 active:scale-95 shadow-purple-600/30'
+                  }
+                `}
+                title="Adicionar Elemento"
+              >
+                <Plus className="w-5 h-5 text-white" />
+              </button>
+            </div>
+
+            {isQuickAddOpen && (
+              <QuickAddMenu 
+                onAdd={(html) => handleInsertBlock(html)} 
+                onClose={() => setIsQuickAddOpen(false)} 
+              />
+            )}
+          </div>
+        </main>
+
+        {/* Right Inspector & Properties Panel */}
+        {!isPreviewMode && (
+          <div className="relative flex items-start">
+          {/* ─── Toggle da Sidebar Direita (Propriedades) ─── */}
+          <button
+            onClick={() => setShowStylesPanel(!showStylesPanel)}
+            title={showStylesPanel ? 'Recolher painel de propriedades' : 'Abrir painel de propriedades'}
+            className={`
+              relative z-20 self-start mt-4 flex flex-col items-center justify-center gap-1
+              w-6 transition-all duration-200 cursor-pointer select-none rounded-l-xl
+              border-y border-l py-3 shrink-0
+              ${showStylesPanel
+                ? 'bg-slate-900/80 border-slate-800 text-slate-500 hover:text-indigo-300 hover:bg-slate-800 hover:border-indigo-500/40'
+                : 'bg-gradient-to-b from-indigo-700 to-indigo-900 border-indigo-600/60 text-indigo-200 hover:from-indigo-600 hover:to-indigo-800 shadow-[-2px_0_12px_rgba(99,102,241,0.3)]'
+              }
+            `}
+          >
+            {showStylesPanel
+              ? <ChevronRight className="w-3 h-3" />
+              : <>
+                  <PanelRight className="w-3 h-3" />
+                  <span className="text-[8px] font-bold tracking-widest uppercase" style={{ writingMode: 'vertical-rl', letterSpacing: '0.15em' }}>CSS</span>
+                </>
+            }
+          </button>
+
+          {showStylesPanel && (
+          <div className="w-80 h-full overflow-y-auto bg-slate-950 border-l border-slate-800">
+            {selectedComponentId && (
+              <InspectorPanel
+                node={findNodeById(activePage?.components || [], selectedComponentId) || {} as ComponentNode}
+                onUpdate={handleUpdateNode}
+              />
+            )}
+            <PropertiesPanel
+              selectedSelector={selectedSelector}
+              selectedPath={selectedPath}
+              selectedStyles={selectedStyles}
+              selectedAttrs={selectedAttrs}
+              onStyleChange={handleStyleChange}
+              onAttrChange={handleAttrChange}
+              onDeleteElement={handleDeleteElement}
+              onDuplicateElement={handleDuplicateElement}
+              onMoveElement={handleMoveElement}
+              onMoveElementDirection={handleMoveElementDirection}
+              layers={layers}
+              onSelectLayer={(selector, path) => {
+                setSelectedSelector(selector);
+                setSelectedPath(path);
+                canvasRef.current?.selectElement?.(path);
+              }}
+              onHoverLayer={(path) => setHoverPath(path)}
+              onSaveSelectionAsTemplate={handleSaveSelectionAsTemplate}
+              pageSeo={{
+                title: activePage?.seoTitle || activePage?.name || '',
+                description: activePage?.seoDescription || '',
+                ogImage: activePage?.seoOgImage || ''
+              }}
+              onPageSeoChange={handlePageSeoChange}
+              onOpenMediaGallery={(target) => {
+                setMediaGalleryTarget(target || null);
+                setActiveLeftSidebar('media');
+              }}
+            />
+          </div>
+          )}
+        </div>
+        )}
+      </div>
+
+      {/* ─── Modal de Código Fonte Completo ─── */}
+      {showCodeModal && activePage && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-4xl h-[80vh] bg-slate-950 border border-slate-800 rounded-2xl flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="px-5 py-3.5 bg-[var(--bg-app)] border-b border-slate-850 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Code2 className="w-4 h-4 text-purple-400" />
+                <span className="font-bold text-sm text-white">Editor de Código - {activePage.name}</span>
+              </div>
+              <button
+                onClick={() => setShowCodeModal(false)}
+                className="px-3 py-1 bg-slate-900 hover:bg-slate-800 text-slate-300 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+              >
+                Fechar
+              </button>
+            </div>
+            <div className="flex-1 min-h-0">
+              <CodeEditor
+                key={activePage.id}
+                html={activePage.html}
+                css={activePage.css}
+                js={activePage.js}
+                onChange={handleCodeChange}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Modal de Exportação & Download Completo (ZIP + Docker) ─── */}
+      {showExportModal && activePage && project && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-2xl bg-slate-950 border border-slate-800 rounded-2xl flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 max-h-[90vh]">
+            <div className="px-5 py-4 bg-[var(--bg-app)] border-b border-slate-850 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Download className="w-4 h-4 text-purple-400" />
+                <span className="font-bold text-sm text-white">Exportação do Projeto - {project.name}</span>
+              </div>
+              <button
+                onClick={() => setShowExportModal(false)}
+                className="text-slate-400 hover:text-white font-bold text-lg cursor-pointer"
+              >
+                &times;
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 overflow-y-auto flex-1">
+              {/* Pacote ZIP Completo com Docker e Estrutura */}
+              <div className="p-4 bg-purple-950/20 border border-purple-500/30 rounded-xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
+                      <Download className="w-3.5 h-3.5 text-purple-400" />
+                      Pacote Completo do Projeto (.ZIP)
+                    </h4>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      Gera o arquivo ZIP com todas as páginas, folhas de estilo CSS, JS, Dockerfile e docker-compose.yml pronto para deploy em qualquer VPS ou Easypanel.
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleDownloadZip}
+                    disabled={downloadingZip}
+                    className="flex items-center gap-1.5 px-4 py-2.5 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all shadow-[0_0_15px_rgba(168,85,247,0.3)] shrink-0 cursor-pointer"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    {downloadingZip ? 'Gerando ZIP...' : 'Baixar Pacote ZIP'}
+                  </button>
+                </div>
+
+                {/* Seletores de Arquivos do ZIP */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-2 border-t border-purple-500/20 text-[11px]">
+                  <label className="flex items-center gap-2 text-slate-300 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={exportOptions.pages}
+                      onChange={e => setExportOptions({ ...exportOptions, pages: e.target.checked })}
+                      className="rounded bg-slate-900 border-slate-700 text-purple-600 focus:ring-0 cursor-pointer"
+                    />
+                    Páginas HTML (pages/)
+                  </label>
+                  <label className="flex items-center gap-2 text-slate-300 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={exportOptions.css}
+                      onChange={e => setExportOptions({ ...exportOptions, css: e.target.checked })}
+                      className="rounded bg-slate-900 border-slate-700 text-purple-600 focus:ring-0 cursor-pointer"
+                    />
+                    Estilos (css/)
+                  </label>
+                  <label className="flex items-center gap-2 text-slate-300 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={exportOptions.js}
+                      onChange={e => setExportOptions({ ...exportOptions, js: e.target.checked })}
+                      className="rounded bg-slate-900 border-slate-700 text-purple-600 focus:ring-0 cursor-pointer"
+                    />
+                    Scripts (js/)
+                  </label>
+                  <label className="flex items-center gap-2 text-slate-300 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={exportOptions.docker}
+                      onChange={e => setExportOptions({ ...exportOptions, docker: e.target.checked })}
+                      className="rounded bg-slate-900 border-slate-700 text-purple-600 focus:ring-0 cursor-pointer"
+                    />
+                    Dockerfile & Compose
+                  </label>
+                  <label className="flex items-center gap-2 text-slate-300 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={exportOptions.readme}
+                      onChange={e => setExportOptions({ ...exportOptions, readme: e.target.checked })}
+                      className="rounded bg-slate-900 border-slate-700 text-purple-600 focus:ring-0 cursor-pointer"
+                    />
+                    README.md
+                  </label>
+                </div>
+              </div>
+
+              {/* Prévia e Cópia Rápida de Código */}
+              <div>
+                <span className="text-[11px] font-bold text-slate-400 block mb-2">Prévia de Código da Página Atual ({activePage.name}):</span>
+                <div className="flex gap-2 border-b border-slate-900 pb-2 mb-2">
+                  <button
+                    onClick={() => setActiveExportTab('html')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${activeExportTab === 'html' ? 'bg-purple-600 text-white' : 'text-slate-400 hover:text-white'}`}
+                  >
+                    HTML Completo
+                  </button>
+                  <button
+                    onClick={() => setActiveExportTab('css')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${activeExportTab === 'css' ? 'bg-purple-600 text-white' : 'text-slate-400 hover:text-white'}`}
+                  >
+                    CSS Customizado
+                  </button>
+                  <button
+                    onClick={() => setActiveExportTab('js')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${activeExportTab === 'js' ? 'bg-purple-600 text-white' : 'text-slate-400 hover:text-white'}`}
+                  >
+                    JavaScript
+                  </button>
+                </div>
+
+                <textarea
+                  readOnly
+                  rows={7}
+                  value={
+                    activeExportTab === 'html' ? getFullHtmlDocument() :
+                    activeExportTab === 'css' ? (activePage.css || '/* Nenhum CSS customizado */') :
+                    (activePage.js || '// Nenhum script interativo')
+                  }
+                  className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 font-mono text-xs text-slate-300 focus:outline-none resize-none"
+                />
+
+                <div className="flex items-center justify-between pt-2">
+                  <button
+                    onClick={() => {
+                      const text = activeExportTab === 'html' ? getFullHtmlDocument() : activeExportTab === 'css' ? activePage.css : activePage.js;
+                      navigator.clipboard.writeText(text);
+                      setCopiedCode(true);
+                      setTimeout(() => setCopiedCode(false), 2000);
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-850 text-slate-300 rounded-xl text-xs font-bold transition-all cursor-pointer border border-slate-800"
+                  >
+                    {copiedCode ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5 text-purple-400" />}
+                    {copiedCode ? 'Copiado!' : 'Copiar Código da Aba'}
+                  </button>
+
+                  <button
+                    onClick={handleDownloadSingleHtml}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-300 rounded-xl text-xs font-semibold transition-all border border-slate-800 cursor-pointer"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    Baixar apenas {activePage.slug}.html
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Modal de Remasterização / Melhoria de Página com IA */}
+      {showRemasterPageModal && activePage && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-slate-950 border border-purple-500/30 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl animate-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-purple-500/20 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-purple-600/20 text-purple-400 rounded-xl border border-purple-500/30">
+                  <Sparkles className="w-5 h-5 text-purple-300" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-white text-sm">Melhorar / Remasterizar Página com IA</h3>
+                  <p className="text-xs text-slate-400 font-mono">Página: {activePage.name} ({activePage.slug}.html)</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowRemasterPageModal(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-3 bg-purple-950/20 border border-purple-500/30 rounded-xl space-y-1 text-xs text-slate-300">
+              <span className="font-bold text-purple-300 flex items-center gap-1.5">
+                <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+                Preservação Integral de Conteúdo e Mídias
+              </span>
+              <p className="text-[11px] leading-relaxed text-slate-400">
+                A IA reestrutura o layout e o design com Tailwind CSS sem alterar os textos, frases e imagens do seu cliente.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
+                Diretriz do Design (Opcional)
+              </label>
+              <textarea
+                rows={3}
+                value={pageRemasterPrompt}
+                onChange={e => setPageRemasterPrompt(e.target.value)}
+                placeholder="Descreva o estilo, tom de cores ou destaques desejados..."
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-xs text-white focus:border-purple-500 focus:outline-none leading-relaxed"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowRemasterPageModal(false)}
+                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-slate-300 rounded-xl text-xs font-semibold"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={remasteringPage}
+                onClick={handleRemasterPage}
+                className="px-5 py-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-purple-600/30 flex items-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                {remasteringPage ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Melhorando Página com IA...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4 text-yellow-300" />
+                    Executar Remasterização
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Validação de Diretrizes, Cores e Acessibilidade */}
+      {activePage && (
+        <PageValidationModal
+          isOpen={showValidationModal}
+          onClose={() => setShowValidationModal(false)}
+          pageHtml={activePage.html}
+          pageCss={activePage.css}
+          pageName={activePage.name}
+          projectTheme={projectTheme}
+          onApplyFixes={(newHtml, newCss) => {
+            handleCodeChange('html', newHtml);
+            if (newCss !== activePage.css) handleCodeChange('css', newCss);
+            notify.success('Correções de diretrizes e acessibilidade aplicadas!', 'Validação');
+          }}
+          onConfirmSave={() => {
+            handleManualSave(true);
+          }}
+          isSaveTriggered={isSaveTriggeredByValidation}
+        />
+      )}
+
+      {/* SEO & Accessibility Audit Modal */}
+      {activePage && (
+        <SEOAuditModal
+          isOpen={showSEOAuditModal}
+          onClose={() => setShowSEOAuditModal(false)}
+          pageHtml={activePage.html}
+          pageName={activePage.name}
+          seoTitle={activePage.seoTitle}
+          seoDescription={activePage.seoDescription}
+          seoOgImage={activePage.seoOgImage}
+        />
+      )}
+
+      {/* Modal de Auditoria de Integridade e Qualidade IA */}
+      <AIAuditModal
+        isOpen={showAIAuditModal}
+        onClose={() => setShowAIAuditModal(false)}
+        projectId={projectId}
+        token={token}
+        onPagesUpdated={(updatedPages) => {
+          setProject(prev => prev ? { ...prev, pages: updatedPages } : null);
+        }}
+      />
+
+      {/* Modal Padronizado Premium de Criação de Páginas */}
+      {project && (
+        <CreatePageModal
+          isOpen={showCreatePageModal}
+          onClose={() => setShowCreatePageModal(false)}
+          existingPages={project.pages || []}
+          onCreatePage={handleCreatePageSubmit}
+        />
+      )}
+    </div>
+  );
+};
+

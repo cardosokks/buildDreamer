@@ -1,0 +1,731 @@
+import { ProxyAgent, setGlobalDispatcher, fetch as undiciFetch } from 'undici';
+
+function isValidHttpUrl(stringToTest?: string): boolean {
+  if (!stringToTest || typeof stringToTest !== 'string' || stringToTest.trim() === '') return false;
+  try {
+    const url = new URL(stringToTest.trim());
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch (_) {
+    return false;
+  }
+}
+
+const rawEnvProxy = process.env.HTTPS_PROXY || process.env.HTTP_PROXY || process.env.AI_PROXY_URL;
+const defaultProxyUrl = isValidHttpUrl(rawEnvProxy) ? rawEnvProxy!.trim() : undefined;
+
+if (defaultProxyUrl) {
+  try {
+    const proxyAgent = new ProxyAgent(defaultProxyUrl);
+    setGlobalDispatcher(proxyAgent);
+    console.log(`[AI Proxy Engine] Proxy global ativado: ${defaultProxyUrl.replace(/:[^:@]+@/, ':***@')}`);
+  } catch (err) {
+    console.error('[AI Proxy Engine] Falha ao configurar proxy global:', err);
+  }
+}
+
+/**
+ * Extrai HTML puro de qualquer texto, inclusive blocos markdown e conversacionais
+ */
+export function extractHtmlFromRawText(text: string): string {
+  let cleaned = text.trim();
+
+  // 1. Tentar extrair do bloco de código markdown ```html ... ``` ou ```xml ... ``` ou ``` ... ```
+  const codeBlockRegex = /```(?:html|xml|javascript|json)?\s*([\s\S]*?)\s*```/i;
+  const match = cleaned.match(codeBlockRegex);
+  if (match && match[1] && match[1].trim()) {
+    cleaned = match[1].trim();
+  }
+
+  // 2. Se ainda contiver texto conversacional antes de uma tag HTML (ex: "Aqui está: <div..."), extrair a partir da primeira tag HTML
+  const firstTag = cleaned.indexOf('<');
+  const lastTag = cleaned.lastIndexOf('>');
+  if (firstTag !== -1 && lastTag !== -1 && lastTag > firstTag) {
+    const candidate = cleaned.slice(firstTag, lastTag + 1).trim();
+    // Validar se o candidato começa com tag HTML ou possui tags válidas
+    if (candidate.startsWith('<') && candidate.endsWith('>')) {
+      cleaned = candidate;
+    }
+  }
+
+  return cleaned;
+}
+
+/**
+ * Limpa o HTML removendo tags <style> e <script> embutidas para garantir separação estrita
+ */
+export function cleanHtmlExtractAssets(rawHtml: string, existingCss = '', existingJs = '') {
+  const extractedHtml = extractHtmlFromRawText(rawHtml);
+  let cleanHtml = extractedHtml;
+  let extractedCss = existingCss;
+  let extractedJs = existingJs;
+
+  // Extrair e remover tags <style> do HTML
+  const styleRegex = /<style\b[^>]*>([\s\S]*?)<\/style>/gi;
+  let styleMatch;
+  while ((styleMatch = styleRegex.exec(extractedHtml)) !== null) {
+    if (styleMatch[1] && styleMatch[1].trim()) {
+      extractedCss = `${extractedCss}\n${styleMatch[1].trim()}`.trim();
+    }
+  }
+  cleanHtml = cleanHtml.replace(styleRegex, '').trim();
+
+  // Extrair e remover tags <script> do HTML (exceto CDNs externos como Tailwind)
+  const scriptRegex = /<script\b(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi;
+  let scriptMatch;
+  while ((scriptMatch = scriptRegex.exec(extractedHtml)) !== null) {
+    if (scriptMatch[1] && scriptMatch[1].trim()) {
+      extractedJs = `${extractedJs}\n${scriptMatch[1].trim()}`.trim();
+    }
+  }
+  cleanHtml = cleanHtml.replace(scriptRegex, '').trim();
+
+  // Se o HTML contiver <body>, extrai apenas o conteúdo do corpo
+  const bodyMatch = cleanHtml.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+  if (bodyMatch) {
+    cleanHtml = bodyMatch[1].trim();
+  }
+
+  // Remove marcações <html>, <head>, <!DOCTYPE> residuais para o canvas visual
+  cleanHtml = cleanHtml
+    .replace(/<!DOCTYPE[^>]*>/gi, '')
+    .replace(/<html[^>]*>/gi, '')
+    .replace(/<\/html>/gi, '')
+    .replace(/<head\b[^>]*>[\s\S]*?<\/head>/gi, '')
+    .trim();
+
+  return {
+    html: cleanHtml,
+    css: extractedCss,
+    js: extractedJs
+  };
+}
+
+/**
+ * Utilitário auxiliar para extrair um valor de string escapado de um JSON quebrado
+ */
+function extractJsonField(text: string, keyName: string): string | null {
+  // Encontrar o padrão "keyName" : " ou 'keyName' : ' ou simplesmente keyName: "
+  const keyRegex = new RegExp(`"${keyName}"\\s*:\\s*(["'])`, 'i');
+  const match = text.match(keyRegex);
+  if (!match) {
+    const keyRegexNoQuotes = new RegExp(`\\b${keyName}\\b\\s*:\\s*(["'])`, 'i');
+    const matchNoQuotes = text.match(keyRegexNoQuotes);
+    if (!matchNoQuotes) return null;
+    return parseEscapedStringValue(text, matchNoQuotes.index! + matchNoQuotes[0].length, matchNoQuotes[1]);
+  }
+  return parseEscapedStringValue(text, match.index! + match[0].length, match[1]);
+}
+
+function parseEscapedStringValue(text: string, startIndex: number, quoteChar: string): string {
+  let result = '';
+  let i = startIndex;
+  while (i < text.length) {
+    const char = text[i];
+    if (char === '\\') {
+      const nextChar = text[i + 1];
+      if (nextChar === '"' || nextChar === "'" || nextChar === '\\' || nextChar === '/' || nextChar === 'b' || nextChar === 'f' || nextChar === 'n' || nextChar === 'r' || nextChar === 't') {
+        if (nextChar === 'n') result += '\n';
+        else if (nextChar === 't') result += '\t';
+        else if (nextChar === 'r') result += '\r';
+        else result += nextChar;
+        i += 2;
+      } else {
+        result += char;
+        i++;
+      }
+    } else if (char === quoteChar) {
+      break;
+    } else {
+      result += char;
+      i++;
+    }
+  }
+  return result;
+}
+
+/**
+ * Tenta fazer o parse de JSON de forma ultra resiliente mesmo se houver caracteres de controle ou formatação variada
+ */
+export function resilientJsonParse(rawString: string): any {
+  let text = rawString.trim();
+
+  // Remove blocos de código markdown se existirem
+  const codeBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  if (codeBlockMatch) {
+    text = codeBlockMatch[1].trim();
+  } else if (text.startsWith('```')) {
+    text = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
+  }
+
+  const formatResult = (obj: any) => {
+    // Se não tiver 'html' mas tiver outro campo óbvio, mapear automaticamente
+    let htmlContent = obj.html || obj.navbar || obj.footer || '';
+    if (!htmlContent) {
+      const keys = Object.keys(obj);
+      const likelyKey = keys.find(k => {
+        const kl = k.toLowerCase();
+        return kl.includes('html') || kl.includes('code') || kl.includes('codigo') || kl.includes('markup') || kl.includes('body') || kl.includes('section') || kl.includes('secao') || kl.includes('content') || kl === 'response';
+      });
+      if (likelyKey) {
+        htmlContent = obj[likelyKey];
+      }
+    }
+
+    const cssContent = obj.css || obj.styles || obj.style || '';
+    const jsContent = obj.js || obj.script || obj.scripts || '';
+    const explanationContent = obj.explanation || obj.explicacao || obj.desc || obj.description || 'Código atualizado pela IA.';
+
+    const cleaned = cleanHtmlExtractAssets(htmlContent, cssContent, jsContent);
+    return {
+      action_type: obj.action_type || 'update_page',
+      explanation: explanationContent,
+      html: cleaned.html || htmlContent || '',
+      css: cleaned.css || cssContent || '',
+      js: cleaned.js || jsContent || '',
+      navigation: obj.navigation || undefined,
+      settings: obj.settings || undefined,
+      navbar: obj.navbar || undefined,
+      footer: obj.footer || undefined
+    };
+  };
+
+  // 1. Parse JSON Direto
+  try {
+    const directParsed = JSON.parse(text);
+    return formatResult(directParsed);
+  } catch {}
+
+  // 2. Extrair objeto JSON delimitado por chaves
+  const firstBrace = text.indexOf('{');
+  const lastBrace = text.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+    const trimmed = text.slice(firstBrace, lastBrace + 1);
+    try {
+      const parsed = JSON.parse(trimmed);
+      return formatResult(parsed);
+    } catch {
+      try {
+        // Tratar escapes de quebras de linha e tabs comuns
+        const sanitized = trimmed.replace(/(?<!\\)"([^"\\]*(?:\\.[^"\\]*)*)"/g, (match) => {
+          return match.replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/\t/g, '\\t');
+        });
+        const parsed = JSON.parse(sanitized);
+        return formatResult(parsed);
+      } catch {}
+    }
+  }
+
+  // 3. Extrator de propriedades nativo ultra robusto (Trata aspas escapadas e quebra de chaves)
+  const extActionType = extractJsonField(text, 'action_type');
+  const extHtml = extractJsonField(text, 'html') || extractJsonField(text, 'code') || extractJsonField(text, 'codigo') || extractJsonField(text, 'markup') || extractJsonField(text, 'content');
+  const extCss = extractJsonField(text, 'css') || extractJsonField(text, 'styles') || extractJsonField(text, 'style');
+  const extJs = extractJsonField(text, 'js') || extractJsonField(text, 'script') || extractJsonField(text, 'scripts');
+  const extExpl = extractJsonField(text, 'explanation') || extractJsonField(text, 'explicacao') || extractJsonField(text, 'desc') || extractJsonField(text, 'description');
+
+  if (extHtml !== null || extActionType === 'question_only' || extActionType === 'update_style_only') {
+    const cleaned = cleanHtmlExtractAssets(extHtml || '', extCss || '', extJs || '');
+    return {
+      action_type: extActionType || (extHtml !== null ? 'update_page' : 'question_only'),
+      explanation: extExpl || 'Conteúdo gerado via scanner resiliente.',
+      html: cleaned.html || extHtml || '',
+      css: cleaned.css || extCss || '',
+      js: cleaned.js || extJs || '',
+      navbar: undefined,
+      footer: undefined
+    };
+  }
+
+  // 4. Se não contiver nenhuma estrutura JSON, mas contiver tags HTML diretas, trata como HTML puro
+  if (text.includes('<') && text.includes('>')) {
+    const extractedHtml = extractHtmlFromRawText(text);
+    if (extractedHtml && extractedHtml.trim().length > 10) {
+      const cleaned = cleanHtmlExtractAssets(extractedHtml);
+      return {
+        action_type: 'update_page',
+        explanation: 'Código HTML atualizado diretamente.',
+        html: cleaned.html,
+        css: cleaned.css,
+        js: cleaned.js
+      };
+    }
+  }
+
+  // 5. Se for puramente texto e sem formato, assume que é question_only
+  if (text.length > 5 && !text.includes('{') && !text.includes('<div')) {
+    return {
+      action_type: 'question_only',
+      explanation: text,
+      html: '',
+      css: '',
+      js: ''
+    };
+  }
+
+  throw new Error('Falha ao processar resposta JSON da IA.');
+}
+
+export interface AISkill {
+  id: string;
+  name: string;
+  category?: string;
+  description?: string;
+  promptSnippet: string;
+  enabled: boolean;
+}
+
+export const DEFAULT_AI_SKILLS: AISkill[] = [
+  {
+    id: 'skill-tailwind-design',
+    name: 'Design System Tailwind UI & Glassmorphism Pro',
+    category: 'layout',
+    description: 'Gera interfaces limpas, sofisticadas e profissionais com paletas harmoniosas, cartões em vidro fosco (glassmorphism), tipografia hierárquica refinada e espaçamento rítmico perfeito.',
+    promptSnippet: 'Utilize Tailwind CSS com estética moderna e profissional: fundo em tons sofisticados, painéis translúcidos (bg-slate-900/60 backdrop-blur-xl border border-slate-800), tipografia limpa, contrastes acessíveis e espaçamento generoso.',
+    enabled: true
+  },
+  {
+    id: 'skill-cro-hero',
+    name: 'Hero Section de Alto Impacto & CRO (Conversão)',
+    category: 'hero',
+    description: 'Desenvolve seções de topo imponentes com chamadas para ação (CTAs) magnéticas, badges de urgência, prova social imediata e cartões de conversão otimizados.',
+    promptSnippet: 'Crie uma Hero Section espetacular: título principal imponente em negrito, subtítulo persuasivo, badges de destaque, botões de ação primária (CTA) com gradiente e efeitos de hover suaves, além de prova social visível.',
+    enabled: true
+  },
+  {
+    id: 'skill-mobile-first',
+    name: 'Responsividade Total Mobile-First & Micro-interações',
+    category: 'animation',
+    description: 'Garante layout perfeitamente fluido em todas as telas (sm, md, lg, xl), menus hambúrguer funcionais, animações suaves e botões flutuantes interativos.',
+    promptSnippet: 'Garanta responsividade impecável mobile-first com classes grid/flex adaptativas (sm:grid-cols-2 lg:grid-cols-3), menu hambúrguer interativo para mobile e transições suaves em todos os elementos clicáveis.',
+    enabled: true
+  },
+  {
+    id: 'skill-modular-js',
+    name: 'JavaScript Modular & Interatividade Avançada',
+    category: 'code',
+    description: 'Implementa acordeões de FAQ funcionais com rotação de ícones, formulários de contato com validação e feedback visual de envio, e contadores animados.',
+    promptSnippet: 'Adicione script JavaScript modular e funcional: manipulação de eventos para abrir/fechar menus mobile, alternar abas ou acordeões de FAQ, validar formulários de contato com mensagem de sucesso na tela e rolar suavemente entre âncoras.',
+    enabled: true
+  },
+  {
+    id: 'skill-multipage-sync',
+    name: 'Arquitetura Multi-Páginas Sincronizada',
+    category: 'layout',
+    description: 'Cria e sincroniza rotas consistentes entre Home, Sobre, Serviços, Contato e FAQ mantendo padrão visual unificado e navegação fluida.',
+    promptSnippet: 'Mantenha rigorosa consistência de navegação entre todas as páginas (Home, Sobre, Serviços, Contato), garantindo que o cabeçalho (navbar) e o rodapé (footer) compartilhem exatamente a mesma estrutura e links em todas as páginas.',
+    enabled: true
+  }
+];
+
+export interface AttachedFile {
+  name: string;
+  type: string;
+  data: string; // Base64 ou texto plano
+  isImage?: boolean;
+}
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+export const generateAIResponse = async (
+  prompt: string, 
+  context: { html: string; css: string; js: string },
+  customApiKey?: string,
+  customModel?: string,
+  registeredModels?: string[],
+  onModelAttempt?: (model: string, index: number, total: number) => void,
+  customProxyUrl?: string,
+  customSkills?: Array<{ id: string; name: string; promptSnippet: string; enabled: boolean }>,
+  attachedFiles?: AttachedFile[]
+) => {
+  const activeKey = (customApiKey || process.env.GEMINI_API_KEY || '').trim();
+  const proxyUrl = isValidHttpUrl(customProxyUrl) ? customProxyUrl!.trim() : defaultProxyUrl;
+
+  if (!activeKey || activeKey === 'null' || activeKey === 'undefined' || activeKey === '""') {
+    throw new Error('Chave da API do Gemini não foi configurada. Por favor, acesse as Configurações para salvar uma API Key válida do Google Gemini ou escolha o Ollama local.');
+  }
+
+  let candidateModels: string[] = [];
+  
+  // Sanitização de modelos (impede modelos descontinuados/especializados e garante uso dos modelos ativos Gemini 3.x)
+  const sanitizeModelName = (name: string): string | null => {
+    if (!name || typeof name !== 'string') return null;
+    let clean = name.trim();
+    if (clean.startsWith('models/')) clean = clean.replace('models/', '');
+    
+    // Filtra modelos especializados que não servem para geração de código
+    const invalidKeywords = ['-tts', '-image', 'gemma', 'imagen', 'embedding', '-customtools', 'bison', 'gecko', 'aqa', 'audio', 'vision-preview', 'veo', 'lyria'];
+    if (invalidKeywords.some(kw => clean.toLowerCase().includes(kw))) {
+      return null;
+    }
+
+    // Mapeamentos para modelos ativos válidos da API do Gemini
+    if (
+      clean.includes('gemini-3.') || 
+      clean === 'gemini-flash-latest' ||
+      clean === 'gemini-pro-latest'
+    ) {
+      return 'gemini-2.5-flash';
+    }
+
+    return clean;
+  };
+
+  const DEFAULT_MODELS = [
+    'gemini-2.5-flash',
+    'gemini-2.5-pro',
+    'gemini-2.0-flash',
+    'gemini-1.5-flash',
+    'gemini-1.5-pro'
+  ];
+
+  if (registeredModels && Array.isArray(registeredModels) && registeredModels.length > 0) {
+    const sanitizedList = registeredModels
+      .map(sanitizeModelName)
+      .filter((m): m is string => m !== null && m.length > 3);
+
+    candidateModels = [...sanitizedList];
+    
+    if (customModel) {
+      const sanitizedCustom = sanitizeModelName(customModel);
+      if (sanitizedCustom && !candidateModels.includes(sanitizedCustom)) {
+        candidateModels.unshift(sanitizedCustom);
+      }
+    }
+    
+    // Garante que haja modelos estáveis de fallback
+    for (const m of DEFAULT_MODELS) {
+      if (!candidateModels.includes(m)) candidateModels.push(m);
+    }
+  } else if (customModel) {
+    const sanitizedCustom = sanitizeModelName(customModel);
+    if (sanitizedCustom) {
+      candidateModels = [sanitizedCustom, ...DEFAULT_MODELS.filter(m => m !== sanitizedCustom)];
+    } else {
+      candidateModels = [...DEFAULT_MODELS];
+    }
+  } else {
+    candidateModels = [...DEFAULT_MODELS];
+  }
+
+  // Remove duplicatas mantendo a ordem e filtra modelos inválidos/vazios
+  candidateModels = [...new Set(candidateModels)].filter(m => m && typeof m === 'string' && m.length > 3);
+
+  // Se customSkills for omitido ou vazio, usa DEFAULT_AI_SKILLS como fallback ativo
+  const skillsToUse = (customSkills && Array.isArray(customSkills) && customSkills.length > 0)
+    ? customSkills
+    : DEFAULT_AI_SKILLS;
+
+  let skillsDirective = '';
+  if (skillsToUse && skillsToUse.length > 0) {
+    const activeSkills = skillsToUse.filter(s => s.enabled !== false);
+    if (activeSkills.length > 0) {
+      skillsDirective = `
+    ========================================================
+    DIRETRIZES TÉCNICAS E SKILLS DE DESIGN OBRIGATÓRIAS ATIVAS (OBRIGATÓRIO INCORPORAR NO HTML, CSS E JS GENERADOS):
+    Você DEVE aplicar ativamente e obrigatoriamente as seguintes habilidades de inteligência artificial no código retornado:
+    ${activeSkills.map((s, idx) => `${idx + 1}. [SKILL: ${s.name.toUpperCase()}]:\n${s.promptSnippet}`).join('\n\n')}
+    ========================================================
+      `;
+    }
+  }
+
+  // Monta referências de arquivos anexados
+  let attachmentsTextDirective = '';
+  const inlineImageParts: Array<{ inlineData: { mimeType: string; data: string } }> = [];
+
+  if (attachedFiles && attachedFiles.length > 0) {
+    const textFiles = attachedFiles.filter(f => !f.isImage && !f.type.startsWith('image/'));
+    const imageFiles = attachedFiles.filter(f => f.isImage || f.type.startsWith('image/'));
+
+    if (textFiles.length > 0) {
+      attachmentsTextDirective += `\n\nARQUIVOS DE REFERÊNCIA ANEXADOS PELO USUÁRIO (Código / Documentos / Exemplo):\n`;
+      textFiles.forEach(f => {
+        attachmentsTextDirective += `--- INÍCIO DO ARQUIVO: "${f.name}" (${f.type}) ---\n${f.data}\n--- FIM DO ARQUIVO: "${f.name}" ---\n\n`;
+      });
+    }
+
+    if (imageFiles.length > 0) {
+      attachmentsTextDirective += `\n\nIMAGENS E ATIVOS ENVIADOS PELO USUÁRIO (Logomarcas / Banners / Mockups):\n`;
+      imageFiles.forEach(img => {
+        attachmentsTextDirective += `- Imagem "${img.name}": O usuário enviou esta imagem em anexo. Se for uma logomarca ou foto, utilize o data URI diretamente na tag <img src="${img.data}" alt="${img.name}" /> nos locais pertinentes ou replique com precisão a estrutura visual solicitada.\n`;
+        
+        // Se o data for um Data URI (ex: data:image/png;base64,...), extrai o base64 puro para enviar ao Gemini Vision
+        const match = img.data.match(/^data:([^;]+);base64,(.+)$/);
+        if (match) {
+          inlineImageParts.push({
+            inlineData: {
+              mimeType: match[1],
+              data: match[2]
+            }
+          });
+        }
+      });
+    }
+  }
+
+  const systemPrompt = `
+    Você é um Arquiteto de Software Frontend de Elite, Designer Visual Sênior e Engenheiro de Design System especializado em ferramentas visuais No-Code / Code-generation (estilo Webflow, Framer, v0.dev e Tailwind UI).
+
+    Sua missão é atuar como o AI Copilot do nosso Visual Website Builder para criar sites de altíssimo impacto, estética ultra moderna, fluidez e interatividade de nível internacional.
+
+    Você receberá um pedido em linguagem natural e o contexto atual da página:
+    - HTML Atual
+    - CSS Atual
+    - JS Atual
+
+    ${skillsDirective}
+    ${attachmentsTextDirective}
+
+    INSTRUÇÕES MANDATÓRIAS DE ARQUITETURA E SEPARAÇÃO DE CÓDIGO:
+    1. SEPARAÇÃO TOTAL DE ARQUIVOS (HTML, CSS e JS TOTALMENTE SEPARADOS):
+       - O campo "html" deve conter APENAS a estrutura visual com classes Tailwind semânticas.
+       - NUNCA inclua tags <style>...</style> dentro do campo "html". Todo CSS customizado, animações @keyframes, efeitos de glow, glassmorphism ou regras extras DEVEM ficar exclusivamente no campo "css".
+       - NUNCA inclua tags <script>...</script> dentro do campo "html". Toda interatividade, handlers de formulários, sliders, modais, observers de scroll ou animações Three.js/Canvas DEVEM ficar exclusivamente no campo "js".
+    2. ESTILOS CSS BASEADOS INTEIRAMENTE NO SEGMENTO DA EMPRESA (PROIBIDO TEMAS HARDCODED):
+       - É ESTRITAMENTE PROIBIDO utilizar variáveis de estilo hardcoded, temas estáticos engessados ou esquemas de cores pré-definidos que tornem os sites parecidos entre si!
+       - A IA DEVE analisar o segmento do negócio, a proposta comercial e o perfil do público-alvo para criar uma identidade visual (cores, gradientes, tipografia do Google Fonts, bordas e sombras) 100% personalizada e sob medida.
+       - INJEÇÃO DE VARIÁVEIS CSS DINÂMICAS: No campo "css", defina variáveis nativas no bloco :root baseadas exclusivamente no nicho do projeto:
+         :root {
+           --primary: [cor primária gerada para o segmento];
+           --accent: [cor de destaque/glow gerada para o segmento];
+           --bg-surface: [fundo claro/escuro/atmosférico apropriado ao segmento];
+           --card-bg: [fundo de cartões/glassmorphism do segmento];
+           --text-main: [cor principal de texto];
+           --border-color: [cor de borda com opacidade do segmento];
+         }
+       - TIPOGRAFIA EXCLUSIVA DO NICHO: Escolha fontes do Google Fonts perfeitamente alinhadas com o tom do nicho (ex: serifa requintada para luxo/gastronomia, sans-serif limpa/humanista para saúde/clínicas, fonte display/imponente para esportes/academias, geométrica para tech/SaaS).
+       - NUNCA repita a mesma paleta ou visual entre projetos de nichos diferentes.
+       - Garanta que o layout seja 100% responsivo para mobile (375px) e desktop (1280px) mantendo o container <div id="canvas-root"> como nó raiz do conteúdo.
+    3. ARQUIVOS ANEXADOS & LOGOMARCAS:
+       - Se o usuário enviou uma logomarca (imagem ou SVG), posicione-a com destaque e elegância na Navbar (<nav>/<header>), Rodapé (<footer>) ou seções hero.
+       - Se o usuário enviou um arquivo de código ou navbar de referência, replique a estrutura com perfeição mantendo o design responsivo.
+    4. CONTROLADORES DE AÇÃO (action_type):
+       - "update_page": Edição de Conteúdo/Layout da página (ex: "adicione um botão whatsapp", "refaça o hero"). Retorne html, css e js.
+       - "update_style_only": Edição de Estilo/Cores (ex: "mude a cor para azul", "adicione animações no CSS"). Retorne o CSS modificado. Omita "html" e "js" ou retorne vazios.
+       - "navigate": Navegação ou Ação de Interface (ex: "vá para a página sobre", "mude para visualização mobile", "abra o SEO audit", "crie a página contato"). Omita html, css e js. Inclua o objeto "navigation".
+       - "settings": Configurações / SEO do Projeto ou Página (ex: "mude o título SEO da página para 'Home - Empresa'", "altere a descrição SEO"). Omita html, css e js. Inclua o objeto "settings".
+       - "question_only": Dúvidas ou Consultas Gerais (ex: "como melhorar o SEO?", "qual paleta combina com azul?"). Retorne a resposta detalhada no campo "explanation". Omita html, css e js.
+
+    5. Retorne SEMPRE um objeto JSON estrito no formato abaixo:
+
+    Formato da Resposta JSON OBRIGATÓRIO:
+    {
+      "action_type": "update_page" | "update_style_only" | "navigate" | "settings" | "question_only",
+      "explanation": "Breve resumo técnico, resposta amigável ou resposta para a dúvida do usuário.",
+      "html": "<apenas nós HTML sem tags <style> nem <script> (vazio se não for update_page)>",
+      "css": "/* Todo CSS adicional separado aqui (vazio se question_only/navigate/settings) */",
+      "js": "// Todo JavaScript funcional separado aqui (vazio se question_only/navigate/settings)",
+      "navigation": {
+        "action": "switch_page" | "create_page" | "seo_modal" | "toggle_viewport",
+        "targetPageSlug": "slug-da-pagina",
+        "viewport": "desktop" | "tablet" | "mobile"
+      },
+      "settings": {
+        "seoTitle": "Título SEO para a página",
+        "seoDescription": "Descrição SEO para a página",
+        "projectName": "Nome do projeto se solicitado"
+      }
+    }
+  `;
+
+  if (!activeKey) {
+    throw new Error("Chave da API do Gemini não fornecida. Configure-a no menu de configurações do sistema ou no backend.");
+  }
+
+  let lastError: any = null;
+
+  // Timeout por requisição para evitar que a IA fique pendurada se o upstream demorar (60 segundos)
+  const REQUEST_TIMEOUT_MS = 60000;
+
+  for (let i = 0; i < candidateModels.length; i++) {
+    const modelToTry = candidateModels[i];
+    if (onModelAttempt) {
+      onModelAttempt(modelToTry, i + 1, candidateModels.length);
+    }
+
+    const versionsToTry = ['v1beta', 'v1'];
+    let modelSuccess = false;
+    
+    for (const apiVersion of versionsToTry) {
+      if (modelSuccess) break;
+
+      const maxRetriesPerVersion = 2;
+      for (let attempt = 0; attempt <= maxRetriesPerVersion; attempt++) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+        try {
+          const generationConfig: any = {
+            responseMimeType: 'application/json',
+            temperature: 0.35,
+            topP: 0.95,
+            maxOutputTokens: 8192
+          };
+
+          const userParts: any[] = [
+            {
+              text: `${systemPrompt}\n\nContexto do site:\nHTML: ${context.html}\nCSS: ${context.css}\nJS: ${context.js}\n\nPedido do Usuário: ${prompt}`
+            },
+            ...inlineImageParts
+          ];
+
+          const payload: any = {
+            contents: [
+              {
+                role: 'user',
+                parts: userParts
+              }
+            ],
+            generationConfig
+          };
+
+          const fetchOptions: any = {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload),
+            signal: controller.signal
+          };
+
+          if (proxyUrl) {
+            fetchOptions.dispatcher = new ProxyAgent(proxyUrl);
+          }
+
+          const urlObj = new URL(`https://generativelanguage.googleapis.com/${apiVersion}/models/${modelToTry}:generateContent`);
+          
+          // Suporte para Chave de API do Gemini e Bearer Token OAuth
+          const isOAuthToken = activeKey.startsWith('ya29.');
+          if (isOAuthToken) {
+            fetchOptions.headers['Authorization'] = `Bearer ${activeKey}`;
+          } else {
+            fetchOptions.headers['x-goog-api-key'] = activeKey;
+            urlObj.searchParams.set('key', activeKey);
+          }
+          
+          const apiUrl = urlObj.toString();
+
+          const response = await undiciFetch(apiUrl, fetchOptions);
+          clearTimeout(timeoutId);
+
+          if (!response.ok) {
+            const errText = await response.text();
+            let googleErrorMessage = '';
+            try {
+              const parsedError = JSON.parse(errText);
+              googleErrorMessage = parsedError?.error?.message || '';
+            } catch {}
+
+            // Se for chave de API inválida / não autorizada, interrompe imediatamente com mensagem clara
+            if (response.status === 400 || response.status === 401) {
+              const isInvalidKey = errText.includes('API key not valid') || 
+                                   errText.includes('invalid authentication credentials') ||
+                                   googleErrorMessage.includes('API key not valid') ||
+                                   googleErrorMessage.includes('invalid authentication credentials');
+              if (isInvalidKey) {
+                throw new Error('A chave da API do Gemini configurada é inválida ou expirou. Por favor, acesse as Configurações para salvar uma API Key válida do Google Gemini.');
+              }
+            }
+
+            // Se for 404, não adianta tentar novamente esta versão do modelo
+            if (response.status === 404) {
+              console.warn(`[Gemini API] Modelo ${modelToTry} não encontrado em ${apiVersion}. Tentando alternativa...`);
+              break; // Sai do loop de retries desta versão e tenta a próxima versão
+            }
+
+            // Se for erro temporário de alta demanda (503), quota (429) ou erro de servidor (500/502/504)
+            const isTransient = [429, 500, 502, 503, 504].includes(response.status);
+            if (isTransient && attempt < maxRetriesPerVersion) {
+              const backoffMs = (attempt + 1) * 2000;
+              console.warn(`[Gemini API] Modelo ${modelToTry} (${apiVersion}) retornou HTTP ${response.status} (${googleErrorMessage || 'Alta demanda / Temporário'}). Aguardando ${backoffMs}ms antes de tentar novamente (tentativa ${attempt + 1}/${maxRetriesPerVersion})...`);
+              await sleep(backoffMs);
+              continue; // Tenta novamente na próxima iteração do loop attempt
+            }
+
+            // Se esgotaram os retries ou é um erro permanente
+            lastError = new Error(`Erro na API (${response.status}) ao chamar ${modelToTry} (${apiVersion}): ${googleErrorMessage || errText}`);
+            console.warn(`[Gemini API] Modelo ${modelToTry} (${apiVersion}) falhou com HTTP ${response.status}. Passando para o próximo modelo candidato...`);
+            break; // Sai do loop de retries desta versão
+          }
+
+          const resJson: any = await response.json();
+          const rawText = resJson?.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+
+          const parsed = resilientJsonParse(rawText);
+          parsed._usedModel = modelToTry;
+          console.log(`[AI Engine] Sucesso com o modelo: ${modelToTry} (${apiVersion})`);
+          modelSuccess = true;
+          return parsed;
+
+        } catch (error: any) {
+          clearTimeout(timeoutId);
+          if (error.name === 'AbortError') {
+            console.warn(`[AI Engine] Timeout na tentativa com ${modelToTry} (${apiVersion})`);
+          } else {
+            console.warn(`[AI Engine] Exceção em ${modelToTry} (${apiVersion}):`, error.message);
+          }
+          lastError = error;
+
+          if (attempt < maxRetriesPerVersion) {
+            await sleep(1500);
+          }
+        }
+      }
+    }
+  }
+
+  console.error("Erro na API do Gemini em todos os modelos candidatos:", lastError);
+  throw new Error(`Erro ao gerar resposta da IA: ${lastError?.message || 'Falha de conexão com a API do Gemini'}`);
+};
+
+/**
+ * Lista modelos disponíveis diretamente da API do Gemini
+ */
+export const listGeminiModels = async (customApiKey?: string, customProxyUrl?: string) => {
+  const activeKey = (customApiKey || process.env.GEMINI_API_KEY || '').trim();
+  const proxyUrl = isValidHttpUrl(customProxyUrl) ? customProxyUrl!.trim() : defaultProxyUrl;
+
+  if (!activeKey || activeKey === 'null' || activeKey === 'undefined' || activeKey === '""') {
+    throw new Error('Chave da API do Gemini não foi configurada. Por favor, informe uma API Key válida nas Configurações.');
+  }
+
+  const urlObj = new URL(`https://generativelanguage.googleapis.com/v1beta/models`);
+  
+  const fetchOptions: any = {
+    method: 'GET',
+    headers: { 
+      'Content-Type': 'application/json'
+    }
+  };
+
+  // Suporte para Chave de API do Gemini e Bearer Token OAuth
+  const isOAuthToken = activeKey.startsWith('ya29.');
+  if (isOAuthToken) {
+    fetchOptions.headers['Authorization'] = `Bearer ${activeKey}`;
+  } else {
+    fetchOptions.headers['x-goog-api-key'] = activeKey;
+    urlObj.searchParams.set('key', activeKey);
+  }
+
+  const apiUrl = urlObj.toString();
+
+  if (proxyUrl) {
+    fetchOptions.dispatcher = new ProxyAgent(proxyUrl);
+  }
+
+  const response = await undiciFetch(apiUrl, fetchOptions);
+  if (!response.ok) {
+    const errText = await response.text();
+    let googleErrorMessage = errText;
+    try {
+      const parsedError = JSON.parse(errText);
+      googleErrorMessage = parsedError?.error?.message || errText;
+    } catch {}
+    throw new Error(`Erro ao listar modelos do Gemini (HTTP ${response.status}): ${googleErrorMessage}`);
+  }
+
+  const data: any = await response.json();
+  if (!data.models || !Array.isArray(data.models) || data.models.length === 0) {
+    throw new Error('A API do Gemini retornou uma lista vazia de modelos.');
+  }
+  return data.models;
+};

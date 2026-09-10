@@ -1,5 +1,10 @@
+node_modules/
+dist/
+.env
+.env.local
 /backend/node_modules
 /backend/.agents
 /backend/.claude
 /backend/.windsurf
 /frontend/node_modules
+*.log
