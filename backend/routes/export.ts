@@ -80,21 +80,34 @@ function stripPromptArtifacts(html: string): string {
 function normalizeHtmlLinks(html: string, isHome: boolean, allPages: Array<{ slug: string; isHomepage: boolean }>): string {
   if (!html) return '';
 
-  return html.replace(/href=["']([^"'#?]+)["']/gi, (match, href) => {
-    if (href.startsWith('http://') || href.startsWith('https://') || href.startsWith('mailto:') || href.startsWith('tel:') || href.startsWith('#')) {
+  return html.replace(/href=["']([^"']+)["']/gi, (match, fullHref) => {
+    if (
+      fullHref.startsWith('http://') ||
+      fullHref.startsWith('https://') ||
+      fullHref.startsWith('mailto:') ||
+      fullHref.startsWith('tel:') ||
+      fullHref.startsWith('#') ||
+      fullHref.startsWith('javascript:')
+    ) {
       return match;
     }
 
-    const cleanHref = href.replace(/^\//, '').replace(/^pages\//, '').replace(/\.html$/, '') || 'index';
+    // Extrair caminho principal, query string e âncoras (hash)
+    const hashIndex = fullHref.indexOf('#');
+    const pathAndSearch = hashIndex !== -1 ? fullHref.substring(0, hashIndex) : fullHref;
+    const hash = hashIndex !== -1 ? fullHref.substring(hashIndex) : '';
+
+    const queryIndex = pathAndSearch.indexOf('?');
+    const pathPart = queryIndex !== -1 ? pathAndSearch.substring(0, queryIndex) : pathAndSearch;
+    const search = queryIndex !== -1 ? pathAndSearch.substring(queryIndex) : '';
+
+    const cleanHref = pathPart.replace(/^\//, '').replace(/^pages\//, '').replace(/\.html$/, '') || 'index';
     
     const targetPage = allPages.find(p => p.slug === cleanHref || (cleanHref === 'index' && p.isHomepage));
     if (!targetPage) return match;
 
-    if (targetPage.isHomepage) {
-      return `href="index.html"`;
-    } else {
-      return `href="${targetPage.slug}.html"`;
-    }
+    const newPath = targetPage.isHomepage ? 'index.html' : `${targetPage.slug}.html`;
+    return `href="${newPath}${search}${hash}"`;
   });
 }
 
@@ -145,8 +158,8 @@ router.get('/:projectId', async (req: AuthenticatedRequest, res: any) => {
       if (!content || !includeAssets || !assetsFolder) return content;
 
       let rewritten = content;
-      // Captura links do tipo /api/media/files/<filename>, http(s)://.../api/media/files/<filename>, /data/uploads/<filename> ou uploads/<filename>
-      const mediaRegex = /(?:https?:\/\/[^\s"'()]+)?(?:\/api\/media\/files\/|\/data\/uploads\/|uploads\/)([a-zA-Z0-9_\-\.]+)/gi;
+      // Captura links do tipo /api/media/files/<filename>, http(s)://.../api/media/files/<filename>, /data/uploads/<filename>, uploads/<filename> ou assets/<filename>
+      const mediaRegex = /(?:https?:\/\/[^\s"'()]+)?(?:\/api\/media\/files\/|\/data\/uploads\/|\/uploads\/|uploads\/|\/assets\/|assets\/)([^"'\s()#?]+)/gi;
       const matches = [...content.matchAll(mediaRegex)];
 
       for (const match of matches) {
@@ -210,7 +223,7 @@ router.get('/:projectId', async (req: AuthenticatedRequest, res: any) => {
     // Processar Favicon do projeto
     let processedFavicon = project.favicon;
     if (processedFavicon && includeAssets && assetsFolder) {
-      const matchFav = processedFavicon.match(/(?:\/api\/media\/files\/|\/data\/uploads\/|uploads\/)([a-zA-Z0-9_\-\.]+)/i);
+      const matchFav = processedFavicon.match(/(?:\/api\/media\/files\/|\/data\/uploads\/|\/uploads\/|uploads\/|\/assets\/|assets\/)([^"'\s()#?]+)/i);
       if (matchFav) {
         const favFilename = matchFav[1];
         if (!bundledAssets.has(favFilename)) {

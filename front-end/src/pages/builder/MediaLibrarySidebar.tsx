@@ -17,12 +17,14 @@ interface MediaLibrarySidebarProps {
   onClose: () => void;
   onSelectImage?: (url: string) => void;
   onInsertImageToCanvas?: (url: string, name: string) => void;
+  projectId?: string;
 }
 
 export const MediaLibrarySidebar: React.FC<MediaLibrarySidebarProps> = ({
   onClose,
   onSelectImage,
-  onInsertImageToCanvas
+  onInsertImageToCanvas,
+  projectId
 }) => {
   const { token } = useAuth();
   const notify = useNotification();
@@ -44,7 +46,8 @@ export const MediaLibrarySidebar: React.FC<MediaLibrarySidebarProps> = ({
   const fetchMedia = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/media`, {
+      const url = projectId ? `${API_URL}/api/media?projectId=${projectId}` : `${API_URL}/api/media`;
+      const res = await fetch(url, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -60,7 +63,7 @@ export const MediaLibrarySidebar: React.FC<MediaLibrarySidebarProps> = ({
 
   useEffect(() => {
     fetchMedia();
-  }, [token]);
+  }, [token, projectId]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -90,6 +93,7 @@ export const MediaLibrarySidebar: React.FC<MediaLibrarySidebarProps> = ({
           name: file.name,
           mimeType: file.type,
           base64Data,
+          projectId: projectId || null
         })
       });
 

@@ -113,12 +113,17 @@ router.post('/test-connection', authenticateToken, async (req, res) => {
 router.get('/', authenticateToken, async (req: AuthenticatedRequest, res: any) => {
   try {
     const { projectId } = req.query;
+    
+    const whereCondition: any = {
+      userId: req.userId,
+    };
+    
+    if (projectId) {
+      whereCondition.projectId = projectId;
+    }
+
     const media = await prisma.media.findMany({
-      where: { 
-        userId: req.userId,
-        // Se projectId for passado, filtra por ele (isso requer que a tabela Media tenha um campo projectId, mas o schema atual não tem. Vou ignorar o filtro de banco de dados se não existir a coluna).
-        // Vou assumir que por enquanto vamos apenas listar tudo.
-      },
+      where: whereCondition,
       orderBy: { createdAt: 'desc' },
       take: 150,
     });
@@ -158,7 +163,8 @@ router.post('/upload', authenticateToken, async (req: AuthenticatedRequest, res:
         size,
         mimeType: effectiveMime,
         storage: uploadRes.isMinio ? 'minio' : 'local',
-        userId: req.userId
+        userId: req.userId,
+        projectId: projectId || null
       }
     });
 

@@ -302,11 +302,32 @@ class ProjectQueue {
       colorPalette
     } = options;
 
+    const project = await prisma.project.findUnique({
+      where: { id: projectId }
+    });
+
     const resolvedApiKey = await this.resolveApiKeyAndSettings(projectId, customApiKey);
-    const resolvedBusinessName = (businessName || '').trim() || 'Sua Empresa';
+    const resolvedBusinessName = (businessName || '').trim() || project?.name || 'Sua Empresa';
     const resolvedSegment = (segment || '').trim() || 'Serviços Profissionais';
     const resolvedStyle = (visualStyle || '').trim() || 'Ultra Moderno, Dark Luxury ou Clean Tech com alto contraste e elegância';
-    const resolvedPalette = (colorPalette || '').trim() || 'Paleta refinada com gradientes sutis e harmônicos';
+    const resolvedPalette = (colorPalette || '').trim() || project?.colorPalette || 'Paleta refinada com gradientes sutis e harmônicos';
+
+    let brandDirective = "";
+    if (project) {
+      brandDirective = `
+\n[REGRAS CRÍTICAS DE IDENTIDADE DA MARCA E DESIGN SYSTEM AUTORAL]
+Você DEVE aplicar rigorosamente as informações oficiais da marca e o Design System abaixo:
+- Nome da Marca / Site: "${project.name}"
+${project.logoUrl ? `- Logotipo Oficial: "${project.logoUrl}" (Insira a imagem de forma responsiva e elegante nos cabeçalhos, navbar ou menus: <img src="${project.logoUrl}" referrerPolicy="no-referrer" alt="${project.name}" class="h-8 md:h-10 object-contain tracking-tight">)` : '- Logotipo: Use um logotipo elegante baseado em texto/tipografia estilizada com o nome do site'}
+- Contatos Oficiais: Telefone / WhatsApp "${project.contacts || 'Não especificado'}" | E-mail: "${project.email || 'Não especificado'}"
+
+- MOTOR DE DERIVAÇÃO ESTÉTICA E PALETA DE CORES:
+  Paleta Solicitada/Configurada: "${project.colorPalette || resolvedPalette}".
+  • PROIBIDO usar layouts monocromáticos cinza estéreis, preto puro \`#000000\` descontextualizado ou o padrão cyberpunk clichê (a menos que o segmento exija).
+  • A IA deve adaptar a paleta ao nicho do negócio: crie uma hierarquia visual sofisticada com tom de base imersivo, cores de superfície translúcidas (Glassmorphic) e acentos vibrantes de alto contraste focados em guiagem visual e conversão (CTA Glow).
+  • TIPOGRAFIA: Escolha e combine pelo menos 2 famílias do Google Fonts apropriadas ao tom da marca (ex: uma fonte imponente display/serifada para títulos e uma sans-serif ultra-legível para o corpo).
+`;
+    }
 
     // 1. Obter todas as páginas existentes no banco de dados para o projeto
     let existingPages = await prisma.page.findMany({
@@ -375,56 +396,83 @@ class ProjectQueue {
     item.currentModel = `Construindo Página Inicial (1/${totalPages})...`;
 
     const homePrompt = `
-Você é um Arquiteto de Software Frontend de Elite e Designer Master (especialista em Webflow, Tailwind UI, Framer e v0).
-Sua missão é criar a PÁGINA INICIAL (HOME) de altíssimo impacto e nível internacional para a empresa "${resolvedBusinessName}".
+Você é um Arquiteto de Software Frontend de Elite e Designer UI/UX Master (especialista no nível Webflow, Framer, Tailwind UI e v0).
+Sua missão é projetar a PÁGINA INICIAL (HOME) mestre de altíssimo impacto, responsiva, fluida e de padrão internacional para "${resolvedBusinessName}".
 
 DADOS DO PROJETO:
 - Nome do Negócio: ${resolvedBusinessName}
 - Segmento / Ramo de Atuação: ${resolvedSegment}
-- Estilo Visual & Paleta: ${resolvedStyle} | ${resolvedPalette}
+- Estilo Visual & Paleta Pretendida: ${resolvedStyle} | ${resolvedPalette}
 - Instruções Específicas do Usuário: ${prompt}
 
 ROTAS DE NAVEGAÇÃO DO SITE (OBRIGATÓRIO incluir na Navbar e no Footer):
 ${navLinksDoc}
 
-ESTRUTURA COMPLETA E OBRIGATÓRIA DA PÁGINA INICIAL:
-1. HEADER / NAVBAR STICKY:
-   - Fundo translúcido com blur (ex: backdrop-blur-md bg-slate-900/80 border-b border-slate-800).
-   - Logomarca moderna com ícone estilizado e tipografia expressiva de ${resolvedBusinessName}.
-   - Links de navegação apontando EXATAMENTE para as rotas acima: ${navigationRoutes.map(r => `<a href="${r.href}">${r.name}</a>`).join(', ')}.
-   - Botão de Ação CTA em destaque no canto direito (ex: "Fale Conosco" / "Comece Agora" / "Solicitar Orçamento").
-   - Botão de menu mobile hambúrguer responsivo com interatividade funcional no JS.
-2. HERO SECTION MASTERPIECE:
-   - Eyebrow Badge (ex: "✨ Líder em ${resolvedSegment}" ou "✦ Soluções Inovadoras").
-   - Título imponente de alto contraste com gradiente sutil no texto (bg-clip-text).
-   - Subtítulo claro, persuasivo e focado na transformação do cliente.
-   - 2 Botões de CTA (Primário com gradiente pulsante + Secundário com contorno elegante e ícone).
-   - Prova social imediata: Avaliação 4.9/5 estrelas ⭐, avatares sobrepostos de clientes e estatística impactante (ex: "+5.000 clientes atendidos").
-   - Card/Mockup visual de alta definição com efeito de profundidade, glassmorphism e iluminação sutil.
-3. BARRA DE AUTORIDADE / CONFIANÇA (TRUST BAR):
-   - "Empresas e parceiros que confiam em nossa excelência" com logos/badges minimalistas.
-4. DIFERENCIAIS & RECURSOS (BENTO GRID MODERNO):
-   - 3 ou 4 cards assimétricos com hover animado, ícones expressivos, bordas com gradiente sutil e métricas destacadas.
-5. VITRINE DE SERVIÇOS / PRODUTOS:
-   - Cards detalhados dos principais serviços de ${resolvedBusinessName} com tags de categoria, lista de benefícios (✓) e link direcionando para "servicos.html" ou WhatsApp.
-6. SEÇÃO SOBRE & AUTORIDADE:
-   - Resumo da trajetória e missão de ${resolvedBusinessName}, pilares de valor e contadores numéricos (ex: 99.8% Satisfação, +10 Anos de Mercado). Link para "sobre.html".
-7. PROVA SOCIAL & DEPOIMENTOS:
-   - Grade de depoimentos com fotos circulares em alta qualidade (Unsplash), 5 estrelas douradas, nome, cargo e depoimento persuasivo.
-8. PERGUNTAS FREQUENTES (FAQ ACCORDION INTERATIVO):
-   - 4 ou 5 dúvidas essenciais do segmento de ${resolvedBusinessName}. O clique deve abrir/fechar suavemente via JavaScript funcional com rotação do chevron!
-9. CHAMADA FINAL PARA AÇÃO (CTA) & NEWSLETTER:
-   - Banner envolvente de fechamento incentivando contato imediato via formulário ou WhatsApp.
-10. BOTÃO FLUTUANTE DO WHATSAPP:
-    - Botão fixo no canto inferior direito com animação de pulso e link direto (href="https://wa.me/5511999999999?text=Ol%C3%A1,%20gostaria%20de%20mais%20informa%C3%A7%C3%B5es").
-11. FOOTER MULTICOLUNAS COMPLETO:
-    - Bio da empresa, links organizados para todas as páginas (${navigationRoutes.map(r => r.name).join(', ')}), redes sociais, aviso legal e copyright.
+==============================================================================
+ESTRUTURA COMPLETA E ASSIMÉTRICA DA PÁGINA INICIAL (ANTI-LAYOUT GENÉRICO)
+==============================================================================
 
-REGRAS TÉCNICAS E ARQUITETURA:
-- O retorno DEVE ser um objeto JSON estrito com as chaves: "html", "css", "js", "explanation".
-- HTML: apenas classes Tailwind semânticas. NUNCA coloque tags <style> ou <script> dentro do HTML.
-- CSS: regras extras de animação (@keyframes, glows, custom scrollbar).
-- JS: código puro com handlers de clique para abrir/fechar o menu mobile, abrir/fechar os accordions do FAQ, validação de envio de formulário com feedback visual, e contadores animados de números.
+1. HEADER / NAVBAR FLUTUANTE (DYNAMIC FLOATING ISLAND):
+   - Container flutuante com blur glassmorphism (ex: backdrop-blur-xl bg-slate-950/70 border border-white/10 rounded-full shadow-2xl).
+   - Logomarca de ${resolvedBusinessName} integrada perfeitamente com altura proporcional.
+   - Links de navegação apontando EXATAMENTE para as rotas acima com estado ativo e micro-hover. Links: ${navigationRoutes.map(r => `<a href="${r.href}">${r.name}</a>`).join(', ')}.
+   - Botão de Ação CTA em destaque no canto direito com brilho sutil/glow.
+   - Menu mobile hambúrguer responsivo com gaveta deslizante ou overlay totalmente interativo no JS.
+
+2. HERO SECTION MASTERPIECE (SPLITSCREEN 3D OU COMPOSIÇÃO EDITORIAL):
+   - Badge Flutuante Duplo Interativo:
+     a) Badge de Autoridade/Google Reviews: "⭐ 4.9/5 (Avaliações Reais)" com selo de verificação.
+     b) Badge de Status Vivo em Tempo Real: Elemento dinâmico calculado via JS com ID \`#realtime-status-badge\` ("🟢 ABERTO AGORA" ou "🔴 FECHADO NO MOMENTO").
+   - Headline Imponente: Título de alto impacto visual com texto em gradiente semântico (bg-clip-text) e revelação dinâmica.
+   - Subtítulo focado no benefício claro e na transformação do cliente.
+   - CTAs Duplos de Alta Conversão: Primário com efeito Glow animado + Secundário transparente com ícone Lucide.
+   - Container Visual em Destaque: Objeto 3D interativo via <spline-viewer> ou mockup visual translúcido em vidro fosco com iluminação radial (glow de fundo).
+
+3. BARRA DE CONFIANÇA & AUTORIDADE (TRUST BAR):
+   - Faixa minimalista estilizada: "Empresas e parceiros que confiam em nossa excelência", com logos translúcidos em grayscale hover-color.
+
+4. BENTO GRID ASSIMÉTRICO DE DIFERENCIAIS (NADA DE 3 COLUNAS IGUAIS!):
+   - Layout de 12 colunas com proporções variadas (ex: col-span-8, col-span-4, row-span-2).
+   - Cartões translúcidos Glassmorphism, com bordas com brilho sutil ao passar o mouse, métricas destacadas, ícones Lucide glowing e overlays de imagem imersivos.
+
+5. VITRINE DE SERVIÇOS / PRODUTOS INTERATIVA:
+   - Apresentação dos principais produtos/serviços de ${resolvedBusinessName} com tags de categoria, lista de diferenciais (✓) e botões diretos para WhatsApp ou a página "servicos.html".
+
+6. SEÇÃO SOBRE & PROPRIEDADE INTELECTUAL:
+   - Narrativa envolvente sobre a missão e fundação de ${resolvedBusinessName}, alinhada com contadores numéricos de estatísticas (ex: 99.8% Satisfação, +10 Anos no Mercado). Link direcionando para "sobre.html".
+
+7. PROVA SOCIAL & DEPOIMENTOS (CARROSSEL SWIPER.JS 3D):
+   - Slider com efeito 3D (Cards ou Coverflow) contendo depoimentos autênticos com fotos de perfil em alta definição (Unsplash), estrelas glowing, nome, cargo e depoimento persuasivo.
+
+8. PERGUNTAS FREQUENTES (FAQ ACCORDION INTERATIVO):
+   - 4 a 6 perguntas estratégicas do segmento ${resolvedSegment}. O clique deve abrir/fechar o acordeão suavemente via JavaScript com rotação do ícone Chevron (+ / -).
+
+9. CHAMADA FINAL PARA AÇÃO (CTA MASTER) & NEWSLETTER:
+   - Seção de fechamento persuasiva incentivando agendamento ou contato imediato via formulário ou WhatsApp.
+
+10. BOTÃO FLUTUANTE DE CONVERSÃO (WHATSAPP/RESERVA):
+    - Botão fixo no canto inferior direito com pulso luminoso, tooltip e link direto wa.me preenchido.
+
+11. FOOTER MULTICOLUNAS COMPLETO:
+    - Bio da marca, links organizados para todas as rotas do site (${navigationRoutes.map(r => r.name).join(', ')}), dados de contato oficial, redes sociais com ícones e copyright.
+
+==============================================================================
+REGRAS TÉCNICAS E ARQUITETURA DE SAÍDA
+==============================================================================
+- DICA CRÍTICA DE LIMITES DE TOKENS: O layout exigido é gigante. Para evitar que a geração seja interrompida no meio (HTML cortado), seja conciso no preenchimento de textos, reduza o número de cards repetidos em listas/grids para no máximo 2 ou 3, e foque em entregar TODAS as seções até o Footer fechado (</footer>).
+- Retorne EXCLUSIVAMENTE um objeto JSON válido no formato:
+  {
+    "html": "...",
+    "css": "...",
+    "js": "...",
+    "explanation": "..."
+  }
+- HTML: Utilize apenas classes Tailwind CSS semânticas. NUNCA inclua tags <style> ou <script> dentro da string HTML.
+- ANIMAÇÕES E REVEALS (GSAP): Adicione a classe 'gsap-reveal' nas seções principais, cabeçalhos, bento grids e cards para acionar as animações de scroll reveal controladas pela plataforma.
+- CSS: Inclua no campo "css" estilos customizados necessários, como animações @keyframes customizadas, efeitos de profundidade, filtros de overlay e regras do Swiper.
+- JS: Inclua no campo "js" JavaScript puro e funcional para os handlers da página: menu mobile responsive, acordeão interativo do FAQ, script do status em tempo real, inicialização do Swiper 3D e manipuladores dos botões de contato.
+
+${brandDirective}
 `;
 
     let homeAiResponse: any = null;
@@ -562,30 +610,48 @@ Desenvolva uma página rica, altamente detalhada e relevante para "${sub.name}",
 
       const subPrompt = `
 Você é o Arquiteto Frontend Líder do site "${resolvedBusinessName}".
-Sua tarefa é gerar o código completo da subpágina "${sub.name}" (slug: ${sub.slug}).
+Sua missão é gerar o código completo, responsivo e exclusivo da subpágina "${sub.name}" (slug: ${sub.slug}).
 
-ESTILO VISUAL & PALETA:
+ESTILO VISUAL & DESIGN SYSTEM DA MARCA:
 ${resolvedStyle} | ${resolvedPalette}
 
-DIRETRIZES DE IDENTIDADE VISUAL E REAPROVEITAMENTO:
-1. A subpágina DEVE manter a mesma identidade estética, tipografia e cores da Home.
+==============================================================================
+DIRETRIZES RÍGIDAS DE COERÊNCIA VISUAL E REAPROVEITAMENTO
+==============================================================================
+1. A subpágina DEVE manter 100% de coerência visual com a Home (mesma tipografia, paleta de cores, arredondamentos e estilo de vidro/glassmorphism).
 2. NAVBAR E FOOTER:
-   - Utilize a mesma estrutura de Navbar e Footer da Home abaixo.
-   - Na Navbar, destaque o link "${sub.name}" com classe ativa (ex: text-purple-400 font-bold ou border-b-2 border-purple-500).
-${navbarHtml ? `\nNAVBAR BASE DA HOME:\n${navbarHtml}\n` : ''}
-${footerHtml ? `\nFOOTER BASE DA HOME:\n${footerHtml}\n` : ''}
+   - Utilize a mesma estrutura mestre fornecida abaixo.
+   - Na Navbar, marque o link da subpágina atual "${sub.name}" com o indicador visual de classe ativa (ex: tom de destaque, borda inferior ou badge ativo).
 
-LINKS DE NAVEGAÇÃO ENTRE AS PÁGINAS DO SITE:
+NAVBAR BASE DA HOME:
+${navbarHtml || 'Navbar base não disponível.'}
+
+FOOTER BASE DA HOME:
+${footerHtml || 'Footer base não disponível.'}
+
+ROTAS DE NAVEGAÇÃO ENTRE AS PÁGINAS DO SITE:
 ${navLinksDoc}
 
-CONTEÚDO OBRIGATÓRIO DESTA SUBPÁGINA:
+CONTEÚDO ESPECÍFICO E OBRIGATÓRIO DESTA SUBPÁGINA:
 ${subpageContextGuidance}
 
-REGRAS MANDATÓRIAS:
-- Retorne JSON estrito: { "html": "...", "css": "...", "js": "...", "explanation": "..." }
-- HTML limpo com classes Tailwind semânticas. NUNCA coloque tags <style> ou <script> dentro do HTML.
-- Insira o botão flutuante de WhatsApp no canto inferior direito.
-- No JS, inclua os handlers de menu mobile, acordeões e validações de formulário.
+==============================================================================
+REGRAS MANDATÓRIAS E SAÍDA TÉCNICA
+==============================================================================
+- O retorno DEVE ser estritamente um JSON no formato:
+  { 
+    "html": "...", 
+    "css": "...", 
+    "js": "...", 
+    "explanation": "..." 
+  }
+- HTML: Código semântico limpo usando Tailwind CSS. NUNCA insira tags <style> ou <script> no HTML.
+- ANIMAÇÕES GSAP: Adicione obrigatoriamente a classe 'gsap-reveal' nos blocos principais, bento grids, tabelas/menus e cartões de destaque da subpágina para garantir a entrada animada fluida no scroll.
+- JAVASCRIPT MODULAR (campo "js"): Escreva scripts específicos para esta subpágina (ex: formulário interativo de contato com popup interno de sucesso, alternador de abas/tabs para preços ou serviços, calculadoras ou acordeões).
+- CSS ESPECÍFICO (campo "css"): Estilos customizados e keyframes necessários apenas para esta subpágina.
+- Mantenha o botão flutuante de WhatsApp fixo no canto inferior direito.
+
+${brandDirective}
       `;
 
       try {
@@ -670,6 +736,21 @@ REGRAS MANDATÓRIAS:
 
     if (!page) throw new Error('Página não encontrada no banco de dados.');
 
+    const project = page.project;
+    let brandDirective = "";
+    if (project) {
+      brandDirective = `
+\n[REGRAS DE IDENTIDADE DA MARCA E DESIGN SYSTEM]
+Sempre use e incorpore rigorosamente as seguintes informações oficiais e paleta de cores para manter a consistência de marca:
+- Nome da Marca / Site: "${project.name}"
+${project.logoUrl ? `- Imagem da Logomarca (URL): "${project.logoUrl}" (Use exatamente este link de logo caso precise renderizar ou atualizar um logotipo, ex: <img src="${project.logoUrl}" referrerPolicy="no-referrer" alt="${project.name}" class="h-8 md:h-10 object-contain">)` : '- Logotipo: Use um logotipo moderno baseado em texto/tipografia estilizada com o nome do site'}
+- Contatos de Telefone / WhatsApp comercial: "${project.contacts || 'Não especificado'}"
+- E-mail oficial de contato: "${project.email || 'Não especificado'}"
+
+${project.colorPalette ? `- DIRETRIZ CRÍTICA DE CORES (PALETA): "${project.colorPalette}". Todas as alterações, novas seções, cores de botões e planos de fundo devem seguir, preencher ou manter rigorosamente esta paleta de cores.` : ''}
+`;
+    }
+
     const resolvedApiKey = await this.resolveApiKeyAndSettings(page.projectId, options.customApiKey || options.apiKey);
 
     const projectPages = page.project?.pages || [page];
@@ -733,7 +814,7 @@ REGRAS MANDATÓRIAS:
           js: currentPage.js || ''
         };
 
-        const pageSpecificPrompt = `${prompt}\n\n[INSTRUÇÃO IMPORTANTE]: Você está atualizando a página "${currentPage.name}" (slug: /${currentPage.slug}) do projeto. Mantenha a identidade visual e o design global sincronizado com as demais páginas.`;
+        const pageSpecificPrompt = `${prompt}\n\n[INSTRUÇÃO IMPORTANTE]: Você está atualizando a página "${currentPage.name}" (slug: /${currentPage.slug}) do projeto. Mantenha a identidade visual e o design global sincronizado com as demais páginas.\n${brandDirective}`;
 
         const res = await executeAIRequest(pageSpecificPrompt, context, {
           ...options,
@@ -832,31 +913,42 @@ REGRAS MANDATÓRIAS:
         console.log(`[AIQueueManager] Iniciando edição direcionada para a seção index ${targetSectionIndex}: ${targetSectionLabel}`);
         
         const sectionPrompt = `
-Você é o Arquiteto Frontend Master.
-Sua missão é atualizar EXCLUSIVAMENTE a seção "${targetSectionLabel}" dentro da página "${page.name}".
+Você é o Arquiteto Frontend Master e Designer UI/UX de Elite responsável pelo site.
+Sua missão é atualizar EXCLUSIVAMENTE a seção "${targetSectionLabel}" na página "${page.name}".
 
-ATENÇÃO EXTREMA:
-1. Retorne um JSON no qual o campo "html" contenha APENAS o código HTML atualizado para esta seção selecionada. Não retorne a página inteira nem o container wrapper externo.
-2. Comece o HTML retornado pela mesma tag raiz (por exemplo, <section ...>, <header ...>, ou <div ...>) correspondente à seção atual se possível, aplicando as modificações solicitadas pelo usuário.
-3. Se o usuário pedir para adicionar novos estilos ou comportamentos, você pode incluí-los como classes Tailwind adicionais no HTML, ou retornar regras customizadas no campo "css" e "js" (estes serão anexados globalmente).
-4. Mantenha os textos originais, logomarcas, mídias e imagens originais da seção, a menos que o pedido diga explicitamente para trocá-los.
+==============================================================================
+ATENÇÃO E REGRAS RÍGIDAS DE EDIÇÃO CIRÚRGICA
+==============================================================================
+1. Retorne um objeto JSON estrito no formato:
+   {
+     "html": "...",
+     "css": "...",
+     "js": "...",
+     "explanation": "..."
+   }
+   Onde o campo "html" DEVE conter APENAS o código HTML atualizado desta seção isolada. Não retorne a página inteira nem containers wrappers externos da página.
+2. Inicie o HTML retornado pela tag raiz da própria seção (ex: <section ...>, <header ...>, <footer ...> ou <div ...>) mantendo suas classes ID e estrutura base, aplicando as alterações solicitadas.
+3. Não remova logos, links oficiais ou textos existentes, a menos que o pedido do usuário solicite expressamente a substituição.
+4. Se o usuário pedir novos efeitos visuais ou interatividade, aplique classes Tailwind adicionais e retorne as regras CSS ou scripts JS correspondentes nos campos "css" e "js" (que serão mesclados ao projeto).
 
 PEDIDO DE ALTERAÇÃO DO USUÁRIO PARA ESTA SEÇÃO:
 """
 ${prompt}
 """
 
+${brandDirective}
+
 CÓDIGO HTML ATUAL DESTA SEÇÃO:
 """
 ${targetSectionHtml}
 """
 
-CONTEXTO GERAL DO DESIGN SYSTEM E DEMAIS PARTES DA PÁGINA (Use apenas para referência de cores, estilos, fontes e design global):
-- HTML Completo:
+CONTEXTO DE DESIGN SYSTEM E ESTILOS GLOBAIS DA PÁGINA (Use como referência de cores, fontes e padrões):
+- HTML Completo da Página:
 """
 ${pageHtml}
 """
-- CSS Atual:
+- CSS Global da Página:
 """
 ${page.css || ''}
 """
@@ -923,7 +1015,9 @@ ${page.css || ''}
           js: page.js || ''
         };
 
-        result = await executeAIRequest(prompt, context, {
+        const fullPrompt = `${prompt}\n${brandDirective}`;
+
+        result = await executeAIRequest(fullPrompt, context, {
           ...options,
           apiKey: resolvedApiKey,
           onProgress: (info) => {

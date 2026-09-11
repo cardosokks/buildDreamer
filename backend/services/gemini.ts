@@ -30,7 +30,7 @@ export function extractHtmlFromRawText(text: string): string {
   let cleaned = text.trim();
 
   // 1. Tentar extrair do bloco de código markdown ```html ... ``` ou ```xml ... ``` ou ``` ... ```
-  const codeBlockRegex = /```(?:html|xml|javascript|json)?\s*([\s\S]*?)\s*```/i;
+  const codeBlockRegex = /```(?:html|xml|javascript|json)?\s*([\s\S]*?)(?:```|$)/i;
   const match = cleaned.match(codeBlockRegex);
   if (match && match[1] && match[1].trim()) {
     cleaned = match[1].trim();
@@ -38,11 +38,13 @@ export function extractHtmlFromRawText(text: string): string {
 
   // 2. Se ainda contiver texto conversacional antes de uma tag HTML (ex: "Aqui está: <div..."), extrair a partir da primeira tag HTML
   const firstTag = cleaned.indexOf('<');
-  const lastTag = cleaned.lastIndexOf('>');
+  let lastTag = cleaned.lastIndexOf('>');
+  if (lastTag === -1 && firstTag !== -1) lastTag = cleaned.length - 1; // Fallback se estiver truncado sem fechar
+  
   if (firstTag !== -1 && lastTag !== -1 && lastTag > firstTag) {
     const candidate = cleaned.slice(firstTag, lastTag + 1).trim();
-    // Validar se o candidato começa com tag HTML ou possui tags válidas
-    if (candidate.startsWith('<') && candidate.endsWith('>')) {
+    // Validar se o candidato começa com tag HTML
+    if (candidate.startsWith('<')) {
       cleaned = candidate;
     }
   }
@@ -60,7 +62,7 @@ export function cleanHtmlExtractAssets(rawHtml: string, existingCss = '', existi
   let extractedJs = existingJs ? existingJs.trim() : '';
 
   // Extrair e remover tags <style> do HTML
-  const styleExtractRegex = /<style\b[^>]*>([\s\S]*?)<\/style>/gi;
+  const styleExtractRegex = /<style\b[^>]*>([\s\S]*?)(?:<\/style>|$)/gi;
   let styleMatch;
   while ((styleMatch = styleExtractRegex.exec(extractedHtml)) !== null) {
     if (styleMatch[1] && styleMatch[1].trim()) {
@@ -70,10 +72,10 @@ export function cleanHtmlExtractAssets(rawHtml: string, existingCss = '', existi
       }
     }
   }
-  cleanHtml = cleanHtml.replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '').trim();
+  cleanHtml = cleanHtml.replace(/<style\b[^>]*>[\s\S]*?(?:<\/style>|$)/gi, '').trim();
 
   // Extrair e remover tags <script> inline do HTML (preserva CDNs com src=)
-  const scriptExtractRegex = /<script\b(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi;
+  const scriptExtractRegex = /<script\b(?![^>]*\bsrc=)[^>]*>([\s\S]*?)(?:<\/script>|$)/gi;
   let scriptMatch;
   while ((scriptMatch = scriptExtractRegex.exec(extractedHtml)) !== null) {
     if (scriptMatch[1] && scriptMatch[1].trim()) {
@@ -83,10 +85,10 @@ export function cleanHtmlExtractAssets(rawHtml: string, existingCss = '', existi
       }
     }
   }
-  cleanHtml = cleanHtml.replace(/<script\b(?![^>]*\bsrc=)[^>]*>[\s\S]*?<\/script>/gi, '').trim();
+  cleanHtml = cleanHtml.replace(/<script\b(?![^>]*\bsrc=)[^>]*>[\s\S]*?(?:<\/script>|$)/gi, '').trim();
 
   // Se o HTML contiver <body>, extrai apenas o conteúdo do corpo
-  const bodyMatch = cleanHtml.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+  const bodyMatch = cleanHtml.match(/<body[^>]*>([\s\S]*?)(?:<\/body>|$)/i);
   if (bodyMatch) {
     cleanHtml = bodyMatch[1].trim();
   }
@@ -96,7 +98,7 @@ export function cleanHtmlExtractAssets(rawHtml: string, existingCss = '', existi
     .replace(/<!DOCTYPE[^>]*>/gi, '')
     .replace(/<html[^>]*>/gi, '')
     .replace(/<\/html>/gi, '')
-    .replace(/<head\b[^>]*>[\s\S]*?<\/head>/gi, '')
+    .replace(/<head\b[^>]*>[\s\S]*?(?:<\/head>|$)/gi, '')
     .trim();
 
   return {

@@ -47,6 +47,10 @@ interface MockProject {
   status: string;
   domain?: string | null;
   favicon?: string | null;
+  logoUrl?: string | null;
+  contacts?: string | null;
+  email?: string | null;
+  colorPalette?: string | null;
   navbarHtml: string;
   footerHtml: string;
   createdAt: Date;
@@ -410,6 +414,10 @@ class InMemoryDatabase {
         status: data.status || 'development',
         domain: data.domain || null,
         favicon: data.favicon || null,
+        logoUrl: data.logoUrl || null,
+        contacts: data.contacts || null,
+        email: data.email || null,
+        colorPalette: data.colorPalette || null,
         navbarHtml: data.navbarHtml || '',
         footerHtml: data.footerHtml || '',
         createdAt: now,

@@ -37,7 +37,8 @@ import {
   X,
   ShieldCheck,
   Plus,
-  Palette
+  Palette,
+  Settings
 } from 'lucide-react';
 import { CreatePageModal, PageCreationData } from './CreatePageModal';
 import { getPageStarterTemplate } from '../../lib/pageTemplates';
@@ -51,6 +52,7 @@ import { ChatPanel } from '../../components/ChatPanel';
 import { SEOAuditModal } from './SEOAuditModal';
 import { ThemeSidebar } from './ThemeSidebar';
 import { CssSidebar } from './CssSidebar';
+import { ProjectSettingsSidebar } from './ProjectSettingsSidebar';
 import { API_URL, safeJson } from '../../config';
 import { useNotification } from '../../context/NotificationContext';
 
@@ -77,6 +79,10 @@ interface Page {
 interface ProjectData {
   id: string;
   name: string;
+  logoUrl?: string;
+  contacts?: string;
+  email?: string;
+  colorPalette?: string;
   pages: Page[];
 }
 
@@ -121,7 +127,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
   const [mediaGalleryTarget, setMediaGalleryTarget] = useState<'src' | 'ogImage' | null>(null);
 
   // Layout Panels (Persistência no LocalStorage)
-  const [activeLeftSidebar, setActiveLeftSidebar] = useState<'dom' | 'media' | 'theme' | 'css' | null>(() => {
+  const [activeLeftSidebar, setActiveLeftSidebar] = useState<'dom' | 'media' | 'theme' | 'css' | 'settings' | null>(() => {
     try {
       const stored = localStorage.getItem('vb_active_left_sidebar');
       return stored !== null ? JSON.parse(stored) : 'dom';
@@ -1700,6 +1706,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
         {/* Left Sidebar 2 (Banco de Imagens & Uploads) */}
         {activeLeftSidebar === 'media' && (
           <MediaLibrarySidebar
+            projectId={projectId}
             onClose={() => {
               setActiveLeftSidebar(null);
               setMediaGalleryTarget(null);
@@ -1775,7 +1782,37 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
           />
         )}
 
-        {/* ─── Alternância de Sidebars Esquerdas (DOM, Mídia, Tema, CSS) ─── */}
+        {/* Left Sidebar 5 (Configurações do Projeto e Brand Variables) */}
+        {activeLeftSidebar === 'settings' && project && (
+          <ProjectSettingsSidebar
+            project={project}
+            onSave={async (updatedFields) => {
+              try {
+                const res = await fetch(`${API_URL}/api/projects/${projectId}`, {
+                  method: 'PUT',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                  },
+                  body: JSON.stringify(updatedFields)
+                });
+                if (!res.ok) throw new Error('Falha ao atualizar configurações do projeto');
+                const updated = await res.json();
+                setProject(prev => prev ? {
+                  ...prev,
+                  ...updated
+                } : null);
+                notify.success('Configurações salvas com sucesso! A IA agora usará essas diretrizes.', 'Sucesso');
+              } catch (err: any) {
+                notify.error(err.message || 'Erro ao salvar configurações');
+                throw err;
+              }
+            }}
+            onClose={() => setActiveLeftSidebar(null)}
+          />
+        )}
+
+        {/* ─── Alternância de Sidebars Esquerdas (DOM, Mídia, Tema, CSS, Settings) ─── */}
         <div className="relative z-20 self-start mt-4 flex flex-col items-center gap-2 shrink-0">
           {/* Aba 1: DOM */}
           <button
@@ -1847,6 +1884,24 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
           >
             <Code2 className="w-3 h-3" />
             <span className="text-[8px] font-bold tracking-widest uppercase" style={{ writingMode: 'vertical-rl', letterSpacing: '0.15em' }}>CSS</span>
+          </button>
+
+          {/* Aba 5: Configurações */}
+          <button
+            onClick={() => setActiveLeftSidebar(prev => prev === 'settings' ? null : 'settings')}
+            title={activeLeftSidebar === 'settings' ? 'Minimizar configurações do site' : 'Abrir configurações globais e paleta da IA (Configs)'}
+            className={`
+              flex flex-col items-center justify-center gap-1
+              w-6 transition-all duration-200 cursor-pointer select-none rounded-r-xl
+              border-y border-r py-3 shrink-0
+              ${activeLeftSidebar === 'settings'
+                ? 'bg-gradient-to-b from-purple-600 to-indigo-800 border-purple-500/60 text-purple-200 shadow-[2px_0_12px_rgba(168,85,247,0.3)]'
+                : 'bg-slate-900/80 border-slate-800 text-slate-500 hover:text-purple-300 hover:bg-slate-800 hover:border-purple-500/40'
+              }
+            `}
+          >
+            <Settings className="w-3 h-3" />
+            <span className="text-[8px] font-bold tracking-widest uppercase" style={{ writingMode: 'vertical-rl', letterSpacing: '0.15em' }}>CONFIGS</span>
           </button>
         </div>
         {/* Central Interactive Sandbox Canvas */}
@@ -1962,6 +2017,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
               />
             )}
             <PropertiesPanel
+              projectId={projectId}
               selectedSelector={selectedSelector}
               selectedPath={selectedPath}
               selectedStyles={selectedStyles}

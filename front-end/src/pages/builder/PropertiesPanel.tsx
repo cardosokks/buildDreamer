@@ -88,6 +88,7 @@ interface PropertiesPanelProps {
   };
   onPageSeoChange?: (key: 'title' | 'description' | 'ogImage', value: string) => void;
   onOpenMediaGallery?: (target?: 'src' | 'ogImage') => void;
+  projectId?: string;
 }
 
 const Section: React.FC<{ title: string; icon: React.ReactNode; children: React.ReactNode; defaultOpen?: boolean }> = ({
@@ -219,6 +220,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   pageSeo,
   onPageSeoChange,
   onOpenMediaGallery,
+  projectId,
 }) => {
   const notify = useNotification();
   const [panelTab, setPanelTab] = useState<'layers' | 'styles' | 'attrs' | 'seo'>('layers');
@@ -411,7 +413,8 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         body: JSON.stringify({
           name: file.name,
           mimeType: file.type,
-          base64Data
+          base64Data,
+          projectId: projectId || null
         })
       });
 
