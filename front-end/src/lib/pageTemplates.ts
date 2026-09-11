@@ -1,12 +1,122 @@
 /**
- * Starter Templates para Páginas do Website Builder (HTML + CSS)
+ * Starter Templates para Páginas do Website Builder (HTML + CSS + JS)
  */
 
 export interface StarterTemplate {
   html: string;
-  css?: string;
-  js?: string;
+  css: string;
+  js: string;
 }
+
+const COMMON_BASE_CSS = `/* Animações e Estilos Globais do Template */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(15px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulseGlow {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50% { opacity: 0.8; transform: scale(1.05); }
+}
+
+@keyframes floatSmooth {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-8px); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-float {
+  animation: floatSmooth 4s ease-in-out infinite;
+}
+
+.pulse-glow {
+  animation: pulseGlow 3s ease-in-out infinite;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #090d16;
+}
+::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+`;
+
+const COMMON_BASE_JS = `// Interatividade Global e Inicializações
+(function() {
+  // 1. Rolagem Suave para Links Internos (#)
+  document.addEventListener('click', function(e) {
+    const anchor = e.target.closest('a[href^="#"]');
+    if (anchor) {
+      const targetId = anchor.getAttribute('href');
+      if (targetId && targetId !== '#') {
+        const targetEl = document.querySelector(targetId);
+        if (targetEl) {
+          e.preventDefault();
+          targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }
+    }
+  });
+
+  // 2. Interatividade de Formulários com Feedback
+  const forms = document.querySelectorAll('form');
+  forms.forEach(form => {
+    if (form.getAttribute('data-bound')) return;
+    form.setAttribute('data-bound', 'true');
+    form.addEventListener('submit', function(e) {
+      e.preventDefault();
+      const btn = form.querySelector('button[type="submit"]');
+      const originalText = btn ? btn.innerHTML : '';
+      
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '⏳ Enviando...';
+      }
+
+      setTimeout(() => {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = '✅ Mensagem Enviada!';
+          btn.classList.add('bg-emerald-600');
+        }
+        form.reset();
+        setTimeout(() => {
+          if (btn) btn.innerHTML = originalText;
+        }, 3000);
+      }, 1000);
+    });
+  });
+
+  // 3. Efeito Parallax/Revelação em Elementos de Tela
+  if ('IntersectionObserver' in window) {
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('animate-fade-in');
+          observer.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.1 });
+
+    document.querySelectorAll('section, .p-6, .grid > div').forEach(el => observer.observe(el));
+  }
+})();
+`;
 
 export function getPageStarterTemplate(
   templateType: string,
@@ -21,7 +131,7 @@ export function getPageStarterTemplate(
         html: `
 <section class="relative py-20 px-6 bg-slate-950 text-white overflow-hidden">
   <div class="max-w-6xl mx-auto text-center space-y-6">
-    <span class="inline-block px-3 py-1 bg-purple-500/10 border border-purple-500/30 text-purple-400 rounded-full text-xs font-semibold uppercase tracking-wider">
+    <span class="inline-block px-3 py-1 bg-purple-500/10 border border-purple-500/30 text-purple-400 rounded-full text-xs font-semibold uppercase tracking-wider pulse-glow">
       Lançamento Exclusivo
     </span>
     <h1 class="text-4xl md:text-6xl font-extrabold tracking-tight leading-tight">
@@ -49,20 +159,20 @@ export function getPageStarterTemplate(
     </div>
     
     <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-      <div class="p-6 bg-slate-950 border border-slate-800 rounded-2xl space-y-3 hover:border-purple-500/40 transition-all">
-        <div class="w-12 h-12 bg-purple-950/60 border border-purple-500/30 rounded-xl flex items-center justify-center text-purple-400 font-bold text-xl">⚡</div>
+      <div class="p-6 bg-slate-950 border border-slate-800 rounded-2xl space-y-3 hover:border-purple-500/40 transition-all transform hover:-translate-y-1">
+        <div class="w-12 h-12 bg-purple-950/60 border border-purple-500/30 rounded-xl flex items-center justify-center text-purple-400 font-bold text-xl animate-float">⚡</div>
         <h3 class="text-lg font-bold text-white">Alta Velocidade</h3>
         <p class="text-xs text-slate-400 leading-relaxed">Páginas ultra-otimizadas com tempo de carregamento inferior a 1 segundo para o cliente final.</p>
       </div>
 
-      <div class="p-6 bg-slate-950 border border-slate-800 rounded-2xl space-y-3 hover:border-pink-500/40 transition-all">
-        <div class="w-12 h-12 bg-pink-950/60 border border-pink-500/30 rounded-xl flex items-center justify-center text-pink-400 font-bold text-xl">🎯</div>
+      <div class="p-6 bg-slate-950 border border-slate-800 rounded-2xl space-y-3 hover:border-pink-500/40 transition-all transform hover:-translate-y-1">
+        <div class="w-12 h-12 bg-pink-950/60 border border-pink-500/30 rounded-xl flex items-center justify-center text-pink-400 font-bold text-xl animate-float">🎯</div>
         <h3 class="text-lg font-bold text-white">Foco em Conversão</h3>
         <p class="text-xs text-slate-400 leading-relaxed">Layout projetado estrategicamente com gatilhos de vendas e formulários interativos.</p>
       </div>
 
-      <div class="p-6 bg-slate-950 border border-slate-800 rounded-2xl space-y-3 hover:border-indigo-500/40 transition-all">
-        <div class="w-12 h-12 bg-indigo-950/60 border border-indigo-500/30 rounded-xl flex items-center justify-center text-indigo-400 font-bold text-xl">📱</div>
+      <div class="p-6 bg-slate-950 border border-slate-800 rounded-2xl space-y-3 hover:border-indigo-500/40 transition-all transform hover:-translate-y-1">
+        <div class="w-12 h-12 bg-indigo-950/60 border border-indigo-500/30 rounded-xl flex items-center justify-center text-indigo-400 font-bold text-xl animate-float">📱</div>
         <h3 class="text-lg font-bold text-white">100% Responsivo</h3>
         <p class="text-xs text-slate-400 leading-relaxed">Navegação perfeita adaptada para celulares, tablets, notebooks e telas ultra-wide.</p>
       </div>
@@ -70,7 +180,8 @@ export function getPageStarterTemplate(
   </div>
 </section>
         `,
-        css: `/* Estilos customizados para ${safeName} */`
+        css: `${COMMON_BASE_CSS}\n/* Custom Landing Page Styles */\n.hero-gradient {\n  background: radial-gradient(circle at 50% 0%, rgba(168, 85, 247, 0.15) 0%, transparent 70%);\n}`,
+        js: `${COMMON_BASE_JS}\n// Landing Page Custom Interactivity`
       };
 
     case 'about':
@@ -99,19 +210,19 @@ export function getPageStarterTemplate(
         </p>
       </div>
       <div class="grid grid-cols-2 gap-4 text-center">
-        <div class="p-5 bg-slate-950 rounded-2xl border border-slate-800">
-          <span class="text-3xl font-extrabold text-indigo-400">+500</span>
+        <div class="p-5 bg-slate-950 rounded-2xl border border-slate-800 transform hover:scale-105 transition-all">
+          <span class="text-3xl font-extrabold text-indigo-400 counter-stat" data-target="500">+500</span>
           <span class="block text-[11px] text-slate-400 mt-1">Clientes Atendidos</span>
         </div>
-        <div class="p-5 bg-slate-950 rounded-2xl border border-slate-800">
+        <div class="p-5 bg-slate-950 rounded-2xl border border-slate-800 transform hover:scale-105 transition-all">
           <span class="text-3xl font-extrabold text-purple-400">99.8%</span>
           <span class="block text-[11px] text-slate-400 mt-1">Satisfação</span>
         </div>
-        <div class="p-5 bg-slate-950 rounded-2xl border border-slate-800">
+        <div class="p-5 bg-slate-950 rounded-2xl border border-slate-800 transform hover:scale-105 transition-all">
           <span class="text-3xl font-extrabold text-pink-400">24/7</span>
           <span class="block text-[11px] text-slate-400 mt-1">Suporte Dedicado</span>
         </div>
-        <div class="p-5 bg-slate-950 rounded-2xl border border-slate-800">
+        <div class="p-5 bg-slate-950 rounded-2xl border border-slate-800 transform hover:scale-105 transition-all">
           <span class="text-3xl font-extrabold text-emerald-400">10+</span>
           <span class="block text-[11px] text-slate-400 mt-1">Anos de Experiência</span>
         </div>
@@ -120,7 +231,8 @@ export function getPageStarterTemplate(
   </div>
 </section>
         `,
-        css: `/* Estilos de Sobre Nós */`
+        css: `${COMMON_BASE_CSS}\n/* Custom About Styles */`,
+        js: `${COMMON_BASE_JS}\n// About Page Interactivity`
       };
 
     case 'services':
@@ -137,9 +249,9 @@ export function getPageStarterTemplate(
     </div>
 
     <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-      <div class="p-6 bg-slate-900 border border-slate-800 rounded-3xl space-y-4 hover:border-cyan-500/40 transition-all flex flex-col justify-between">
+      <div class="p-6 bg-slate-900 border border-slate-800 rounded-3xl space-y-4 hover:border-cyan-500/40 transition-all flex flex-col justify-between transform hover:-translate-y-1">
         <div class="space-y-3">
-          <span class="text-2xl">💼</span>
+          <span class="text-2xl animate-float inline-block">💼</span>
           <h3 class="text-xl font-bold text-white">Consultoria Estratégica</h3>
           <p class="text-xs text-slate-400 leading-relaxed">Mapeamento de gargalos, diagnóstico de processos e plano de ação estruturado para otimizar operações.</p>
         </div>
@@ -148,12 +260,12 @@ export function getPageStarterTemplate(
         </a>
       </div>
 
-      <div class="p-6 bg-slate-900 border border-cyan-500/40 rounded-3xl space-y-4 shadow-xl shadow-cyan-950/30 flex flex-col justify-between relative">
+      <div class="p-6 bg-slate-900 border border-cyan-500/40 rounded-3xl space-y-4 shadow-xl shadow-cyan-950/30 flex flex-col justify-between relative transform hover:-translate-y-1">
         <span class="absolute -top-3 right-6 bg-gradient-to-r from-cyan-500 to-purple-500 text-slate-950 text-[10px] font-extrabold px-3 py-0.5 rounded-full uppercase">
           Mais Procurado
         </span>
         <div class="space-y-3">
-          <span class="text-2xl">🚀</span>
+          <span class="text-2xl animate-float inline-block">🚀</span>
           <h3 class="text-xl font-bold text-white">Desenvolvimento Sob Medida</h3>
           <p class="text-xs text-slate-300 leading-relaxed">Criação de sistemas web, landing pages e integrações exclusivas focadas em performance e segurança.</p>
         </div>
@@ -162,9 +274,9 @@ export function getPageStarterTemplate(
         </a>
       </div>
 
-      <div class="p-6 bg-slate-900 border border-slate-800 rounded-3xl space-y-4 hover:border-cyan-500/40 transition-all flex flex-col justify-between">
+      <div class="p-6 bg-slate-900 border border-slate-800 rounded-3xl space-y-4 hover:border-cyan-500/40 transition-all flex flex-col justify-between transform hover:-translate-y-1">
         <div class="space-y-3">
-          <span class="text-2xl">📈</span>
+          <span class="text-2xl animate-float inline-block">📈</span>
           <h3 class="text-xl font-bold text-white">Gestão & Manutenção</h3>
           <p class="text-xs text-slate-400 leading-relaxed">Acompanhamento contínuo, backups automatizados, relatórios de dados e suporte prioritário.</p>
         </div>
@@ -176,7 +288,8 @@ export function getPageStarterTemplate(
   </div>
 </section>
         `,
-        css: `/* Estilos de Serviços */`
+        css: `${COMMON_BASE_CSS}\n/* Custom Services Styles */`,
+        js: `${COMMON_BASE_JS}\n// Services Page Interactivity`
       };
 
     case 'contact':
@@ -223,19 +336,19 @@ export function getPageStarterTemplate(
         </div>
       </div>
 
-      <form class="md:col-span-7 bg-slate-900 p-6 rounded-3xl border border-slate-800 space-y-4" onsubmit="event.preventDefault(); alert('Mensagem enviada com sucesso!');">
+      <form class="md:col-span-7 bg-slate-900 p-6 rounded-3xl border border-slate-800 space-y-4">
         <h3 class="text-lg font-bold text-white">Envie sua Mensagem</h3>
         <div>
           <label class="block text-xs font-semibold text-slate-300 mb-1">Seu Nome</label>
-          <input type="text" required placeholder="Digite seu nome completo" class="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500" />
+          <input type="text" required placeholder="Digite seu nome completo" class="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500 transition-colors" />
         </div>
         <div>
           <label class="block text-xs font-semibold text-slate-300 mb-1">Seu E-mail ou WhatsApp</label>
-          <input type="text" required placeholder="exemplo@email.com ou (00) 99999-9999" class="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500" />
+          <input type="text" required placeholder="exemplo@email.com ou (00) 99999-9999" class="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500 transition-colors" />
         </div>
         <div>
           <label class="block text-xs font-semibold text-slate-300 mb-1">Como podemos ajudar?</label>
-          <textarea rows="4" required placeholder="Escreva os detalhes da sua solicitação..." class="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500"></textarea>
+          <textarea rows="4" required placeholder="Escreva os detalhes da sua solicitação..." class="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500 transition-colors"></textarea>
         </div>
         <button type="submit" class="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs shadow-lg shadow-emerald-600/30 transition-all cursor-pointer">
           Enviar Mensagem
@@ -245,7 +358,8 @@ export function getPageStarterTemplate(
   </div>
 </section>
         `,
-        css: `/* Estilos de Contato */`
+        css: `${COMMON_BASE_CSS}\n/* Custom Contact Styles */`,
+        js: `${COMMON_BASE_JS}\n// Contact Form Handlers`
       };
 
     case 'pricing':
@@ -262,7 +376,7 @@ export function getPageStarterTemplate(
     </div>
 
     <div class="grid grid-cols-1 md:grid-cols-3 gap-6 items-stretch">
-      <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 flex flex-col justify-between space-y-6">
+      <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 flex flex-col justify-between space-y-6 hover:border-slate-700 transition-all">
         <div class="space-y-4">
           <h3 class="text-lg font-bold text-white">Básico</h3>
           <div class="text-3xl font-extrabold text-amber-400">R$ 99 <span class="text-xs font-normal text-slate-400">/mês</span></div>
@@ -276,7 +390,7 @@ export function getPageStarterTemplate(
         <a href="#contato" class="w-full py-2.5 text-center bg-slate-800 hover:bg-slate-750 text-white rounded-xl text-xs font-bold transition-all">Assinar Básico</a>
       </div>
 
-      <div class="bg-slate-900 border border-amber-500/50 rounded-3xl p-6 flex flex-col justify-between space-y-6 shadow-xl shadow-amber-950/30 relative">
+      <div class="bg-slate-900 border border-amber-500/50 rounded-3xl p-6 flex flex-col justify-between space-y-6 shadow-xl shadow-amber-950/30 relative transform hover:-translate-y-1 transition-all">
         <span class="absolute -top-3 left-1/2 -translate-x-1/2 bg-amber-500 text-slate-950 font-extrabold text-[10px] px-3 py-0.5 rounded-full uppercase">Mais Recomendado</span>
         <div class="space-y-4">
           <h3 class="text-lg font-bold text-white">Profissional</h3>
@@ -291,7 +405,7 @@ export function getPageStarterTemplate(
         <a href="#contato" class="w-full py-2.5 text-center bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold rounded-xl text-xs transition-all shadow-md">Começar Agora</a>
       </div>
 
-      <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 flex flex-col justify-between space-y-6">
+      <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 flex flex-col justify-between space-y-6 hover:border-slate-700 transition-all">
         <div class="space-y-4">
           <h3 class="text-lg font-bold text-white">Enterprise</h3>
           <div class="text-3xl font-extrabold text-amber-400">Personalizado</div>
@@ -308,7 +422,8 @@ export function getPageStarterTemplate(
   </div>
 </section>
         `,
-        css: `/* Estilos de Tabela de Preços */`
+        css: `${COMMON_BASE_CSS}\n/* Custom Pricing Styles */`,
+        js: `${COMMON_BASE_JS}\n// Pricing Page Interactivity`
       };
 
     case 'portfolio':
@@ -325,24 +440,24 @@ export function getPageStarterTemplate(
     </div>
 
     <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-      <div class="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden hover:border-pink-500/40 transition-all group">
-        <div class="h-48 bg-gradient-to-tr from-purple-900 to-slate-900 flex items-center justify-center text-4xl">💻</div>
+      <div class="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden hover:border-pink-500/40 transition-all group transform hover:-translate-y-1">
+        <div class="h-48 bg-gradient-to-tr from-purple-900 to-slate-900 flex items-center justify-center text-4xl group-hover:scale-110 transition-transform">💻</div>
         <div class="p-5 space-y-2">
           <h3 class="font-bold text-white text-base">Portal E-commerce Premium</h3>
           <p class="text-xs text-slate-400">Plataforma de alta performance com checkout otimizado.</p>
         </div>
       </div>
 
-      <div class="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden hover:border-pink-500/40 transition-all group">
-        <div class="h-48 bg-gradient-to-tr from-pink-900 to-slate-900 flex items-center justify-center text-4xl">📱</div>
+      <div class="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden hover:border-pink-500/40 transition-all group transform hover:-translate-y-1">
+        <div class="h-48 bg-gradient-to-tr from-pink-900 to-slate-900 flex items-center justify-center text-4xl group-hover:scale-110 transition-transform">📱</div>
         <div class="p-5 space-y-2">
           <h3 class="font-bold text-white text-base">App Institucional Médico</h3>
           <p class="text-xs text-slate-400">Sistema de agendamento online integrado com prontuários.</p>
         </div>
       </div>
 
-      <div class="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden hover:border-pink-500/40 transition-all group">
-        <div class="h-48 bg-gradient-to-tr from-indigo-900 to-slate-900 flex items-center justify-center text-4xl">🏢</div>
+      <div class="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden hover:border-pink-500/40 transition-all group transform hover:-translate-y-1">
+        <div class="h-48 bg-gradient-to-tr from-indigo-900 to-slate-900 flex items-center justify-center text-4xl group-hover:scale-110 transition-transform">🏢</div>
         <div class="p-5 space-y-2">
           <h3 class="font-bold text-white text-base">Landing Page de Imobiliária</h3>
           <p class="text-xs text-slate-400">Aumento de +180% na captura de leads qualificados.</p>
@@ -352,7 +467,8 @@ export function getPageStarterTemplate(
   </div>
 </section>
         `,
-        css: `/* Estilos de Portfólio */`
+        css: `${COMMON_BASE_CSS}\n/* Custom Portfolio Styles */`,
+        js: `${COMMON_BASE_JS}\n// Portfolio Interactivity`
       };
 
     case 'blank':
@@ -361,17 +477,19 @@ export function getPageStarterTemplate(
         html: `
 <section class="py-20 px-6 bg-slate-950 text-white min-h-[60vh] flex flex-col items-center justify-center text-center">
   <div class="max-w-xl mx-auto space-y-4">
-    <div class="w-16 h-16 mx-auto bg-purple-950/60 border border-purple-500/30 rounded-2xl flex items-center justify-center text-purple-400 font-bold text-2xl">
+    <div class="w-16 h-16 mx-auto bg-purple-950/60 border border-purple-500/30 rounded-2xl flex items-center justify-center text-purple-400 font-bold text-2xl animate-float">
       ✦
     </div>
     <h1 class="text-3xl font-bold text-white">${safeName}</h1>
     <p class="text-xs text-slate-400 leading-relaxed">
-      Esta é a sua nova página em branco. Arraste blocos e componentes da barra lateral ou utilize o assistente de IA para construir seu conteúdo.
+      Esta é a sua nova página. Arraste blocos e componentes da barra lateral ou utilize o assistente de IA para construir seu conteúdo com animações e JS interativo.
     </p>
   </div>
 </section>
         `,
-        css: `/* Estilos de ${safeName} */`
+        css: `${COMMON_BASE_CSS}\n/* Custom Styles para ${safeName} */`,
+        js: `${COMMON_BASE_JS}\n// Custom JS para ${safeName}`
       };
   }
 }
+

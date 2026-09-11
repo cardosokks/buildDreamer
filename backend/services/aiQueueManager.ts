@@ -381,30 +381,8 @@ Sua missão é criar a PÁGINA INICIAL (HOME) de altíssimo impacto e nível int
 DADOS DO PROJETO:
 - Nome do Negócio: ${resolvedBusinessName}
 - Segmento / Ramo de Atuação: ${resolvedSegment}
-- Estilo Visual Solicitado: ${resolvedStyle || 'Livre & Exclusivo por IA'} | ${resolvedPalette || 'Sintetizada por IA'}
+- Estilo Visual & Paleta: ${resolvedStyle} | ${resolvedPalette}
 - Instruções Específicas do Usuário: ${prompt}
-
-DIRETRIZES CRÍTICAS DE ESTILOS CSS POR SEGMENTO (PROIBIDO TEMAS HARDCODED OU REPETITIVOS):
-1. INJEÇÃO DE ESTILOS CSS BASEADOS INTEIRAMENTE NO SEGMENTO "${resolvedSegment}":
-   - É ESTRITAMENTE PROIBIDO reutilizar variáveis hardcoded estáticas ou cores padrão (como bg-slate-900 engessado em todos os sites)!
-   - Toda a identidade estética (cores de fundo, cartões, realces glow, gradientes, bordas e tipografia do Google Fonts) DEVE ser sintetizada sob medida com base no segmento "${resolvedSegment}".
-   - No início do campo "css", declare variáveis nativas no bloco :root especificamente para a marca "${resolvedBusinessName}":
-     :root {
-       --brand-primary: [Cor primária gerada para o nicho de ${resolvedSegment}];
-       --brand-accent: [Cor de acento/glow para botões e destaques do nicho];
-       --brand-bg: [Cor de fundo adequada ao segmento - clara, escura ou de tom pastel/terroso];
-       --brand-card: [Cor de fundo de cartões e painéis com glassmorphism do nicho];
-       --brand-text: [Cor dos textos principais];
-       --brand-border: [Cor das bordas com transparência adequada];
-       --font-heading: [Nome da fonte do Google Fonts selecionada para títulos do segmento];
-       --font-body: [Nome da fonte do Google Fonts selecionada para leitura do segmento];
-     }
-2. ADAPTAÇÃO VISUAL AO PÚBLICO DO SEGMENTO:
-   - Se Saúde/Médico/Clínica: cores assépticas (branco, ciano, azul-royal, verde-menta ou rosé), tipografia limpa humanista.
-   - Se Tecnologia/SaaS: cores futuristas (obsidian, indigo/ciano néon, violeta), tipografia geométrica em Bento Grid.
-   - Se Gastronomia/Artesanal: cores quentes (terracota, creme, café, verde-oliva), tipografia serifada aconchegante.
-   - Se Barbearia/Balada/Luxo: cores noturnas (obsidian, âmbar, dourado, vidro escuro), tipografia imponente.
-   - Se Esportes/Academia: alto contraste (preto profundo, amarelo-limão/néon), tipografia display em caixa alta.
 
 ROTAS DE NAVEGAÇÃO DO SITE (OBRIGATÓRIO incluir na Navbar e no Footer):
 ${navLinksDoc}
@@ -445,7 +423,7 @@ ESTRUTURA COMPLETA E OBRIGATÓRIA DA PÁGINA INICIAL:
 REGRAS TÉCNICAS E ARQUITETURA:
 - O retorno DEVE ser um objeto JSON estrito com as chaves: "html", "css", "js", "explanation".
 - HTML: apenas classes Tailwind semânticas. NUNCA coloque tags <style> ou <script> dentro do HTML.
-- CSS: defina o bloco :root no início com as variáveis da marca do segmento, mais regras extras de animação (@keyframes, glows, custom scrollbar).
+- CSS: regras extras de animação (@keyframes, glows, custom scrollbar).
 - JS: código puro com handlers de clique para abrir/fechar o menu mobile, abrir/fechar os accordions do FAQ, validação de envio de formulário com feedback visual, e contadores animados de números.
 `;
 
@@ -586,22 +564,14 @@ Desenvolva uma página rica, altamente detalhada e relevante para "${sub.name}",
 Você é o Arquiteto Frontend Líder do site "${resolvedBusinessName}".
 Sua tarefa é gerar o código completo da subpágina "${sub.name}" (slug: ${sub.slug}).
 
-ESTILO VISUAL & PALETA DO PROJETO:
+ESTILO VISUAL & PALETA:
 ${resolvedStyle} | ${resolvedPalette}
 
-CSS DA PÁGINA HOME (PRINCIPAL) - REUTILIZE TODAS AS VARIÁVEIS E FONTES:
-Você DEVE utilizar exatamente as mesmas variáveis de estilo (:root) e fontes definidas para a Home. NÃO crie novas cores ou fontes!
-Aqui está o CSS original da Home para sua referência obrigatória:
-\`\`\`css
-${updatedHomeCss}
-\`\`\`
-
 DIRETRIZES DE IDENTIDADE VISUAL E REAPROVEITAMENTO:
-1. A subpágina DEVE utilizar integralmente o mesmo esquema visual e variáveis CSS (:root) do segmento "${resolvedSegment}" criados para a Home e listados no CSS acima.
-2. É ESTRITAMENTE PROIBIDO inventar uma nova paleta de cores ou redefinir as variáveis do :root com cores diferentes das que estão no bloco acima. Toda e qualquer classe customizada ou cor deve beber diretamente das variáveis como var(--brand-primary), var(--brand-accent), etc.
-3. NAVBAR E FOOTER:
+1. A subpágina DEVE manter a mesma identidade estética, tipografia e cores da Home.
+2. NAVBAR E FOOTER:
    - Utilize a mesma estrutura de Navbar e Footer da Home abaixo.
-   - Na Navbar, destaque o link "${sub.name}" com classe ativa (ex: text-[var(--brand-accent)] font-bold ou border-b-2 border-[var(--brand-accent)]).
+   - Na Navbar, destaque o link "${sub.name}" com classe ativa (ex: text-purple-400 font-bold ou border-b-2 border-purple-500).
 ${navbarHtml ? `\nNAVBAR BASE DA HOME:\n${navbarHtml}\n` : ''}
 ${footerHtml ? `\nFOOTER BASE DA HOME:\n${footerHtml}\n` : ''}
 
@@ -666,46 +636,7 @@ REGRAS MANDATÓRIAS:
       }
     }
 
-    // 5. PASSO DE AUDITORIA E SELO DE QUALIDADE POR IA (VERIFICAÇÃO DE INTEGRIDADE)
-    item.currentModel = 'Auditando integridade e selando qualidade das páginas com IA...';
-    try {
-      for (const pageItem of updatedPagesList) {
-        if (pageItem.html.toLowerCase().includes('lorem ipsum') || pageItem.html.includes('href="#"')) {
-          const auditFixPrompt = `
-Você é o Auditor de Qualidade Final do site "${resolvedBusinessName}".
-Revise e aperfeiçoe o código da página "${pageItem.name}".
-1. Substitua qualquer 'Lorem Ipsum' por texto real, persuasion e relevante sobre o negócio.
-2. Corrija links quebrados para apontar para rotas válidas de navegação (${navigationRoutes.map(r => r.href).join(', ')}).
-3. Mantenha a mesma estrutura HTML, Tailwind CSS e scripts intactos.
-          `;
-          const fixedRes = await executeAIRequest(
-            auditFixPrompt,
-            { html: pageItem.html, css: pageItem.css, js: pageItem.js },
-            {
-              provider: (aiProvider as any) || 'gemini',
-              apiKey: resolvedApiKey,
-              model: customModel,
-              registeredModels,
-              proxyUrl: customProxyUrl,
-              ollamaEndpoint,
-              lowSpecMode,
-              customSkills
-            }
-          );
-          if (fixedRes.html) {
-            pageItem.html = fixedRes.html;
-            await prisma.page.update({
-              where: { id: pageItem.id },
-              data: { html: fixedRes.html }
-            });
-          }
-        }
-      }
-    } catch (auditErr: any) {
-      console.warn('[AIQueueManager] Aviso na auditoria final:', auditErr.message);
-    }
-
-    // 6. REGISTRAR VERSÃO DE BACKUP COMPLETA
+    // 5. REGISTRAR VERSÃO DE BACKUP COMPLETA
     await prisma.version.create({
       data: {
         name: `Geração Completa Multi-páginas (${totalPages} pág)`,

@@ -4,8 +4,7 @@ datasource db {
 }
 
 generator client {
-  provider      = "prisma-client-js"
-  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+  provider = "prisma-client-js"
 }
 
 model User {
@@ -64,7 +63,6 @@ model Project {
   favicon      String?
   navbarHtml   String          @default("")
   footerHtml   String          @default("")
-  theme        String?         // Objeto JSON contendo fontes, cores, estilos globais compartilhados
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
   members      ProjectMember[]

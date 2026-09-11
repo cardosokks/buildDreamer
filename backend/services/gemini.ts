@@ -56,28 +56,34 @@ export function extractHtmlFromRawText(text: string): string {
 export function cleanHtmlExtractAssets(rawHtml: string, existingCss = '', existingJs = '') {
   const extractedHtml = extractHtmlFromRawText(rawHtml);
   let cleanHtml = extractedHtml;
-  let extractedCss = existingCss;
-  let extractedJs = existingJs;
+  let extractedCss = existingCss ? existingCss.trim() : '';
+  let extractedJs = existingJs ? existingJs.trim() : '';
 
   // Extrair e remover tags <style> do HTML
-  const styleRegex = /<style\b[^>]*>([\s\S]*?)<\/style>/gi;
+  const styleExtractRegex = /<style\b[^>]*>([\s\S]*?)<\/style>/gi;
   let styleMatch;
-  while ((styleMatch = styleRegex.exec(extractedHtml)) !== null) {
+  while ((styleMatch = styleExtractRegex.exec(extractedHtml)) !== null) {
     if (styleMatch[1] && styleMatch[1].trim()) {
-      extractedCss = `${extractedCss}\n${styleMatch[1].trim()}`.trim();
+      const code = styleMatch[1].trim();
+      if (!extractedCss.includes(code)) {
+        extractedCss = extractedCss ? `${extractedCss}\n\n${code}` : code;
+      }
     }
   }
-  cleanHtml = cleanHtml.replace(styleRegex, '').trim();
+  cleanHtml = cleanHtml.replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '').trim();
 
-  // Extrair e remover tags <script> do HTML (exceto CDNs externos como Tailwind)
-  const scriptRegex = /<script\b(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi;
+  // Extrair e remover tags <script> inline do HTML (preserva CDNs com src=)
+  const scriptExtractRegex = /<script\b(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi;
   let scriptMatch;
-  while ((scriptMatch = scriptRegex.exec(extractedHtml)) !== null) {
+  while ((scriptMatch = scriptExtractRegex.exec(extractedHtml)) !== null) {
     if (scriptMatch[1] && scriptMatch[1].trim()) {
-      extractedJs = `${extractedJs}\n${scriptMatch[1].trim()}`.trim();
+      const code = scriptMatch[1].trim();
+      if (!extractedJs.includes(code)) {
+        extractedJs = extractedJs ? `${extractedJs}\n\n${code}` : code;
+      }
     }
   }
-  cleanHtml = cleanHtml.replace(scriptRegex, '').trim();
+  cleanHtml = cleanHtml.replace(/<script\b(?![^>]*\bsrc=)[^>]*>[\s\S]*?<\/script>/gi, '').trim();
 
   // Se o HTML contiver <body>, extrai apenas o conteúdo do corpo
   const bodyMatch = cleanHtml.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
@@ -480,21 +486,11 @@ export const generateAIResponse = async (
        - O campo "html" deve conter APENAS a estrutura visual com classes Tailwind semânticas.
        - NUNCA inclua tags <style>...</style> dentro do campo "html". Todo CSS customizado, animações @keyframes, efeitos de glow, glassmorphism ou regras extras DEVEM ficar exclusivamente no campo "css".
        - NUNCA inclua tags <script>...</script> dentro do campo "html". Toda interatividade, handlers de formulários, sliders, modais, observers de scroll ou animações Three.js/Canvas DEVEM ficar exclusivamente no campo "js".
-    2. ESTILOS CSS BASEADOS INTEIRAMENTE NO SEGMENTO DA EMPRESA (PROIBIDO TEMAS HARDCODED):
-       - É ESTRITAMENTE PROIBIDO utilizar variáveis de estilo hardcoded, temas estáticos engessados ou esquemas de cores pré-definidos que tornem os sites parecidos entre si!
-       - A IA DEVE analisar o segmento do negócio, a proposta comercial e o perfil do público-alvo para criar uma identidade visual (cores, gradientes, tipografia do Google Fonts, bordas e sombras) 100% personalizada e sob medida.
-       - INJEÇÃO DE VARIÁVEIS CSS DINÂMICAS: No campo "css", defina variáveis nativas no bloco :root baseadas exclusivamente no nicho do projeto:
-         :root {
-           --primary: [cor primária gerada para o segmento];
-           --accent: [cor de destaque/glow gerada para o segmento];
-           --bg-surface: [fundo claro/escuro/atmosférico apropriado ao segmento];
-           --card-bg: [fundo de cartões/glassmorphism do segmento];
-           --text-main: [cor principal de texto];
-           --border-color: [cor de borda com opacidade do segmento];
-         }
-       - TIPOGRAFIA EXCLUSIVA DO NICHO: Escolha fontes do Google Fonts perfeitamente alinhadas com o tom do nicho (ex: serifa requintada para luxo/gastronomia, sans-serif limpa/humanista para saúde/clínicas, fonte display/imponente para esportes/academias, geométrica para tech/SaaS).
-       - NUNCA repita a mesma paleta ou visual entre projetos de nichos diferentes.
-       - Garanta que o layout seja 100% responsivo para mobile (375px) e desktop (1280px) mantendo o container <div id="canvas-root"> como nó raiz do conteúdo.
+    2. PADRÃO ESTÉTICO & DESIGN SYSTEM UNIVERSAL:
+       - Use Tailwind CSS moderno, gradientes sutis, glassmorphism, tipografia elegante (Inter / Outfit) e design limpo.
+       - Garanta que o layout seja 100% responsivo para mobile (375px) e desktop (1280px).
+       - Mantenha IDs e classes semânticas.
+       - Preserve o container <div id="canvas-root"> como nó raiz do conteúdo.
     3. ARQUIVOS ANEXADOS & LOGOMARCAS:
        - Se o usuário enviou uma logomarca (imagem ou SVG), posicione-a com destaque e elegância na Navbar (<nav>/<header>), Rodapé (<footer>) ou seções hero.
        - Se o usuário enviou um arquivo de código ou navbar de referência, replique a estrutura com perfeição mantendo o design responsivo.

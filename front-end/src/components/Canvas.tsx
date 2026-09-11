@@ -1,23 +1,9 @@
-import React, { useEffect, useRef, useCallback, useState, useImperativeHandle, forwardRef } from 'react';
+import React, { useEffect, useRef, useCallback, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { 
-  Trash2, Copy, ChevronUp, ChevronDown, 
-  ArrowUp, ArrowDown, Plus, X, 
-  Type, Layout, AlignLeft, Square, Radio, 
-  Image as ImageIcon 
-} from 'lucide-react';
 import { renderTreeToHtml } from '../utils/renderer';
 import { ComponentNode } from '../types/canvas';
 
-export interface CanvasHandle {
-  applyStyle: (path: string, prop: string, value: string) => void;
-  applyAttr: (path: string, attr: string, value: string) => void;
-  requestOverlayUpdate: () => void;
-  selectElement: (path: string) => void;
-  getIframe: () => HTMLIFrameElement | null;
-}
-
-export interface CanvasProps {
+interface CanvasProps {
   html?: string;
   components?: ComponentNode[];
   css: string;
@@ -25,8 +11,6 @@ export interface CanvasProps {
   highlightPath?: string | null;
   hoverPath?: string | null;
   zoom?: number;
-  theme?: any;
-  isPreviewMode?: boolean;
   onElementSelect: (
     selector: string,
     styles: Record<string, string>,
@@ -48,7 +32,7 @@ export interface CanvasProps {
   ) => void;
 }
 
-export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({
+export const Canvas: React.FC<CanvasProps> = ({
   html,
   components,
   css,
@@ -56,8 +40,6 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({
   highlightPath,
   hoverPath,
   zoom = 100,
-  theme,
-  isPreviewMode = false,
   onElementSelect,
   onInlineContentChange,
   onDeleteElement,
@@ -66,42 +48,12 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({
   onSelectParentElement,
   onHtmlChange,
   onInsertBlock
-}, ref) => {
+}) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const isInitializedRef = useRef(false);
-
-  useImperativeHandle(ref, () => ({
-    applyStyle: (path: string, prop: string, value: string) => {
-      iframeRef.current?.contentWindow?.postMessage({
-        type: 'APPLY_ELEMENT_STYLE',
-        path,
-        prop,
-        value
-      }, '*');
-    },
-    applyAttr: (path: string, attr: string, value: string) => {
-      iframeRef.current?.contentWindow?.postMessage({
-        type: 'APPLY_ELEMENT_ATTR',
-        path,
-        attr,
-        value
-      }, '*');
-    },
-    requestOverlayUpdate: () => {
-      iframeRef.current?.contentWindow?.postMessage({
-        type: 'REQUEST_UPDATE_RECT'
-      }, '*');
-    },
-    selectElement: (path: string) => {
-      iframeRef.current?.contentWindow?.postMessage({
-        type: 'SELECT_ELEMENT_BY_PATH',
-        path
-      }, '*');
-    },
-    getIframe: () => iframeRef.current
-  }), []);
   const lastHtmlSentRef = useRef<string>('');
   const lastCssSentRef = useRef<string>('');
+  const lastJsSentRef = useRef<string>('');
   const [selectionRect, setSelectionRect] = useState<{ top: number; left: number; width: number; height: number; bottom: number; right: number } | null>(null);
   const [selectionTagText, setSelectionTagText] = useState<string>('');
   const [activeElementPath, setActiveElementPath] = useState<string | null>(null);
@@ -238,33 +190,12 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({
     }
   </style>
 
-  <style id="studio-global-theme">
-    :root {
-      --brand-primary: ${theme?.accent || '#a855f7'};
-      --brand-accent: ${theme?.accent || '#a855f7'};
-      --brand-accent-glow: ${theme?.accentGlow || 'rgba(168, 85, 247, 0.35)'};
-      --brand-bg: ${theme?.bg || '#080a12'};
-      --brand-card: ${theme?.cardBg || '#101526'};
-      --brand-text-primary: ${theme?.textPrimary || '#f8fafc'};
-      --brand-text-secondary: ${theme?.textSecondary || '#94a3b8'};
-      --brand-border: ${theme?.border || 'rgba(168, 85, 247, 0.25)'};
-    }
-    body {
-      background-color: var(--brand-bg) !important;
-      color: var(--brand-text-primary) !important;
-      font-family: '${theme?.bodyFont ? theme.bodyFont.split(',')[0].trim() : 'Plus Jakarta Sans'}', sans-serif !important;
-    }
-    h1, h2, h3, h4, h5, h6 {
-      font-family: '${theme?.headingFont ? theme.headingFont.split(',')[0].trim() : 'Syne'}', sans-serif !important;
-    }
-  </style>
-
   <style id="studio-user-styles">
     ${rawCss}
   </style>
 </head>
 <body>
-  ${(rawHtml && rawHtml.includes('id="canvas-root"')) ? rawHtml : `<div id="canvas-root">${rawHtml}</div>`}
+  <div id="canvas-root">${rawHtml}</div>
 
   <!-- Selection Box Overlay & Handles -->
   <div id="studio-selection-box">
@@ -286,7 +217,6 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({
       let currentSelected = null;
       let currentSelectedPath = null;
       let isEditingInline = false;
-      let isPreviewMode = false;
       let resizeObserver = null;
 
       const selectionBox = document.getElementById('studio-selection-box');
@@ -297,35 +227,9 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({
       const dimensionBadge = document.getElementById('studio-dimension-badge');
       const canvasRoot = document.getElementById('canvas-root');
 
-      function getElementId(el) {
-        if (!el) return '';
-        if (typeof el.id === 'string') return el.id;
-        if (el.id && typeof el.id === 'object' && typeof el.id.animVal === 'string') {
-          return el.id.animVal;
-        }
-        return '';
-      }
-
-      function getElementClassName(el) {
-        if (!el) return '';
-        if (typeof el.className === 'string') return el.className;
-        if (el.className && typeof el.className === 'object' && typeof el.className.animVal === 'string') {
-          return el.className.animVal;
-        }
-        const attrClass = el.getAttribute ? el.getAttribute('class') : null;
-        if (typeof attrClass === 'string') return attrClass;
-        return '';
-      }
-
-      function hasIdStartingWithStudio(node) {
-        if (!node) return false;
-        const idStr = getElementId(node);
-        return idStr.startsWith('studio-');
-      }
-
       function isInternalStudioNode(node) {
         if (!node || node === document.body || node === document.documentElement || node === canvasRoot) return true;
-        if (hasIdStartingWithStudio(node)) return true;
+        if (node.id && node.id.startsWith('studio-')) return true;
         if (node.closest && (node.closest('#studio-quick-toolbar') || node.closest('#studio-selection-box') || node.closest('#studio-hover-box'))) return true;
         return false;
       }
@@ -337,7 +241,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({
         while (indexEl && indexEl !== canvasRoot && indexEl !== document.body) {
           const parent = indexEl.parentElement;
           if (!parent) break;
-          const validSiblings = Array.from(parent.children).filter(c => !hasIdStartingWithStudio(c));
+          const validSiblings = Array.from(parent.children).filter(c => !c.id || !c.id.startsWith('studio-'));
           const idx = validSiblings.indexOf(indexEl);
           if (idx !== -1) {
             indexParts.unshift(idx);
@@ -355,7 +259,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({
         let el = root;
         for (const idx of parts) {
           if (!el) return null;
-          const validKids = Array.from(el.children).filter(c => !hasIdStartingWithStudio(c));
+          const validKids = Array.from(el.children).filter(c => !c.id || !c.id.startsWith('studio-'));
           if (idx < 0 || idx >= validKids.length) return null;
           el = validKids[idx];
         }
@@ -392,11 +296,9 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({
         }
 
         const tag = currentSelected.tagName.toLowerCase();
-        const elementIdStr = getElementId(currentSelected);
-        const id = elementIdStr ? '#' + elementIdStr : '';
-        const elementClassStr = getElementClassName(currentSelected);
-        const cls = elementClassStr
-          ? '.' + elementClassStr.split(' ').filter(c => c && !c.startsWith('studio-'))[0]
+        const id = currentSelected.id ? '#' + currentSelected.id : '';
+        const cls = currentSelected.className && typeof currentSelected.className === 'string'
+          ? '.' + currentSelected.className.split(' ').filter(c => c && !c.startsWith('studio-'))[0]
           : '';
         const tagText = tag + id + (cls ? cls.slice(0, 14) : '');
 
@@ -408,7 +310,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({
         }, '*');
       }
 
-      function clearCurrentSelectionState() {
+      function removeSelection() {
         if (isEditingInline && currentSelected) {
           currentSelected.removeAttribute('contenteditable');
           isEditingInline = false;
@@ -419,10 +321,6 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({
         currentSelected = null;
         currentSelectedPath = null;
         if (selectionBox) selectionBox.style.display = 'none';
-      }
-
-      function removeSelection() {
-        clearCurrentSelectionState();
         window.parent.postMessage({ type: 'HIDE_SELECTION_RECT' }, '*');
       }
 
@@ -436,7 +334,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({
         }
         if (!normalizedTarget || isInternalStudioNode(normalizedTarget)) return;
 
-        clearCurrentSelectionState();
+        removeSelection();
         currentSelected = normalizedTarget;
         currentSelectedPath = getIndexPath(normalizedTarget);
 
@@ -459,13 +357,11 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({
         // Build Selector Chain
         const selectorParts = [];
         let selEl = normalizedTarget;
-        while (selEl && selEl !== document.body && getElementId(selEl) !== 'canvas-root') {
+        while (selEl && selEl !== document.body && selEl.id !== 'canvas-root') {
           let name = selEl.nodeName.toLowerCase();
-          const selElId = getElementId(selEl);
-          const selElClass = getElementClassName(selEl);
-          if (selElId) {
-            name += '#' + selElId;
-          } else if (selElClass) {
+          if (selEl.id) {
+            name += '#' + selEl.id;
+          } else if (selEl.className && typeof selEl.className === 'string') {
             const cleanClasses = Array.from(selEl.classList || [])
               .filter(c => !c.startsWith('studio-'))
               .join('.');
@@ -549,7 +445,6 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({
 
         if (selectionBox) selectionBox.style.display = 'none';
         if (quickToolbar) quickToolbar.style.display = 'none';
-        window.parent.postMessage({ type: 'HIDE_SELECTION_RECT' }, '*');
 
         const onBlur = () => {
           target.removeAttribute('contenteditable');
@@ -582,7 +477,6 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({
 
       // ─── Click Listener ───
       document.addEventListener('click', function(e) {
-        if (isPreviewMode) return;
         if (e.target.closest('#studio-quick-toolbar') || e.target.closest('.studio-resize-handle')) {
           return;
         }
@@ -601,7 +495,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({
 
       // ─── Double Click for Direct Inline Text Editing ───
       document.addEventListener('dblclick', function(e) {
-        if (isInternalStudioNode(e.target) || isPreviewMode) return;
+        if (isInternalStudioNode(e.target)) return;
         e.preventDefault();
         e.stopPropagation();
         startInlineEdit(e.target);
@@ -609,17 +503,15 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({
 
       // ─── Context Menu Listener (Right-click) ───
       document.addEventListener('contextmenu', function(e) {
-        if (isInternalStudioNode(e.target) || isPreviewMode) return;
+        if (isInternalStudioNode(e.target)) return;
         e.preventDefault();
         e.stopPropagation();
         const target = e.target;
         selectElement(target, false);
         const tag = target.tagName.toLowerCase();
-        const targetIdStr = getElementId(target);
-        const id = targetIdStr ? '#' + targetIdStr : '';
-        const targetClassStr = getElementClassName(target);
-        const cls = targetClassStr
-          ? '.' + targetClassStr.split(' ').filter(c => c && !c.startsWith('studio-'))[0]
+        const id = target.id ? '#' + target.id : '';
+        const cls = target.className && typeof target.className === 'string'
+          ? '.' + target.className.split(' ').filter(c => c && !c.startsWith('studio-'))[0]
           : '';
         const tagText = tag + id + (cls ? cls.slice(0, 14) : '');
         const path = getIndexPath(target);
@@ -635,7 +527,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({
 
       // ─── Hover Listener (FIXED coords) ───
       document.body.addEventListener('mousemove', function(e) {
-        if (isEditingInline || isPreviewMode) {
+        if (isEditingInline) {
           if (hoverBox) hoverBox.style.display = 'none';
           return;
         }
@@ -661,52 +553,6 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({
       // ─── Incoming Actions From Parent ───
       window.addEventListener('message', function(msg) {
         if (!msg.data) return;
-
-        if (msg.data.type === 'SET_PREVIEW_MODE') {
-          isPreviewMode = msg.data.enabled;
-          if (isPreviewMode) {
-            removeSelection();
-            if (hoverBox) hoverBox.style.display = 'none';
-          }
-        }
-
-        if (msg.data.type === 'SELECT_ELEMENT_BY_PATH' && msg.data.path) {
-          const el = getElementByIndexPath(msg.data.path);
-          if (el) {
-            selectElement(el, false); // false to not notify parent again if we want, but actually we DO want to notify parent to get styles
-          }
-        }
-
-        if (msg.data.type === 'APPLY_ELEMENT_STYLE' && msg.data.path) {
-          const el = getElementByIndexPath(msg.data.path);
-          if (el && el.style) {
-            if (msg.data.value !== undefined && msg.data.value !== null && msg.data.value !== '') {
-              el.style.setProperty(msg.data.prop, msg.data.value);
-            } else {
-              el.style.removeProperty(msg.data.prop);
-            }
-            if (currentSelected === el) {
-              updateOverlayPosition();
-            }
-          }
-        }
-
-        if (msg.data.type === 'APPLY_ELEMENT_ATTR' && msg.data.path) {
-          const el = getElementByIndexPath(msg.data.path);
-          if (el) {
-            if (msg.data.attr === '_textContent') {
-              el.textContent = msg.data.value;
-            } else if (msg.data.value !== undefined && msg.data.value !== null && msg.data.value !== '') {
-              el.setAttribute(msg.data.attr, msg.data.value);
-            } else {
-              el.removeAttribute(msg.data.attr);
-            }
-            if (currentSelected === el) {
-              updateOverlayPosition();
-            }
-          }
-        }
-
         if (msg.data.type === 'ACTION_SELECT_PARENT' && currentSelected) {
           const parent = currentSelected.parentElement;
           if (parent && !isInternalStudioNode(parent)) {
@@ -901,56 +747,50 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({
       window.addEventListener('message', function(msg) {
         if (!msg.data) return;
 
-        if (msg.data.type === 'UPDATE_THEME') {
-          const theme = msg.data.theme;
-          const themeStyles = document.getElementById('studio-global-theme');
-          if (themeStyles) {
-            themeStyles.textContent = ':root { ' +
-              '--brand-primary: ' + (theme?.accent || '#a855f7') + '; ' +
-              '--brand-accent: ' + (theme?.accent || '#a855f7') + '; ' +
-              '--brand-accent-glow: ' + (theme?.accentGlow || 'rgba(168, 85, 247, 0.35)') + '; ' +
-              '--brand-bg: ' + (theme?.bg || '#080a12') + '; ' +
-              '--brand-card: ' + (theme?.cardBg || '#101526') + '; ' +
-              '--brand-text-primary: ' + (theme?.textPrimary || '#f8fafc') + '; ' +
-              '--brand-text-secondary: ' + (theme?.textSecondary || '#94a3b8') + '; ' +
-              '--brand-border: ' + (theme?.border || 'rgba(168, 85, 247, 0.25)') + '; ' +
-            '} ' +
-            'body { ' +
-              'background-color: var(--brand-bg) !important; ' +
-              'color: var(--brand-text-primary) !important; ' +
-              'font-family: \'' + (theme?.bodyFont ? theme.bodyFont.split(',')[0].trim() : 'Plus Jakarta Sans') + '\', sans-serif !important; ' +
-            '} ' +
-            'h1, h2, h3, h4, h5, h6 { ' +
-              'font-family: \'' + (theme?.headingFont ? theme.headingFont.split(',')[0].trim() : 'Syne') + '\', sans-serif !important; ' +
-            '}';
-          }
-        }
-
         if (msg.data.type === 'UPDATE_HTML_SEAMLESS') {
           const scrollX = window.scrollX;
           const scrollY = window.scrollY;
           const root = document.getElementById('canvas-root');
 
           if (root && typeof msg.data.html === 'string') {
-            let htmlToSet = msg.data.html;
-            if (htmlToSet.includes('id="canvas-root"')) {
-              try {
-                const tempDoc = new DOMParser().parseFromString(htmlToSet, 'text/html');
-                const tempRoot = tempDoc.getElementById('canvas-root');
-                if (tempRoot) {
-                  if (tempRoot.className) root.className = tempRoot.className;
-                  if (tempRoot.getAttribute('style')) root.setAttribute('style', tempRoot.getAttribute('style') || '');
-                  htmlToSet = tempRoot.innerHTML;
-                }
-              } catch(e) {}
-            }
-            root.innerHTML = htmlToSet;
+            root.innerHTML = msg.data.html;
           }
 
           const userStyles = document.getElementById('studio-user-styles');
           if (userStyles && typeof msg.data.css === 'string') {
             userStyles.textContent = msg.data.css;
           }
+
+          if (typeof msg.data.js === 'string' && msg.data.js.trim()) {
+            try {
+              new Function(msg.data.js)();
+            } catch (err) {
+              console.warn('Erro ao executar script atualizado:', err);
+            }
+          }
+
+          // Re-initialize dynamic icons and plugins
+          setTimeout(function() {
+            if (window.lucide) { try { lucide.createIcons(); } catch(e){} }
+            if (typeof Swiper !== 'undefined' && document.querySelector('.maps-reviews-swiper')) {
+              try {
+                new Swiper('.maps-reviews-swiper', {
+                  effect: 'cards',
+                  grabCursor: true,
+                  pagination: { el: '.swiper-pagination', clickable: true },
+                  autoplay: { delay: 4000, disableOnInteraction: false }
+                });
+              } catch(e){}
+            }
+            if (typeof gsap !== 'undefined' && typeof ScrollTrigger !== 'undefined') {
+              try {
+                gsap.registerPlugin(ScrollTrigger);
+                gsap.utils.toArray('.gsap-reveal').forEach(function(el) {
+                  gsap.from(el, { opacity: 0, y: 35, duration: 0.8, ease: 'power2.out', scrollTrigger: { trigger: el, start: 'top 85%' } });
+                });
+              } catch(e){}
+            }
+          }, 100);
 
           window.scrollTo(scrollX, scrollY);
 
@@ -973,10 +813,6 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({
           const path = msg.data.path;
           if (path === null || path === undefined || path === '') {
             removeSelection();
-            return;
-          }
-          if (currentSelectedPath === path && currentSelected && currentSelected.isConnected) {
-            updateOverlayPosition();
             return;
           }
           const el = getElementByIndexPath(path);
@@ -1037,17 +873,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({
   </script>
 </body>
 </html>`;
-  }, [theme]);
-
-  // Synchronize Theme Changes to IFrame
-  useEffect(() => {
-    const iframe = iframeRef.current;
-    if (!iframe || !isInitializedRef.current) return;
-    iframe.contentWindow?.postMessage({
-      type: 'UPDATE_THEME',
-      theme
-    }, '*');
-  }, [theme]);
+  }, []);
 
   // Initialization & Live Content Sync
   useEffect(() => {
@@ -1058,13 +884,15 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({
 
     // If iframe is already initialized and DOM is alive, update via seamless message
     if (isInitializedRef.current && iframe.contentDocument && iframe.contentDocument.getElementById('canvas-root')) {
-      if (lastHtmlSentRef.current !== renderedHtml || lastCssSentRef.current !== css) {
+      if (lastHtmlSentRef.current !== renderedHtml || lastCssSentRef.current !== css || lastJsSentRef.current !== js) {
         lastHtmlSentRef.current = renderedHtml;
         lastCssSentRef.current = css;
+        lastJsSentRef.current = js;
         iframe.contentWindow?.postMessage({
           type: 'UPDATE_HTML_SEAMLESS',
           html: renderedHtml,
-          css
+          css,
+          js
         }, '*');
       }
       return;
@@ -1073,6 +901,7 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({
     // Initial load into iframe
     lastHtmlSentRef.current = renderedHtml;
     lastCssSentRef.current = css;
+    lastJsSentRef.current = js;
     const documentContent = buildIframeDoc(renderedHtml, css, js);
     iframe.srcdoc = documentContent;
     isInitializedRef.current = true;
@@ -1090,23 +919,12 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({
       }, '*');
     };
 
-    const sendPreviewMode = () => {
-      iframe.contentWindow?.postMessage({
-        type: 'SET_PREVIEW_MODE',
-        enabled: isPreviewMode
-      }, '*');
-    };
-
     if (iframe.contentDocument?.readyState === 'complete') {
       sendHighlight();
-      sendPreviewMode();
     } else {
-      iframe.addEventListener('load', () => {
-        sendHighlight();
-        sendPreviewMode();
-      }, { once: true });
+      iframe.addEventListener('load', sendHighlight, { once: true });
     }
-  }, [highlightPath, isPreviewMode]);
+  }, [highlightPath]);
 
   // Sync Hover Path from Layers tree
   useEffect(() => {
@@ -1179,22 +997,19 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({
 
         case 'UPDATE_SELECTION_RECT':
           if (iframeRef.current) {
-            const iframe = iframeRef.current;
-            const iframeRect = iframe.getBoundingClientRect();
+            const iframeRect = iframeRef.current.getBoundingClientRect();
             const scale = zoom / 100;
-
             const screenTop = iframeRect.top + event.data.rect.top * scale;
             const screenLeft = iframeRect.left + event.data.rect.left * scale;
-            const screenWidth = event.data.rect.width * scale;
-            const screenHeight = event.data.rect.height * scale;
-
+            const screenBottom = iframeRect.top + event.data.rect.bottom * scale;
+            const screenRight = iframeRect.left + event.data.rect.right * scale;
             setSelectionRect({
               top: screenTop,
               left: screenLeft,
-              width: screenWidth,
-              height: screenHeight,
-              bottom: screenTop + screenHeight,
-              right: screenLeft + screenWidth
+              width: event.data.rect.width * scale,
+              height: event.data.rect.height * scale,
+              bottom: screenBottom,
+              right: screenRight
             });
             setSelectionTagText(event.data.tagText);
             setActiveElementPath(event.data.path);
@@ -1208,18 +1023,10 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({
 
         case 'OPEN_CONTEXT_MENU':
           if (iframeRef.current) {
-            const iframe = iframeRef.current;
-            const iframeRect = iframe.getBoundingClientRect();
-            const w = iframe.offsetWidth;
-            const h = iframe.offsetHeight;
+            const iframeRect = iframeRef.current.getBoundingClientRect();
             const scale = zoom / 100;
-
-            const cx = iframeRect.left + iframeRect.width / 2;
-            const cy = iframeRect.top + iframeRect.height / 2;
-
-            const screenX = cx + (event.data.x - w / 2) * scale;
-            const screenY = cy + (event.data.y - h / 2) * scale;
-
+            const screenX = iframeRect.left + event.data.x * scale;
+            const screenY = iframeRect.top + event.data.y * scale;
             setContextMenu({
               visible: true,
               x: screenX,
@@ -1248,21 +1055,6 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({
     onInsertBlock
   ]);
 
-  // Synchronize selection bounding box on window resize or scroll
-  useEffect(() => {
-    const handleSync = () => {
-      if (selectionRect && iframeRef.current) {
-        iframeRef.current.contentWindow?.postMessage({ type: 'REQUEST_UPDATE_RECT' }, '*');
-      }
-    };
-    window.addEventListener('resize', handleSync);
-    window.addEventListener('scroll', handleSync, true);
-    return () => {
-      window.removeEventListener('resize', handleSync);
-      window.removeEventListener('scroll', handleSync, true);
-    };
-  }, [selectionRect]);
-
   const scale = zoom / 100;
 
   return (
@@ -1283,141 +1075,96 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({
         />
       </div>
 
-      {selectionRect && !isPreviewMode && createPortal(
-        <>
-          {/* Interaction-Aware Selection Bounding Box */}
-          <div
-            id="studio-selection-bounding-box"
-            role="region"
-            aria-label="Elemento Selecionado"
-            className="fixed pointer-events-none z-[999990] transition-all duration-75"
-            style={{
-              top: `${selectionRect.top}px`,
-              left: `${selectionRect.left}px`,
-              width: `${Math.max(selectionRect.width, 2)}px`,
-              height: `${Math.max(selectionRect.height, 2)}px`,
-              border: '2px solid #a855f7',
-              boxShadow: '0 0 0 1px rgba(168, 85, 247, 0.4), 0 0 16px rgba(168, 85, 247, 0.3)',
-              borderRadius: '3px'
+      {selectionRect && createPortal(
+        <div
+          id="studio-quick-toolbar"
+          role="toolbar"
+          aria-label="Ações do Elemento"
+          className="fixed z-[999999] bg-[#0f0b18] border border-purple-500/50 rounded-xl px-2.5 py-1.5 shadow-2xl flex items-center gap-1.5 text-xs text-white select-none animate-in fade-in duration-100"
+          style={{
+            top: (() => {
+              let t = selectionRect.top - 46;
+              if (t < 8) t = selectionRect.bottom + 8;
+              return t;
+            })(),
+            left: Math.max(8, Math.min(selectionRect.left, window.innerWidth - 380))
+          }}
+        >
+          <span className="bg-purple-600 text-white font-mono text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider max-w-[120px] truncate">
+            {selectionTagText || 'element'}
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              iframeRef.current?.contentWindow?.postMessage({ type: 'ACTION_SELECT_PARENT' }, '*');
             }}
+            className="px-2 py-1 bg-slate-900 hover:bg-purple-600 border border-slate-700 hover:border-purple-400 rounded-lg font-medium transition-all cursor-pointer"
+            title="Selecionar Elemento Pai"
           >
-            {/* Tag & Dimension Badge */}
-            <div className="absolute -top-5 left-0 bg-purple-600 text-white font-mono text-[10px] font-bold px-1.5 py-0.5 rounded shadow flex items-center gap-1.5 whitespace-nowrap pointer-events-auto">
-              <span>{selectionTagText || 'Elemento'}</span>
-              <span className="text-purple-200 text-[9px] font-normal">
-                {Math.round(selectionRect.width)}×{Math.round(selectionRect.height)}px
-              </span>
-            </div>
-
-            {/* Corner Resize Markers */}
-            <div className="absolute -top-1.5 -left-1.5 w-2.5 h-2.5 bg-white border-2 border-purple-600 rounded-sm shadow-sm pointer-events-none" />
-            <div className="absolute -top-1.5 -right-1.5 w-2.5 h-2.5 bg-white border-2 border-purple-600 rounded-sm shadow-sm pointer-events-none" />
-            <div className="absolute -bottom-1.5 -left-1.5 w-2.5 h-2.5 bg-white border-2 border-purple-600 rounded-sm shadow-sm pointer-events-none" />
-            <div className="absolute -bottom-1.5 -right-1.5 w-2.5 h-2.5 bg-white border-2 border-purple-600 rounded-sm shadow-sm pointer-events-none" />
-          </div>
-
-          {/* Quick Actions Floating Toolbar */}
-          <div
-            id="studio-quick-toolbar"
-            role="toolbar"
-            aria-label="Ações do Elemento"
-            className="fixed z-[999999] bg-[#0f0b18]/95 backdrop-blur-md border border-purple-500/50 rounded-xl px-2.5 py-1.5 shadow-2xl flex items-center gap-1.5 text-xs text-white select-none animate-in fade-in duration-100"
-            style={{
-              top: (() => {
-                let t = selectionRect.top - 46;
-                if (t < 64) {
-                  t = selectionRect.bottom + 10;
-                }
-                return Math.max(64, Math.min(t, window.innerHeight - 52));
-              })(),
-              left: Math.max(16, Math.min(selectionRect.left, window.innerWidth - 340))
+            ▲ Pai
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (activeElementPath && onMoveElementDirection) {
+                onMoveElementDirection(activeElementPath, 'up');
+                setTimeout(() => iframeRef.current?.contentWindow?.postMessage({ type: 'REQUEST_UPDATE_RECT' }, '*'), 50);
+              }
             }}
+            className="px-2 py-1 bg-slate-900 hover:bg-purple-600 border border-slate-700 hover:border-purple-400 rounded-lg font-medium transition-all cursor-pointer"
+            title="Mover para Cima"
           >
-            <div className="flex items-center gap-1.5 border-r border-slate-800 pr-2 mr-0.5">
-              <span className="bg-purple-600/30 text-purple-300 font-mono text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider max-w-[90px] truncate">
-                {selectionTagText || 'elemento'}
-              </span>
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                if (onSelectParentElement && (activeElementPath || highlightPath)) {
-                  onSelectParentElement(activeElementPath || highlightPath || '');
-                } else {
-                  iframeRef.current?.contentWindow?.postMessage({ type: 'ACTION_SELECT_PARENT' }, '*');
-                }
-              }}
-              className="p-1.5 hover:bg-purple-600/20 text-slate-300 hover:text-purple-300 rounded-lg transition-all cursor-pointer"
-              title="Selecionar Elemento Pai"
-            >
-              <ChevronUp className="w-4 h-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                const targetPath = activeElementPath || highlightPath;
-                if (targetPath && onMoveElementDirection) {
-                  onMoveElementDirection(targetPath, 'up');
-                  setTimeout(() => iframeRef.current?.contentWindow?.postMessage({ type: 'REQUEST_UPDATE_RECT' }, '*'), 50);
-                }
-              }}
-              className="p-1.5 hover:bg-purple-600/20 text-slate-300 hover:text-purple-300 rounded-lg transition-all cursor-pointer"
-              title="Subir elemento (Mover para Cima)"
-            >
-              <ArrowUp className="w-4 h-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                const targetPath = activeElementPath || highlightPath;
-                if (targetPath && onMoveElementDirection) {
-                  onMoveElementDirection(targetPath, 'down');
-                  setTimeout(() => iframeRef.current?.contentWindow?.postMessage({ type: 'REQUEST_UPDATE_RECT' }, '*'), 50);
-                }
-              }}
-              className="p-1.5 hover:bg-purple-600/20 text-slate-300 hover:text-purple-300 rounded-lg transition-all cursor-pointer"
-              title="Descer elemento (Mover para Baixo)"
-            >
-              <ArrowDown className="w-4 h-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                const targetPath = activeElementPath || highlightPath;
-                if (targetPath && onDuplicateElement) {
-                  onDuplicateElement(targetPath);
-                  setTimeout(() => iframeRef.current?.contentWindow?.postMessage({ type: 'REQUEST_UPDATE_RECT' }, '*'), 100);
-                }
-              }}
-              className="p-1.5 hover:bg-purple-600/20 text-slate-300 hover:text-purple-300 rounded-lg transition-all cursor-pointer"
-              title="Clonar elemento (Duplicar)"
-            >
-              <Copy className="w-4 h-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => iframeRef.current?.contentWindow?.postMessage({ type: 'ACTION_START_INLINE_EDIT' }, '*')}
-              className="p-1.5 hover:bg-purple-600/20 text-slate-300 hover:text-purple-300 rounded-lg transition-all cursor-pointer"
-              title="Editar texto inline"
-            >
-              <Type className="w-4 h-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                const targetPath = activeElementPath || highlightPath;
-                if (targetPath && onDeleteElement) {
-                  onDeleteElement(targetPath);
-                  setSelectionRect(null);
-                }
-              }}
-              className="p-1.5 hover:bg-rose-600/20 text-slate-300 hover:text-rose-400 rounded-lg transition-all cursor-pointer"
-              title="Excluir elemento"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
-          </div>
-        </>,
+            ↑ Cima
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (activeElementPath && onMoveElementDirection) {
+                onMoveElementDirection(activeElementPath, 'down');
+                setTimeout(() => iframeRef.current?.contentWindow?.postMessage({ type: 'REQUEST_UPDATE_RECT' }, '*'), 50);
+              }
+            }}
+            className="px-2 py-1 bg-slate-900 hover:bg-purple-600 border border-slate-700 hover:border-purple-400 rounded-lg font-medium transition-all cursor-pointer"
+            title="Mover para Baixo"
+          >
+            ↓ Baixo
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (activeElementPath && onDuplicateElement) {
+                onDuplicateElement(activeElementPath);
+              }
+            }}
+            className="px-2 py-1 bg-slate-900 hover:bg-purple-600 border border-slate-700 hover:border-purple-400 rounded-lg font-medium transition-all cursor-pointer"
+            title="Duplicar Elemento"
+          >
+            📋 Duplicar
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              iframeRef.current?.contentWindow?.postMessage({ type: 'ACTION_START_INLINE_EDIT' }, '*');
+            }}
+            className="px-2 py-1 bg-slate-900 hover:bg-purple-600 border border-slate-700 hover:border-purple-400 rounded-lg font-medium transition-all cursor-pointer"
+            title="Editar Texto Diretamente"
+          >
+            ✏️ Texto
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (activeElementPath && onDeleteElement) {
+                onDeleteElement(activeElementPath);
+                setSelectionRect(null);
+              }
+            }}
+            className="px-2 py-1 bg-rose-950/40 hover:bg-rose-600 border border-rose-900/60 hover:border-rose-500 text-rose-300 hover:text-white rounded-lg font-medium transition-all cursor-pointer"
+            title="Excluir Elemento"
+          >
+            🗑️ Excluir
+          </button>
+        </div>,
         document.body
       )}
 
@@ -1505,6 +1252,4 @@ export const Canvas = forwardRef<CanvasHandle, CanvasProps>(({
       )}
     </div>
   );
-});
-
-Canvas.displayName = 'Canvas';
+};

@@ -381,9 +381,9 @@ router.get('/chat-job/:jobId', (req, res: any) => {
 // POST /api/ai/generate-page - Gerar nova página do zero integrada ao projeto existente
 router.post('/generate-page', async (req: AuthenticatedRequest, res: any) => {
   try {
-    const { prompt, projectId, name, slug, templateType } = req.body;
-    if (!projectId) {
-      return res.status(400).json({ error: 'projectId é obrigatório' });
+    const { prompt, projectId, name, slug } = req.body;
+    if (!prompt || !projectId) {
+      return res.status(400).json({ error: 'Prompt e projectId são obrigatórios' });
     }
 
     const provider = (req.headers['x-ai-provider'] as any) || 'gemini';
@@ -421,31 +421,18 @@ router.post('/generate-page', async (req: AuthenticatedRequest, res: any) => {
 
     const navLinksDoc = allRoutes.map(r => `- "${r.name}" -> href="${r.href}"`).join('\n');
 
-    const projectContext = `
-PROJETO: "${project?.name || 'Website'}"
-DESCRIÇÃO/PROMPT DO PROJETO: "${project?.description || 'Site institucional profissional de alta conversão'}"
-CÓDIGO DA PÁGINA HOME / ESTILOS TEMA:
-CSS da Home (reutilizar variáveis :root e cores):
-${globalCss}
-`;
-
     const fullPrompt = `
 Você é o Engenheiro Frontend Líder e Designer Master do projeto "${project?.name || 'Website'}".
 Sua tarefa é criar a subpágina "${pageName}" (slug: ${pageSlug}) com nível de excelência internacional.
 
-CONTEXTO DO PROJETO E PALETA DE CORES:
-${projectContext}
-
 TEMA E OBJETIVO DA PÁGINA:
-${prompt || `Crie a página ${pageName} totalmente customizada para o nicho de ${project?.name}`}
-Tipo de Estrutura: ${templateType || 'Livre / Niche Custom'}
+${prompt}
 
-DIRETRIZES DE DESIGN SYSTEM E CONSISTÊNCIA DE MARCA:
-1. Mantenha exatamente a mesma identidade visual, paleta de cores e variáveis CSS do :root definidas para a página principal do projeto.
-2. É ESTRITAMENTE PROIBIDO usar textos genéricos como "Lorem Ipsum", "Insira seu texto" ou "Empresa XYZ". Todo o conteúdo DEVE ser escrito sob medida para a proposta do projeto ("${project?.name}").
-3. NAVBAR E FOOTER REPETIDOS:
-${navbarHtml ? `Utilize EXATAMENTE a mesma estrutura de Navbar padronizada abaixo (destaque o link "${pageName}" como ativo):\n${navbarHtml}\n` : 'Crie um Header/Navbar moderno com links para as páginas.'}
-${footerHtml ? `Utilize EXATAMENTE a mesma estrutura de Footer padronizado abaixo:\n${footerHtml}\n` : 'Crie um Footer completo multicolunas.'}
+DIRETRIZES DE DESIGN SYSTEM:
+1. Mantenha a mesma identidade visual, paleta de cores e tipografia de alto padrão da página principal.
+2. NAVBAR E FOOTER:
+${navbarHtml ? `Utilize a estrutura de Navbar padronizada abaixo (destaque o link "${pageName}" como ativo):\n${navbarHtml}\n` : 'Crie um Header/Navbar moderno com links para as páginas.'}
+${footerHtml ? `Utilize o Footer padronizado abaixo:\n${footerHtml}\n` : 'Crie um Footer completo multicolunas.'}
 
 ROTAS DO SITE:
 ${navLinksDoc}
@@ -478,232 +465,6 @@ REGRAS:
     return res.status(201).json({
       page: newPage,
       explanation: result.explanation
-    });
-  } catch (error: any) {
-    return res.status(500).json({ error: error.message });
-  }
-});
-
-// POST /api/ai/audit-site - Auditoria de Integridade, Erros e Qualidade do Site com IA
-router.post('/audit-site', async (req: AuthenticatedRequest, res: any) => {
-  try {
-    const { projectId } = req.body;
-    if (!projectId) {
-      return res.status(400).json({ error: 'projectId é obrigatório para auditoria' });
-    }
-
-    const project = await prisma.project.findUnique({
-      where: { id: projectId },
-      include: { pages: true }
-    });
-
-    if (!project || project.pages.length === 0) {
-      return res.status(404).json({ error: 'Projeto ou páginas não encontrados' });
-    }
-
-    const homePage = project.pages.find(p => p.isHomepage || p.slug === 'index') || project.pages[0];
-    const extractedHome = extractNavbarAndFooter(homePage.html || '');
-
-    const issues: Array<{
-      id: string;
-      pageId: string;
-      pageName: string;
-      type: 'placeholder' | 'theme_mismatch' | 'nav_inconsistency' | 'missing_content' | 'seo_missing' | 'broken_link';
-      severity: 'critical' | 'warning' | 'info';
-      title: string;
-      description: string;
-      suggestedFix: string;
-    }> = [];
-
-    let totalScore = 100;
-
-    // Analisar cada página deterministicamente + regras de sanidade
-    project.pages.forEach((page) => {
-      const html = page.html || '';
-      const lowerHtml = html.toLowerCase();
-
-      // 1. Verificar Placeholders
-      if (lowerHtml.includes('lorem ipsum') || lowerHtml.includes('insira seu texto') || lowerHtml.includes('sua empresa aqui') || lowerHtml.includes('via.placeholder.com')) {
-        totalScore -= 12;
-        issues.push({
-          id: `placeholder-${page.id}`,
-          pageId: page.id,
-          pageName: page.name,
-          type: 'placeholder',
-          severity: 'warning',
-          title: 'Texto ou Imagem Placeholder Detectado',
-          description: `A página "${page.name}" contém textos temporários (ex: Lorem Ipsum) ou imagens genéricas de exemplo.`,
-          suggestedFix: 'Substitua por copy persuasivo e imagens do nicho do projeto.'
-        });
-      }
-
-      // 2. Verificar Links Quebrados na Navbar ou Botões
-      if (html.includes('href="#"') || html.includes('href=""')) {
-        totalScore -= 8;
-        issues.push({
-          id: `link-${page.id}`,
-          pageId: page.id,
-          pageName: page.name,
-          type: 'broken_link',
-          severity: 'info',
-          title: 'Links não mapeados (href="#")',
-          description: `A página "${page.name}" possui botões ou links direcionando para "#" sem destino real definido.`,
-          suggestedFix: 'Atualize o href para apontar para seções internas (#contato) ou para outras páginas (.html).'
-        });
-      }
-
-      // 3. Verificar se falta SEO Basico
-      if (!page.seoTitle || !page.seoDescription) {
-        totalScore -= 5;
-        issues.push({
-          id: `seo-${page.id}`,
-          pageId: page.id,
-          pageName: page.name,
-          type: 'seo_missing',
-          severity: 'info',
-          title: 'Configurações de SEO Incompletas',
-          description: `A página "${page.name}" está sem Título SEO ou Meta Descrição configurados.`,
-          suggestedFix: 'Gere um título otimizado e meta descrição atrativa para o Google.'
-        });
-      }
-
-      // 4. Consistência do Header/Navbar em subpáginas
-      if (!page.isHomepage && extractedHome.navbarHtml) {
-        const pageExtracted = extractNavbarAndFooter(page.html || '');
-        if (!pageExtracted.navbarHtml || pageExtracted.navbarHtml.length < 50) {
-          totalScore -= 15;
-          issues.push({
-            id: `nav-${page.id}`,
-            pageId: page.id,
-            pageName: page.name,
-            type: 'nav_inconsistency',
-            severity: 'critical',
-            title: 'Menu de Navegação (Navbar) Ausente ou Inconsistente',
-            description: `A página "${page.name}" não possui o mesmo Header/Navbar que a página principal.`,
-            suggestedFix: 'Replique a estrutura de Navbar padronizada com o logo e links ativos da página.'
-          });
-        }
-      }
-
-      // 5. Consistência do Rodapé
-      if (!page.isHomepage && extractedHome.footerHtml) {
-        const pageExtracted = extractNavbarAndFooter(page.html || '');
-        if (!pageExtracted.footerHtml || pageExtracted.footerHtml.length < 50) {
-          totalScore -= 10;
-          issues.push({
-            id: `footer-${page.id}`,
-            pageId: page.id,
-            pageName: page.name,
-            type: 'nav_inconsistency',
-            severity: 'warning',
-            title: 'Rodapé (Footer) Desconectado do Tema',
-            description: `A subpágina "${page.name}" não inclui o rodapé multicolunas institucional.`,
-            suggestedFix: 'Insira o mesmo Footer institucional da Home para garantir navegabilidade.'
-          });
-        }
-      }
-    });
-
-    const finalScore = Math.max(10, Math.min(100, totalScore));
-
-    return res.json({
-      healthScore: finalScore,
-      status: finalScore >= 90 ? 'perfect' : finalScore >= 70 ? 'warnings' : 'critical',
-      summary: issues.length === 0
-        ? 'Todas as páginas estão 100% completas, alinhadas ao tema do projeto, com Navbar e Footer padronizados!'
-        : `Encontrados ${issues.length} pontos de melhoria para deixar o site 100% profissional e sem erros.`,
-      issues,
-      pagesChecked: project.pages.length
-    });
-  } catch (error: any) {
-    return res.status(500).json({ error: error.message });
-  }
-});
-
-// POST /api/ai/autofix-site - Correção Automática de Erros e Inconsistências com IA
-router.post('/autofix-site', async (req: AuthenticatedRequest, res: any) => {
-  try {
-    const { projectId } = req.body;
-    if (!projectId) {
-      return res.status(400).json({ error: 'projectId é obrigatório' });
-    }
-
-    const provider = (req.headers['x-ai-provider'] as any) || 'gemini';
-    const customApiKey = decodeHeader(req.headers['x-gemini-key']) || undefined;
-    const customModel = decodeHeader(req.headers['x-gemini-model']) || undefined;
-    const ollamaEndpoint = decodeHeader(req.headers['x-ollama-endpoint']) || undefined;
-
-    const project = await prisma.project.findUnique({
-      where: { id: projectId },
-      include: { pages: true }
-    });
-
-    if (!project || project.pages.length === 0) {
-      return res.status(404).json({ error: 'Projeto não encontrado' });
-    }
-
-    const homePage = project.pages.find(p => p.isHomepage || p.slug === 'index') || project.pages[0];
-    const { navbarHtml, footerHtml } = extractNavbarAndFooter(homePage.html || '');
-    const globalCss = homePage.css || '';
-
-    const navigationRoutes = project.pages.map(p => ({
-      name: p.name,
-      href: p.isHomepage ? 'index.html' : `${p.slug}.html`
-    }));
-    const navLinksDoc = navigationRoutes.map(r => `- "${r.name}" -> href="${r.href}"`).join('\n');
-
-    const updatedPages: any[] = [];
-
-    for (const page of project.pages) {
-      const isHome = page.id === homePage.id;
-
-      const fixPrompt = `
-Você é o Auditor de Qualidade e Desenvolvedor Sênior de IA do site "${project.name}".
-Sua tarefa é CORRIGIR E FINALIZAR 100% a página "${page.name}" (slug: ${page.slug}).
-
-INSTRUÇÃO DE AUDITORIA & QUALIDADE:
-1. Elimine QUALQUER texto placeholder (Lorem ipsum, "Insira seu texto", "SEU NOME", "Empresa Exemplo").
-2. Escreva textos altamente ricos, reais e focados na conversão do projeto "${project.name}" (Descrição: ${project.description || 'Serviços de excelência'}).
-3. Corrija todos os links de botões e navegadores para usar as rotas reais:
-${navLinksDoc}
-4. Garanta que a Navbar e o Footer sejam EXATAMENTE os mesmos da página Home abaixo, mantendo as cores e identidade visual intactas.
-${!isHome && navbarHtml ? `NAVBAR PADRÃO:\n${navbarHtml}\n` : ''}
-${!isHome && footerHtml ? `FOOTER PADRÃO:\n${footerHtml}\n` : ''}
-
-REGRAS DE SAÍDA:
-- Retorne JSON estrito: { "html": "...", "css": "...", "js": "...", "explanation": "..." }
-- Não coloque tags <style> ou <script> dentro do HTML.
-- Mantenha ou adicione botão flutuante de WhatsApp e interatividade no JS.
-      `;
-
-      try {
-        const resAi = await executeAIRequest(
-          fixPrompt,
-          { html: page.html || '<div></div>', css: page.css || globalCss, js: page.js || '' },
-          { provider, apiKey: customApiKey, model: customModel, ollamaEndpoint }
-        );
-
-        const updated = await prisma.page.update({
-          where: { id: page.id },
-          data: {
-            html: resAi.html,
-            css: resAi.css || page.css,
-            js: resAi.js || page.js,
-            seoTitle: page.seoTitle || `${page.name} | ${project.name}`,
-            seoDescription: page.seoDescription || `${page.name} oficial de ${project.name}. Conheça nossas soluções e entre em contato.`
-          }
-        });
-
-        updatedPages.push(updated);
-      } catch (err: any) {
-        console.warn(`[Autofix] Falha na IA para a página ${page.name}:`, err.message);
-        updatedPages.push(page);
-      }
-    }
-
-    return res.json({
-      message: 'Site corrigido e otimizado com sucesso pela IA!',
-      updatedPages
     });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });

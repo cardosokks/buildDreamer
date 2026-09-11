@@ -594,7 +594,7 @@ router.put('/:id', async (req: AuthenticatedRequest, res: any) => {
   try {
     const id = req.params.id as string;
     const userId = req.userId as string;
-    const { name, description, status, domain, favicon, theme } = req.body;
+    const { name, description, status, domain, favicon } = req.body;
 
     const membership = await prisma.projectMember.findFirst({
       where: {
@@ -614,8 +614,7 @@ router.put('/:id', async (req: AuthenticatedRequest, res: any) => {
         ...(description !== undefined && { description: description?.trim() || null }),
         ...(status !== undefined && { status }),
         ...(domain !== undefined && { domain: domain?.trim() || null }),
-        ...(favicon !== undefined && { favicon }),
-        ...(theme !== undefined && { theme: typeof theme === 'string' ? theme : JSON.stringify(theme) })
+        ...(favicon !== undefined && { favicon })
       },
       include: {
         pages: {

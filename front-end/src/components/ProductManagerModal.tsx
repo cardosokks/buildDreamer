@@ -165,6 +165,8 @@ export const ProductManagerModal: React.FC<ProductManagerModalProps> = ({
     }
   }, [editingProduct]);
 
+  if (!isOpen) return null;
+
   // Calculate product sales & revenue statistics
   const productStatsMap = useMemo(() => {
     const stats: Record<string, { count: number; totalRevenue: number }> = {};
@@ -178,8 +180,6 @@ export const ProductManagerModal: React.FC<ProductManagerModalProps> = ({
     });
     return stats;
   }, [sales]);
-
-  if (!isOpen) return null;
 
   // Overall catalog metrics
   const totalProducts = products.length;
@@ -329,7 +329,7 @@ export const ProductManagerModal: React.FC<ProductManagerModalProps> = ({
         handleCloseForm();
         onRefreshProducts();
         if (viewingProduct?.id === editingProduct?.id) {
-          setViewingProduct({ ...viewingProduct, ...payload, id: editingProduct?.id || '' });
+          setViewingProduct({ ...viewingProduct, ...payload, id: editingProduct.id });
         }
       } else {
         notify.error(data.error || 'Erro ao salvar produto');

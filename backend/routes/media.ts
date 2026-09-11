@@ -14,9 +14,6 @@ router.get('/files/*', async (req, res) => {
     if (!objectName) {
       return res.status(400).send('Bad Request: Object name is required');
     }
-
-    // Obtém o stream do arquivo (ou cria e retorna o fallback local se não existir)
-    const stream = await getAssetStream(objectName);
     
     // Configura os headers baseados na extensão do arquivo
     const ext = objectName.split('.').pop()?.toLowerCase();
@@ -27,27 +24,14 @@ router.get('/files/*', async (req, res) => {
     else if (ext === 'svg') contentType = 'image/svg+xml';
     else if (ext === 'webp') contentType = 'image/webp';
     else if (ext === 'mp4') contentType = 'video/mp4';
-    else if (ext === 'js') contentType = 'application/javascript';
-    else if (ext === 'css') contentType = 'text/css';
-
-    // Se o arquivo for um SVG de fallback gerado localmente, ajusta o Content-Type para renderizar no navegador
-    const filename = path.basename(objectName);
-    const localPath = path.join(process.cwd(), 'backend', 'data', 'uploads', filename);
-    if (fs.existsSync(localPath)) {
-      try {
-        const head = fs.readFileSync(localPath, { encoding: 'utf-8', flag: 'r' }).slice(0, 100);
-        if (head.includes('<svg')) {
-          contentType = 'image/svg+xml';
-        }
-      } catch {}
-    }
     
     res.setHeader('Content-Type', contentType);
     res.setHeader('Cache-Control', 'public, max-age=31536000'); // cache for 1 year
     
+    const stream = await getAssetStream(objectName);
     stream.pipe(res);
   } catch (error: any) {
-    console.warn(`[Media Proxy Warning] Falha ao servir arquivo ${req.params[0]}:`, error.message);
+    console.error(`[MinIO Proxy Error] Falha ao buscar arquivo ${req.params[0]}:`, error.message);
     res.status(404).send('Not Found');
   }
 });

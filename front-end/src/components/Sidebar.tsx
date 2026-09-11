@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   Type,
   Square,
@@ -137,24 +137,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set(['0', '1', '2', '3', '0.0', '0.1', '1.0']));
   const [dragSource, setDragSource] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState<string | null>(null);
-
-  // Auto-expand parent folders when selectedPath changes
-  useEffect(() => {
-    if (selectedPath) {
-      const parts = selectedPath.split('.');
-      if (parts.length > 1) {
-        setExpandedPaths(prev => {
-          const next = new Set(prev);
-          let current = '';
-          for (let i = 0; i < parts.length - 1; i++) {
-            current = current ? `${current}.${parts[i]}` : parts[i];
-            next.add(current);
-          }
-          return next;
-        });
-      }
-    }
-  }, [selectedPath]);
 
   // Template Manager State
   const [templateCategoryFilter, setTemplateCategoryFilter] = useState<string>('ALL');
@@ -497,51 +479,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
 </section>
       `,
       createdAt: 3
-    },
-    {
-      id: 'simple-button',
-      title: 'Botão Moderno',
-      category: 'Elementos',
-      html: `
-<button style="padding: 12px 24px; background: #a855f7; color: white; border: none; border-radius: 12px; font-weight: 700; cursor: pointer; transition: transform 0.2s;">
-  Clique Aqui
-</button>
-      `,
-      createdAt: 4
-    },
-    {
-      id: 'hero-minimal',
-      title: 'Hero Minimalista',
-      category: 'Hero',
-      html: `
-<div style="padding: 120px 20px; text-align: center; background: #080a12;">
-  <h1 style="font-size: 56px; font-weight: 900; color: white; margin-bottom: 24px; line-height: 1.1;">Construa sua Presença <span style="color: #a855f7;">Digital</span></h1>
-  <p style="font-size: 18px; color: #94a3b8; max-width: 600px; margin: 0 auto 40px auto;">A plataforma definitiva para criar landing pages que convertem visitantes em clientes reais.</p>
-  <div style="display: flex; gap: 16px; justify-content: center;">
-    <button style="padding: 16px 32px; background: #a855f7; color: white; border-radius: 12px; font-weight: 700; border: none;">Começar Agora</button>
-    <button style="padding: 16px 32px; background: transparent; color: white; border: 1px solid #334155; border-radius: 12px; font-weight: 700;">Saber Mais</button>
-  </div>
-</div>
-      `,
-      createdAt: 5
-    },
-    {
-      id: 'image-card',
-      title: 'Card com Imagem',
-      category: 'Componentes',
-      html: `
-<div style="max-width: 350px; background: #111827; border: 1px solid #1f2937; border-radius: 20px; overflow: hidden; transition: transform 0.3s;">
-  <div style="height: 200px; background: #1f2937; display: flex; align-items: center; justify-content: center;">
-    <img src="https://images.unsplash.com/photo-1498050108023-c5249f4df085?auto=format&fit=crop&w=600&q=80" style="width: 100%; height: 100%; object-fit: cover;" />
-  </div>
-  <div style="padding: 24px;">
-    <h3 style="font-size: 20px; font-weight: 700; color: white; margin-bottom: 12px;">Título do Projeto</h3>
-    <p style="font-size: 14px; color: #94a3b8; margin-bottom: 20px;">Descrição curta e objetiva sobre o que este card representa no seu layout.</p>
-    <button style="color: #a855f7; background: transparent; border: none; font-weight: 700; cursor: pointer;">Ver Detalhes →</button>
-  </div>
-</div>
-      `,
-      createdAt: 6
     }
   ];
 
