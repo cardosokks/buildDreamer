@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Editor from '@monaco-editor/react';
 import { Save, Plus, Trash2, FileCode, Code, FileText } from 'lucide-react';
-import { useNotification } from '../context/NotificationContext';
+import { useNotification } from '../../context/NotificationContext';
 
 interface CodeFile {
   id: string;

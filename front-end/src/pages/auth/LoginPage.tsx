@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { API_URL, safeJson } from '../config';
-import { useAuth } from '../context/AuthContext';
+import { API_URL, safeJson } from '../../config';
+import { useAuth } from '../../context/AuthContext';
 import { Lock, Mail, ArrowRight, ShieldCheck, AlertCircle, Loader2, Flower } from 'lucide-react';
 
 interface LoginPageProps {

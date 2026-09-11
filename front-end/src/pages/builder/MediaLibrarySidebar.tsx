@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Image as ImageIcon, Upload, Trash2, Plus, Copy, Check, Search, Loader2, X, RefreshCw, CheckSquare, Square } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
-import { API_URL } from '../config';
-import { useNotification } from '../context/NotificationContext';
+import { useAuth } from '../../context/AuthContext';
+import { API_URL } from '../../config';
+import { useNotification } from '../../context/NotificationContext';
 
 export interface MediaItem {
   id: string;

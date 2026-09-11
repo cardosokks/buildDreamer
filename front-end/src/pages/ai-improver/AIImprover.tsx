@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useAuth } from '../context/AuthContext';
-import { useTheme } from '../context/ThemeContext';
-import { useNotification } from '../context/NotificationContext';
+import { useAuth } from '../../context/AuthContext';
+import { useTheme } from '../../context/ThemeContext';
+import { useNotification } from '../../context/NotificationContext';
 import {
   ArrowLeft,
   Sparkles,
@@ -29,8 +29,9 @@ import {
   Sliders,
   Sparkle
 } from 'lucide-react';
-import { ChatPanel } from './ChatPanel';
-import { API_URL, safeJson } from '../config';
+import { ChatPanel } from '../../components/ChatPanel';
+import { API_URL, safeJson } from '../../config';
+import { COMMON_HEAD_SCRIPTS, CORE_BASE_STYLES } from '../../lib/pageHead';
 
 interface Page {
   id: string;
@@ -731,8 +732,11 @@ export const AIImprover: React.FC<AIImproverProps> = ({ projectId, onBack, onOpe
                         <html>
                           <head>
                             <meta charset="utf-8">
-                            <script src="https://cdn.tailwindcss.com"></script>
-                            <style>${beforeSnapshot?.css || originalCss}</style>
+                            ${COMMON_HEAD_SCRIPTS}
+                            <style>
+                              ${CORE_BASE_STYLES}
+                              ${beforeSnapshot?.css || originalCss}
+                            </style>
                           </head>
                           <body class="bg-transparent m-0 p-0">${beforeSnapshot?.html || originalHtml}</body>
                           <script>${beforeSnapshot?.js || originalJs}</script>
@@ -761,8 +765,11 @@ export const AIImprover: React.FC<AIImproverProps> = ({ projectId, onBack, onOpe
                         <html>
                           <head>
                             <meta charset="utf-8">
-                            <script src="https://cdn.tailwindcss.com"></script>
-                            <style>${activePage?.css || ''}</style>
+                            ${COMMON_HEAD_SCRIPTS}
+                            <style>
+                              ${CORE_BASE_STYLES}
+                              ${activePage?.css || ''}
+                            </style>
                           </head>
                           <body class="bg-transparent m-0 p-0">${activePage?.html || ''}</body>
                           <script>${activePage?.js || ''}</script>
@@ -804,13 +811,9 @@ export const AIImprover: React.FC<AIImproverProps> = ({ projectId, onBack, onOpe
                         <html>
                           <head>
                             <meta charset="utf-8">
-                            <script src="https://cdn.tailwindcss.com"></script>
+                            ${COMMON_HEAD_SCRIPTS}
                             <style>
-                              html, body {
-                                margin: 0;
-                                padding: 0;
-                                overflow-x: hidden;
-                              }
+                              ${CORE_BASE_STYLES}
                               ${activePage.css || ''}
                             </style>
                           </head>

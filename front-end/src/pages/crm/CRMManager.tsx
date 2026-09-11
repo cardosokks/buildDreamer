@@ -31,11 +31,11 @@ import {
   DollarSign,
   ShoppingCart
 } from 'lucide-react';
-import { API_URL, safeJson } from '../config';
-import { useAuth } from '../context/AuthContext';
-import { useTheme } from '../context/ThemeContext';
-import { useNotification } from '../context/NotificationContext';
-import { ProductManagerModal, Product } from './ProductManagerModal';
+import { API_URL, safeJson } from '../../config';
+import { useAuth } from '../../context/AuthContext';
+import { useTheme } from '../../context/ThemeContext';
+import { useNotification } from '../../context/NotificationContext';
+import { ProductManagerModal, Product } from '../../components/ProductManagerModal';
 
 interface Sale {
   id: string;

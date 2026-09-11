@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '../context/AuthContext';
-import { API_URL, safeJson } from '../config';
+import { useAuth } from '../../context/AuthContext';
+import { API_URL, safeJson } from '../../config';
 import { PromptPreviewModal } from './PromptPreviewModal';
-import { buildStructuredSitePrompt, mapSegmentToTheme } from '../utils/promptEngine';
+import { buildStructuredSitePrompt, mapSegmentToTheme } from '../../utils/promptEngine';
 import {
   FolderPlus,
   Trash2,
@@ -77,12 +77,12 @@ import {
   ShieldCheck
 } from 'lucide-react';
 
-import { useTheme } from '../context/ThemeContext';
-import { useNotification } from '../context/NotificationContext';
-import { SettingsPage } from './SettingsPage';
-import { CRMManager } from './CRMManager';
-import { UserManagementPanel } from './UserManagementPanel';
-import { TeamChatPanel } from './TeamChatPanel';
+import { useTheme } from '../../context/ThemeContext';
+import { useNotification } from '../../context/NotificationContext';
+import { SettingsPage } from '../settings/SettingsPage';
+import { CRMManager } from '../crm/CRMManager';
+import { UserManagementPanel } from '../users/UserManagementPanel';
+import { TeamChatPanel } from '../../components/TeamChatPanel';
 
 interface Project {
   id: string;

@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { AuthPage } from './components/AuthPage';
-import { Dashboard } from './components/Dashboard';
-import { VisualBuilder } from './components/VisualBuilder';
-import { AIImprover } from './components/AIImprover';
+import { AuthPage } from './pages/auth/AuthPage';
+import { Dashboard } from './pages/dashboard/Dashboard';
+import { VisualBuilder } from './pages/builder/VisualBuilder';
+import { AIImprover } from './pages/ai-improver/AIImprover';
 
 export interface AppRoute {
   type: 'dashboard' | 'builder' | 'ai-improver' | 'auth';

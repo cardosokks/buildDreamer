@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../db';
 import { AuthenticatedRequest } from '../middleware/auth';
+import { cleanHtmlExtractAssets } from '../services/gemini';
 
 const router = Router();
 
@@ -35,6 +36,9 @@ router.post(['/projects/:projectId/pages', '/pages'], async (req: AuthenticatedR
       });
     }
 
+    // Separa rigorosamente HTML, CSS e JS para a nova página
+    const cleaned = cleanHtmlExtractAssets(html || '<div></div>', css || '', js || '');
+
     const page = await prisma.page.create({
       data: {
         name,
@@ -43,9 +47,9 @@ router.post(['/projects/:projectId/pages', '/pages'], async (req: AuthenticatedR
         description: description || '',
         seoTitle: seoTitle || title || name,
         seoDescription: seoDescription || description || '',
-        html: html || '<div></div>',
-        css: css || '',
-        js: js || '',
+        html: cleaned.html || '<div></div>',
+        css: cleaned.css || '',
+        js: cleaned.js || '',
         isHomepage: isHomepage === true,
         projectId
       },
@@ -89,6 +93,12 @@ router.put('/pages/:id', async (req: AuthenticatedRequest, res: any) => {
       });
     }
 
+    const rawHtmlInput = html !== undefined ? html : page.html;
+    const rawCssInput = css !== undefined ? css : page.css;
+    const rawJsInput = js !== undefined ? js : page.js;
+
+    const cleaned = cleanHtmlExtractAssets(rawHtmlInput, rawCssInput, rawJsInput);
+
     const updatedPage = await prisma.page.update({
       where: { id },
       data: {
@@ -99,9 +109,9 @@ router.put('/pages/:id', async (req: AuthenticatedRequest, res: any) => {
         seoTitle: seoTitle !== undefined ? seoTitle : page.seoTitle,
         seoDescription: seoDescription !== undefined ? seoDescription : page.seoDescription,
         seoOgImage: seoOgImage !== undefined ? seoOgImage : (page.seoOgImage || null),
-        html: html !== undefined ? html : page.html,
-        css: css !== undefined ? css : page.css,
-        js: js !== undefined ? js : page.js,
+        html: cleaned.html,
+        css: cleaned.css,
+        js: cleaned.js,
         isHomepage: isHomepage !== undefined ? isHomepage : page.isHomepage
       }
     });

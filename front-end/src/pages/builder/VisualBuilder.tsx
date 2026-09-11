@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useAuth } from '../context/AuthContext';
-import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../../context/AuthContext';
+import { useTheme } from '../../context/ThemeContext';
 import {
   ArrowLeft,
   Eye,
@@ -36,24 +36,29 @@ import {
   CheckCircle,
   X,
   ShieldCheck,
-  Plus
+  Plus,
+  Palette
 } from 'lucide-react';
 import { CreatePageModal, PageCreationData } from './CreatePageModal';
-import { getPageStarterTemplate } from '../lib/pageTemplates';
+import { getPageStarterTemplate } from '../../lib/pageTemplates';
 import { Sidebar } from './Sidebar';
 import type { ElementNode } from './Sidebar';
 import { Canvas } from './Canvas';
 import { PropertiesPanel } from './PropertiesPanel';
 import { CodeEditor } from './CodeEditor';
 import { MediaLibrarySidebar } from './MediaLibrarySidebar';
-import { ChatPanel } from './ChatPanel';
+import { ChatPanel } from '../../components/ChatPanel';
 import { SEOAuditModal } from './SEOAuditModal';
-import { API_URL, safeJson } from '../config';
-import { useNotification } from '../context/NotificationContext';
+import { ThemeSidebar } from './ThemeSidebar';
+import { CssSidebar } from './CssSidebar';
+import { API_URL, safeJson } from '../../config';
+import { useNotification } from '../../context/NotificationContext';
 
 import { InspectorPanel } from './InspectorPanel';
-import { findNodeById, updateComponentNode, removeNodeById, addNodeToParentById } from '../utils/tree';
-import { ComponentNode } from '../types/canvas';
+import { findNodeById, updateComponentNode, removeNodeById, addNodeToParentById } from '../../utils/tree';
+import { separatePageAssets } from '../../utils/cleanHtml';
+import { COMMON_HEAD_SCRIPTS, CORE_BASE_STYLES } from '../../lib/pageHead';
+import { ComponentNode } from '../../types/canvas';
 
 interface Page {
   id: string;
@@ -116,7 +121,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
   const [mediaGalleryTarget, setMediaGalleryTarget] = useState<'src' | 'ogImage' | null>(null);
 
   // Layout Panels (Persistência no LocalStorage)
-  const [activeLeftSidebar, setActiveLeftSidebar] = useState<'dom' | 'media' | null>(() => {
+  const [activeLeftSidebar, setActiveLeftSidebar] = useState<'dom' | 'media' | 'theme' | 'css' | null>(() => {
     try {
       const stored = localStorage.getItem('vb_active_left_sidebar');
       return stored !== null ? JSON.parse(stored) : 'dom';
@@ -195,6 +200,17 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
       });
       if (!res.ok) throw new Error('Falha ao carregar projeto');
       const data = await res.json();
+      if (data && data.pages) {
+        data.pages = data.pages.map((p: Page) => {
+          const separated = separatePageAssets(p.html, p.css, p.js);
+          return {
+            ...p,
+            html: separated.html,
+            css: separated.css,
+            js: separated.js
+          };
+        });
+      }
       setProject(data);
       if (data.name) {
         document.title = `${data.name} | Editor Visual BuildDreamer`;
@@ -391,6 +407,25 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
     return current;
   };
 
+  const getPathFromElement = (root: Element, target: Element): string => {
+    if (!target || target === root) return '';
+    const indexParts: number[] = [];
+    let current: Element | null = target;
+    while (current && current !== root) {
+      const parent = current.parentElement;
+      if (!parent) break;
+      const validChildren: Element[] = Array.from(parent.children).filter(
+        (c: Element) => !c.id.startsWith('studio-') && !c.classList.contains('studio-tool-btn')
+      );
+      const idx = validChildren.indexOf(current);
+      if (idx !== -1) {
+        indexParts.unshift(idx);
+      }
+      current = parent;
+    }
+    return indexParts.join('.');
+  };
+
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error'>('saved');
 
   const persistPage = useCallback(async (pageToSave: Page, showSuccessToast: boolean) => {
@@ -476,7 +511,19 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
     const currentPage = activePageRef.current;
     if (!currentPage) return;
     pushHistorySnapshot(`Edição de ${type.toUpperCase()}`);
-    const updatedPage = { ...currentPage, [type]: value };
+
+    let updatedPage = { ...currentPage, [type]: value };
+
+    if (type === 'html' && typeof value === 'string') {
+      const separated = separatePageAssets(value, currentPage.css, currentPage.js);
+      updatedPage = {
+        ...currentPage,
+        html: separated.html,
+        css: separated.css,
+        js: separated.js
+      };
+    }
+
     activePageRef.current = updatedPage;
 
     setProject(prev => prev ? {
@@ -511,7 +558,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
     const root = doc.getElementById('canvas-root') || doc.body;
     const el = getElementByPath(root, path);
     if (el) {
-      el.textContent = newText;
+      el.innerHTML = newText;
       const newHtml = serializeBodyContent(doc);
       handleCodeChange('html', newHtml);
     }
@@ -526,11 +573,14 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
     const doc = parseDocFromHtml(currentPage.html);
     const root = doc.getElementById('canvas-root') || doc.body;
     const el = getElementByPath(root, selectedPath);
-    if (el instanceof HTMLElement) {
-      if (value) {
-        el.style.setProperty(prop, value);
-      } else {
-        el.style.removeProperty(prop);
+    if (el) {
+      const htmlEl = el as any;
+      if (htmlEl.style) {
+        if (value) {
+          htmlEl.style.setProperty(prop, value);
+        } else {
+          htmlEl.style.removeProperty(prop);
+        }
       }
       const newHtml = serializeBodyContent(doc);
       handleCodeChange('html', newHtml);
@@ -596,6 +646,9 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
       return;
     }
 
+    const newPath = getPathFromElement(root, el);
+    setSelectedPath(newPath);
+
     const newHtml = serializeBodyContent(doc);
     handleCodeChange('html', newHtml);
   };
@@ -626,6 +679,10 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
     if (el && el.parentElement) {
       const clone = el.cloneNode(true) as Element;
       el.parentElement.insertBefore(clone, el.nextSibling);
+      
+      const newPath = getPathFromElement(root, clone);
+      setSelectedPath(newPath);
+
       const newHtml = serializeBodyContent(doc);
       handleCodeChange('html', newHtml);
     }
@@ -649,10 +706,12 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
       } else {
         tgtEl.appendChild(srcEl);
       }
+
+      const newPath = getPathFromElement(root, srcEl);
+      setSelectedPath(newPath);
+
       const newHtml = serializeBodyContent(doc);
       handleCodeChange('html', newHtml);
-      setSelectedPath(null);
-      setSelectedSelector(null);
     }
   };
 
@@ -1035,6 +1094,11 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
       finalJs = starter.js || '';
     }
 
+    const separated = separatePageAssets(finalHtml, finalCss, finalJs);
+    finalHtml = separated.html;
+    finalCss = separated.css;
+    finalJs = separated.js;
+
     const res = await fetch(`${API_URL}/api/pages`, {
       method: 'POST',
       headers: {
@@ -1103,40 +1167,15 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
   <title>${activePage.seoTitle || activePage.name}</title>
   <meta name="description" content="${cleanDesc}">
   <!-- CDNs e Tecnologias Injetadas -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://unpkg.com/lucide@latest"></script>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300..800;1,300..800&family=Syne:wght@700;800&family=Space+Grotesk:wght@500;700&family=Outfit:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700;800;900&family=Cinzel:wght@600;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
-  <script src="https://unpkg.com/lenis@1.1.18/dist/lenis.min.js"></script>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css"/>
-  <script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>
-  <script type="module" src="https://unpkg.com/@splinetool/viewer/build/spline-viewer.js"></script>
+  ${COMMON_HEAD_SCRIPTS}
   <style id="studio-core-styles">
-    * {
-      box-sizing: border-box;
-    }
-    body {
-      margin: 0;
-      padding: 0;
-      min-height: 100vh;
-      background: #090d16;
-      color: #f8fafc;
-      font-family: 'Plus Jakarta Sans', 'Inter', sans-serif;
-      position: relative;
-    }
-    h1, h2, h3, h4, h5, h6 {
-      font-family: 'Syne', 'Outfit', sans-serif;
-    }
+    ${CORE_BASE_STYLES}
   </style>
   <style id="studio-user-styles">
     ${activePage.css || ''}
   </style>
 </head>
-<body class="bg-slate-950 text-slate-100 min-h-screen">
+<body class="min-h-screen">
   <div id="preview-root">
     ${activePage.html || ''}
   </div>
@@ -1717,12 +1756,31 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
           />
         )}
 
-        {/* ─── Alternância de Sidebars Esquerdas (DOM e Banco de Mídias) ─── */}
+        {/* Left Sidebar 3 (Tema & Estilos Globais) */}
+        {activeLeftSidebar === 'theme' && activePage && (
+          <ThemeSidebar
+            css={activePage.css || ''}
+            onCssChange={(newCss) => handleCodeChange('css', newCss)}
+            onClose={() => setActiveLeftSidebar(null)}
+          />
+        )}
+
+        {/* Left Sidebar 4 (Editor CSS da Página) */}
+        {activeLeftSidebar === 'css' && activePage && (
+          <CssSidebar
+            css={activePage.css || ''}
+            selectedSelector={selectedSelector}
+            onCssChange={(newCss) => handleCodeChange('css', newCss)}
+            onClose={() => setActiveLeftSidebar(null)}
+          />
+        )}
+
+        {/* ─── Alternância de Sidebars Esquerdas (DOM, Mídia, Tema, CSS) ─── */}
         <div className="relative z-20 self-start mt-4 flex flex-col items-center gap-2 shrink-0">
-          {/* Botão DOM */}
+          {/* Aba 1: DOM */}
           <button
             onClick={() => setActiveLeftSidebar(prev => prev === 'dom' ? null : 'dom')}
-            title={activeLeftSidebar === 'dom' ? 'Minimizar painel de páginas (DOM)' : 'Abrir painel de páginas (DOM)'}
+            title={activeLeftSidebar === 'dom' ? 'Minimizar painel de páginas (DOM)' : 'Abrir painel de páginas e estrutura (DOM)'}
             className={`
               flex flex-col items-center justify-center gap-1
               w-6 transition-all duration-200 cursor-pointer select-none rounded-r-xl
@@ -1737,10 +1795,10 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
             <span className="text-[8px] font-bold tracking-widest uppercase" style={{ writingMode: 'vertical-rl', letterSpacing: '0.15em' }}>DOM</span>
           </button>
 
-          {/* Botão Mídia (Posicionado exatamente abaixo do ícone da DOM) */}
+          {/* Aba 2: Mídia */}
           <button
             onClick={() => setActiveLeftSidebar(prev => prev === 'media' ? null : 'media')}
-            title={activeLeftSidebar === 'media' ? 'Minimizar banco de imagens' : 'Abrir banco de imagens e upload'}
+            title={activeLeftSidebar === 'media' ? 'Minimizar banco de imagens' : 'Abrir banco de imagens e upload (Mídia)'}
             className={`
               flex flex-col items-center justify-center gap-1
               w-6 transition-all duration-200 cursor-pointer select-none rounded-r-xl
@@ -1753,6 +1811,42 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
           >
             <ImageIcon className="w-3 h-3" />
             <span className="text-[8px] font-bold tracking-widest uppercase" style={{ writingMode: 'vertical-rl', letterSpacing: '0.15em' }}>MÍDIA</span>
+          </button>
+
+          {/* Aba 3: Tema */}
+          <button
+            onClick={() => setActiveLeftSidebar(prev => prev === 'theme' ? null : 'theme')}
+            title={activeLeftSidebar === 'theme' ? 'Minimizar tema e fontes' : 'Abrir tema e paleta de cores (Tema)'}
+            className={`
+              flex flex-col items-center justify-center gap-1
+              w-6 transition-all duration-200 cursor-pointer select-none rounded-r-xl
+              border-y border-r py-3 shrink-0
+              ${activeLeftSidebar === 'theme'
+                ? 'bg-gradient-to-b from-amber-600 to-rose-700 border-amber-500/60 text-amber-200 shadow-[2px_0_12px_rgba(245,158,11,0.3)]'
+                : 'bg-slate-900/80 border-slate-800 text-slate-500 hover:text-amber-300 hover:bg-slate-800 hover:border-amber-500/40'
+              }
+            `}
+          >
+            <Palette className="w-3 h-3" />
+            <span className="text-[8px] font-bold tracking-widest uppercase" style={{ writingMode: 'vertical-rl', letterSpacing: '0.15em' }}>TEMA</span>
+          </button>
+
+          {/* Aba 4: CSS */}
+          <button
+            onClick={() => setActiveLeftSidebar(prev => prev === 'css' ? null : 'css')}
+            title={activeLeftSidebar === 'css' ? 'Minimizar editor de CSS' : 'Abrir editor de CSS da página (CSS)'}
+            className={`
+              flex flex-col items-center justify-center gap-1
+              w-6 transition-all duration-200 cursor-pointer select-none rounded-r-xl
+              border-y border-r py-3 shrink-0
+              ${activeLeftSidebar === 'css'
+                ? 'bg-gradient-to-b from-indigo-600 to-purple-800 border-indigo-500/60 text-indigo-200 shadow-[2px_0_12px_rgba(99,102,241,0.3)]'
+                : 'bg-slate-900/80 border-slate-800 text-slate-500 hover:text-indigo-300 hover:bg-slate-800 hover:border-indigo-500/40'
+              }
+            `}
+          >
+            <Code2 className="w-3 h-3" />
+            <span className="text-[8px] font-bold tracking-widest uppercase" style={{ writingMode: 'vertical-rl', letterSpacing: '0.15em' }}>CSS</span>
           </button>
         </div>
         {/* Central Interactive Sandbox Canvas */}

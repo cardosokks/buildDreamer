@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useCallback, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { renderTreeToHtml } from '../utils/renderer';
-import { ComponentNode } from '../types/canvas';
+import { renderTreeToHtml } from '../../utils/renderer';
+import { ComponentNode } from '../../types/canvas';
+import { COMMON_HEAD_SCRIPTS, CORE_BASE_STYLES } from '../../lib/pageHead';
 
 interface CanvasProps {
   html?: string;
@@ -66,10 +67,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   } | null>(null);
 
   const getRenderedHtml = useCallback(() => {
-    if (components && components.length > 0) {
-      return renderTreeToHtml(components);
-    }
-    return html || '';
+    return html || (components && components.length > 0 ? renderTreeToHtml(components) : '');
   }, [components, html]);
 
   // Construct complete isolated iframe document with engine scripts & UI overlays
@@ -79,34 +77,10 @@ export const Canvas: React.FC<CanvasProps> = ({
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://unpkg.com/lucide@latest"></script>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300..800;1,300..800&family=Syne:wght@700;800&family=Space+Grotesk:wght@500;700&family=Outfit:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700;800;900&family=Cinzel:wght@600;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
-  <script src="https://unpkg.com/lenis@1.1.18/dist/lenis.min.js"></script>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css"/>
-  <script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>
-  <script type="module" src="https://unpkg.com/@splinetool/viewer/build/spline-viewer.js"></script>
+  ${COMMON_HEAD_SCRIPTS}
   
   <style id="studio-core-styles">
-    *, *::before, *::after {
-      box-sizing: border-box;
-    }
-    html, body {
-      margin: 0;
-      padding: 0;
-      min-height: 100vh;
-      background: #ffffff;
-      color: #0f172a;
-      font-family: 'Inter', system-ui, -apple-system, sans-serif;
-    }
-    h1, h2, h3, h4, h5, h6 {
-      font-family: 'Outfit', 'Inter', sans-serif;
-    }
+    ${CORE_BASE_STYLES}
 
     /* ─── Studio Selection Box (FIXED TO VIEWPORT) ─── */
     #studio-selection-box {
@@ -475,6 +449,16 @@ export const Canvas: React.FC<CanvasProps> = ({
         target.addEventListener('keydown', onKey);
       }
 
+      // ─── Window Blur Listener to commit changes when clicking outside iframe ───
+      window.addEventListener('blur', function() {
+        if (isEditingInline) {
+          const activeEdit = document.querySelector('[contenteditable="true"]');
+          if (activeEdit) {
+            activeEdit.blur();
+          }
+        }
+      });
+
       // ─── Click Listener ───
       document.addEventListener('click', function(e) {
         if (e.target.closest('#studio-quick-toolbar') || e.target.closest('.studio-resize-handle')) {
@@ -482,6 +466,21 @@ export const Canvas: React.FC<CanvasProps> = ({
         }
 
         const target = e.target;
+
+        // Se estiver editando inline, gerencia desfocagem e cursor de texto
+        if (isEditingInline) {
+          const activeEdit = document.querySelector('[contenteditable="true"]');
+          if (activeEdit) {
+            if (activeEdit.contains(target)) {
+              // Permite clicar normalmente dentro do elemento editável para posicionar cursor/selecionar
+              return;
+            } else {
+              // Clicou fora do elemento sendo editado: desfoca para salvar e prossegue
+              activeEdit.blur();
+            }
+          }
+        }
+
         if (isInternalStudioNode(target)) {
           removeSelection();
           window.parent.postMessage({ type: 'ELEMENT_SELECTED', selector: '', styles: {}, attrs: {}, elementPath: '', componentId: null }, '*');
@@ -795,10 +794,12 @@ export const Canvas: React.FC<CanvasProps> = ({
           window.scrollTo(scrollX, scrollY);
 
           // Restore selection safely
-          if (currentSelectedPath) {
-            const el = getElementByIndexPath(currentSelectedPath);
+          const path = (msg.data.highlightPath !== undefined) ? msg.data.highlightPath : currentSelectedPath;
+          if (path) {
+            const el = getElementByIndexPath(path);
             if (el) {
               currentSelected = el;
+              currentSelectedPath = path;
               if (window.ResizeObserver && resizeObserver) {
                 try { resizeObserver.observe(currentSelected); } catch(e) {}
               }
@@ -806,6 +807,8 @@ export const Canvas: React.FC<CanvasProps> = ({
             } else {
               removeSelection();
             }
+          } else {
+            removeSelection();
           }
         }
 
@@ -869,6 +872,7 @@ export const Canvas: React.FC<CanvasProps> = ({
           } catch(e){}
         }
       }, 300);
+      try { window.parent.postMessage({ type: 'CANVAS_READY' }, '*'); } catch(e){}
     })();
   </script>
 </body>
@@ -892,7 +896,8 @@ export const Canvas: React.FC<CanvasProps> = ({
           type: 'UPDATE_HTML_SEAMLESS',
           html: renderedHtml,
           css,
-          js
+          js,
+          highlightPath: highlightPath ?? null
         }, '*');
       }
       return;
@@ -905,7 +910,7 @@ export const Canvas: React.FC<CanvasProps> = ({
     const documentContent = buildIframeDoc(renderedHtml, css, js);
     iframe.srcdoc = documentContent;
     isInitializedRef.current = true;
-  }, [getRenderedHtml, css, js, buildIframeDoc]);
+  }, [getRenderedHtml, css, js, buildIframeDoc, highlightPath]);
 
   // Sync Highlight Path from Sidebar / Layers
   useEffect(() => {
@@ -919,11 +924,14 @@ export const Canvas: React.FC<CanvasProps> = ({
       }, '*');
     };
 
-    if (iframe.contentDocument?.readyState === 'complete') {
-      sendHighlight();
-    } else {
-      iframe.addEventListener('load', sendHighlight, { once: true });
-    }
+    // Always send highlight path immediately to prevent race conditions
+    sendHighlight();
+
+    // Also send on load just in case the iframe is still loading
+    iframe.addEventListener('load', sendHighlight);
+    return () => {
+      iframe.removeEventListener('load', sendHighlight);
+    };
   }, [highlightPath]);
 
   // Sync Hover Path from Layers tree

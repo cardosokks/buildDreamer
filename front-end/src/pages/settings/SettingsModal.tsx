@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '../context/AuthContext';
-import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../../context/AuthContext';
+import { useTheme } from '../../context/ThemeContext';
 import { User, Key, Save, Trash2, Plus, Box, Sparkles, Cpu, Check, RotateCcw } from 'lucide-react';
-import { API_URL } from '../config';
+import { API_URL } from '../../config';
 
 interface SettingsModalProps {
   onClose: () => void;

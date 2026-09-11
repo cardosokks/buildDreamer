@@ -27,9 +27,9 @@ import {
   Image as ImageIcon,
   Loader2
 } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
-import { API_URL } from '../config';
-import { useNotification } from '../context/NotificationContext';
+import { useAuth } from '../../context/AuthContext';
+import { API_URL } from '../../config';
+import { useNotification } from '../../context/NotificationContext';
 
 const rgbToHex = (color: string): string => {
   if (!color || color === 'transparent' || color.startsWith('#')) return color;

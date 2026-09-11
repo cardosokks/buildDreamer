@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '../context/AuthContext';
-import { useNotification } from '../context/NotificationContext';
-import { API_URL, safeJson } from '../config';
+import { useAuth } from '../../context/AuthContext';
+import { useNotification } from '../../context/NotificationContext';
+import { API_URL, safeJson } from '../../config';
 import { Users, UserPlus, Shield, Key, Trash2, Edit2, Check, X, Lock, Mail, User as UserIcon, Calendar, AlertTriangle } from 'lucide-react';
 
 interface SystemUser {

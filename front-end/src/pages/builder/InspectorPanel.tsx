@@ -1,5 +1,5 @@
 import React from 'react';
-import { ComponentNode } from '../types/canvas';
+import { ComponentNode } from '../../types/canvas';
 
 interface InspectorPanelProps {
   node: ComponentNode;
