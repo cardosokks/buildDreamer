@@ -321,6 +321,14 @@ export const DEFAULT_AI_SKILLS: AISkill[] = [
     description: 'Cria e sincroniza rotas consistentes entre Home, Sobre, Serviços, Contato e FAQ mantendo padrão visual unificado e navegação fluida.',
     promptSnippet: 'Mantenha rigorosa consistência de navegação entre todas as páginas (Home, Sobre, Serviços, Contato), garantindo que o cabeçalho (navbar) e o rodapé (footer) compartilhem exatamente a mesma estrutura e links em todas as páginas.',
     enabled: true
+  },
+  {
+    id: 'skill-section-transitions',
+    name: 'Transições Orgânicas & Divisores de Seção (Anti-Quadrado)',
+    category: 'layout',
+    description: 'Elimina o visual de blocos quadrados engessados adicionando divisores de seção em SVG (ondas, slants diagonais, curvas), linhas néon com glow e cartões flutuantes sobrepostos.',
+    promptSnippet: 'Aplique o princípio Anti-Quadrado entre seções: insira divisores SVG de transição orgânica (ondas "wave", cortes diagonais "slant", curvas suaves) sempre que houver mudança de cor de fundo, e adicione cartões flutuantes com margem negativa (-mt-12 relative z-20) que cruzam a fronteira entre seções.',
+    enabled: true
   }
 ];
 
@@ -368,21 +376,21 @@ export const generateAIResponse = async (
     // Mapeamentos para modelos ativos válidos da API do Gemini
     if (
       clean.includes('gemini-3.') || 
+      clean.includes('gemini-2.5') ||
       clean === 'gemini-flash-latest' ||
       clean === 'gemini-pro-latest'
     ) {
-      return 'gemini-2.5-flash';
+      return 'gemini-2.0-flash';
     }
 
     return clean;
   };
 
   const DEFAULT_MODELS = [
-    'gemini-2.5-flash',
-    'gemini-2.5-pro',
     'gemini-2.0-flash',
     'gemini-1.5-flash',
-    'gemini-1.5-pro'
+    'gemini-1.5-pro',
+    'gemini-2.0-flash-lite'
   ];
 
   if (registeredModels && Array.isArray(registeredModels) && registeredModels.length > 0) {

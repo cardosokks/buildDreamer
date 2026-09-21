@@ -4,6 +4,7 @@ import { useTheme } from '../../context/ThemeContext';
 import {
   ArrowLeft,
   Eye,
+  Edit3,
   Download,
   Code2,
   Undo2,
@@ -143,6 +144,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
   }, [activeLeftSidebar]);
 
   const [showSidebar, setShowSidebar] = useState<boolean>(true);
+  const [isBrowserMode, setIsBrowserMode] = useState<boolean>(false);
 
   const [showStylesPanel, setShowStylesPanel] = useState<boolean>(() => {
     try {
@@ -1366,6 +1368,34 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
           </div>
         </div>
 
+        {/* Segmented Mode Switcher: Modo Editor vs Live Preview (Modo Navegador) */}
+        <div className="flex items-center bg-slate-950/90 border border-slate-800 rounded-xl p-1 gap-1 shadow-inner">
+          <button
+            onClick={() => setIsBrowserMode(false)}
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              !isBrowserMode
+                ? 'bg-purple-600 text-white shadow-md shadow-purple-600/30'
+                : 'text-slate-400 hover:text-white hover:bg-slate-900'
+            }`}
+            title="Modo de Edição com seleções, propriedades e painéis de controle"
+          >
+            <Edit3 className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Modo Editor</span>
+          </button>
+          <button
+            onClick={() => setIsBrowserMode(true)}
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              isBrowserMode
+                ? 'bg-cyan-600 text-white shadow-md shadow-cyan-600/30'
+                : 'text-slate-400 hover:text-white hover:bg-slate-900'
+            }`}
+            title="Live Preview: Visualização limpa em tela cheia como um navegador real"
+          >
+            <Eye className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Live Preview</span>
+          </button>
+        </div>
+
         {/* Viewports & Breakpoints Controller (Menu Unificado Dropdown) */}
         <div className="flex items-center">
           <div className="relative">
@@ -1610,7 +1640,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
       {/* ─── Main Editor Workspace Layout ─── */}
       <div className="flex-1 flex overflow-hidden relative">
         {/* Left Sidebar 1 (Páginas + DOM Tree) */}
-        {activeLeftSidebar === 'dom' && project && activePage && (
+        {!isBrowserMode && activeLeftSidebar === 'dom' && project && activePage && (
           <Sidebar
             pages={project.pages}
             activePageId={activePageId}
@@ -1704,7 +1734,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
         )}
 
         {/* Left Sidebar 2 (Banco de Imagens & Uploads) */}
-        {activeLeftSidebar === 'media' && (
+        {!isBrowserMode && activeLeftSidebar === 'media' && (
           <MediaLibrarySidebar
             projectId={projectId}
             onClose={() => {
@@ -1764,7 +1794,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
         )}
 
         {/* Left Sidebar 3 (Tema & Estilos Globais) */}
-        {activeLeftSidebar === 'theme' && activePage && (
+        {!isBrowserMode && activeLeftSidebar === 'theme' && activePage && (
           <ThemeSidebar
             css={activePage.css || ''}
             onCssChange={(newCss) => handleCodeChange('css', newCss)}
@@ -1773,7 +1803,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
         )}
 
         {/* Left Sidebar 4 (Editor CSS da Página) */}
-        {activeLeftSidebar === 'css' && activePage && (
+        {!isBrowserMode && activeLeftSidebar === 'css' && activePage && (
           <CssSidebar
             css={activePage.css || ''}
             selectedSelector={selectedSelector}
@@ -1783,7 +1813,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
         )}
 
         {/* Left Sidebar 5 (Configurações do Projeto e Brand Variables) */}
-        {activeLeftSidebar === 'settings' && project && (
+        {!isBrowserMode && activeLeftSidebar === 'settings' && project && (
           <ProjectSettingsSidebar
             project={project}
             onSave={async (updatedFields) => {
@@ -1813,100 +1843,103 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
         )}
 
         {/* ─── Alternância de Sidebars Esquerdas (DOM, Mídia, Tema, CSS, Settings) ─── */}
-        <div className="relative z-20 self-start mt-4 flex flex-col items-center gap-2 shrink-0">
-          {/* Aba 1: DOM */}
-          <button
-            onClick={() => setActiveLeftSidebar(prev => prev === 'dom' ? null : 'dom')}
-            title={activeLeftSidebar === 'dom' ? 'Minimizar painel de páginas (DOM)' : 'Abrir painel de páginas e estrutura (DOM)'}
-            className={`
-              flex flex-col items-center justify-center gap-1
-              w-6 transition-all duration-200 cursor-pointer select-none rounded-r-xl
-              border-y border-r py-3 shrink-0
-              ${activeLeftSidebar === 'dom'
-                ? 'bg-gradient-to-b from-purple-700 to-purple-900 border-purple-600/60 text-purple-200 shadow-[2px_0_12px_rgba(168,85,247,0.3)]'
-                : 'bg-slate-900/80 border-slate-800 text-slate-500 hover:text-purple-300 hover:bg-slate-800 hover:border-purple-500/40'
-              }
-            `}
-          >
-            <PanelLeft className="w-3 h-3" />
-            <span className="text-[8px] font-bold tracking-widest uppercase" style={{ writingMode: 'vertical-rl', letterSpacing: '0.15em' }}>DOM</span>
-          </button>
+        {!isBrowserMode && (
+          <div className="relative z-20 self-start mt-4 flex flex-col items-center gap-2 shrink-0">
+            {/* Aba 1: DOM */}
+            <button
+              onClick={() => setActiveLeftSidebar(prev => prev === 'dom' ? null : 'dom')}
+              title={activeLeftSidebar === 'dom' ? 'Minimizar painel de páginas (DOM)' : 'Abrir painel de páginas e estrutura (DOM)'}
+              className={`
+                flex flex-col items-center justify-center gap-1
+                w-6 transition-all duration-200 cursor-pointer select-none rounded-r-xl
+                border-y border-r py-3 shrink-0
+                ${activeLeftSidebar === 'dom'
+                  ? 'bg-gradient-to-b from-purple-700 to-purple-900 border-purple-600/60 text-purple-200 shadow-[2px_0_12px_rgba(168,85,247,0.3)]'
+                  : 'bg-slate-900/80 border-slate-800 text-slate-500 hover:text-purple-300 hover:bg-slate-800 hover:border-purple-500/40'
+                }
+              `}
+            >
+              <PanelLeft className="w-3 h-3" />
+              <span className="text-[8px] font-bold tracking-widest uppercase" style={{ writingMode: 'vertical-rl', letterSpacing: '0.15em' }}>DOM</span>
+            </button>
 
-          {/* Aba 2: Mídia */}
-          <button
-            onClick={() => setActiveLeftSidebar(prev => prev === 'media' ? null : 'media')}
-            title={activeLeftSidebar === 'media' ? 'Minimizar banco de imagens' : 'Abrir banco de imagens e upload (Mídia)'}
-            className={`
-              flex flex-col items-center justify-center gap-1
-              w-6 transition-all duration-200 cursor-pointer select-none rounded-r-xl
-              border-y border-r py-3 shrink-0
-              ${activeLeftSidebar === 'media'
-                ? 'bg-gradient-to-b from-cyan-600 to-indigo-700 border-cyan-500/60 text-cyan-200 shadow-[2px_0_12px_rgba(6,182,212,0.3)]'
-                : 'bg-slate-900/80 border-slate-800 text-slate-500 hover:text-cyan-300 hover:bg-slate-800 hover:border-cyan-500/40'
-              }
-            `}
-          >
-            <ImageIcon className="w-3 h-3" />
-            <span className="text-[8px] font-bold tracking-widest uppercase" style={{ writingMode: 'vertical-rl', letterSpacing: '0.15em' }}>MÍDIA</span>
-          </button>
+            {/* Aba 2: Mídia */}
+            <button
+              onClick={() => setActiveLeftSidebar(prev => prev === 'media' ? null : 'media')}
+              title={activeLeftSidebar === 'media' ? 'Minimizar banco de imagens' : 'Abrir banco de imagens e upload (Mídia)'}
+              className={`
+                flex flex-col items-center justify-center gap-1
+                w-6 transition-all duration-200 cursor-pointer select-none rounded-r-xl
+                border-y border-r py-3 shrink-0
+                ${activeLeftSidebar === 'media'
+                  ? 'bg-gradient-to-b from-cyan-600 to-indigo-700 border-cyan-500/60 text-cyan-200 shadow-[2px_0_12px_rgba(6,182,212,0.3)]'
+                  : 'bg-slate-900/80 border-slate-800 text-slate-500 hover:text-cyan-300 hover:bg-slate-800 hover:border-cyan-500/40'
+                }
+              `}
+            >
+              <ImageIcon className="w-3 h-3" />
+              <span className="text-[8px] font-bold tracking-widest uppercase" style={{ writingMode: 'vertical-rl', letterSpacing: '0.15em' }}>MÍDIA</span>
+            </button>
 
-          {/* Aba 3: Tema */}
-          <button
-            onClick={() => setActiveLeftSidebar(prev => prev === 'theme' ? null : 'theme')}
-            title={activeLeftSidebar === 'theme' ? 'Minimizar tema e fontes' : 'Abrir tema e paleta de cores (Tema)'}
-            className={`
-              flex flex-col items-center justify-center gap-1
-              w-6 transition-all duration-200 cursor-pointer select-none rounded-r-xl
-              border-y border-r py-3 shrink-0
-              ${activeLeftSidebar === 'theme'
-                ? 'bg-gradient-to-b from-amber-600 to-rose-700 border-amber-500/60 text-amber-200 shadow-[2px_0_12px_rgba(245,158,11,0.3)]'
-                : 'bg-slate-900/80 border-slate-800 text-slate-500 hover:text-amber-300 hover:bg-slate-800 hover:border-amber-500/40'
-              }
-            `}
-          >
-            <Palette className="w-3 h-3" />
-            <span className="text-[8px] font-bold tracking-widest uppercase" style={{ writingMode: 'vertical-rl', letterSpacing: '0.15em' }}>TEMA</span>
-          </button>
+            {/* Aba 3: Tema */}
+            <button
+              onClick={() => setActiveLeftSidebar(prev => prev === 'theme' ? null : 'theme')}
+              title={activeLeftSidebar === 'theme' ? 'Minimizar tema e fontes' : 'Abrir tema e paleta de cores (Tema)'}
+              className={`
+                flex flex-col items-center justify-center gap-1
+                w-6 transition-all duration-200 cursor-pointer select-none rounded-r-xl
+                border-y border-r py-3 shrink-0
+                ${activeLeftSidebar === 'theme'
+                  ? 'bg-gradient-to-b from-amber-600 to-rose-700 border-amber-500/60 text-amber-200 shadow-[2px_0_12px_rgba(245,158,11,0.3)]'
+                  : 'bg-slate-900/80 border-slate-800 text-slate-500 hover:text-amber-300 hover:bg-slate-800 hover:border-amber-500/40'
+                }
+              `}
+            >
+              <Palette className="w-3 h-3" />
+              <span className="text-[8px] font-bold tracking-widest uppercase" style={{ writingMode: 'vertical-rl', letterSpacing: '0.15em' }}>TEMA</span>
+            </button>
 
-          {/* Aba 4: CSS */}
-          <button
-            onClick={() => setActiveLeftSidebar(prev => prev === 'css' ? null : 'css')}
-            title={activeLeftSidebar === 'css' ? 'Minimizar editor de CSS' : 'Abrir editor de CSS da página (CSS)'}
-            className={`
-              flex flex-col items-center justify-center gap-1
-              w-6 transition-all duration-200 cursor-pointer select-none rounded-r-xl
-              border-y border-r py-3 shrink-0
-              ${activeLeftSidebar === 'css'
-                ? 'bg-gradient-to-b from-indigo-600 to-purple-800 border-indigo-500/60 text-indigo-200 shadow-[2px_0_12px_rgba(99,102,241,0.3)]'
-                : 'bg-slate-900/80 border-slate-800 text-slate-500 hover:text-indigo-300 hover:bg-slate-800 hover:border-indigo-500/40'
-              }
-            `}
-          >
-            <Code2 className="w-3 h-3" />
-            <span className="text-[8px] font-bold tracking-widest uppercase" style={{ writingMode: 'vertical-rl', letterSpacing: '0.15em' }}>CSS</span>
-          </button>
+            {/* Aba 4: CSS */}
+            <button
+              onClick={() => setActiveLeftSidebar(prev => prev === 'css' ? null : 'css')}
+              title={activeLeftSidebar === 'css' ? 'Minimizar editor de CSS' : 'Abrir editor de CSS da página (CSS)'}
+              className={`
+                flex flex-col items-center justify-center gap-1
+                w-6 transition-all duration-200 cursor-pointer select-none rounded-r-xl
+                border-y border-r py-3 shrink-0
+                ${activeLeftSidebar === 'css'
+                  ? 'bg-gradient-to-b from-indigo-600 to-purple-800 border-indigo-500/60 text-indigo-200 shadow-[2px_0_12px_rgba(99,102,241,0.3)]'
+                  : 'bg-slate-900/80 border-slate-800 text-slate-500 hover:text-indigo-300 hover:bg-slate-800 hover:border-indigo-500/40'
+                }
+              `}
+            >
+              <Code2 className="w-3 h-3" />
+              <span className="text-[8px] font-bold tracking-widest uppercase" style={{ writingMode: 'vertical-rl', letterSpacing: '0.15em' }}>CSS</span>
+            </button>
 
-          {/* Aba 5: Configurações */}
-          <button
-            onClick={() => setActiveLeftSidebar(prev => prev === 'settings' ? null : 'settings')}
-            title={activeLeftSidebar === 'settings' ? 'Minimizar configurações do site' : 'Abrir configurações globais e paleta da IA (Configs)'}
-            className={`
-              flex flex-col items-center justify-center gap-1
-              w-6 transition-all duration-200 cursor-pointer select-none rounded-r-xl
-              border-y border-r py-3 shrink-0
-              ${activeLeftSidebar === 'settings'
-                ? 'bg-gradient-to-b from-purple-600 to-indigo-800 border-purple-500/60 text-purple-200 shadow-[2px_0_12px_rgba(168,85,247,0.3)]'
-                : 'bg-slate-900/80 border-slate-800 text-slate-500 hover:text-purple-300 hover:bg-slate-800 hover:border-purple-500/40'
-              }
-            `}
-          >
-            <Settings className="w-3 h-3" />
-            <span className="text-[8px] font-bold tracking-widest uppercase" style={{ writingMode: 'vertical-rl', letterSpacing: '0.15em' }}>CONFIGS</span>
-          </button>
-        </div>
+            {/* Aba 5: Configurações */}
+            <button
+              onClick={() => setActiveLeftSidebar(prev => prev === 'settings' ? null : 'settings')}
+              title={activeLeftSidebar === 'settings' ? 'Minimizar configurações do site' : 'Abrir configurações globais e paleta da IA (Configs)'}
+              className={`
+                flex flex-col items-center justify-center gap-1
+                w-6 transition-all duration-200 cursor-pointer select-none rounded-r-xl
+                border-y border-r py-3 shrink-0
+                ${activeLeftSidebar === 'settings'
+                  ? 'bg-gradient-to-b from-purple-600 to-indigo-800 border-purple-500/60 text-purple-200 shadow-[2px_0_12px_rgba(168,85,247,0.3)]'
+                  : 'bg-slate-900/80 border-slate-800 text-slate-500 hover:text-purple-300 hover:bg-slate-800 hover:border-purple-500/40'
+                }
+              `}
+            >
+              <Settings className="w-3 h-3" />
+              <span className="text-[8px] font-bold tracking-widest uppercase" style={{ writingMode: 'vertical-rl', letterSpacing: '0.15em' }}>CONFIGS</span>
+            </button>
+          </div>
+        )}
+
         {/* Central Interactive Sandbox Canvas */}
         <main 
-          className="flex-1 flex justify-center items-center overflow-auto bg-[#07020d] p-3 md:p-6 min-w-0"
+          className="flex-1 flex justify-center items-center overflow-auto bg-[#07020d] p-3 md:p-6 min-w-0 relative"
           onWheel={(e) => {
             if (e.altKey) {
               e.preventDefault();
@@ -1918,6 +1951,65 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
             }
           }}
         >
+          {/* Floating Pill Banner when in Live Preview Mode */}
+          {isBrowserMode && (
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-slate-900/90 backdrop-blur-md border border-cyan-500/40 text-slate-200 px-4 py-2 rounded-2xl shadow-2xl animate-in fade-in slide-in-from-top-4 duration-200">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse" />
+                <span className="text-xs font-extrabold text-cyan-300 tracking-wide uppercase">Live Preview (Sem Overlays)</span>
+              </div>
+
+              <div className="h-4 w-px bg-slate-800" />
+
+              {/* Controles rápidos de Viewport no Live Preview */}
+              <div className="flex items-center gap-1 bg-slate-950/80 border border-slate-800 rounded-lg p-1">
+                <button
+                  onClick={() => setViewport('desktop')}
+                  className={`p-1.5 rounded-md transition-colors cursor-pointer ${viewport === 'desktop' ? 'bg-cyan-600 text-white' : 'text-slate-400 hover:text-white'}`}
+                  title="Visualizar em Desktop (Full Width)"
+                >
+                  <Monitor className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={() => setViewport('tablet')}
+                  className={`p-1.5 rounded-md transition-colors cursor-pointer ${viewport === 'tablet' ? 'bg-cyan-600 text-white' : 'text-slate-400 hover:text-white'}`}
+                  title="Visualizar em Tablet (768px)"
+                >
+                  <Tablet className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={() => setViewport('mobile')}
+                  className={`p-1.5 rounded-md transition-colors cursor-pointer ${viewport === 'mobile' ? 'bg-cyan-600 text-white' : 'text-slate-400 hover:text-white'}`}
+                  title="Visualizar em Mobile (375px)"
+                >
+                  <Smartphone className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              <div className="h-4 w-px bg-slate-800" />
+
+              <button
+                onClick={handleOpenLivePreview}
+                className="flex items-center gap-1.5 text-xs font-semibold text-slate-300 hover:text-white transition-colors cursor-pointer"
+                title="Abrir em Nova Aba Externa"
+              >
+                <ExternalLink className="w-3.5 h-3.5 text-cyan-400" />
+                <span className="hidden sm:inline">Nova Aba</span>
+              </button>
+
+              <div className="h-4 w-px bg-slate-800" />
+
+              <button
+                onClick={() => setIsBrowserMode(false)}
+                className="flex items-center gap-1.5 px-3 py-1 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-purple-600/30 cursor-pointer"
+                title="Sair do Live Preview e Voltar ao Editor"
+              >
+                <Edit3 className="w-3.5 h-3.5" />
+                <span>Voltar ao Editor</span>
+              </button>
+            </div>
+          )}
+
           <div 
             className="transition-all duration-200 h-full flex items-center justify-center relative"
             style={{
@@ -1962,10 +2054,41 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
                 css={activePage.css}
                 js={activePage.js}
                 components={activePage.components}
-                highlightPath={selectedPath}
-                hoverPath={hoverPath}
+                highlightPath={isBrowserMode ? null : selectedPath}
+                hoverPath={isBrowserMode ? null : hoverPath}
                 zoom={zoom}
+                isBrowserMode={isBrowserMode}
+                onNavigatePage={(href) => {
+                  if (!project?.pages) return;
+                  const cleanSlug = href
+                    .replace(/^https?:\/\/[^\/]+/i, '')
+                    .replace(/^blob:[^\/]+\//i, '')
+                    .replace(/^\/+/, '')
+                    .replace(/^pages\//, '')
+                    .replace(/\.html$/i, '')
+                    .replace(/\/$/, '')
+                    .toLowerCase();
+
+                  const targetPage = project.pages.find(p => {
+                    const pSlug = (p.slug || '').toLowerCase().replace(/^\/+/, '').replace(/\.html$/i, '');
+                    const pName = (p.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+                    return (
+                      pSlug === cleanSlug ||
+                      pName === cleanSlug ||
+                      (cleanSlug === 'index' && p.isHomepage) ||
+                      (cleanSlug === 'home' && p.isHomepage)
+                    );
+                  });
+
+                  if (targetPage) {
+                    setActivePageId(targetPage.id);
+                    setSelectedSelector(null);
+                    setSelectedPath(null);
+                    notify.info(`Navegado para: ${targetPage.name}`, 'Live Preview');
+                  }
+                }}
                 onElementSelect={(selector, styles, attrs, path, componentId) => {
+                  if (isBrowserMode) return;
                   setSelectedSelector(selector);
                   setSelectedStyles(styles);
                   setSelectedAttrs(attrs);
@@ -1984,7 +2107,8 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
         </main>
 
         {/* Right Inspector & Properties Panel */}
-        <div className="relative flex items-start">
+        {!isBrowserMode && (
+          <div className="relative flex items-start">
           {/* ─── Toggle da Sidebar Direita (Propriedades) ─── */}
           <button
             onClick={() => setShowStylesPanel(!showStylesPanel)}
@@ -2049,6 +2173,7 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
           </div>
           )}
         </div>
+        )}
       </div>
 
       {/* ─── Modal de Código Fonte Completo ─── */}

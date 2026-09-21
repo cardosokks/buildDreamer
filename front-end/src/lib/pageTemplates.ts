@@ -130,7 +130,7 @@ export function getPageStarterTemplate(
       return {
         html: `
 <section class="relative py-20 px-6 bg-slate-950 text-white overflow-hidden">
-  <div class="max-w-6xl mx-auto text-center space-y-6">
+  <div class="max-w-6xl mx-auto text-center space-y-6 relative z-10">
     <span class="inline-block px-3 py-1 bg-purple-500/10 border border-purple-500/30 text-purple-400 rounded-full text-xs font-semibold uppercase tracking-wider pulse-glow">
       Lançamento Exclusivo
     </span>
@@ -149,10 +149,18 @@ export function getPageStarterTemplate(
       </a>
     </div>
   </div>
+
+  <!-- Divisor em Onda SVG (Anti-Quadrado) -->
+  <div class="absolute bottom-0 left-0 right-0 w-full overflow-hidden leading-none pointer-events-none opacity-90">
+    <svg class="relative block w-full h-12 md:h-20 text-slate-900" viewBox="0 0 1200 120" preserveAspectRatio="none" fill="currentColor">
+      <path d="M321.39,56.44c58-10.79,114.16-30.13,172-41.86,82.39-16.72,168.19-17.73,250.45-.39C823.78,31,906.67,72,985.66,92.83c70.05,18.48,146.53,26.09,214.34,3V120H0V95.8C59.71,118.08,130.83,121.5,200,115.8,241.6,112.3,282.8,92.6,321.39,56.44Z"></path>
+    </svg>
+  </div>
 </section>
 
+<!-- Cartões Flutuantes Sobrepostos Cruzando Seções (-mt-12 relative z-20) -->
 <section id="recursos" class="py-16 px-6 bg-slate-900 text-slate-100">
-  <div class="max-w-6xl mx-auto space-y-12">
+  <div class="max-w-6xl mx-auto space-y-12 -mt-12 relative z-20">
     <div class="text-center space-y-3">
       <h2 class="text-3xl font-bold text-white">Nossos Diferenciais</h2>
       <p class="text-sm text-slate-400 max-w-lg mx-auto">Tecnologia de ponta aliada ao design pensado para máxima conversão.</p>

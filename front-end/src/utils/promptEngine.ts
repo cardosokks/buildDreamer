@@ -25,6 +25,7 @@ export interface PromptBuildParams {
   visualStyle?: string;
   colorPalette?: string;
   heroLayout?: 'auto' | 'bento' | 'splitscreen_3d' | 'parallax';
+  sectionTransitions?: 'waves' | 'slants' | 'curves' | 'overlapping_cards' | 'gradient_glows' | 'auto';
   pagesList?: Array<{ name: string; slug: string; isHomepage?: boolean }>;
   extraInstructions?: string;
   leadInfo?: {
@@ -39,264 +40,31 @@ export interface PromptBuildParams {
 
 /**
  * Motor de Mapeamento de Temas (Theme Engine)
- * Seleção dinâmica de paleta de cores e tipografia baseada no segmento ou estilo do cliente
+ * Gera recomendações abertas e flexíveis para a IA definir autonomamente a paleta de cores e tipografia
  */
 export function mapSegmentToTheme(segment: string, userStyle: string = '', userPalette: string = ''): ThemeConfig {
   const seg = (segment || '').toLowerCase();
   const style = (userStyle || '').toLowerCase();
-  const palette = (userPalette || '').toLowerCase();
 
-  // 0. Se o usuário digitou um estilo visual personalizado, dar prioridade total a esse conceito
-  if (style.trim().length > 0) {
-    if (style.includes('neon') || style.includes('cyber') || style.includes('escuro neon')) {
-      return {
-        id: 'dark_neon_custom',
-        name: 'Design Escuro & Néon Cyber',
-        description: 'Estética noturna imersiva com fundo obsidian profundo, realces em néon vibrante e atmosfera tecnológica de alta conversão.',
-        colors: {
-          bg: '#080a12',
-          cardBg: '#101526',
-          accent: '#a855f7',
-          accentGlow: 'rgba(168, 85, 247, 0.35)',
-          textPrimary: '#f8fafc',
-          textSecondary: '#94a3b8',
-          border: 'rgba(168, 85, 247, 0.25)'
-        },
-        typography: {
-          headingFont: 'Syne, Space Grotesk, sans-serif',
-          bodyFont: 'Plus Jakarta Sans, sans-serif',
-          styleDescription: 'Tipografia futurista imponente combinando títulos em Syne com corpo legível em Plus Jakarta Sans.'
-        },
-        recommendedHero: 'splitscreen_3d'
-      };
-    }
-
-    if (style.includes('clean') || style.includes('claro') || style.includes('branc') || style.includes('minimal')) {
-      return {
-        id: 'clean_minimal_custom',
-        name: 'Clean & Minimalista Respirável',
-        description: 'Design claro, translúcido e sofisticado, com máxima elegância tipográfica, espaços em branco e visual de alto padrão.',
-        colors: {
-          bg: '#f8fafc',
-          cardBg: '#ffffff',
-          accent: '#2563eb',
-          accentGlow: 'rgba(37, 99, 235, 0.15)',
-          textPrimary: '#0f172a',
-          textSecondary: '#475569',
-          border: '#e2e8f0'
-        },
-        typography: {
-          headingFont: 'Plus Jakarta Sans, Outfit, sans-serif',
-          bodyFont: 'Inter, sans-serif',
-          styleDescription: 'Tipografia limpa, leve e refinada para leitura agradável.'
-        },
-        recommendedHero: 'parallax'
-      };
-    }
-
-    if (style.includes('lux') || style.includes('gold') || style.includes('dourad') || style.includes('premium')) {
-      return {
-        id: 'dark_luxe_custom',
-        name: 'Dark Luxe & Premium Gold',
-        description: 'Estética noturna nobre com detalhes refinados em âmbar/dourado, vidro fosco e atmosfera luxuosa.',
-        colors: {
-          bg: '#0a0810',
-          cardBg: '#141021',
-          accent: '#d97706',
-          accentGlow: 'rgba(217, 119, 6, 0.25)',
-          textPrimary: '#f8fafc',
-          textSecondary: '#a1a1aa',
-          border: 'rgba(217, 119, 6, 0.2)'
-        },
-        typography: {
-          headingFont: 'Cinzel, Playfair Display, serif',
-          bodyFont: 'Plus Jakarta Sans, sans-serif',
-          styleDescription: 'Títulos em caixa alta ou serif elegante transmitindo exclusividade.'
-        },
-        recommendedHero: 'splitscreen_3d'
-      };
-    }
-
-    return {
-      id: 'tailored_user_style',
-      name: 'Identidade Sob Medida por IA',
-      description: `A IA criará autonomamente uma combinação exclusiva de cores, gradientes e fontes inspirados no conceito "${userStyle}".`,
-      colors: {
-        bg: '#090d16',
-        cardBg: '#111827',
-        accent: '#8b5cf6',
-        accentGlow: 'rgba(139, 92, 246, 0.3)',
-        textPrimary: '#f8fafc',
-        textSecondary: '#94a3b8',
-        border: 'rgba(139, 92, 246, 0.25)'
-      },
-      typography: {
-        headingFont: 'Syne, Plus Jakarta Sans, Outfit',
-        bodyFont: 'Inter, sans-serif',
-        styleDescription: 'Seleção tipográfica dinâmica ajustada sob medida para o nicho.'
-      },
-      recommendedHero: 'bento'
-    };
-  }
-
-  // 1. Dark Luxe: Barbearias, Bares, Baladas, Pubs, Tabacarias, Gastronomia Noturna, Luxo
-  if (
-    seg.includes('barb') || seg.includes('bar') || seg.includes('pub') || seg.includes('balada') ||
-    seg.includes('tabac') || seg.includes('drinks') || seg.includes('steak') || seg.includes('luxe') ||
-    seg.includes('noite')
-  ) {
-    return {
-      id: 'dark_luxe',
-      name: 'Dark Luxe Premium',
-      description: 'Estética noturna luxuosa com fundo obsidian, detalhes dourados/âmbar, vidro fosco e atmosfera refinada.',
-      colors: {
-        bg: '#0b0813',
-        cardBg: '#130f24',
-        accent: '#d97706',
-        accentGlow: 'rgba(217, 119, 6, 0.25)',
-        textPrimary: '#f8fafc',
-        textSecondary: '#94a3b8',
-        border: 'rgba(217, 119, 6, 0.2)'
-      },
-      typography: {
-        headingFont: 'Cinzel, Playfair Display, serif',
-        bodyFont: 'Plus Jakarta Sans, sans-serif',
-        styleDescription: 'Títulos imponentes em caixa alta ou serif refinada com espaçamento elegante (tracking-wide), contrastando com corpo legível.'
-      },
-      recommendedHero: 'splitscreen_3d'
-    };
-  }
-
-  // 2. Clean Medical / Clinical / Estética: Clínicas, Médicos, Estética, Odontologia, Saúde, Dermato
-  if (
-    seg.includes('clinic') || seg.includes('clínica') || seg.includes('médic') || seg.includes('dentis') ||
-    seg.includes('odonto') || seg.includes('estétic') || seg.includes('saúde') || seg.includes('saude') ||
-    seg.includes('dermato') || seg.includes('psico') || seg.includes('fisio') || seg.includes('spa')
-  ) {
-    return {
-      id: 'clean_medical',
-      name: 'Clean Medical & Clinical',
-      description: 'Design limpo, translúcido e acolhedor com tons de ciano/azul royal, verde menta ou rosé suave e máxima legibilidade.',
-      colors: {
-        bg: '#f8fafc',
-        cardBg: '#ffffff',
-        accent: '#0284c7',
-        accentGlow: 'rgba(2, 132, 199, 0.15)',
-        textPrimary: '#0f172a',
-        textSecondary: '#475569',
-        border: '#e2e8f0'
-      },
-      typography: {
-        headingFont: 'Plus Jakarta Sans, Outfit, sans-serif',
-        bodyFont: 'Inter, sans-serif',
-        styleDescription: 'Tipografia moderna, limpa, humanizada e acolhedora, transmitindo segurança, higiene e profissionalismo.'
-      },
-      recommendedHero: 'parallax'
-    };
-  }
-
-  // 3. High Contrast / Performance: Academias, Crossfit, Personal, Lutas, Esportes
-  if (
-    seg.includes('academ') || seg.includes('crossfit') || seg.includes('fit') || seg.includes('personal') ||
-    seg.includes('treino') || seg.includes('esporte') || seg.includes('luta') || seg.includes('suplement')
-  ) {
-    return {
-      id: 'high_contrast',
-      name: 'High Contrast Performance',
-      description: 'Fundo escuro profundo com acentos de alto impacto (amarelo limão/verde néon), numerais gigantes e energia extrema.',
-      colors: {
-        bg: '#050505',
-        cardBg: '#121212',
-        accent: '#eab308',
-        accentGlow: 'rgba(234, 179, 8, 0.3)',
-        textPrimary: '#ffffff',
-        textSecondary: '#a3a3a3',
-        border: '#262626'
-      },
-      typography: {
-        headingFont: 'Chakra Petch, Oswald, sans-serif',
-        bodyFont: 'Montserrat, sans-serif',
-        styleDescription: 'Títulos em fonte pesada/display, numerais gigantes estilizados para métricas e badges em caixa alta com alto contraste.'
-      },
-      recommendedHero: 'bento'
-    };
-  }
-
-  // 4. Warm Natural / Artisanal: Cafés, Padarias, Bistrôs, Confeitarias, Restaurantes Orgânicos
-  if (
-    seg.includes('café') || seg.includes('cafe') || seg.includes('padaria') || seg.includes('bistrô') ||
-    seg.includes('bistro') || seg.includes('confeitar') || seg.includes('pizzaria') || seg.includes('artesanal') ||
-    seg.includes('orgânic') || seg.includes('gastronomia')
-  ) {
-    return {
-      id: 'warm_natural',
-      name: 'Warm Natural & Artisanal',
-      description: 'Tons acolhedores terrosos, creme macio, marrom café, verde oliva e textura artesanal.',
-      colors: {
-        bg: '#fdfbf7',
-        cardBg: '#f5f0e6',
-        accent: '#ea580c',
-        accentGlow: 'rgba(234, 88, 12, 0.2)',
-        textPrimary: '#271c19',
-        textSecondary: '#635147',
-        border: '#e7dfd3'
-      },
-      typography: {
-        headingFont: 'Lora, Merriweather, serif',
-        bodyFont: 'Plus Jakarta Sans, sans-serif',
-        styleDescription: 'Títulos em serif artesanal quente e acolhedora, transmitindo sabor, tradição e carinho.'
-      },
-      recommendedHero: 'parallax'
-    };
-  }
-
-  // 5. SaaS / Tech / Startup: Startups, Apps, Software, Agências
-  if (
-    seg.includes('saas') || seg.includes('tech') || seg.includes('software') || seg.includes('startup') ||
-    seg.includes('app') || seg.includes('agência') || seg.includes('agencia') || seg.includes('digital')
-  ) {
-    return {
-      id: 'saas_tech',
-      name: 'Deep Space Tech & SaaS',
-      description: 'Visual futurista em azul marinho/slate com gradientes violeta/cobre e cartões Bento Grid responsivos.',
-      colors: {
-        bg: '#0f172a',
-        cardBg: '#1e293b',
-        accent: '#8b5cf6',
-        accentGlow: 'rgba(139, 92, 246, 0.3)',
-        textPrimary: '#f8fafc',
-        textSecondary: '#94a3b8',
-        border: '#334155'
-      },
-      typography: {
-        headingFont: 'Space Grotesk, Inter, sans-serif',
-        bodyFont: 'Inter, sans-serif',
-        styleDescription: 'Tipografia tecnológica contemporânea com peso marcante nos títulos e clareza no corpo de texto.'
-      },
-      recommendedHero: 'bento'
-    };
-  }
-
-  // Fallback Padrão: Identidade Exclusiva por IA
   return {
-    id: 'ai_bespoke_luxury',
-    name: 'Identidade Sob Medida por IA',
-    description: `A IA gerará autonomamente uma paleta de cores e tipografia exclusiva perfeitamente adequada para "${segment}".`,
+    id: 'ai_autonomous_theme',
+    name: style.trim() ? `Estilo Personalizado: "${userStyle}"` : `Design Autônomo para ${segment || 'Geral'}`,
+    description: 'Liberdade criativa total da IA para analisar o cliente, a logo/marca e criar uma paleta de cores, iluminação e tipografia 100% sob medida.',
     colors: {
-      bg: '#0a0c12',
-      cardBg: '#121624',
-      accent: '#6366f1',
-      accentGlow: 'rgba(99, 102, 241, 0.25)',
+      bg: '#080c14',
+      cardBg: '#101726',
+      accent: '#8b5cf6',
+      accentGlow: 'rgba(139, 92, 246, 0.35)',
       textPrimary: '#f8fafc',
       textSecondary: '#94a3b8',
-      border: 'rgba(99, 102, 241, 0.2)'
+      border: 'rgba(139, 92, 246, 0.25)'
     },
     typography: {
-      headingFont: 'Syne, Plus Jakarta Sans, Outfit, sans-serif',
-      bodyFont: 'Inter, sans-serif',
-      styleDescription: 'Tipografia contemporânea e exclusiva criada para o negócio.'
+      headingFont: 'Syne, Plus Jakarta Sans, Outfit, Space Grotesk',
+      bodyFont: 'Inter, Plus Jakarta Sans, sans-serif',
+      styleDescription: 'Seleção tipográfica dinâmica do Google Fonts perfeitamente alinhada à marca do cliente.'
     },
-    recommendedHero: 'splitscreen_3d'
+    recommendedHero: seg.includes('saas') || seg.includes('app') ? 'bento' : seg.includes('3d') || seg.includes('tech') ? 'splitscreen_3d' : 'splitscreen_3d'
   };
 }
 
@@ -310,6 +78,7 @@ export function buildStructuredSitePrompt(params: PromptBuildParams): string {
     visualStyle = '',
     colorPalette = '',
     heroLayout = 'auto',
+    sectionTransitions = 'auto',
     pagesList = [{ name: 'Início', slug: 'index', isHomepage: true }],
     extraInstructions = '',
     leadInfo
@@ -327,47 +96,48 @@ export function buildStructuredSitePrompt(params: PromptBuildParams): string {
   const ratingStr = leadInfo?.rating || '5.0';
   const reviewsCountNum = leadInfo?.reviewsCount || 128;
 
-  const customStyleDirective = visualStyle.trim()
-    ? `APLIQUE O ESTILO VISUAL SOLICITADO PELO USUÁRIO: "${visualStyle}".
-- O modelo DEVE criar uma identidade visual 100% personalizada e alinhada ao conceito "${visualStyle}".
-- ESCOLHA DE CORES E PALETA: A IA tem total liberdade para escolher a melhor combinação de cores hexadecimais, gradientes, brilhos glow, cartões translúcidos e bordas de destaque. Se o usuário pediu "escuro neon", crie tons escuros profundos com acentos néon (roxo, ciano, esmeralda ou rosa). Se pediu "clean/claro", utilize fundos leves e respiráveis.
-- TIPOGRAFIA EXCLUSIVA: Escolha famílias do Google Fonts apropriadas para o nicho (ex: Syne, Plus Jakarta Sans, Outfit, Space Grotesk, Inter, Lora, etc.).`
-    : `IDENTIDADE VISUAL DINÂMICA E EXCLUSIVA CRIADA PELA IA:
-- A IA possui liberdade total para definir a paleta de cores, gradientes, tipografia e hierarquia de seções ideal para o segmento "${segment}" e empresa "${businessName}".
-- Crie uma combinação única de cores e tipografia (tema escuro, claro, neon ou luxuoso conforme a natureza do negócio). NUNCA utilize cores fixas ou engessadas que deixem os sites parecidos entre si.`;
-
   return `==============================================================================
-PROMPT ESTRUTURADO DE ALTA FIDELIDADE — GERADOR DE SITES PROFISSIONAIS
+PROMPT ESTRUTURADO ORQUESTRADO EM PASSO A PASSO (GERAÇÃO AUTÔNOMA DE SITES POR IA)
 ==============================================================================
 
-EMPRESA / NEGÓCIO: "${businessName}"
-SEGMENTO DE ATUAÇÃO: "${segment}"
-ESTRUTURA DE PÁGINAS (${pagesCount}): ${pagesFormatted}
-
+PASSO 1: ANÁLISE DO CLIENTE, LOGO E DEFINIÇÃO DA PALETA DE CORES / TEMA VISUAL (100% DEFINIDO PELA IA)
 ------------------------------------------------------------------------------
-DIRETRIZES OBRIGATÓRIAS DE DESIGN E COMPONENTES (ANTI-LAYOUT GENÉRICO)
+- DADOS DO CLIENTE PRESERVADOS INTEGRALMENTE (NUNCA OMITA ESTES DADOS EM NENHUMA PÁGINA):
+  • Nome da Empresa/Negócio: "${businessName}"
+  • Segmento / Categoria: "${segment}"
+  • Telefone / WhatsApp: "${phoneStr}"
+  • Endereço Físico: "${addressStr}"
+  • Horário de Funcionamento: "${openingHoursStr}"
+  • Avaliações e Prova Social: Nota ${ratingStr} ★ (${reviewsCountNum} avaliações reais no Google Maps)
+  • Website / Link de Referência: "${leadInfo?.website || 'Disponível no site'}"
+
+- DEFINIÇÃO AUTÔNOMA DA IDENTIDADE VISUAL & PALETA DE CORES:
+  • Se o cliente enviou uma Logo ou imagem de referência anexada, VERIFIQUE e EXTRAIA as cores principais e o conceito da marca para definir a paleta visual do site.
+  • Se não houver logo, A IA POSSUI 100% DE LIBERDADE CRIATIVA para definir a paleta de cores (primary, secondary, accent, bg, cardBg, text) e a atmosfera perfeita para o nicho de "${segment}".
+  • É ESTRITAMENTE PROIBIDO UTILIZAR TEMAS PRÉ-DEFINIDOS ENGESSADOS OU LIMITADORES! Escolha livremente combinações de cores hexadecimais, gradientes, brilhos glow, cartões translúcidos (Glassmorphism) e tipografia moderna do Google Fonts alinhados ao estilo: "${visualStyle || 'Livre Criação por IA'}".
+
+PASSO 2: ESTRUTURAÇÃO AUTÔNOMA DE PÁGINAS E ELEMENTOS GLOBAIS
 ------------------------------------------------------------------------------
+- A IA define autonomamente a quantidade e a lista de páginas ideais para este negócio (${pagesCount} páginas configuradas): ${pagesFormatted}.
+- CONSISTÊNCIA DO TEMA INICIAL: Todas as páginas geradas DEVEM seguir rigorosamente a mesma paleta de cores e identidade visual estabelecida no PASSO 1, garantindo unidade estética em todo o projeto.
+- ELEMENTOS GLOBAIS MANDATÓRIOS EM TODAS AS PÁGINAS:
+  1. Navbar / Header Global: Estrutura idêntica em todas as páginas, exibindo a marca/logo do cliente, menu de navegação responsivo com destaque visual para a página ativa e botão WhatsApp CTA.
+  2. Footer / Rodapé Global: Multicolunas completo com contatos (${phoneStr}, ${addressStr}), horário de funcionamento (${openingHoursStr}), redes sociais e copyright.
+  3. Botão Flutuante de WhatsApp: Acesso direto em todas as páginas.
 
-1. ZERO LAYOUT GENÉRICO (ANTI-TEMPLATE):
-   - É ESTRITAMENTE PROIBIDO criar seções padronizadas de 3 colunas simples com cartões idênticos!
-   - Utilize Bento Grids com variações de colspans/rowspans (ex: col-span-2, row-span-2) com cartões de tamanhos e destaques variados.
-   - Crie layouts assimétricos com profundidade visual, cartões em vidro fosco Glassmorphism (backdrop-blur-md bg-slate-900/60 border border-white/10), iluminação com gradientes radiais/glows e seções splitscreen dinâmicas.
+PASSO 3: SINTETIZAÇÃO DO PROMPT COM TECNOLOGIAS DE ANIMAÇÃO, TRANSIÇÃO E DESIGN
+------------------------------------------------------------------------------
+- ANIMAÇÕES E INTERATIVIDADE DE ÚLTIMA GERAÇÃO:
+  • GSAP ScrollTrigger: Elementos surgem com revelações fluidas em scroll (.gsap-reveal com fade-up, escala e stagger).
+  • Lenis Smooth Scroll: Rolagem de página ultra-suave e luxuosa.
+  • Swiper.js 3D: Carrossel de avaliações do Google Maps e galeria visual com efeito 3D Cards / Coverflow.
+  • Spline 3D Viewer: Objetos 3D interativos no Hero Section.
+  • Microinterações de Hover: Botões com brilho glow dinâmico e elevação de cartões em hover.
 
-2. HERO SECTION DE ALTO IMPACTO:
-   - Elemento 3D / Glassmorphism Refinado: Inclua um objeto 3D interativo com a tag <spline-viewer url="https://prod.spline.design/6Wnt13RekM1bT46U/scene.splinecode"></spline-viewer> ou um container Hero com efeito Glassmorphism refinado (backdrop-blur-xl border border-white/10 shadow-[0_0_50px_rgba(139,92,246,0.2)]).
-   - Tipografia Impactante com Google Fonts: Utilize famílias tipográficas modernas como 'Syne', 'Plus Jakarta Sans', 'Space Grotesk' ou 'Outfit' para títulos imponentes em destaque.
-   - Badge Flutuante Interativo Duplo:
-     a) Badge Google Maps: Exibindo Nota ${ratingStr} ★ (${reviewsCountNum} avaliações reais) com selo de verificação no Maps.
-     b) Badge de Status em Tempo Real: Indicador LED pulsante "🟢 Aberto Agora" (calculado dinamicamente via JS).
-
-3. ANIMAÇÕES E EFEITOS JS INLINE:
-   - Lenis Smooth Scroll: Inicialize o Lenis JS para rolagem ultra-suave na página inteira.
-   - GSAP ScrollTrigger: Aplique GSAP ScrollTrigger nos elementos (.gsap-reveal) para que as seções e cartões surjam suavemente com animação de fade-up e escala ao rolar a página.
-   - Swiper.js 3D: Configure o Swiper.js com efeito de cards (effect: 'cards') ou coverflow (effect: 'coverflow') para as seções de depoimentos e galeria.
-   - Microinterações de Hover: Botões com hover de brilho/glow (hover:shadow-[0_0_25px_var(--accent-glow)] hover:scale-105 transition-all duration-300) e cartões que se elevam ao passar o mouse (hover:-translate-y-2 hover:border-purple-500/50 transition-all duration-300).
-
-4. FIDELIDADE RIGOROSA AO ESTILO VISUAL SOLICITADO:
-   - ${customStyleDirective}
+- TRANSIÇÕES DE SEÇÃO FLÚIDAS E ORGÂNICAS (ANTI-LAYOUT QUADRADO / ANTI-BLOCOS RETOS):
+  • NUNCA empilhe seções em blocos retangulares planos e quadrados retos!
+  • Alterne seções usando divisores em Ondas SVG, Cortes Diagonais (Slants), Arcos Curvos, Cartões Flutuantes Sobrepostos cruzando a fronteira de seções (-mt-12 relative z-20) e Linhas Néon com Glow.
+  • Estilo de transição selecionado: [${sectionTransitions.toUpperCase()}].
 
 ------------------------------------------------------------------------------
 INCLUSÃO OBRIGATÓRIA DE HEADERS, CDNS E GOOGLE FONTS NO <head>
@@ -488,6 +258,6 @@ INSTRUÇÕES ADICIONAIS DO USUÁRIO
 ------------------------------------------------------------------------------
 ${extraInstructions ? extraInstructions : 'Gere um design espetacular, 100% responsivo, com visual único de agência de alta tecnologia.'}
 
-Siga rigorosamente todas as diretrizes acima, entregando o código completo com todas as seções e interatividades solicitadas.`;
+Siga rigorosamente os 3 PASSOS acima, entregando o código completo com todas as seções e interatividades solicitadas.`;
 }
 

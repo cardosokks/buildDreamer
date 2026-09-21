@@ -58,6 +58,8 @@ import {
   Clock,
   SortAsc,
   SortDesc,
+  RefreshCw,
+  Wand2,
   User,
   Link as LinkIcon,
   PanelLeftClose,
@@ -819,6 +821,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
   const [visualStyle, setVisualStyle] = useState('');
   const [colorPalette, setColorPalette] = useState('');
   const [heroLayout, setHeroLayout] = useState<'auto' | 'bento' | 'splitscreen_3d' | 'parallax'>('auto');
+  const [sectionTransitions, setSectionTransitions] = useState<'waves' | 'slants' | 'curves' | 'overlapping_cards' | 'gradient_glows' | 'auto'>('auto');
   const [aiSiteTypePreset, setAiSiteTypePreset] = useState<'institutional' | 'saas' | 'ecommerce' | 'landing' | 'custom'>('institutional');
   const [selectedPagesList, setSelectedPagesList] = useState<Array<{ name: string; slug: string; isHomepage?: boolean }>>([
     { name: 'Início', slug: 'index', isHomepage: true },
@@ -876,6 +879,96 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
     setSelectedPagesList(prev => [...prev, { name: raw, slug }]);
     setCustomPageInput('');
     setAiSiteTypePreset('custom');
+  };
+
+  const [isPlanningWithAI, setIsPlanningWithAI] = useState(false);
+  const [aiPlanDetails, setAiPlanDetails] = useState<any>(null);
+
+  const handleAutoPlanWithAI = async () => {
+    if (!businessName.trim() || !segment.trim()) {
+      notify.warning('Preencha o Nome da Empresa e o Segmento para executar o planejamento autônomo da IA.', 'Campos Obrigatórios');
+      return;
+    }
+
+    setIsPlanningWithAI(true);
+    try {
+      const preferredProvider = localStorage.getItem('preferred_ai_provider') || 'gemini';
+      const selectedModel = preferredProvider === 'ollama' 
+        ? (localStorage.getItem('ollama_selected_model') || 'qwen2.5-coder:1.5b')
+        : (localStorage.getItem('last_selected_ai_model') || '');
+
+      const safeHeader = (val: string) => {
+        try { return btoa(unescape(encodeURIComponent(val))); } catch { return ''; }
+      };
+
+      const res = await fetch(`${API_URL}/api/ai/plan-site`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'X-AI-Provider': preferredProvider,
+          'X-AI-Model': safeHeader(selectedModel),
+          'X-AI-API-Key': safeHeader(localStorage.getItem('gemini_api_key') || '')
+        },
+        body: JSON.stringify({
+          businessName: businessName.trim(),
+          segment: segment.trim(),
+          extraInstructions: newProjectDesc.trim(),
+          leadInfo: targetLeadForProject ? {
+            phone: targetLeadForProject.phone,
+            address: targetLeadForProject.address,
+            rating: targetLeadForProject.rating,
+            reviewsCount: targetLeadForProject.totalReviews,
+            website: targetLeadForProject.website || undefined
+          } : undefined
+        })
+      });
+
+      const data = await safeJson(res);
+      if (!res.ok) throw new Error(data.error || 'Erro no planejamento autônomo por IA.');
+
+      if (data.plan) {
+        setAiPlanDetails(data.plan);
+
+        if (Array.isArray(data.plan.suggestedPages) && data.plan.suggestedPages.length > 0) {
+          const pages = data.plan.suggestedPages.map((p: any) => ({
+            name: p.name,
+            slug: p.slug || p.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+            isHomepage: !!p.isHomepage
+          }));
+          setSelectedPagesList(pages);
+        }
+
+        if (data.plan.colorPalette?.mood) {
+          setVisualStyle(`${data.plan.colorPalette.mood} (Paleta por IA)`);
+        }
+
+        const compiled = buildStructuredSitePrompt({
+          businessName: businessName.trim(),
+          segment: segment.trim(),
+          visualStyle: data.plan.colorPalette?.mood || visualStyle.trim(),
+          colorPalette: JSON.stringify(data.plan.colorPalette),
+          heroLayout: heroLayout,
+          sectionTransitions: sectionTransitions,
+          pagesList: selectedPagesList,
+          extraInstructions: newProjectDesc.trim(),
+          leadInfo: targetLeadForProject ? {
+            phone: targetLeadForProject.phone,
+            address: targetLeadForProject.address,
+            rating: targetLeadForProject.rating,
+            reviewsCount: targetLeadForProject.totalReviews,
+            website: targetLeadForProject.website || undefined
+          } : undefined
+        });
+
+        setAiFinalPrompt(compiled);
+        notify.success('Planejamento em 3 passos concluído! Páginas e paleta de cores configuradas autonomamente.', 'IA Pronta');
+      }
+    } catch (err: any) {
+      notify.error(err.message || 'Falha ao executar planejamento por IA.', 'Erro');
+    } finally {
+      setIsPlanningWithAI(false);
+    }
   };
 
   const handleRemovePageFromAI = (slugToRemove: string) => {
@@ -1545,6 +1638,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
           visualStyle: visualStyle.trim(),
           colorPalette: colorPalette.trim(),
           heroLayout: heroLayout,
+          sectionTransitions: sectionTransitions,
           pagesList: selectedPagesList,
           extraInstructions: newProjectDesc.trim(),
           leadInfo: targetLeadForProject ? {
@@ -4656,6 +4750,51 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                         </div>
                       </div>
 
+                      {/* Botão de Planejamento Autônomo da IA (3 Passos) */}
+                      <div className="p-3.5 bg-gradient-to-r from-purple-950/60 via-slate-900 to-indigo-950/60 border border-purple-500/30 rounded-xl space-y-2">
+                        <div className="flex items-center justify-between flex-wrap gap-2">
+                          <div className="flex items-center gap-2">
+                            <Sparkles className="w-4 h-4 text-purple-400 animate-pulse" />
+                            <span className="text-xs font-bold text-white uppercase tracking-wider">
+                              Planejamento Autônomo da IA (3 Passos)
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={handleAutoPlanWithAI}
+                            disabled={isPlanningWithAI || !businessName.trim() || !segment.trim()}
+                            className="px-3.5 py-1.5 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer shadow-md"
+                          >
+                            {isPlanningWithAI ? (
+                              <>
+                                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                <span>Analisando e Planejando...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Wand2 className="w-3.5 h-3.5" />
+                                <span>Executar Planejamento com IA</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                        <p className="text-[11px] text-slate-300 leading-relaxed">
+                          <strong>Passo 1:</strong> Analisa dados e logo ➔ define paleta de cores e tema único.<br />
+                          <strong>Passo 2:</strong> Define a quantidade e lista de páginas mantendo o tema inicial e elementos globais.<br />
+                          <strong>Passo 3:</strong> Compila prompt master enriquecido com animações (GSAP, Lenis, Swiper 3D) e transições fluídas.
+                        </p>
+
+                        {aiPlanDetails && (
+                          <div className="mt-2 pt-2 border-t border-purple-500/20 text-xs text-purple-200 space-y-1 bg-purple-950/30 p-2.5 rounded-lg">
+                            <div className="font-semibold text-white flex items-center gap-1">
+                              <span>✓ Planejamento Concluído:</span>
+                            </div>
+                            <div>• <strong>Marca & Atmosfera:</strong> {aiPlanDetails.colorPalette?.mood || 'Cores definidas por IA'}</div>
+                            <div>• <strong>Páginas Sugeridas ({aiPlanDetails.suggestedPages?.length}):</strong> {aiPlanDetails.suggestedPages?.map((p: any) => p.name).join(', ')}</div>
+                          </div>
+                        )}
+                      </div>
+
                       {/* Arquitetura de Múltiplas Páginas */}
                       <div className="p-3.5 bg-slate-950/80 border border-slate-800/80 rounded-xl space-y-3">
                         <div className="flex items-center justify-between">
@@ -4788,6 +4927,37 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                             >
                               <div className="text-xs font-bold">{item.label}</div>
                               <div className="text-[10px] opacity-70">{item.desc}</div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Transições entre Seções (Anti-Layout Quadrado) */}
+                      <div>
+                        <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5 flex items-center gap-1.5">
+                          <span>Transições de Seção (Anti-Layout Quadrado)</span>
+                          <span className="text-[9px] px-1.5 py-0.5 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold rounded">Recomendado</span>
+                        </label>
+                        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                          {[
+                            { id: 'auto', label: 'IA Auto Mix', desc: 'Mix Fluído' },
+                            { id: 'waves', label: '🌊 Ondas SVG', desc: 'Curvas Suaves' },
+                            { id: 'slants', label: '📐 Cortes Slants', desc: 'Ângulos Modernos' },
+                            { id: 'overlapping_cards', label: '🃏 Sobrepostos', desc: 'Cards Flutuantes' },
+                            { id: 'gradient_glows', label: '🌟 Néon Glow', desc: 'Linhas de Luz' }
+                          ].map(item => (
+                            <button
+                              key={item.id}
+                              type="button"
+                              onClick={() => setSectionTransitions(item.id as any)}
+                              className={`p-2 rounded-xl text-left border transition-all cursor-pointer ${
+                                sectionTransitions === item.id
+                                  ? 'bg-purple-950/70 border-purple-500 text-white shadow-sm ring-1 ring-purple-500/50'
+                                  : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
+                              }`}
+                            >
+                              <div className="text-xs font-bold truncate">{item.label}</div>
+                              <div className="text-[10px] opacity-70 truncate">{item.desc}</div>
                             </button>
                           ))}
                         </div>
@@ -4982,6 +5152,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                           visualStyle: visualStyle.trim(),
                           colorPalette: colorPalette.trim(),
                           heroLayout: heroLayout,
+                          sectionTransitions: sectionTransitions,
                           pagesList: selectedPagesList,
                           extraInstructions: newProjectDesc.trim(),
                           leadInfo: targetLeadForProject ? {

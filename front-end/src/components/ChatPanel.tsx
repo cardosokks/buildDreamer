@@ -1383,6 +1383,32 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
           )}
         </div>
 
+        {/* Chips Rápidos de Ação / Transições de Seção */}
+        <div className="flex flex-wrap items-center gap-1 text-[10px] px-0.5">
+          <span className="text-slate-500 font-semibold mr-0.5">✦ Transições:</span>
+          <button
+            type="button"
+            onClick={() => setInput(prev => prev + (prev ? ' ' : '') + 'Adicione divisores em ondas SVG fluídas entre as seções para eliminar o visual retangular.')}
+            className="px-2 py-0.5 bg-purple-950/40 hover:bg-purple-900/60 text-purple-300 hover:text-white rounded border border-purple-500/30 transition-all cursor-pointer"
+          >
+            🌊 Ondas SVG
+          </button>
+          <button
+            type="button"
+            onClick={() => setInput(prev => prev + (prev ? ' ' : '') + 'Adicione cortes diagonais (slants) entre as seções para dar dinamismo.')}
+            className="px-2 py-0.5 bg-indigo-950/40 hover:bg-indigo-900/60 text-indigo-300 hover:text-white rounded border border-indigo-500/30 transition-all cursor-pointer"
+          >
+            📐 Cortes Slants
+          </button>
+          <button
+            type="button"
+            onClick={() => setInput(prev => prev + (prev ? ' ' : '') + 'Insira cartões flutuantes sobrepostos (-mt-12 relative z-20) cruzando a divisa entre seções.')}
+            className="px-2 py-0.5 bg-pink-950/40 hover:bg-pink-900/60 text-pink-300 hover:text-white rounded border border-pink-500/30 transition-all cursor-pointer"
+          >
+            🃏 Cartões Sobrepostos
+          </button>
+        </div>
+
         {/* Prévia de Arquivos Anexados no Input */}
         {attachedFiles.length > 0 && (
           <div className="flex flex-wrap gap-1.5 p-2 bg-slate-900/90 border border-purple-500/30 rounded-xl">

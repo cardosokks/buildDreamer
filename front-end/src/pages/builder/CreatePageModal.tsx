@@ -414,11 +414,14 @@ export const CreatePageModal: React.FC<CreatePageModalProps> = ({
 
           {/* Opção Condicional: Prompt de Inteligência Artificial */}
           {templateType === 'ai' && (
-            <div className="p-4 bg-gradient-to-br from-purple-950/30 to-pink-950/20 border border-purple-500/30 rounded-2xl space-y-2 animate-in fade-in duration-150">
-              <div className="flex items-center gap-2 text-purple-300 text-xs font-bold">
-                <Sparkles className="w-4 h-4 text-pink-400 animate-pulse" />
-                <span>Instruções para a IA construir esta página:</span>
+            <div className="p-4 bg-gradient-to-br from-purple-950/30 to-pink-950/20 border border-purple-500/30 rounded-2xl space-y-3 animate-in fade-in duration-150">
+              <div className="flex items-center justify-between text-purple-300 text-xs font-bold">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-pink-400 animate-pulse" />
+                  <span>Instruções para a IA construir esta página:</span>
+                </div>
               </div>
+
               <textarea
                 rows={3}
                 required
@@ -427,6 +430,43 @@ export const CreatePageModal: React.FC<CreatePageModalProps> = ({
                 onChange={e => setAiPrompt(e.target.value)}
                 className="w-full px-4 py-3 bg-slate-950/90 border border-purple-500/30 rounded-xl text-xs text-white placeholder-slate-600 focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500"
               />
+
+              {/* Chips de Atalho para Transição de Seção (Anti-Quadrado) */}
+              <div className="space-y-1.5 pt-1">
+                <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">
+                  ✦ Atalhos de Estilo & Transições Dinâmicas de Seção (Anti-Quadrado):
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setAiPrompt(prev => prev + (prev ? '\n' : '') + 'Adicione divisores em ondas SVG fluídas entre todas as seções para evitar um layout reto e quadrado.')}
+                    className="px-2.5 py-1 bg-purple-950/60 hover:bg-purple-900 border border-purple-500/30 text-purple-300 hover:text-white rounded-lg text-[11px] transition-all cursor-pointer flex items-center gap-1"
+                  >
+                    🌊 Divisores em Ondas SVG
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAiPrompt(prev => prev + (prev ? '\n' : '') + 'Utilize cortes diagonais (slants/ângulos) para conectar as seções com dinamismo.')}
+                    className="px-2.5 py-1 bg-indigo-950/60 hover:bg-indigo-900 border border-indigo-500/30 text-indigo-300 hover:text-white rounded-lg text-[11px] transition-all cursor-pointer flex items-center gap-1"
+                  >
+                    📐 Cortes Diagonais (Slants)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAiPrompt(prev => prev + (prev ? '\n' : '') + 'Adicione cartões flutuantes sobrepostos (-mt-12 relative z-20) que cruzam a divisa entre as seções.')}
+                    className="px-2.5 py-1 bg-pink-950/60 hover:bg-pink-900 border border-pink-500/30 text-pink-300 hover:text-white rounded-lg text-[11px] transition-all cursor-pointer flex items-center gap-1"
+                  >
+                    🃏 Cartões Sobrepostos
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAiPrompt(prev => prev + (prev ? '\n' : '') + 'Inclua linhas de separação néon com pontos de luz glow (bg-gradient-to-r via-purple-500/50).')}
+                    className="px-2.5 py-1 bg-cyan-950/60 hover:bg-cyan-900 border border-cyan-500/30 text-cyan-300 hover:text-white rounded-lg text-[11px] transition-all cursor-pointer flex items-center gap-1"
+                  >
+                    🌟 Linhas Néon & Glow
+                  </button>
+                </div>
+              </div>
             </div>
           )}
 

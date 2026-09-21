@@ -428,9 +428,10 @@ Sua tarefa é criar a subpágina "${pageName}" (slug: ${pageSlug}) com nível de
 TEMA E OBJETIVO DA PÁGINA:
 ${prompt}
 
-DIRETRIZES DE DESIGN SYSTEM:
+DIRETRIZES DE DESIGN SYSTEM & DINÂMICA DE SEÇÃO (ANTI-QUADRADO):
 1. Mantenha a mesma identidade visual, paleta de cores e tipografia de alto padrão da página principal.
-2. NAVBAR E FOOTER:
+2. TRANSIÇÕES DE SEÇÃO DINÂMICAS: NUNCA crie blocos retangulares planos e quadrados retos. Insira divisores SVG de transição orgânica (ondas, cortes diagonais slants ou curvas) e elementos flutuantes sobrepostos (-mt-12 relative z-20) entre seções de cores de fundo diferentes.
+3. NAVBAR E FOOTER:
 ${navbarHtml ? `Utilize a estrutura de Navbar padronizada abaixo (destaque o link "${pageName}" como ativo):\n${navbarHtml}\n` : 'Crie um Header/Navbar moderno com links para as páginas.'}
 ${footerHtml ? `Utilize o Footer padronizado abaixo:\n${footerHtml}\n` : 'Crie um Footer completo multicolunas.'}
 
@@ -479,6 +480,156 @@ router.get(['/scrape-job/:jobId', '/remaster/scrape/:jobId/status'], (req, res: 
     return res.status(404).json({ error: 'Job de remasterização não encontrado.' });
   }
   return res.json(job);
+});
+
+// POST /api/ai/plan-site - Planejamento Autônomo de Site em 3 Passos pela IA
+router.post('/plan-site', async (req: AuthenticatedRequest, res: any) => {
+  try {
+    const { businessName, segment, extraInstructions, leadInfo, attachedFiles } = req.body;
+
+    if (!businessName || !segment) {
+      return res.status(400).json({ error: 'Nome da empresa e segmento são obrigatórios.' });
+    }
+
+    const provider = (req.headers['x-ai-provider'] as string) || 'gemini';
+    const customApiKey = decodeHeader(req.headers['x-ai-api-key']);
+    const customModel = decodeHeader(req.headers['x-ai-model']);
+
+    const promptPlan = `
+Você é o Diretor de Arte e Arquiteto de Software Full-Stack da Plataforma de Criação de Sites por IA.
+Sua missão é realizar o PLANEJAMENTO AUTÔNOMO COMPLETO em 3 passos para a empresa "${businessName}" (Segmento/Categoria: "${segment}").
+
+DADOS DO CLIENTE PRESERVADOS:
+- Empresa: "${businessName}"
+- Segmento: "${segment}"
+- Telefone/WhatsApp: "${leadInfo?.phone || '(61) 99999-8888'}"
+- Endereço: "${leadInfo?.address || 'Atendimento Principal, Centro'}"
+- Horários: "${leadInfo?.openingHours || 'Segunda a Sábado: 08:00 - 20:00'}"
+- Avaliações: Nota ${leadInfo?.rating || '5.0'} (${leadInfo?.reviewsCount || '128'} avaliações reais)
+- Instruções Específicas do Cliente: "${extraInstructions || 'Criar um site com design espetacular e altíssima taxa de conversão.'}"
+
+INSTRUÇÕES DO PLANEJAMENTO (3 PASSOS):
+PASSO 1: Analise os dados do cliente e verifique se há referências visuais/logo. Defina autonomamente uma paleta de cores exclusiva (primary, secondary, accent, bg, cardBg, text) e tema visual sob medida para o segmento. NUNCA use regras engessadas ou temas pré-definidos fixos.
+PASSO 2: Defina autonomamente a quantidade e a lista de páginas recomendadas para este negócio (ex: Home, Serviços, Sobre, Galeria/Portfólio, Depoimentos, Contato, FAQ).
+PASSO 3: Monte as diretrizes de injeção de tecnologias para incorporar animações avançadas (GSAP, Lenis, Swiper 3D, Spline 3D) e transições orgânicas de seção (ondas SVG, slants, cartões sobrepostos) sem perder nenhuma informação do cliente e garantindo elementos globais (Navbar e Footer) compartilhados em todas as páginas.
+
+Retorne EXATAMENTE no formato JSON:
+{
+  "clientAnalysis": {
+    "summary": "Resumo do perfil do cliente e estratégia de posicionamento visual",
+    "hasLogo": false,
+    "brandConcept": "Conceito da marca baseado no nicho"
+  },
+  "colorPalette": {
+    "primary": "#8b5cf6",
+    "secondary": "#ec4899",
+    "accent": "#3b82f6",
+    "bg": "#080c14",
+    "cardBg": "#101726",
+    "textColor": "#f8fafc",
+    "mood": "Descrição do clima/atmosfera das cores"
+  },
+  "suggestedPages": [
+    { "name": "Início", "slug": "index", "isHomepage": true, "purpose": "Apresentação de alto impacto" },
+    { "name": "Serviços", "slug": "servicos", "purpose": "Catálogo detalhado" },
+    { "name": "Sobre Nós", "slug": "sobre", "purpose": "História e diferenciais" },
+    { "name": "Contato", "slug": "contato", "purpose": "Formulário e mapa" }
+  ],
+  "technologiesInjected": ["GSAP ScrollTrigger", "Lenis Smooth Scroll", "Swiper.js 3D", "Spline Viewer 3D", "Ondas SVG", "Bento Grid"]
+}
+`;
+
+    let planData: any = null;
+    try {
+      const result = await executeAIRequest(
+        promptPlan,
+        { html: '', css: '', js: '' },
+        { provider: provider as any, apiKey: customApiKey, model: customModel, attachedFiles }
+      );
+
+      const cleanText = result.explanation ? result.explanation.replace(/```json|```/g, '').trim() : '';
+      const firstBrace = cleanText.indexOf('{');
+      const lastBrace = cleanText.lastIndexOf('}');
+      if (firstBrace !== -1 && lastBrace !== -1) {
+        planData = JSON.parse(cleanText.substring(firstBrace, lastBrace + 1));
+      }
+    } catch (e: any) {
+      console.warn('Alerta na chamada da IA durante o planejamento autônomo, ativando plano inteligente de fallback:', e?.message || e);
+    }
+
+    if (!planData || !planData.suggestedPages) {
+      const seg = (segment || '').toLowerCase();
+      let primary = '#8b5cf6';
+      let secondary = '#ec4899';
+      let accent = '#3b82f6';
+      let bg = '#080c14';
+      let cardBg = '#101726';
+      let mood = 'Atmosfera moderna com iluminação tecnológica e elegância gráfica';
+
+      if (seg.includes('barb') || seg.includes('pub') || seg.includes('bar') || seg.includes('luxe')) {
+        primary = '#d97706';
+        secondary = '#b45309';
+        accent = '#f59e0b';
+        bg = '#0b0813';
+        cardBg = '#130f24';
+        mood = 'Dark Luxe Noturno: Fundo obsidian profundo com brilho dourado âmbar refinado';
+      } else if (seg.includes('clinic') || seg.includes('médic') || seg.includes('saúde') || seg.includes('estétic')) {
+        primary = '#0284c7';
+        secondary = '#0d9488';
+        accent = '#38bdf8';
+        bg = '#f8fafc';
+        cardBg = '#ffffff';
+        mood = 'Clean Clinical: Design claro, respirável e humanizado em tons ciano e menta';
+      } else if (seg.includes('academ') || seg.includes('fit') || seg.includes('esporte')) {
+        primary = '#eab308';
+        secondary = '#ef4444';
+        accent = '#84cc16';
+        bg = '#050505';
+        cardBg = '#121212';
+        mood = 'High Contrast Energy: Fundo preto obsidian com acentos néon amarelos e vermelhos vibrantes';
+      }
+
+      const pages = [
+        { name: 'Início', slug: 'index', isHomepage: true, purpose: 'Apresentação de alto impacto com Hero 3D e prova social' },
+        { name: 'Serviços', slug: 'servicos', purpose: 'Catálogo detalhado com cartões Bento Grid' },
+        { name: 'Sobre Nós', slug: 'sobre', purpose: 'História, credibilidade e diferenciais' },
+        { name: 'Contato', slug: 'contato', purpose: 'Formulário, mapa e botão de WhatsApp' }
+      ];
+
+      if (seg.includes('restaurante') || seg.includes('café') || seg.includes('bar') || seg.includes('pizzaria')) {
+        pages.splice(2, 0, { name: 'Cardápio', slug: 'cardapio', isHomepage: false, purpose: 'Menu digital completo' });
+      } else {
+        pages.push({ name: 'FAQ', slug: 'faq', purpose: 'Perguntas frequentes e suporte' });
+      }
+
+      planData = {
+        clientAnalysis: {
+          summary: `Planejamento estratégico autônomo gerado para ${businessName} no nicho de ${segment}.`,
+          hasLogo: Array.isArray(attachedFiles) && attachedFiles.length > 0,
+          brandConcept: `Identidade autônoma focada no segmento de ${segment}`
+        },
+        colorPalette: {
+          primary,
+          secondary,
+          accent,
+          bg,
+          cardBg,
+          textColor: bg === '#f8fafc' ? '#0f172a' : '#f8fafc',
+          mood
+        },
+        suggestedPages: pages,
+        technologiesInjected: ['GSAP ScrollTrigger', 'Lenis Smooth Scroll', 'Swiper.js 3D', 'Spline Viewer 3D', 'Ondas SVG']
+      };
+    }
+
+    return res.json({
+      success: true,
+      plan: planData
+    });
+  } catch (err: any) {
+    console.error('Erro no planejamento de site por IA:', err);
+    return res.status(500).json({ error: err.message || 'Erro ao realizar o planejamento por IA.' });
+  }
 });
 
 // POST /api/ai/scrape-url ou /api/ai/remaster/scrape - Iniciar remasterização de site a partir de URL ou HTML

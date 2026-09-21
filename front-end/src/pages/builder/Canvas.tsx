@@ -12,6 +12,8 @@ interface CanvasProps {
   highlightPath?: string | null;
   hoverPath?: string | null;
   zoom?: number;
+  isBrowserMode?: boolean;
+  onNavigatePage?: (href: string) => void;
   onElementSelect: (
     selector: string,
     styles: Record<string, string>,
@@ -41,6 +43,8 @@ export const Canvas: React.FC<CanvasProps> = ({
   highlightPath,
   hoverPath,
   zoom = 100,
+  isBrowserMode = false,
+  onNavigatePage,
   onElementSelect,
   onInlineContentChange,
   onDeleteElement,
@@ -71,7 +75,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   }, [components, html]);
 
   // Construct complete isolated iframe document with engine scripts & UI overlays
-  const buildIframeDoc = useCallback((rawHtml: string, rawCss: string, rawJs: string) => {
+  const buildIframeDoc = useCallback((rawHtml: string, rawCss: string, rawJs: string, browserMode: boolean = false) => {
     return `<!DOCTYPE html>
 <html lang="pt-BR" class="h-full">
 <head>
@@ -81,6 +85,18 @@ export const Canvas: React.FC<CanvasProps> = ({
   
   <style id="studio-core-styles">
     ${CORE_BASE_STYLES}
+
+    ${browserMode ? `
+      #studio-selection-box, #studio-hover-box, #studio-drop-indicator, .studio-resize-handle {
+        display: none !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+        visibility: hidden !important;
+      }
+      [contenteditable="true"] {
+        outline: none !important;
+      }
+    ` : ''}
 
     /* ─── Studio Selection Box (FIXED TO VIEWPORT) ─── */
     #studio-selection-box {
@@ -241,6 +257,13 @@ export const Canvas: React.FC<CanvasProps> = ({
       }
 
       function updateOverlayPosition() {
+        if (window.__IS_BROWSER_MODE__) {
+          if (selectionBox) selectionBox.style.display = 'none';
+          if (hoverBox) hoverBox.style.display = 'none';
+          window.parent.postMessage({ type: 'HIDE_SELECTION_RECT' }, '*');
+          return;
+        }
+
         if (!currentSelected || !currentSelected.isConnected || isEditingInline) {
           if (selectionBox) selectionBox.style.display = 'none';
           window.parent.postMessage({ type: 'HIDE_SELECTION_RECT' }, '*');
@@ -461,6 +484,19 @@ export const Canvas: React.FC<CanvasProps> = ({
 
       // ─── Click Listener ───
       document.addEventListener('click', function(e) {
+        if (window.__IS_BROWSER_MODE__) {
+          var anchor = e.target.closest ? e.target.closest('a') : null;
+          if (anchor) {
+            var rawHref = anchor.getAttribute('href') || '';
+            if (rawHref && !rawHref.startsWith('#') && !rawHref.startsWith('javascript:')) {
+              e.preventDefault();
+              e.stopPropagation();
+              window.parent.postMessage({ type: 'NAVIGATE_PAGE', href: rawHref }, '*');
+            }
+          }
+          return; // Let native browser events (forms, buttons, accordions) execute normally!
+        }
+
         if (e.target.closest('#studio-quick-toolbar') || e.target.closest('.studio-resize-handle')) {
           return;
         }
@@ -494,7 +530,7 @@ export const Canvas: React.FC<CanvasProps> = ({
 
       // ─── Double Click for Direct Inline Text Editing ───
       document.addEventListener('dblclick', function(e) {
-        if (isInternalStudioNode(e.target)) return;
+        if (window.__IS_BROWSER_MODE__ || isInternalStudioNode(e.target)) return;
         e.preventDefault();
         e.stopPropagation();
         startInlineEdit(e.target);
@@ -502,7 +538,7 @@ export const Canvas: React.FC<CanvasProps> = ({
 
       // ─── Context Menu Listener (Right-click) ───
       document.addEventListener('contextmenu', function(e) {
-        if (isInternalStudioNode(e.target)) return;
+        if (window.__IS_BROWSER_MODE__ || isInternalStudioNode(e.target)) return;
         e.preventDefault();
         e.stopPropagation();
         const target = e.target;
@@ -526,6 +562,10 @@ export const Canvas: React.FC<CanvasProps> = ({
 
       // ─── Hover Listener (FIXED coords) ───
       document.body.addEventListener('mousemove', function(e) {
+        if (window.__IS_BROWSER_MODE__) {
+          if (hoverBox) hoverBox.style.display = 'none';
+          return;
+        }
         if (isEditingInline) {
           if (hoverBox) hoverBox.style.display = 'none';
           return;
@@ -826,6 +866,17 @@ export const Canvas: React.FC<CanvasProps> = ({
           }
         }
 
+        if (msg.data.type === 'SET_BROWSER_MODE') {
+          window.__IS_BROWSER_MODE__ = !!msg.data.isBrowserMode;
+          if (window.__IS_BROWSER_MODE__) {
+            removeSelection();
+            if (hoverBox) hoverBox.style.display = 'none';
+            if (dropIndicator) dropIndicator.style.display = 'none';
+          } else {
+            updateOverlayPosition();
+          }
+        }
+
         if (msg.data.type === 'HOVER_ELEMENT') {
           const hoverP = msg.data.path;
           if (!hoverP) {
@@ -907,10 +958,20 @@ export const Canvas: React.FC<CanvasProps> = ({
     lastHtmlSentRef.current = renderedHtml;
     lastCssSentRef.current = css;
     lastJsSentRef.current = js;
-    const documentContent = buildIframeDoc(renderedHtml, css, js);
+    const documentContent = buildIframeDoc(renderedHtml, css, js, isBrowserMode);
     iframe.srcdoc = documentContent;
     isInitializedRef.current = true;
-  }, [getRenderedHtml, css, js, buildIframeDoc, highlightPath]);
+  }, [getRenderedHtml, css, js, buildIframeDoc, highlightPath, isBrowserMode]);
+
+  // Sync Browser Mode toggle
+  useEffect(() => {
+    const iframe = iframeRef.current;
+    if (!iframe || !iframe.contentWindow) return;
+    iframe.contentWindow.postMessage({
+      type: 'SET_BROWSER_MODE',
+      isBrowserMode: !!isBrowserMode
+    }, '*');
+  }, [isBrowserMode]);
 
   // Sync Highlight Path from Sidebar / Layers
   useEffect(() => {
@@ -1045,6 +1106,12 @@ export const Canvas: React.FC<CanvasProps> = ({
           }
           break;
 
+        case 'NAVIGATE_PAGE':
+          if (onNavigatePage && event.data.href) {
+            onNavigatePage(event.data.href);
+          }
+          break;
+
         default:
           break;
       }
@@ -1060,7 +1127,8 @@ export const Canvas: React.FC<CanvasProps> = ({
     onMoveElementDirection,
     onSelectParentElement,
     onHtmlChange,
-    onInsertBlock
+    onInsertBlock,
+    onNavigatePage
   ]);
 
   const scale = zoom / 100;
@@ -1083,7 +1151,7 @@ export const Canvas: React.FC<CanvasProps> = ({
         />
       </div>
 
-      {selectionRect && createPortal(
+      {selectionRect && !isBrowserMode && createPortal(
         <div
           id="studio-quick-toolbar"
           role="toolbar"
