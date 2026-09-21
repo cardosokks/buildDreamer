@@ -9,10 +9,42 @@ export interface User {
   role?: UserRole;
 }
 
+export const syncSettingsToLocalStorage = (settings: any) => {
+  if (!settings) return;
+  if (settings.geminiApiKey !== undefined) {
+    if (settings.geminiApiKey) localStorage.setItem('gemini_api_key', settings.geminiApiKey);
+    else localStorage.removeItem('gemini_api_key');
+  }
+  if (settings.openaiApiKey !== undefined) {
+    if (settings.openaiApiKey) localStorage.setItem('openai_api_key', settings.openaiApiKey);
+    else localStorage.removeItem('openai_api_key');
+  }
+  if (settings.aiProxyUrl !== undefined) {
+    if (settings.aiProxyUrl) localStorage.setItem('ai_proxy_url', settings.aiProxyUrl);
+    else localStorage.removeItem('ai_proxy_url');
+  }
+  if (settings.ngrokAuthToken !== undefined) {
+    if (settings.ngrokAuthToken) localStorage.setItem('ngrok_authtoken', settings.ngrokAuthToken);
+    else localStorage.removeItem('ngrok_authtoken');
+  }
+  if (settings.preferredAiProvider) {
+    localStorage.setItem('preferred_ai_provider', settings.preferredAiProvider);
+  }
+  if (settings.navbarSize) {
+    localStorage.setItem('rp_navbar_size', settings.navbarSize);
+  }
+  if (settings.customAiModels) {
+    localStorage.setItem('custom_gemini_models', typeof settings.customAiModels === 'string' ? settings.customAiModels : JSON.stringify(settings.customAiModels));
+  }
+  if (settings.customAiSkills) {
+    localStorage.setItem('custom_ai_skills', typeof settings.customAiSkills === 'string' ? settings.customAiSkills : JSON.stringify(settings.customAiSkills));
+  }
+};
+
 interface AuthContextType {
   user: User | null;
   token: string | null;
-  login: (token: string, user: User) => void;
+  login: (token: string, user: User, settings?: any) => void;
   logout: () => void;
   isAuthenticated: boolean;
   isAdmin: boolean;
@@ -35,11 +67,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(null);
   }, []);
 
-  const login = (newToken: string, newUser: User) => {
+  const login = (newToken: string, newUser: User, settings?: any) => {
     localStorage.setItem('auth_token', newToken);
     localStorage.setItem('auth_user', JSON.stringify(newUser));
     setToken(newToken);
     setUser(newUser);
+    if (settings) {
+      syncSettingsToLocalStorage(settings);
+    } else {
+      const API_URL = import.meta.env.VITE_API_URL || '';
+      fetch(`${API_URL}/api/auth/settings`, {
+        headers: { 'Authorization': `Bearer ${newToken}` }
+      })
+        .then(res => res.json())
+        .then(data => {
+          if (data?.settings) syncSettingsToLocalStorage(data.settings);
+        })
+        .catch(() => {});
+    }
   };
 
   // Escuta evento global de desautenticação
@@ -110,6 +155,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setToken(storedToken);
             setUser(data.user);
             localStorage.setItem('auth_user', JSON.stringify(data.user));
+            if (data.settings) {
+              syncSettingsToLocalStorage(data.settings);
+            }
           } else {
             logout();
           }

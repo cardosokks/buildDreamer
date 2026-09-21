@@ -88,6 +88,43 @@ async function startServer() {
       }
     });
 
+    socket.on('typing', (data) => {
+      // data: { recipientId, isTyping, userName, userId }
+      if (data.recipientId && data.recipientId !== 'ALL') {
+        io.to(`user_${data.recipientId}`).emit('user_typing', data);
+      } else {
+        socket.broadcast.emit('user_typing', data);
+      }
+    });
+
+    socket.on('message_reaction', (data) => {
+      // data: { messageId, reactions, recipientId, senderId }
+      if (data.recipientId && data.recipientId !== 'ALL') {
+        io.to(`user_${data.recipientId}`).emit('message_reaction_updated', data);
+        io.to(`user_${data.senderId}`).emit('message_reaction_updated', data);
+      } else {
+        io.emit('message_reaction_updated', data);
+      }
+    });
+
+    socket.on('message_pinned', (data) => {
+      if (data.recipientId && data.recipientId !== 'ALL') {
+        io.to(`user_${data.recipientId}`).emit('message_pinned_updated', data);
+        io.to(`user_${data.senderId}`).emit('message_pinned_updated', data);
+      } else {
+        io.emit('message_pinned_updated', data);
+      }
+    });
+
+    socket.on('message_deleted', (data) => {
+      if (data.recipientId && data.recipientId !== 'ALL') {
+        io.to(`user_${data.recipientId}`).emit('message_deleted', data);
+        io.to(`user_${data.senderId}`).emit('message_deleted', data);
+      } else {
+        io.emit('message_deleted', data);
+      }
+    });
+
     socket.on('send_notification', (notif) => {
       if (notif.recipientId) {
         io.to(`user_${notif.recipientId}`).emit('receive_notification', notif);

@@ -60,18 +60,44 @@ router.post('/login', async (req: any, res: any) => {
       return res.status(400).json({ error: 'E-mail ou senha incorretos' });
     }
 
-    const rows: any[] = await prisma.$queryRawUnsafe(`SELECT "role" FROM "User" WHERE "id" = $1`, user.id);
-    let role = rows && rows[0] && rows[0].role ? rows[0].role : 'USER';
+    const rows: any[] = await prisma.$queryRawUnsafe(`SELECT * FROM "User" WHERE "id" = $1`, user.id);
+    const fullUser = rows && rows[0] ? rows[0] : user;
+    let role = fullUser.role || 'USER';
 
     // Se houver apenas 1 usuário e estiver sem role, torna ADMIN
     const totalUsers = await prisma.user.count();
     if (totalUsers === 1 && role !== 'ADMIN') {
       role = 'ADMIN';
       await prisma.$executeRawUnsafe(`UPDATE "User" SET "role" = 'ADMIN' WHERE "id" = $1`, user.id);
+      fullUser.role = 'ADMIN';
     }
 
     const token = jwt.sign({ userId: user.id, role }, JWT_SECRET, { expiresIn: '7d' });
-    return res.json({ token, user: { id: user.id, email: user.email, name: user.name, role } });
+    return res.json({ 
+      token, 
+      user: { 
+        id: user.id, 
+        email: user.email, 
+        name: fullUser.name || user.name, 
+        role 
+      },
+      settings: {
+        id: fullUser.id,
+        email: fullUser.email,
+        name: fullUser.name || user.name,
+        role,
+        preferredAiProvider: fullUser.preferredAiProvider || 'gemini',
+        geminiApiKey: fullUser.geminiApiKey || null,
+        openaiApiKey: fullUser.openaiApiKey || null,
+        aiProxyUrl: fullUser.aiProxyUrl || null,
+        ngrokAuthToken: fullUser.ngrokAuthToken || null,
+        navbarSize: fullUser.navbarSize || 'normal',
+        customAiSkills: fullUser.customAiSkills || null,
+        customAiModels: fullUser.customAiModels || null,
+        savedLeads: fullUser.savedLeads || null,
+        filterPresets: fullUser.filterPresets || null
+      }
+    });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
   }
@@ -87,10 +113,12 @@ async function ensureUserSettingsColumns() {
     await prisma.$executeRawUnsafe(`
       ALTER TABLE "User" 
       ADD COLUMN IF NOT EXISTS "role" TEXT DEFAULT 'USER',
+      ADD COLUMN IF NOT EXISTS "preferredAiProvider" TEXT DEFAULT 'gemini',
       ADD COLUMN IF NOT EXISTS "geminiApiKey" TEXT,
       ADD COLUMN IF NOT EXISTS "openaiApiKey" TEXT,
       ADD COLUMN IF NOT EXISTS "aiProxyUrl" TEXT,
       ADD COLUMN IF NOT EXISTS "ngrokAuthToken" TEXT,
+      ADD COLUMN IF NOT EXISTS "navbarSize" TEXT DEFAULT 'normal',
       ADD COLUMN IF NOT EXISTS "customAiSkills" JSONB,
       ADD COLUMN IF NOT EXISTS "customAiModels" JSONB,
       ADD COLUMN IF NOT EXISTS "savedLeads" JSONB,
@@ -112,7 +140,7 @@ router.get('/me', authenticateToken, async (req: AuthenticatedRequest, res: any)
   try {
     await ensureUserSettingsColumns();
     const rows: any[] = await prisma.$queryRawUnsafe(
-      `SELECT "id", "email", "name", "role" FROM "User" WHERE "id" = $1 LIMIT 1`,
+      `SELECT * FROM "User" WHERE "id" = $1 LIMIT 1`,
       req.userId
     );
 
@@ -120,7 +148,31 @@ router.get('/me', authenticateToken, async (req: AuthenticatedRequest, res: any)
       return res.status(404).json({ error: 'Usuário não encontrado' });
     }
 
-    return res.json({ user: rows[0] });
+    const fullUser = rows[0];
+    return res.json({ 
+      user: {
+        id: fullUser.id,
+        email: fullUser.email,
+        name: fullUser.name,
+        role: fullUser.role || 'USER'
+      },
+      settings: {
+        id: fullUser.id,
+        email: fullUser.email,
+        name: fullUser.name,
+        role: fullUser.role || 'USER',
+        preferredAiProvider: fullUser.preferredAiProvider || 'gemini',
+        geminiApiKey: fullUser.geminiApiKey || null,
+        openaiApiKey: fullUser.openaiApiKey || null,
+        aiProxyUrl: fullUser.aiProxyUrl || null,
+        ngrokAuthToken: fullUser.ngrokAuthToken || null,
+        navbarSize: fullUser.navbarSize || 'normal',
+        customAiSkills: fullUser.customAiSkills || null,
+        customAiModels: fullUser.customAiModels || null,
+        savedLeads: fullUser.savedLeads || null,
+        filterPresets: fullUser.filterPresets || null
+      }
+    });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
   }
@@ -131,7 +183,7 @@ router.get('/settings', authenticateToken, async (req: AuthenticatedRequest, res
   try {
     await ensureUserSettingsColumns();
     const rows: any[] = await prisma.$queryRawUnsafe(
-      `SELECT "id", "email", "name", "role", "geminiApiKey", "openaiApiKey", "aiProxyUrl", "ngrokAuthToken", "customAiSkills", "customAiModels", "savedLeads", "filterPresets" FROM "User" WHERE "id" = $1 LIMIT 1`,
+      `SELECT "id", "email", "name", "role", "preferredAiProvider", "geminiApiKey", "openaiApiKey", "aiProxyUrl", "ngrokAuthToken", "navbarSize", "customAiSkills", "customAiModels", "savedLeads", "filterPresets" FROM "User" WHERE "id" = $1 LIMIT 1`,
       req.userId
     );
 
@@ -164,10 +216,12 @@ router.put('/settings', authenticateToken, async (req: AuthenticatedRequest, res
     await ensureUserSettingsColumns();
     const { 
       name,
+      preferredAiProvider,
       geminiApiKey, 
       openaiApiKey, 
       aiProxyUrl, 
       ngrokAuthToken, 
+      navbarSize,
       customAiSkills, 
       customAiModels,
       savedLeads,
@@ -181,6 +235,10 @@ router.put('/settings', authenticateToken, async (req: AuthenticatedRequest, res
     if (name !== undefined) {
       fields.push(`"name" = $${idx++}`);
       values.push(name);
+    }
+    if (preferredAiProvider !== undefined) {
+      fields.push(`"preferredAiProvider" = $${idx++}`);
+      values.push(preferredAiProvider);
     }
     if (geminiApiKey !== undefined) {
       fields.push(`"geminiApiKey" = $${idx++}`);
@@ -197,6 +255,10 @@ router.put('/settings', authenticateToken, async (req: AuthenticatedRequest, res
     if (ngrokAuthToken !== undefined) {
       fields.push(`"ngrokAuthToken" = $${idx++}`);
       values.push(ngrokAuthToken);
+    }
+    if (navbarSize !== undefined) {
+      fields.push(`"navbarSize" = $${idx++}`);
+      values.push(navbarSize);
     }
     if (customAiSkills !== undefined) {
       fields.push(`"customAiSkills" = $${idx++}::jsonb`);
@@ -224,13 +286,24 @@ router.put('/settings', authenticateToken, async (req: AuthenticatedRequest, res
     }
 
     const rows: any[] = await prisma.$queryRawUnsafe(
-      `SELECT "id", "email", "name", "geminiApiKey", "openaiApiKey", "aiProxyUrl", "ngrokAuthToken", "customAiSkills", "customAiModels", "savedLeads", "filterPresets" FROM "User" WHERE "id" = $1 LIMIT 1`,
+      `SELECT "id", "email", "name", "role", "preferredAiProvider", "geminiApiKey", "openaiApiKey", "aiProxyUrl", "ngrokAuthToken", "navbarSize", "customAiSkills", "customAiModels", "savedLeads", "filterPresets" FROM "User" WHERE "id" = $1 LIMIT 1`,
       req.userId
     );
 
+    const user = rows[0] || {};
+    ['customAiSkills', 'customAiModels', 'savedLeads', 'filterPresets'].forEach(field => {
+      if (user[field] && typeof user[field] === 'string') {
+        try {
+          user[field] = JSON.parse(user[field]);
+        } catch (e) {
+          console.error(`Error parsing ${field}:`, e);
+        }
+      }
+    });
+
     return res.json({ 
       message: 'Configurações salvas e sincronizadas com sucesso no banco de dados!', 
-      settings: rows[0] || {} 
+      settings: user 
     });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });

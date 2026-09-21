@@ -151,21 +151,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
           if (s) {
             if (s.name) setName(s.name);
             if (s.email) setEmail(s.email);
-            if (s.geminiApiKey) {
-              setGeminiKey(s.geminiApiKey);
-              localStorage.setItem('gemini_api_key', s.geminiApiKey);
+            if (s.geminiApiKey !== undefined) {
+              setGeminiKey(s.geminiApiKey || '');
+              if (s.geminiApiKey) localStorage.setItem('gemini_api_key', s.geminiApiKey);
+              else localStorage.removeItem('gemini_api_key');
             }
-            if (s.openaiApiKey) {
-              setOpenaiKey(s.openaiApiKey);
-              localStorage.setItem('openai_api_key', s.openaiApiKey);
+            if (s.openaiApiKey !== undefined) {
+              setOpenaiKey(s.openaiApiKey || '');
+              if (s.openaiApiKey) localStorage.setItem('openai_api_key', s.openaiApiKey);
+              else localStorage.removeItem('openai_api_key');
             }
-            if (s.aiProxyUrl) {
-              setProxyUrl(s.aiProxyUrl);
-              localStorage.setItem('ai_proxy_url', s.aiProxyUrl);
+            if (s.aiProxyUrl !== undefined) {
+              setProxyUrl(s.aiProxyUrl || '');
+              if (s.aiProxyUrl) localStorage.setItem('ai_proxy_url', s.aiProxyUrl);
+              else localStorage.removeItem('ai_proxy_url');
             }
-            if (s.ngrokAuthToken) {
-              setNgrokToken(s.ngrokAuthToken);
-              localStorage.setItem('ngrok_authtoken', s.ngrokAuthToken);
+            if (s.ngrokAuthToken !== undefined) {
+              setNgrokToken(s.ngrokAuthToken || '');
+              if (s.ngrokAuthToken) localStorage.setItem('ngrok_authtoken', s.ngrokAuthToken);
+              else localStorage.removeItem('ngrok_authtoken');
             }
             if (s.customAiModels && Array.isArray(s.customAiModels)) {
               setModels(s.customAiModels);
@@ -206,11 +210,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
         body: JSON.stringify(payload)
       });
       if (!res.ok) {
-        const err = await res.json();
+        const err = await res.json().catch(() => ({}));
         throw new Error(err.error || 'Falha ao salvar no banco');
       }
+      return await res.json().catch(() => ({}));
     } catch (e: any) {
       console.error('Falha ao sincronizar com banco de dados:', e);
+      throw e;
     } finally {
       setSavingRemote(false);
     }
@@ -240,28 +246,55 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
     e.preventDefault();
     setLoading(true);
     setSuccessMsg(null);
+    setErrorMsg(null);
     
-    const finalGeminiKey = geminiKey.trim();
-    const finalOpenaiKey = openaiKey.trim();
-    const finalProxyUrl = proxyUrl.trim();
-    const finalNgrokToken = ngrokToken.trim();
+    try {
+      const finalGeminiKey = geminiKey.trim();
+      const finalOpenaiKey = openaiKey.trim();
+      const finalProxyUrl = proxyUrl.trim();
+      const finalNgrokToken = ngrokToken.trim();
 
-    // Atualiza localmente
-    localStorage.setItem('gemini_api_key', finalGeminiKey);
-    localStorage.setItem('openai_api_key', finalOpenaiKey);
-    localStorage.setItem('ai_proxy_url', finalProxyUrl);
-    localStorage.setItem('ngrok_authtoken', finalNgrokToken);
+      // Atualiza localmente
+      if (finalGeminiKey) localStorage.setItem('gemini_api_key', finalGeminiKey);
+      else localStorage.removeItem('gemini_api_key');
 
-    // Salva no banco de dados
-    await saveToDatabase({
-      geminiApiKey: finalGeminiKey,
-      openaiApiKey: finalOpenaiKey,
-      aiProxyUrl: finalProxyUrl,
-      ngrokAuthToken: finalNgrokToken
-    });
+      if (finalOpenaiKey) localStorage.setItem('openai_api_key', finalOpenaiKey);
+      else localStorage.removeItem('openai_api_key');
 
-    setSuccessMsg('Configurações de IA, Proxy e Ngrok salvas com sucesso no banco de dados!');
-    setLoading(false);
+      if (finalProxyUrl) localStorage.setItem('ai_proxy_url', finalProxyUrl);
+      else localStorage.removeItem('ai_proxy_url');
+
+      if (finalNgrokToken) localStorage.setItem('ngrok_authtoken', finalNgrokToken);
+      else localStorage.removeItem('ngrok_authtoken');
+
+      // Salva no banco de dados
+      await saveToDatabase({
+        geminiApiKey: finalGeminiKey,
+        openaiApiKey: finalOpenaiKey,
+        aiProxyUrl: finalProxyUrl,
+        ngrokAuthToken: finalNgrokToken
+      });
+
+      await fetch(`${API_URL}/api/users/profile`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          geminiApiKey: finalGeminiKey,
+          openaiApiKey: finalOpenaiKey,
+          aiProxyUrl: finalProxyUrl,
+          ngrokAuthToken: finalNgrokToken
+        })
+      }).catch(() => {});
+
+      setSuccessMsg('Configurações de IA, Proxy e Ngrok salvas com sucesso no banco de dados!');
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Erro ao gravar as configurações no banco de dados');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleAddModel = async (e: React.FormEvent) => {

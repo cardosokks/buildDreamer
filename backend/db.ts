@@ -8,6 +8,7 @@ interface MockUser {
   password: string;
   name?: string | null;
   role?: string;
+  preferredAiProvider?: string | null;
   geminiApiKey?: string | null;
   openaiApiKey?: string | null;
   aiProxyUrl?: string | null;
@@ -16,6 +17,7 @@ interface MockUser {
   customAiModels?: any;
   savedLeads?: any;
   filterPresets?: any;
+  navbarSize?: string | null;
   createdAt: Date;
 }
 
@@ -93,6 +95,12 @@ interface MockMedia {
   createdAt: Date;
 }
 
+export interface MessageReaction {
+  emoji: string;
+  userId: string;
+  userName: string;
+}
+
 export interface MockMessage {
   id: string;
   senderId: string;
@@ -107,7 +115,17 @@ export interface MockMessage {
   fileName?: string | null;
   fileSize?: number | null;
   read: boolean;
+  replyTo?: {
+    id: string;
+    senderName: string;
+    content: string;
+    type: string;
+  } | null;
+  reactions?: MessageReaction[];
+  pinned?: boolean;
+  isEdited?: boolean;
   createdAt: Date;
+  updatedAt?: Date;
 }
 
 interface MockVersion {
@@ -249,6 +267,7 @@ class InMemoryDatabase {
         password: data.password,
         name: data.name || data.email.split('@')[0],
         role: data.role || (this.users.size === 0 ? 'ADMIN' : 'USER'),
+        preferredAiProvider: data.preferredAiProvider || 'gemini',
         geminiApiKey: data.geminiApiKey || null,
         openaiApiKey: data.openaiApiKey || null,
         aiProxyUrl: data.aiProxyUrl || null,
@@ -257,9 +276,11 @@ class InMemoryDatabase {
         customAiModels: data.customAiModels || null,
         savedLeads: data.savedLeads || null,
         filterPresets: data.filterPresets || null,
+        navbarSize: data.navbarSize || 'normal',
         createdAt: new Date()
       };
       this.users.set(id, user);
+      this.save();
       return { ...user };
     },
     update: async ({ where, data }: { where: { id?: string; email?: string }; data: any }) => {
@@ -270,12 +291,14 @@ class InMemoryDatabase {
       }
       if (!user) throw new Error('User not found');
       Object.assign(user, data);
+      this.save();
       return { ...user };
     },
     delete: async ({ where }: { where: { id: string } }) => {
       const u = this.users.get(where.id);
       if (u) {
         this.users.delete(where.id);
+        this.save();
         return { ...u };
       }
       return null;
@@ -313,6 +336,10 @@ class InMemoryDatabase {
       list.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
       return list.map(m => ({ ...m }));
     },
+    findUnique: async ({ where }: { where: { id: string } }) => {
+      const msg = this.messages.get(where.id);
+      return msg ? { ...msg } : null;
+    },
     create: async ({ data }: { data: any }) => {
       const id = data.id || `msg_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
       const msg: MockMessage = {
@@ -329,10 +356,22 @@ class InMemoryDatabase {
         fileName: data.fileName || null,
         fileSize: data.fileSize || null,
         read: data.read || false,
+        replyTo: data.replyTo || null,
+        reactions: data.reactions || [],
+        pinned: data.pinned || false,
+        isEdited: data.isEdited || false,
         createdAt: data.createdAt ? new Date(data.createdAt) : new Date()
       };
       this.messages.set(id, msg);
       return { ...msg };
+    },
+    update: async ({ where, data }: { where: { id: string }; data: any }) => {
+      const msg = this.messages.get(where.id);
+      if (msg) {
+        Object.assign(msg, data, { updatedAt: new Date() });
+        return { ...msg };
+      }
+      return null;
     },
     updateMany: async ({ where, data }: { where: any; data: any }) => {
       let count = 0;
@@ -1046,13 +1085,17 @@ class InMemoryDatabase {
       const role = params[0];
       const userId = params[1];
       const user = this.users.get(userId);
-      if (user) user.role = role;
+      if (user) {
+        user.role = role;
+        this.save();
+      }
       return 1;
     }
 
     if (s.includes('DELETE FROM "User" WHERE "id" = $1')) {
       const id = params[0];
       this.users.delete(id);
+      this.save();
       return 1;
     }
 
@@ -1060,20 +1103,25 @@ class InMemoryDatabase {
       const userId = params[params.length - 1];
       const user = this.users.get(userId);
       if (user) {
-        // Updates can pass multiple fields
-        for (let i = 0; i < params.length - 1; i++) {
-          const val = params[i];
-          if (s.includes('"geminiApiKey"')) user.geminiApiKey = val;
-          if (s.includes('"openaiApiKey"')) user.openaiApiKey = val;
-          if (s.includes('"aiProxyUrl"')) user.aiProxyUrl = val;
-          if (s.includes('"ngrokAuthToken"')) user.ngrokAuthToken = val;
-          if (s.includes('"customAiSkills"')) {
-            try { user.customAiSkills = typeof val === 'string' ? JSON.parse(val) : val; } catch {}
+        const setPart = s.substring(s.indexOf('SET') + 3, s.indexOf('WHERE')).trim();
+        const assignments = setPart.split(',').map(a => a.trim());
+        assignments.forEach((assignment, i) => {
+          const fieldMatch = assignment.match(/"([^"]+)"/);
+          if (fieldMatch && i < params.length - 1) {
+            const fieldName = fieldMatch[1];
+            const val = params[i];
+            if (fieldName === 'customAiSkills' || fieldName === 'customAiModels' || fieldName === 'savedLeads' || fieldName === 'filterPresets') {
+              try {
+                (user as any)[fieldName] = typeof val === 'string' ? JSON.parse(val) : val;
+              } catch {
+                (user as any)[fieldName] = val;
+              }
+            } else {
+              (user as any)[fieldName] = val;
+            }
           }
-          if (s.includes('"customAiModels"')) {
-            try { user.customAiModels = typeof val === 'string' ? JSON.parse(val) : val; } catch {}
-          }
-        }
+        });
+        this.save();
       }
       return 1;
     }

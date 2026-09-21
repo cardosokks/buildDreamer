@@ -79,6 +79,7 @@ router.get('/conversations', authenticateToken, async (req: AuthenticatedRequest
       return timeB - timeA;
     });
 
+    const generalSender = lastGeneral ? users.find(u => u.id === lastGeneral.senderId) : null;
     return res.json({
       generalChannel: {
         id: 'ALL',
@@ -87,7 +88,7 @@ router.get('/conversations', authenticateToken, async (req: AuthenticatedRequest
           id: lastGeneral.id,
           content: lastGeneral.content,
           type: lastGeneral.type,
-          senderName: lastGeneral.senderName,
+          senderName: generalSender ? (generalSender.name || generalSender.email.split('@')[0]) : (lastGeneral.senderName || 'Membro'),
           createdAt: lastGeneral.createdAt
         } : null
       },
@@ -138,7 +139,21 @@ router.get('/messages', authenticateToken, async (req: AuthenticatedRequest, res
       });
     }
 
-    return res.json({ messages });
+    // Buscar lista de usuários para obter os nomes atualizados
+    const users = await prisma.user.findMany({
+      select: { id: true, email: true, name: true }
+    });
+    const userMap = new Map<string, string>();
+    users.forEach(u => {
+      userMap.set(u.id, u.name || u.email.split('@')[0]);
+    });
+
+    const enrichedMessages = messages.map(m => ({
+      ...m,
+      senderName: userMap.get(m.senderId) || m.senderName || 'Membro'
+    }));
+
+    return res.json({ messages: enrichedMessages });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
   }
@@ -148,7 +163,7 @@ router.get('/messages', authenticateToken, async (req: AuthenticatedRequest, res
 router.post('/messages', authenticateToken, async (req: AuthenticatedRequest, res: any) => {
   try {
     const currentUserId = req.userId!;
-    const { content, type = 'text', recipientId = 'ALL', mediaUrl, duration, fileName, fileSize } = req.body;
+    const { content, type = 'text', recipientId = 'ALL', mediaUrl, duration, fileName, fileSize, replyTo } = req.body;
 
     // Buscar dados do usuário logado
     const user = await prisma.user.findUnique({ where: { id: currentUserId } });
@@ -169,12 +184,108 @@ router.post('/messages', authenticateToken, async (req: AuthenticatedRequest, re
         duration: duration ? Number(duration) : null,
         fileName: fileName || null,
         fileSize: fileSize ? Number(fileSize) : null,
+        replyTo: replyTo || null,
+        reactions: [],
+        pinned: false,
         read: false,
         createdAt: new Date()
       }
     });
 
     return res.status(201).json({ message: newMessage });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /api/chat/messages/:id/react - Alternar reação com emoji em uma mensagem
+router.post('/messages/:id/react', authenticateToken, async (req: AuthenticatedRequest, res: any) => {
+  try {
+    const { id } = req.params;
+    const { emoji } = req.body;
+    const currentUserId = req.userId!;
+
+    if (!emoji) {
+      return res.status(400).json({ error: 'Emoji é obrigatório' });
+    }
+
+    const user = await prisma.user.findUnique({ where: { id: currentUserId } });
+    const msg = await (prisma as any).message.findUnique({ where: { id } });
+
+    if (!msg) {
+      return res.status(404).json({ error: 'Mensagem não encontrada' });
+    }
+
+    let reactions = Array.isArray(msg.reactions) ? [...msg.reactions] : [];
+    const existingIndex = reactions.findIndex(r => r.userId === currentUserId && r.emoji === emoji);
+
+    if (existingIndex > -1) {
+      // Remove a reação se já tiver clicado no mesmo emoji (toggle off)
+      reactions.splice(existingIndex, 1);
+    } else {
+      // Adiciona a nova reação
+      reactions.push({
+        emoji,
+        userId: currentUserId,
+        userName: user?.name || user?.email?.split('@')[0] || 'Usuário'
+      });
+    }
+
+    const updated = await (prisma as any).message.update({
+      where: { id },
+      data: { reactions }
+    });
+
+    return res.json({ message: updated, reactions });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// PUT /api/chat/messages/:id/pin - Fixar ou desafixar mensagem
+router.put('/messages/:id/pin', authenticateToken, async (req: AuthenticatedRequest, res: any) => {
+  try {
+    const { id } = req.params;
+    const { pinned } = req.body;
+
+    const msg = await (prisma as any).message.findUnique({ where: { id } });
+    if (!msg) {
+      return res.status(404).json({ error: 'Mensagem não encontrada' });
+    }
+
+    const updated = await (prisma as any).message.update({
+      where: { id },
+      data: { pinned: Boolean(pinned) }
+    });
+
+    return res.json({ message: updated });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// PUT /api/chat/messages/:id/edit - Editar texto de mensagem própria
+router.put('/messages/:id/edit', authenticateToken, async (req: AuthenticatedRequest, res: any) => {
+  try {
+    const { id } = req.params;
+    const { content } = req.body;
+    const currentUserId = req.userId!;
+
+    const msg = await (prisma as any).message.findUnique({ where: { id } });
+    if (!msg) {
+      return res.status(404).json({ error: 'Mensagem não encontrada' });
+    }
+
+    if (msg.senderId !== currentUserId) {
+      return res.status(403).json({ error: 'Você só pode editar suas próprias mensagens' });
+    }
+
+    const updated = await (prisma as any).message.update({
+      where: { id },
+      data: { content, isEdited: true }
+    });
+
+    return res.json({ message: updated });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
   }

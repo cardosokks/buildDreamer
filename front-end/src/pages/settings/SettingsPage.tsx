@@ -290,21 +290,33 @@ export const SettingsPage: React.FC = () => {
           if (s) {
             if (s.name) setName(s.name);
             if (s.email) setEmail(s.email);
-            if (s.geminiApiKey) {
-              setGeminiKey(s.geminiApiKey);
-              localStorage.setItem('gemini_api_key', s.geminiApiKey);
+            if (s.preferredAiProvider) {
+              setAiProvider(s.preferredAiProvider);
+              localStorage.setItem('preferred_ai_provider', s.preferredAiProvider);
             }
-            if (s.openaiApiKey) {
-              setOpenaiKey(s.openaiApiKey);
-              localStorage.setItem('openai_api_key', s.openaiApiKey);
+            if (s.navbarSize) {
+              setNavbarSize(s.navbarSize);
+              localStorage.setItem('rp_navbar_size', s.navbarSize);
             }
-            if (s.aiProxyUrl) {
-              setProxyUrl(s.aiProxyUrl);
-              localStorage.setItem('ai_proxy_url', s.aiProxyUrl);
+            if (s.geminiApiKey !== undefined) {
+              setGeminiKey(s.geminiApiKey || '');
+              if (s.geminiApiKey) localStorage.setItem('gemini_api_key', s.geminiApiKey);
+              else localStorage.removeItem('gemini_api_key');
             }
-            if (s.ngrokAuthToken) {
-              setNgrokToken(s.ngrokAuthToken);
-              localStorage.setItem('ngrok_authtoken', s.ngrokAuthToken);
+            if (s.openaiApiKey !== undefined) {
+              setOpenaiKey(s.openaiApiKey || '');
+              if (s.openaiApiKey) localStorage.setItem('openai_api_key', s.openaiApiKey);
+              else localStorage.removeItem('openai_api_key');
+            }
+            if (s.aiProxyUrl !== undefined) {
+              setProxyUrl(s.aiProxyUrl || '');
+              if (s.aiProxyUrl) localStorage.setItem('ai_proxy_url', s.aiProxyUrl);
+              else localStorage.removeItem('ai_proxy_url');
+            }
+            if (s.ngrokAuthToken !== undefined) {
+              setNgrokToken(s.ngrokAuthToken || '');
+              if (s.ngrokAuthToken) localStorage.setItem('ngrok_authtoken', s.ngrokAuthToken);
+              else localStorage.removeItem('ngrok_authtoken');
             }
             if (s.customAiModels && Array.isArray(s.customAiModels)) {
               setModels(s.customAiModels);
@@ -340,15 +352,22 @@ export const SettingsPage: React.FC = () => {
         body: JSON.stringify(payload)
       });
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || 'Falha ao salvar no banco');
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Falha ao salvar no banco de dados');
       }
+      return await res.json().catch(() => ({}));
     } catch (e: any) {
       console.error('Falha ao sincronizar com banco de dados:', e);
+      throw e;
     } finally {
       setSavingRemote(false);
     }
   };
+
+  useEffect(() => {
+    if (user?.name) setName(user.name);
+    if (user?.email) setEmail(user.email);
+  }, [user?.name, user?.email]);
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -362,6 +381,18 @@ export const SettingsPage: React.FC = () => {
         login(token!, updatedUser);
         localStorage.setItem('rp_navbar_size', navbarSize);
         await saveToDatabase({ name, navbarSize });
+
+        // Também garantir persistência via /api/users/profile
+        await fetch(`${API_URL}/api/users/profile`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ name })
+        }).catch(() => {});
+
+        window.dispatchEvent(new CustomEvent('user_profile_updated', { detail: { name, email } }));
         setSuccessMsg('Perfil atualizado com sucesso!');
       }
     } catch (err: any) {
@@ -384,10 +415,17 @@ export const SettingsPage: React.FC = () => {
       const finalNgrokToken = ngrokToken.trim();
 
       localStorage.setItem('preferred_ai_provider', aiProvider);
-      localStorage.setItem('gemini_api_key', finalGeminiKey);
-      localStorage.setItem('openai_api_key', finalOpenaiKey);
-      localStorage.setItem('ai_proxy_url', finalProxyUrl);
-      localStorage.setItem('ngrok_authtoken', finalNgrokToken);
+      if (finalGeminiKey) localStorage.setItem('gemini_api_key', finalGeminiKey);
+      else localStorage.removeItem('gemini_api_key');
+
+      if (finalOpenaiKey) localStorage.setItem('openai_api_key', finalOpenaiKey);
+      else localStorage.removeItem('openai_api_key');
+
+      if (finalProxyUrl) localStorage.setItem('ai_proxy_url', finalProxyUrl);
+      else localStorage.removeItem('ai_proxy_url');
+
+      if (finalNgrokToken) localStorage.setItem('ngrok_authtoken', finalNgrokToken);
+      else localStorage.removeItem('ngrok_authtoken');
 
       await saveToDatabase({
         preferredAiProvider: aiProvider,
@@ -397,9 +435,25 @@ export const SettingsPage: React.FC = () => {
         ngrokAuthToken: finalNgrokToken
       });
 
-      setSuccessMsg('Configurações de IA salvas com sucesso!');
+      // Também persistir explicitamente via /api/users/profile como dupla garantia
+      await fetch(`${API_URL}/api/users/profile`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          preferredAiProvider: aiProvider,
+          geminiApiKey: finalGeminiKey,
+          openaiApiKey: finalOpenaiKey,
+          aiProxyUrl: finalProxyUrl,
+          ngrokAuthToken: finalNgrokToken
+        })
+      }).catch(() => {});
+
+      setSuccessMsg('Chave de API do Gemini e configurações de IA gravadas com sucesso no banco de dados!');
     } catch (err: any) {
-      setErrorMsg(err.message);
+      setErrorMsg(err.message || 'Erro ao gravar as configurações no banco de dados');
     } finally {
       setLoading(false);
     }

@@ -44,7 +44,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onSwitchToRegister }) => {
       const data = await safeJson(res);
       if (!res.ok) throw new Error(data.error || 'Erro ao realizar login');
 
-      login(data.token, data.user);
+      login(data.token, data.user, data.settings);
     } catch (err: any) {
       setError(err.message || 'Falha na autenticação');
     } finally {

@@ -41,10 +41,12 @@ router.get('/profile', authenticateToken, async (req: AuthenticatedRequest, res:
         email: true,
         name: true,
         role: true,
+        preferredAiProvider: true,
         geminiApiKey: true,
         openaiApiKey: true,
         aiProxyUrl: true,
         ngrokAuthToken: true,
+        navbarSize: true,
         customAiSkills: true,
         customAiModels: true,
         createdAt: true
@@ -65,13 +67,15 @@ router.put('/profile', authenticateToken, async (req: AuthenticatedRequest, res:
     if (!req.userId) {
       return res.status(401).json({ error: 'Não autenticado' });
     }
-    const { name, geminiApiKey, openaiApiKey, aiProxyUrl, ngrokAuthToken, customAiSkills, customAiModels } = req.body;
+    const { name, preferredAiProvider, geminiApiKey, openaiApiKey, aiProxyUrl, ngrokAuthToken, navbarSize, customAiSkills, customAiModels } = req.body;
     const updateData: any = {};
     if (name !== undefined) updateData.name = name;
+    if (preferredAiProvider !== undefined) updateData.preferredAiProvider = preferredAiProvider;
     if (geminiApiKey !== undefined) updateData.geminiApiKey = geminiApiKey;
     if (openaiApiKey !== undefined) updateData.openaiApiKey = openaiApiKey;
     if (aiProxyUrl !== undefined) updateData.aiProxyUrl = aiProxyUrl;
     if (ngrokAuthToken !== undefined) updateData.ngrokAuthToken = ngrokAuthToken;
+    if (navbarSize !== undefined) updateData.navbarSize = navbarSize;
     if (customAiSkills !== undefined) updateData.customAiSkills = customAiSkills;
     if (customAiModels !== undefined) updateData.customAiModels = customAiModels;
 

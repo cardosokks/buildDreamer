@@ -143,6 +143,54 @@
       "savedLeads": null,
       "filterPresets": null,
       "createdAt": "2026-09-21T17:29:48.901Z"
+    },
+    "user_1790013715392_dalni9": {
+      "id": "user_1790013715392_dalni9",
+      "email": "carol_1790013715165@test.com",
+      "password": "$2b$10$I9afCzcuPQFpHiYrY.VSKeSgzjc.RhRvSRsrkCy9Ic4pyIhez87ZC",
+      "name": "Carol Teste",
+      "role": "USER",
+      "geminiApiKey": null,
+      "openaiApiKey": null,
+      "aiProxyUrl": null,
+      "ngrokAuthToken": null,
+      "customAiSkills": null,
+      "customAiModels": null,
+      "savedLeads": null,
+      "filterPresets": null,
+      "createdAt": "2026-09-21T18:01:55.392Z"
+    },
+    "user_1790013715513_pztspm": {
+      "id": "user_1790013715513_pztspm",
+      "email": "david_1790013715165@test.com",
+      "password": "$2b$10$4kqLuVYqadmVmYcUl7Ne4OLjqZH50Wc3CzzLPh8P4Tx0k06BXiwla",
+      "name": "David Teste",
+      "role": "USER",
+      "geminiApiKey": null,
+      "openaiApiKey": null,
+      "aiProxyUrl": null,
+      "ngrokAuthToken": null,
+      "customAiSkills": null,
+      "customAiModels": null,
+      "savedLeads": null,
+      "filterPresets": null,
+      "createdAt": "2026-09-21T18:01:55.513Z"
+    },
+    "user_1790013729753_edapx0": {
+      "id": "user_1790013729753_edapx0",
+      "email": "debug_user_1790013729641@builddreamer.local",
+      "password": "$2b$10$iFkA9XEAoFD1aGMWZ/AabOvKFZb26FPPzPTY62EyIhLM4D7YJBEvu",
+      "name": "Debug User",
+      "role": "USER",
+      "geminiApiKey": "test_gemini_key_12345",
+      "openaiApiKey": null,
+      "aiProxyUrl": "https://proxy.builddreamer.local",
+      "ngrokAuthToken": null,
+      "customAiSkills": null,
+      "customAiModels": null,
+      "savedLeads": null,
+      "filterPresets": null,
+      "createdAt": "2026-09-21T18:02:09.753Z"
     }
   },
   "leads": {
@@ -325,6 +373,26 @@
       "projectId": null,
       "createdAt": "2026-09-21T17:29:49.299Z",
       "updatedAt": "2026-09-21T17:29:49.299Z"
+    },
+    "lead-1790013730169-96lr7y": {
+      "id": "lead-1790013730169-96lr7y",
+      "name": "Cliente Diagnóstico",
+      "company": "Empresa Teste S.A.",
+      "phone": "+55 11 99999-9999",
+      "email": "lead@empresa.com",
+      "website": null,
+      "address": null,
+      "rating": null,
+      "dealValue": 15000,
+      "status": "NEW",
+      "notes": null,
+      "origin": "MANUAL",
+      "tags": [],
+      "lastContactDate": null,
+      "userId": "user_1790013729753_edapx0",
+      "projectId": null,
+      "createdAt": "2026-09-21T18:02:10.169Z",
+      "updatedAt": "2026-09-21T18:02:10.169Z"
     }
   },
   "projects": {
@@ -435,6 +503,22 @@
       "footerHtml": "",
       "createdAt": "2026-09-21T17:29:49.031Z",
       "updatedAt": "2026-09-21T17:29:49.031Z"
+    },
+    "proj_1790013729887_28rrm8": {
+      "id": "proj_1790013729887_28rrm8",
+      "name": "Site de Teste de Diagnóstico",
+      "description": "Projeto criado para validação de integridade",
+      "status": "development",
+      "domain": null,
+      "favicon": null,
+      "logoUrl": null,
+      "contacts": null,
+      "email": null,
+      "colorPalette": null,
+      "navbarHtml": "",
+      "footerHtml": "",
+      "createdAt": "2026-09-21T18:02:09.887Z",
+      "updatedAt": "2026-09-21T18:02:09.887Z"
     }
   },
   "projectMembers": {
@@ -479,6 +563,12 @@
       "role": "OWNER",
       "userId": "user_1790011788901_naftws",
       "projectId": "proj_1790011789031_inzfcj"
+    },
+    "mem_1790013729887_g32xhb": {
+      "id": "mem_1790013729887_g32xhb",
+      "role": "OWNER",
+      "userId": "user_1790013729753_edapx0",
+      "projectId": "proj_1790013729887_28rrm8"
     }
   },
   "pages": {
@@ -662,6 +752,23 @@
       "projectId": "proj_1790011789031_inzfcj",
       "createdAt": "2026-09-21T17:29:49.031Z",
       "updatedAt": "2026-09-21T17:29:49.055Z",
+      "seoOgImage": null
+    },
+    "page_1790013729887_ol4qsc": {
+      "id": "page_1790013729887_ol4qsc",
+      "name": "Home",
+      "slug": "index",
+      "title": "Home",
+      "description": null,
+      "html": "<header class=\"p-4 bg-slate-900 text-white\"><h1>Diagnóstico OK</h1></header><main class=\"p-8\"><p>Página de teste validada.</p></main>",
+      "css": "body { background: #0f172a; color: #fff; }",
+      "js": "console.log(\"diagnóstico ativo\");",
+      "seoTitle": "Título SEO Diagnóstico",
+      "seoDescription": "Descrição SEO Diagnóstico",
+      "isHomepage": true,
+      "projectId": "proj_1790013729887_28rrm8",
+      "createdAt": "2026-09-21T18:02:09.887Z",
+      "updatedAt": "2026-09-21T18:02:09.916Z",
       "seoOgImage": null
     }
   },
@@ -1320,6 +1427,17 @@
       "projectId": "proj_1790011789031_inzfcj",
       "storage": "local",
       "createdAt": "2026-09-21T17:29:49.289Z"
+    },
+    "media_1790013730155_87xejo": {
+      "id": "media_1790013730155_87xejo",
+      "name": "pixel_diagnostico.png",
+      "url": "/api/media/files/uploads/1790013729926_pixel_diagnostico.png",
+      "size": 68,
+      "mimeType": "image/png",
+      "userId": "user_1790013729753_edapx0",
+      "projectId": "proj_1790013729887_28rrm8",
+      "storage": "local",
+      "createdAt": "2026-09-21T18:02:10.155Z"
     }
   },
   "versions": {
@@ -1407,6 +1525,58 @@
       "fileSize": null,
       "read": false,
       "createdAt": "2026-09-21T17:28:53.258Z"
+    },
+    "msg_1790013715522_3r3egv": {
+      "id": "msg_1790013715522_3r3egv",
+      "senderId": "user_1790013715392_dalni9",
+      "senderName": "Carol Teste",
+      "senderEmail": "carol_1790013715165@test.com",
+      "senderRole": "USER",
+      "recipientId": "user_1790013715513_pztspm",
+      "content": "Primeira mensagem original (EDITADA)",
+      "type": "text",
+      "mediaUrl": null,
+      "duration": null,
+      "fileName": null,
+      "fileSize": null,
+      "read": false,
+      "replyTo": null,
+      "reactions": [
+        {
+          "emoji": "❤️",
+          "userId": "user_1790013715513_pztspm",
+          "userName": "David Teste"
+        }
+      ],
+      "pinned": true,
+      "isEdited": true,
+      "createdAt": "2026-09-21T18:01:55.522Z",
+      "updatedAt": "2026-09-21T18:01:55.539Z"
+    },
+    "msg_1790013715547_o33o2o": {
+      "id": "msg_1790013715547_o33o2o",
+      "senderId": "user_1790013715513_pztspm",
+      "senderName": "David Teste",
+      "senderEmail": "david_1790013715165@test.com",
+      "senderRole": "USER",
+      "recipientId": "user_1790013715392_dalni9",
+      "content": "Esta é a resposta citando a mensagem anterior",
+      "type": "text",
+      "mediaUrl": null,
+      "duration": null,
+      "fileName": null,
+      "fileSize": null,
+      "read": false,
+      "replyTo": {
+        "id": "msg_1790013715522_3r3egv",
+        "senderName": "Carol Teste",
+        "content": "Primeira mensagem original",
+        "type": "text"
+      },
+      "reactions": [],
+      "pinned": false,
+      "isEdited": false,
+      "createdAt": "2026-09-21T18:01:55.547Z"
     }
   },
   "assets": {},
@@ -1506,6 +1676,22 @@
       "userId": "user_1790011788901_naftws",
       "createdAt": "2026-09-21T17:29:49.306Z",
       "updatedAt": "2026-09-21T17:29:49.306Z"
+    },
+    "prod_1790013730177_gu76wq": {
+      "id": "prod_1790013730177_gu76wq",
+      "name": "Site Institucional Premium",
+      "price": 2500,
+      "description": null,
+      "category": "Desenvolvimento Web",
+      "sku": "DEV-001",
+      "status": "ACTIVE",
+      "billingType": "ONE_TIME",
+      "costPrice": null,
+      "siteUrl": null,
+      "projectId": "proj_1790013729887_28rrm8",
+      "userId": "user_1790013729753_edapx0",
+      "createdAt": "2026-09-21T18:02:10.177Z",
+      "updatedAt": "2026-09-21T18:02:10.177Z"
     }
   },
   "sales": {}
