@@ -184,51 +184,67 @@ class InMemoryDatabase {
   }
 
   private load() {
-    if (fs.existsSync(this.dbPath)) {
-      try {
-        const data = JSON.parse(fs.readFileSync(this.dbPath, 'utf8'));
-        this.users = new Map(Object.entries(data.users));
-        this.leads = new Map(Object.entries(data.leads));
-        this.projects = new Map(Object.entries(data.projects));
-        this.projectMembers = new Map(Object.entries(data.projectMembers));
-        this.pages = new Map(Object.entries(data.pages));
-        this.medias = new Map(Object.entries(data.medias));
-        this.versions = new Map(Object.entries(data.versions));
-        this.messages = new Map(Object.entries(data.messages));
-        this.assets = new Map(Object.entries(data.assets || {}));
-        this.products = new Map(
-          Object.entries(data.products || {}).map(([id, p]: [string, any]) => [
-            id, 
-            { ...p, createdAt: new Date(p.createdAt), updatedAt: new Date(p.updatedAt) }
-          ])
-        );
-        this.sales = new Map(
-          Object.entries(data.sales || {}).map(([id, s]: [string, any]) => [
-            id, 
-            { ...s, createdAt: new Date(s.createdAt) }
-          ])
-        );
-      } catch (err) {
-        console.error('Failed to load DB, starting fresh:', err);
+    try {
+      const dir = path.dirname(this.dbPath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
       }
+      if (fs.existsSync(this.dbPath)) {
+        const data = JSON.parse(fs.readFileSync(this.dbPath, 'utf8'));
+        if (data.users) this.users = new Map(Object.entries(data.users));
+        if (data.leads) this.leads = new Map(Object.entries(data.leads));
+        if (data.projects) this.projects = new Map(Object.entries(data.projects));
+        if (data.projectMembers) this.projectMembers = new Map(Object.entries(data.projectMembers));
+        if (data.pages) this.pages = new Map(Object.entries(data.pages));
+        if (data.medias) this.medias = new Map(Object.entries(data.medias));
+        if (data.versions) this.versions = new Map(Object.entries(data.versions));
+        if (data.messages) this.messages = new Map(Object.entries(data.messages));
+        if (data.assets) this.assets = new Map(Object.entries(data.assets));
+        if (data.products) {
+          this.products = new Map(
+            Object.entries(data.products).map(([id, p]: [string, any]) => [
+              id, 
+              { ...p, createdAt: new Date(p.createdAt), updatedAt: new Date(p.updatedAt) }
+            ])
+          );
+        }
+        if (data.sales) {
+          this.sales = new Map(
+            Object.entries(data.sales).map(([id, s]: [string, any]) => [
+              id, 
+              { ...s, createdAt: new Date(s.createdAt) }
+            ])
+          );
+        }
+      }
+    } catch (err) {
+      console.warn('Alerta ao carregar banco em memória do disco:', err);
     }
   }
 
   private save() {
-    const data = {
-      users: Object.fromEntries(this.users),
-      leads: Object.fromEntries(this.leads),
-      projects: Object.fromEntries(this.projects),
-      projectMembers: Object.fromEntries(this.projectMembers),
-      pages: Object.fromEntries(this.pages),
-      medias: Object.fromEntries(this.medias),
-      versions: Object.fromEntries(this.versions),
-      messages: Object.fromEntries(this.messages),
-      assets: Object.fromEntries(this.assets),
-      products: Object.fromEntries(this.products),
-      sales: Object.fromEntries(this.sales),
-    };
-    fs.writeFileSync(this.dbPath, JSON.stringify(data, null, 2));
+    try {
+      const dir = path.dirname(this.dbPath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      const data = {
+        users: Object.fromEntries(this.users),
+        leads: Object.fromEntries(this.leads),
+        projects: Object.fromEntries(this.projects),
+        projectMembers: Object.fromEntries(this.projectMembers),
+        pages: Object.fromEntries(this.pages),
+        medias: Object.fromEntries(this.medias),
+        versions: Object.fromEntries(this.versions),
+        messages: Object.fromEntries(this.messages),
+        assets: Object.fromEntries(this.assets),
+        products: Object.fromEntries(this.products),
+        sales: Object.fromEntries(this.sales),
+      };
+      fs.writeFileSync(this.dbPath, JSON.stringify(data, null, 2), 'utf8');
+    } catch (err) {
+      console.warn('Alerta ao persistir banco em memória no disco (dados mantidos na API/memória):', err);
+    }
   }
 
   user = {
