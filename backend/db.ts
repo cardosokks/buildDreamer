@@ -88,6 +88,7 @@ interface MockMedia {
   size: number;
   mimeType: string;
   userId: string;
+  projectId?: string | null;
   storage?: string;
   createdAt: Date;
 }
@@ -285,7 +286,17 @@ class InMemoryDatabase {
     findMany: async ({ where, orderBy }: { where?: any; orderBy?: any } = {}) => {
       let list = Array.from(this.messages.values());
       if (where) {
-        if (where.recipientId) {
+        if (Array.isArray(where.OR)) {
+          list = list.filter(m => {
+            return where.OR.some((cond: any) => {
+              let match = true;
+              if (cond.senderId !== undefined && m.senderId !== cond.senderId) match = false;
+              if (cond.recipientId !== undefined && m.recipientId !== cond.recipientId) match = false;
+              if (cond.read !== undefined && m.read !== cond.read) match = false;
+              return match;
+            });
+          });
+        } else if (where.recipientId) {
           if (where.recipientId === 'ALL') {
             list = list.filter(m => m.recipientId === 'ALL');
           } else if (where.senderId) {
@@ -299,7 +310,7 @@ class InMemoryDatabase {
           }
         }
       }
-      list.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+      list.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
       return list.map(m => ({ ...m }));
     },
     create: async ({ data }: { data: any }) => {
@@ -834,8 +845,22 @@ class InMemoryDatabase {
   };
 
   media = {
-    findMany: async ({ where }: { where: any }) => {
-      return Array.from(this.medias.values()).filter(m => !where || !where.userId || m.userId === where.userId);
+    findMany: async ({ where, orderBy, take }: { where?: any; orderBy?: any; take?: number } = {}) => {
+      let list = Array.from(this.medias.values()).filter(m => {
+        if (!where) return true;
+        if (where.userId && m.userId !== where.userId) return false;
+        if (where.projectId && m.projectId !== where.projectId) return false;
+        return true;
+      });
+      if (orderBy && orderBy.createdAt === 'desc') {
+        list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      } else if (orderBy && orderBy.createdAt === 'asc') {
+        list.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+      }
+      if (typeof take === 'number' && take > 0) {
+        list = list.slice(0, take);
+      }
+      return list;
     },
     findUnique: async ({ where }: { where: { id: string } }) => {
       const m = this.medias.get(where.id);
@@ -850,6 +875,7 @@ class InMemoryDatabase {
         size: data.size,
         mimeType: data.mimeType,
         userId: data.userId,
+        projectId: data.projectId || null,
         storage: data.storage,
         createdAt: new Date()
       };

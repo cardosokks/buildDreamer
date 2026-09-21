@@ -29,24 +29,105 @@ const upload = multer({
   limits: { fileSize: 25 * 1024 * 1024 } // 25MB max
 });
 
+// GET /api/chat/conversations - Listar visão geral de conversas com resumo da última mensagem e não lidas
+router.get('/conversations', authenticateToken, async (req: AuthenticatedRequest, res: any) => {
+  try {
+    const currentUserId = req.userId!;
+    const users = await prisma.user.findMany({
+      select: { id: true, email: true, name: true, role: true }
+    });
+
+    const allMessages: any[] = await (prisma as any).message.findMany();
+
+    // Mensagens do Canal Geral
+    const generalMessages = allMessages.filter(m => m.recipientId === 'ALL');
+    const lastGeneral = generalMessages[generalMessages.length - 1] || null;
+
+    // Conversas diretas para cada usuário
+    const otherUsers = users.filter(u => u.id !== currentUserId);
+    const conversations = otherUsers.map(u => {
+      const directMsgs = allMessages.filter(m => 
+        (m.senderId === currentUserId && m.recipientId === u.id) ||
+        (m.senderId === u.id && m.recipientId === currentUserId)
+      );
+      const lastMsg = directMsgs[directMsgs.length - 1] || null;
+      const unreadCount = directMsgs.filter(m => m.senderId === u.id && !m.read).length;
+
+      return {
+        user: {
+          id: u.id,
+          name: u.name || u.email.split('@')[0],
+          email: u.email,
+          role: u.role || 'USER'
+        },
+        lastMessage: lastMsg ? {
+          id: lastMsg.id,
+          content: lastMsg.content,
+          type: lastMsg.type,
+          senderId: lastMsg.senderId,
+          createdAt: lastMsg.createdAt,
+          fileName: lastMsg.fileName
+        } : null,
+        unreadCount
+      };
+    });
+
+    // Ordenar conversas por data da última mensagem (mais recentes primeiro)
+    conversations.sort((a, b) => {
+      const timeA = a.lastMessage ? new Date(a.lastMessage.createdAt).getTime() : 0;
+      const timeB = b.lastMessage ? new Date(b.lastMessage.createdAt).getTime() : 0;
+      return timeB - timeA;
+    });
+
+    return res.json({
+      generalChannel: {
+        id: 'ALL',
+        name: 'Canal Geral da Equipe',
+        lastMessage: lastGeneral ? {
+          id: lastGeneral.id,
+          content: lastGeneral.content,
+          type: lastGeneral.type,
+          senderName: lastGeneral.senderName,
+          createdAt: lastGeneral.createdAt
+        } : null
+      },
+      conversations
+    });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
 // GET /api/chat/messages - Obter mensagens do chat (geral ou conversa direta)
 router.get('/messages', authenticateToken, async (req: AuthenticatedRequest, res: any) => {
   try {
     const { recipientId, targetUserId } = req.query;
     const currentUserId = req.userId!;
+    const effectiveTarget = (targetUserId || recipientId) as string | undefined;
 
     let messages: any[] = [];
-    if (targetUserId && targetUserId !== 'ALL') {
-      // Conversa direta entre currentUserId e targetUserId (ambas as direções)
+    if (effectiveTarget && effectiveTarget !== 'ALL') {
+      // Conversa direta privada entre currentUserId e effectiveTarget (ambas as direções)
       messages = await (prisma as any).message.findMany({
         where: {
           OR: [
-            { senderId: currentUserId, recipientId: String(targetUserId) },
-            { senderId: String(targetUserId), recipientId: currentUserId }
+            { senderId: currentUserId, recipientId: String(effectiveTarget) },
+            { senderId: String(effectiveTarget), recipientId: currentUserId }
           ]
         },
         orderBy: { createdAt: 'asc' }
       });
+
+      // Marcar mensagens recebidas como lidas
+      try {
+        await (prisma as any).message.updateMany({
+          where: {
+            senderId: String(effectiveTarget),
+            recipientId: currentUserId
+          },
+          data: { read: true }
+        });
+      } catch {}
     } else {
       // Canal Geral / Broadcast
       messages = await (prisma as any).message.findMany({

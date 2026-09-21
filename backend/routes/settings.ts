@@ -6,6 +6,27 @@ import { prisma } from '../db';
 
 const router = Router();
 
+// System Settings / Status overview
+router.get('/', async (req, res: any) => {
+  try {
+    const counts = {
+      projects: (await prisma.project.findMany()).length,
+      pages: (await prisma.page.findMany()).length,
+      leads: (await prisma.lead.findMany()).length,
+      medias: (await prisma.media.findMany()).length,
+      users: (await prisma.user.findMany()).length
+    };
+    return res.json({
+      status: 'healthy',
+      version: '1.0.0',
+      timestamp: new Date().toISOString(),
+      counts
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // Database Backup / Export
 router.get('/backup', async (req, res: any) => {
   try {

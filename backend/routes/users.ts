@@ -28,6 +28,63 @@ const requireAdmin = async (req: AuthenticatedRequest, res: any, next: any) => {
   }
 };
 
+// GET /api/users/profile - Obter dados do usuário atual autenticado
+router.get('/profile', authenticateToken, async (req: AuthenticatedRequest, res: any) => {
+  try {
+    if (!req.userId) {
+      return res.status(401).json({ error: 'Não autenticado' });
+    }
+    const user = await prisma.user.findUnique({
+      where: { id: req.userId },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        geminiApiKey: true,
+        openaiApiKey: true,
+        aiProxyUrl: true,
+        ngrokAuthToken: true,
+        customAiSkills: true,
+        customAiModels: true,
+        createdAt: true
+      }
+    });
+    if (!user) {
+      return res.status(404).json({ error: 'Usuário não encontrado' });
+    }
+    return res.json(user);
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// PUT /api/users/profile - Atualizar perfil e configurações de IA do usuário atual
+router.put('/profile', authenticateToken, async (req: AuthenticatedRequest, res: any) => {
+  try {
+    if (!req.userId) {
+      return res.status(401).json({ error: 'Não autenticado' });
+    }
+    const { name, geminiApiKey, openaiApiKey, aiProxyUrl, ngrokAuthToken, customAiSkills, customAiModels } = req.body;
+    const updateData: any = {};
+    if (name !== undefined) updateData.name = name;
+    if (geminiApiKey !== undefined) updateData.geminiApiKey = geminiApiKey;
+    if (openaiApiKey !== undefined) updateData.openaiApiKey = openaiApiKey;
+    if (aiProxyUrl !== undefined) updateData.aiProxyUrl = aiProxyUrl;
+    if (ngrokAuthToken !== undefined) updateData.ngrokAuthToken = ngrokAuthToken;
+    if (customAiSkills !== undefined) updateData.customAiSkills = customAiSkills;
+    if (customAiModels !== undefined) updateData.customAiModels = customAiModels;
+
+    const updated = await prisma.user.update({
+      where: { id: req.userId },
+      data: updateData
+    });
+    return res.json({ message: 'Perfil atualizado com sucesso!', user: updated });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
 // GET /api/users - Listar todos os usuários do sistema
 router.get('/', authenticateToken, async (req: AuthenticatedRequest, res: any) => {
   try {

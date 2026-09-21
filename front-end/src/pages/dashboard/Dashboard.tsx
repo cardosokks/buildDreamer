@@ -1917,13 +1917,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
 
             {/* 🔔 Sino de Notificações */}
             <div className="relative flex items-center gap-2">
-              {/* Botão Chat Corporativo */}
+              {/* Botão Chat Corporativo & Mensagens Privadas */}
               <button
-                onClick={() => setIsTeamChatOpen(true)}
-                className={`relative w-9 h-9 border rounded-xl flex items-center justify-center transition-all cursor-pointer shadow-sm ${theme === 'light' ? 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-600' : 'bg-slate-900/80 hover:bg-slate-800 border-slate-800 text-slate-300 hover:text-white'}`}
-                title="Chat Corporativo da Equipe"
+                onClick={() => setIsTeamChatOpen(prev => !prev)}
+                className={`relative w-9 h-9 border rounded-xl flex items-center justify-center transition-all cursor-pointer shadow-sm ${
+                  isTeamChatOpen
+                    ? 'bg-blue-600 text-white border-blue-500 shadow-blue-500/20'
+                    : theme === 'light' 
+                      ? 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-600' 
+                      : 'bg-slate-900/80 hover:bg-slate-800 border-slate-800 text-slate-300 hover:text-white'
+                }`}
+                title="Mensagens & Chat Privado da Equipe (Estilo Messenger)"
               >
-                <MessageSquare className="w-4 h-4 text-purple-400" />
+                <MessageSquare className="w-4 h-4" />
               </button>
 
               <button

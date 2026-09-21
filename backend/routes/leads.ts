@@ -46,7 +46,7 @@ router.post('/', async (req: AuthenticatedRequest, res) => {
       }
     });
 
-    return res.json(lead);
+    return res.status(201).json(lead);
   } catch (error) {
     console.error('Error creating lead:', error);
     return res.status(500).json({ error: 'Erro ao cadastrar cliente.' });
