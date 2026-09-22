@@ -2,6 +2,7 @@ import { prisma } from '../db';
 import { executeAIRequest } from '../services/aiEngine';
 import { uploadAssetToStorage } from './storageService';
 import { projectJobsQueue } from '../routes/projects';
+import { processGlobalElements, PageRouteInfo } from './globalElementsManager';
 import https from 'https';
 import http from 'http';
 import crypto from 'crypto';
@@ -700,6 +701,63 @@ export function extractNavbarAndFooter(homeHtml: string): { navbarHtml: string; 
   return { navbarHtml, footerHtml };
 }
 
+/**
+ * Garante que a página possua exatamente 1 Navbar/Header no topo e 1 Footer no rodapé,
+ * removendo duplicidades acidentais geradas pela IA em subpáginas ou edições.
+ */
+export function ensureAndDeduplicateGlobalElements(
+  html: string,
+  globalNavbarHtml?: string,
+  globalFooterHtml?: string
+): string {
+  if (!html || typeof html !== 'string') return html || '';
+  let cleanHtml = html.trim();
+
+  // 1. DEDUPLICAÇÃO E GARANTIA DE NAVBAR / HEADER
+  const headerRegex = /<(?:header|nav)\b[^>]*>[\s\S]*?<\/(?:header|nav)>/gi;
+  const headerMatches = [...cleanHtml.matchAll(headerRegex)];
+
+  if (headerMatches.length > 1) {
+    let count = 0;
+    cleanHtml = cleanHtml.replace(headerRegex, (match) => {
+      count++;
+      if (count === 1) return match;
+      return '';
+    });
+  } else if (headerMatches.length === 0 && globalNavbarHtml && globalNavbarHtml.trim()) {
+    cleanHtml = `${globalNavbarHtml.trim()}\n\n${cleanHtml}`;
+  }
+
+  // 2. DEDUPLICAÇÃO E GARANTIA DE FOOTER
+  const footerRegex = /<footer\b[^>]*>[\s\S]*?<\/footer>/gi;
+  const footerMatches = [...cleanHtml.matchAll(footerRegex)];
+
+  if (footerMatches.length > 1) {
+    let count = 0;
+    cleanHtml = cleanHtml.replace(footerRegex, (match) => {
+      count++;
+      if (count === 1) return match;
+      return '';
+    });
+  } else if (footerMatches.length === 0 && globalFooterHtml && globalFooterHtml.trim()) {
+    cleanHtml = `${cleanHtml}\n\n${globalFooterHtml.trim()}`;
+  }
+
+  // 3. DEDUPLICAÇÃO DE BOTÃO FLUTUANTE DE WHATSAPP
+  const waFloatingRegex = /<a\b[^>]*href=["'][^"']*wa\.me[^"']*["'][^>]*class=["'][^"']*fixed[^"']*["'][^>]*>[\s\S]*?<\/a>/gi;
+  const waMatches = [...cleanHtml.matchAll(waFloatingRegex)];
+  if (waMatches.length > 1) {
+    let count = 0;
+    cleanHtml = cleanHtml.replace(waFloatingRegex, (match) => {
+      count++;
+      if (count === 1) return match;
+      return '';
+    });
+  }
+
+  return cleanHtml;
+}
+
 // In-memory queue para Scrape Jobs
 export const scrapeJobsQueue: Record<string, {
   status: 'pending' | 'scraping' | 'completed' | 'failed';
@@ -978,6 +1036,25 @@ export async function processCustomRemasterGenerationJob(
       console.warn('[Remaster] Erro ao reprocessar assets da home gerada:', e);
     }
 
+    const allRemasterPagesInfo: PageRouteInfo[] = [
+      { name: homePage.name, slug: homePage.slug || 'index' },
+      ...subPages.map(s => ({ name: s.name, slug: s.slug }))
+    ];
+
+    // Processa a Home do remaster para garantir elementos globais mestres
+    const processedRemasterHome = processGlobalElements({
+      html: finalHomeHtml,
+      businessName: businessName,
+      pages: allRemasterPagesInfo,
+      currentSlug: homePage.slug || 'index',
+      isHomepage: true
+    });
+
+    finalHomeHtml = processedRemasterHome.html;
+    const masterRemasterNav = processedRemasterHome.navbarHtml;
+    const masterRemasterFooter = processedRemasterHome.footerHtml;
+    const masterRemasterWhatsApp = processedRemasterHome.whatsAppHtml;
+
     await prisma.page.update({
       where: { id: homePage.dbId },
       data: {
@@ -987,7 +1064,6 @@ export async function processCustomRemasterGenerationJob(
       }
     });
 
-    const { navbarHtml, footerHtml } = extractNavbarAndFooter(finalHomeHtml);
     const globalCss = homeAiResponse.css || '';
     const globalJs = homeAiResponse.js || '';
 
@@ -1018,8 +1094,8 @@ export async function processCustomRemasterGenerationJob(
         ${sub.js}
         """
 
-        ${sharedComponents.repeatNavbar ? `NAVBAR GERADA NA HOME:\n${navbarHtml}` : ''}
-        ${sharedComponents.repeatFooter ? `FOOTER GERADO NA HOME:\n${footerHtml}` : ''}
+        ${sharedComponents.repeatNavbar ? `NAVBAR GERADA NA HOME:\n${masterRemasterNav}` : ''}
+        ${sharedComponents.repeatFooter ? `FOOTER GERADO NA HOME:\n${masterRemasterFooter}` : ''}
 
         REGRAS:
         - Mantenha todo o conteúdo e mídias originais.
@@ -1053,6 +1129,20 @@ export async function processCustomRemasterGenerationJob(
         } catch (e) {
           console.warn(`[Remaster] Erro ao reprocessar assets da subpágina ${sub.name}:`, e);
         }
+
+        // Processa a subpágina para aplicar os elementos globais mestres da Home
+        const processedRemasterSub = processGlobalElements({
+          html: finalSubHtml,
+          businessName: businessName,
+          pages: allRemasterPagesInfo,
+          currentSlug: sub.slug,
+          isHomepage: false,
+          globalNavbarHtml: masterRemasterNav,
+          globalFooterHtml: masterRemasterFooter,
+          globalWhatsAppHtml: masterRemasterWhatsApp
+        });
+
+        finalSubHtml = processedRemasterSub.html;
 
         await prisma.page.update({
           where: { id: sub.dbId },
