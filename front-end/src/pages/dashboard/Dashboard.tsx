@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { API_URL, safeJson } from '../../config';
 import { PromptPreviewModal } from './PromptPreviewModal';
-import { buildStructuredSitePrompt, mapSegmentToTheme } from '../../utils/promptEngine';
+import { SiteGenerationModal } from './SiteGenerationModal';
+import { buildStructuredSitePrompt, mapSegmentToTheme, SitePageDefinition } from '../../utils/promptEngine';
 import {
   FolderPlus,
   Trash2,
@@ -1786,6 +1787,158 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
     } finally {
       setCreating(false);
     }
+  };
+
+  const handleExecuteSuiteGeneration = async (config: {
+    name: string;
+    description: string;
+    isAIPrompt: boolean;
+    pagesToGenerate: SitePageDefinition[];
+    siteStyle: string;
+    segment: string;
+    colorPalette: string;
+    businessName: string;
+    targetLead?: any;
+    digitalFeatures: string[];
+    heroLayout: string;
+    sectionTransitions: string;
+  }) => {
+    setCreating(true);
+    try {
+      let registeredModelIds: string[] = [];
+      try {
+        const stored = localStorage.getItem('custom_gemini_models');
+        if (stored) registeredModelIds = JSON.parse(stored).map((m: any) => m.id);
+      } catch { }
+
+      const safeHeader = (val: string) => {
+        try { return btoa(unescape(encodeURIComponent(val))); } catch { return ''; }
+      };
+
+      const preferredProvider = localStorage.getItem('preferred_ai_provider') || 'gemini';
+      const selectedModel = preferredProvider === 'ollama' 
+        ? (localStorage.getItem('ollama_selected_model') || 'qwen2.5-coder:1.5b')
+        : (localStorage.getItem('last_selected_ai_model') || '');
+      const ollamaEndpoint = localStorage.getItem('ollama_endpoint') || 'http://localhost:11434';
+      const ollamaLowSpec = localStorage.getItem('ollama_low_spec_mode') || 'true';
+
+      const res = await fetch(`${API_URL}/api/projects`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'X-Gemini-Key': safeHeader(localStorage.getItem('gemini_api_key') || ''),
+          'X-Gemini-Models': safeHeader(JSON.stringify(registeredModelIds)),
+          'X-Proxy-Url': safeHeader(localStorage.getItem('ai_proxy_url') || ''),
+          'X-AI-Skills': safeHeader(localStorage.getItem('custom_ai_skills') || ''),
+          'X-AI-Provider': preferredProvider,
+          'X-AI-Model': safeHeader(selectedModel),
+          'X-Ollama-Endpoint': ollamaEndpoint,
+          'X-Ollama-Model': safeHeader(localStorage.getItem('ollama_selected_model') || ''),
+          'X-Ollama-Low-Spec': ollamaLowSpec
+        },
+        body: JSON.stringify({
+          name: config.name,
+          description: config.description,
+          isAIPrompt: true,
+          pagesToGenerate: config.pagesToGenerate,
+          siteStyle: config.siteStyle,
+          segment: config.segment,
+          colorPalette: config.colorPalette,
+          businessName: config.businessName,
+          leadId: config.targetLead?.id || undefined
+        })
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Falha ao criar projeto.');
+      }
+      const newProject = await res.json().catch(() => ({}));
+
+      if (config.targetLead) {
+        try {
+          await fetch(`${API_URL}/api/leads/crm`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+              name: config.targetLead.name,
+              company: config.targetLead.category || 'Comércio Local',
+              phone: config.targetLead.phone || null,
+              website: config.targetLead.website || null,
+              address: config.targetLead.address || null,
+              dealValue: 1500,
+              status: 'PROPOSAL_SENT',
+              notes: `Site com ${config.pagesToGenerate?.length || 1} página(s) criado via IA com recursos modernos.`,
+              projectId: newProject.id
+            })
+          });
+        } catch { }
+      }
+
+      setProjects([newProject, ...projects]);
+      setShowCreateModal(false);
+      setTargetLeadForProject(null);
+      fetchProjects();
+      notify.success(`Projeto "${config.name}" criado com sucesso!`, 'Criado');
+
+      addBellNotification({
+        type: 'info',
+        emoji: '🤖',
+        title: 'IA trabalhando no seu site multi-páginas!',
+        message: `Gerando ${config.pagesToGenerate?.length || 1} página(s) para "${config.name}"...`,
+      });
+
+      setGeneratingProjectJobs(prev => {
+        const updated = {
+          ...prev,
+          [newProject.id]: { status: 'processing' }
+        };
+        try {
+          localStorage.setItem('rp_generating_project_jobs', JSON.stringify(updated));
+        } catch { }
+        return updated;
+      });
+      setActiveTab('projects');
+    } catch (err: any) {
+      notify.error(err.message || 'Falha ao criar projeto', 'Erro');
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const handleAutoPlanForSuiteModal = async (bName: string, bSegment: string, bExtra: string) => {
+    const preferredProvider = localStorage.getItem('preferred_ai_provider') || 'gemini';
+    const selectedModel = preferredProvider === 'ollama' 
+      ? (localStorage.getItem('ollama_selected_model') || 'qwen2.5-coder:1.5b')
+      : (localStorage.getItem('last_selected_ai_model') || '');
+    
+    const safeHeader = (val: string) => {
+      try { return btoa(unescape(encodeURIComponent(val))); } catch { return ''; }
+    };
+
+    const res = await fetch(`${API_URL}/api/ai/plan-site`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+        'X-AI-Provider': preferredProvider,
+        'X-AI-Model': safeHeader(selectedModel),
+        'X-AI-API-Key': safeHeader(localStorage.getItem('gemini_api_key') || '')
+      },
+      body: JSON.stringify({
+        businessName: bName.trim(),
+        segment: bSegment.trim(),
+        extraInstructions: bExtra.trim()
+      })
+    });
+
+    const data = await safeJson(res);
+    if (!res.ok) throw new Error(data.error || 'Erro no planejamento autônomo por IA.');
+    return data;
   };
 
   const handleDeleteProject = (id: string, e?: React.MouseEvent) => {
@@ -4481,8 +4634,24 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
         </div>
       )}
 
-      {/* Create Project Modal */}
-      {showCreateModal && (
+      {/* Complete Redesigned Multi-Page AI Site Generation Wizard Modal */}
+      {showCreateModal && creationMode === 'ai' && (
+        <SiteGenerationModal
+          isOpen={showCreateModal && creationMode === 'ai'}
+          onClose={() => {
+            setShowCreateModal(false);
+            setTargetLeadForProject(null);
+          }}
+          onGenerate={handleExecuteSuiteGeneration}
+          savedLeads={savedLeads}
+          initialLead={targetLeadForProject}
+          onAutoPlanWithAI={handleAutoPlanForSuiteModal}
+          isPlanningWithAI={isPlanningWithAI}
+        />
+      )}
+
+      {/* Standard Create Project Modal (Scratch, Template, ZIP) */}
+      {showCreateModal && creationMode !== 'ai' && (
         <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
           <div className="w-full max-w-2xl bg-[#0f0b18] border border-slate-800 rounded-2xl shadow-2xl p-6 max-h-[92vh] overflow-y-auto">
             <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
@@ -4509,7 +4678,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
               <button
                 type="button"
                 onClick={() => setCreationMode('ai')}
-                className={`py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer ${creationMode === 'ai' ? 'bg-purple-700 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}
+                className={`py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer ${(creationMode as string) === 'ai' ? 'bg-purple-700 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}
               >
                 IA Gemini
               </button>
@@ -4593,406 +4762,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                       className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500/50 text-sm text-white resize-none"
                     />
                   </div>
-                </div>
-              )}
-
-              {creationMode === 'ai' && (
-                <div className="space-y-5">
-                  {aiStep === 'config' && (
-                    <>
-                      {/* Top Banner Info */}
-                      <div className="p-3.5 bg-gradient-to-r from-purple-950/40 via-indigo-950/30 to-slate-900/50 border border-purple-500/30 rounded-xl flex items-start gap-3">
-                        <div className="p-2 bg-purple-600/20 text-purple-400 rounded-lg shrink-0 mt-0.5">
-                          <Sparkles className="w-5 h-5" />
-                        </div>
-                        <div>
-                          <h4 className="text-xs font-bold text-purple-200">Gerador de Sites Multi-páginas com IA</h4>
-                          <p className="text-[11px] text-slate-300 leading-relaxed mt-0.5">
-                            Defina a identidade, as páginas e as diretrizes visuais. No próximo passo, você poderá revisar e ajustar o prompt exato que será enviado para a IA.
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* Vincular Cliente / Lead */}
-                      <div className="p-3.5 bg-slate-950/80 border border-slate-800 rounded-xl space-y-3">
-                        <div className="flex items-center justify-between">
-                          <label className="text-xs font-bold uppercase tracking-wider text-slate-200 flex items-center gap-2">
-                            <UserCheck className="w-4 h-4 text-purple-400" />
-                            Deseja vincular este projeto a um Cliente / Lead?
-                          </label>
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setLinkToClient(true);
-                              }}
-                              className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
-                                linkToClient ? 'bg-purple-600 text-white shadow-sm' : 'bg-slate-900 text-slate-400 hover:text-white'
-                              }`}
-                            >
-                              Sim
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setLinkToClient(false);
-                                setTargetLeadForProject(null);
-                              }}
-                              className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
-                                !linkToClient ? 'bg-slate-800 text-white shadow-sm' : 'bg-slate-900 text-slate-400 hover:text-white'
-                              }`}
-                            >
-                              Não
-                            </button>
-                          </div>
-                        </div>
-
-                        {linkToClient && (
-                          <div className="space-y-2.5 pt-2 border-t border-slate-800/80">
-                            {targetLeadForProject ? (
-                              <div className="p-3 bg-emerald-950/30 border border-emerald-500/40 rounded-xl flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                  <div className="p-2 bg-emerald-600/20 text-emerald-400 rounded-lg">
-                                    <UserCheck className="w-4 h-4" />
-                                  </div>
-                                  <div>
-                                    <div className="text-xs font-bold text-white">{targetLeadForProject.name}</div>
-                                    <div className="text-[10px] text-slate-400">{targetLeadForProject.category || 'Cliente'} • {targetLeadForProject.phone || 'Sem telefone'}</div>
-                                  </div>
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() => setTargetLeadForProject(null)}
-                                  className="text-xs text-red-400 hover:underline cursor-pointer font-medium"
-                                >
-                                  Trocar / Desvincular
-                                </button>
-                              </div>
-                            ) : (
-                              <>
-                                <div className="relative">
-                                  <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-500" />
-                                  <input
-                                    type="text"
-                                    placeholder="Pesquisar cliente por nome, telefone ou email..."
-                                    value={clientSearchQuery}
-                                    onChange={(e) => setClientSearchQuery(e.target.value)}
-                                    className="w-full pl-9 pr-3 py-2 bg-slate-900 border border-slate-800 focus:border-purple-500 rounded-xl focus:outline-none text-xs text-white placeholder-slate-500"
-                                  />
-                                </div>
-
-                                <div className="max-h-40 overflow-y-auto space-y-1 divide-y divide-slate-850">
-                                  {savedLeads
-                                    .filter(lead => 
-                                      lead.name.toLowerCase().includes(clientSearchQuery.toLowerCase()) ||
-                                      (lead.phone && lead.phone.includes(clientSearchQuery)) ||
-                                      (lead.email && lead.email.toLowerCase().includes(clientSearchQuery.toLowerCase())) ||
-                                      (lead.category && lead.category.toLowerCase().includes(clientSearchQuery.toLowerCase()))
-                                    )
-                                    .map(lead => (
-                                      <div
-                                        key={lead.id}
-                                        onClick={() => {
-                                          setTargetLeadForProject(lead);
-                                          setBusinessName(lead.name);
-                                          setSegment(lead.category || 'Serviços');
-                                          setNewProjectDesc(`Contato: ${lead.phone || 'N/A'} - ${lead.email || 'N/A'}`);
-                                        }}
-                                        className="p-2.5 hover:bg-slate-900/80 rounded-lg cursor-pointer transition-all flex items-center justify-between"
-                                      >
-                                        <div>
-                                          <div className="text-xs font-semibold text-white">🏢 {lead.name}</div>
-                                          <div className="text-[10px] text-slate-400">{lead.category || 'Serviços'} {lead.phone ? `• ${lead.phone}` : ''}</div>
-                                        </div>
-                                        <span className="text-[10px] bg-purple-950 text-purple-300 px-2 py-1 rounded-md border border-purple-500/30">
-                                          Vincular ➔
-                                        </span>
-                                      </div>
-                                    ))}
-                                  {savedLeads.length === 0 && (
-                                    <p className="text-xs text-slate-500 text-center py-3">Nenhum cliente salvo no CRM.</p>
-                                  )}
-                                </div>
-                              </>
-                            )}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Nome e Segmento */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <div>
-                          <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
-                            Nome do Negócio / Empresa *
-                          </label>
-                          <input
-                            type="text"
-                            required
-                            placeholder="Ex: Bella Napoli Ristorante"
-                            value={businessName}
-                            onChange={(e) => setBusinessName(e.target.value)}
-                            className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 focus:border-purple-500 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500/30 text-xs text-white placeholder-slate-600"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
-                            Segmento de Atuação *
-                          </label>
-                          <input
-                            type="text"
-                            required
-                            placeholder="Ex: Restaurante Italiano, Advocacia, SaaS..."
-                            value={segment}
-                            onChange={(e) => setSegment(e.target.value)}
-                            className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 focus:border-purple-500 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500/30 text-xs text-white placeholder-slate-600"
-                          />
-                        </div>
-                      </div>
-
-                      {/* Botão de Planejamento Autônomo da IA (3 Passos) */}
-                      <div className="p-3.5 bg-gradient-to-r from-purple-950/60 via-slate-900 to-indigo-950/60 border border-purple-500/30 rounded-xl space-y-2">
-                        <div className="flex items-center justify-between flex-wrap gap-2">
-                          <div className="flex items-center gap-2">
-                            <Sparkles className="w-4 h-4 text-purple-400 animate-pulse" />
-                            <span className="text-xs font-bold text-white uppercase tracking-wider">
-                              Planejamento Autônomo da IA (3 Passos)
-                            </span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={handleAutoPlanWithAI}
-                            disabled={isPlanningWithAI || !businessName.trim() || !segment.trim()}
-                            className="px-3.5 py-1.5 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer shadow-md"
-                          >
-                            {isPlanningWithAI ? (
-                              <>
-                                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                                <span>Analisando e Planejando...</span>
-                              </>
-                            ) : (
-                              <>
-                                <Wand2 className="w-3.5 h-3.5" />
-                                <span>Executar Planejamento com IA</span>
-                              </>
-                            )}
-                          </button>
-                        </div>
-                        <p className="text-[11px] text-slate-300 leading-relaxed">
-                          <strong>Passo 1:</strong> Analisa dados e logo ➔ define paleta de cores e tema único.<br />
-                          <strong>Passo 2:</strong> Define a quantidade e lista de páginas mantendo o tema inicial e elementos globais.<br />
-                          <strong>Passo 3:</strong> Compila prompt master enriquecido com animações (GSAP, Lenis, Swiper 3D) e transições fluídas.
-                        </p>
-
-                        {aiPlanDetails && (
-                          <div className="mt-2 pt-2 border-t border-purple-500/20 text-xs text-purple-200 space-y-1 bg-purple-950/30 p-2.5 rounded-lg">
-                            <div className="font-semibold text-white flex items-center gap-1">
-                              <span>✓ Planejamento Concluído:</span>
-                            </div>
-                            <div>• <strong>Marca & Atmosfera:</strong> {aiPlanDetails.colorPalette?.mood || 'Cores definidas por IA'}</div>
-                            <div>• <strong>Páginas Sugeridas ({aiPlanDetails.suggestedPages?.length}):</strong> {aiPlanDetails.suggestedPages?.map((p: any) => p.name).join(', ')}</div>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Arquitetura de Múltiplas Páginas */}
-                      <div className="p-3.5 bg-slate-950/80 border border-slate-800/80 rounded-xl space-y-3">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <Layers className="w-4 h-4 text-purple-400" />
-                            <label className="text-xs font-bold uppercase tracking-wider text-slate-200">
-                              Estrutura de Páginas do Site ({selectedPagesList.length} páginas)
-                            </label>
-                          </div>
-                        </div>
-
-                        {/* Selected Pages Chips list */}
-                        <div className="flex flex-wrap gap-2 pt-1">
-                          {selectedPagesList.map((page, idx) => (
-                            <div
-                              key={page.slug}
-                              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border ${
-                                page.isHomepage
-                                  ? 'bg-purple-950/70 border-purple-500/50 text-purple-200'
-                                  : 'bg-slate-900 border-slate-700/80 text-slate-200'
-                              }`}
-                            >
-                              <span className="text-[10px] text-slate-400 font-mono">#{idx + 1}</span>
-                              <span>{page.name}</span>
-                              {page.isHomepage ? (
-                                <span className="text-[9px] bg-purple-500/30 text-purple-200 px-1 py-0.2 rounded">Principal</span>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={() => handleRemovePageFromAI(page.slug)}
-                                  className="text-slate-400 hover:text-red-400 ml-0.5 cursor-pointer"
-                                  title="Remover esta página"
-                                >
-                                  <X className="w-3 h-3" />
-                                </button>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-
-                        {/* Add Custom Page Input */}
-                        <div className="flex items-center gap-2 pt-1">
-                          <input
-                            type="text"
-                            placeholder="Adicionar outra página (ex: Cardápio, Equipe, Galeria, Blog)..."
-                            value={customPageInput}
-                            onChange={(e) => setCustomPageInput(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault();
-                                handleAddCustomPageToAI();
-                              }
-                            }}
-                            className="flex-1 px-3 py-1.5 bg-slate-900 border border-slate-800 focus:border-purple-500 rounded-lg focus:outline-none text-xs text-white placeholder-slate-600"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => handleAddCustomPageToAI()}
-                            disabled={!customPageInput.trim()}
-                            className="px-3 py-1.5 bg-slate-800 hover:bg-purple-600 disabled:opacity-40 disabled:hover:bg-slate-800 text-white text-xs font-semibold rounded-lg transition-all flex items-center gap-1 cursor-pointer"
-                          >
-                            <Plus className="w-3.5 h-3.5" />
-                            Adicionar
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Estilo Visual & Identidade (Sem temas predefinidos para não atrapalhar o prompt) */}
-                      <div className="space-y-2">
-                        <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400">
-                          Estilo Visual e Identidade Proposta *
-                        </label>
-                        <textarea
-                          required
-                          placeholder="Descreva exatamente a identidade visual desejada (ex: Dark Luxury com gradientes em roxo néon, minimalista e sofisticado, tipografia moderna sem serifa...)"
-                          value={visualStyle}
-                          onChange={(e) => setVisualStyle(e.target.value)}
-                          rows={2}
-                          className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 focus:border-purple-500 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500/30 text-xs text-white resize-none placeholder-slate-600"
-                        />
-                      </div>
-
-                      {/* Theme Engine Preview */}
-                      {segment.trim().length > 1 && (() => {
-                        const activeTheme = mapSegmentToTheme(segment, visualStyle, colorPalette);
-                        return (
-                          <div className="p-3 bg-gradient-to-r from-slate-950 via-slate-900 to-purple-950/40 border border-purple-500/30 rounded-xl space-y-2">
-                            <div className="flex items-center justify-between text-xs">
-                              <span className="font-bold text-purple-300 flex items-center gap-1.5">
-                                <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-                                Mapeamento Inteligente: <span className="text-white">{activeTheme.name}</span>
-                              </span>
-                              <span className="text-[10px] text-purple-300/80 font-mono">
-                                Hero Rec.: {activeTheme.recommendedHero}
-                              </span>
-                            </div>
-                            <p className="text-[11px] text-slate-300 leading-normal">{activeTheme.description}</p>
-                            <div className="flex items-center justify-between text-[10px] pt-1 border-t border-slate-800/80">
-                              <div className="flex items-center gap-2">
-                                <span className="text-slate-400 font-semibold uppercase">Estilo:</span>
-                                <span className="text-purple-300 font-medium">{visualStyle.trim() || 'Criativo & Exclusivo por IA'}</span>
-                              </div>
-                              <span className="text-slate-400 font-mono truncate max-w-[200px]">Design Autônomo por IA</span>
-                            </div>
-                          </div>
-                        );
-                      })()}
-
-                      {/* Hero Layout Injected Selector */}
-                      <div className="space-y-1.5">
-                        <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400">
-                          Layout do Hero Section (Motor de Injeção de Componentes)
-                        </label>
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                          {[
-                            { id: 'auto', label: 'Auto (Tema)', desc: 'Motor Automático' },
-                            { id: 'bento', label: 'Bento Grid', desc: 'SaaS / Métricas' },
-                            { id: 'splitscreen_3d', label: 'Splitscreen 3D', desc: 'Spline / Interativo' },
-                            { id: 'parallax', label: 'Parallax Header', desc: 'Imersivo / Mídia' }
-                          ].map(item => (
-                            <button
-                              key={item.id}
-                              type="button"
-                              onClick={() => setHeroLayout(item.id as any)}
-                              className={`p-2 rounded-xl text-left border transition-all cursor-pointer ${
-                                heroLayout === item.id
-                                  ? 'bg-purple-950/70 border-purple-500 text-white shadow-sm'
-                                  : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
-                              }`}
-                            >
-                              <div className="text-xs font-bold">{item.label}</div>
-                              <div className="text-[10px] opacity-70">{item.desc}</div>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Transições entre Seções (Anti-Layout Quadrado) */}
-                      <div>
-                        <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5 flex items-center gap-1.5">
-                          <span>Transições de Seção (Anti-Layout Quadrado)</span>
-                          <span className="text-[9px] px-1.5 py-0.5 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold rounded">Recomendado</span>
-                        </label>
-                        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-                          {[
-                            { id: 'auto', label: 'IA Auto Mix', desc: 'Mix Fluído' },
-                            { id: 'waves', label: '🌊 Ondas SVG', desc: 'Curvas Suaves' },
-                            { id: 'slants', label: '📐 Cortes Slants', desc: 'Ângulos Modernos' },
-                            { id: 'overlapping_cards', label: '🃏 Sobrepostos', desc: 'Cards Flutuantes' },
-                            { id: 'gradient_glows', label: '🌟 Néon Glow', desc: 'Linhas de Luz' }
-                          ].map(item => (
-                            <button
-                              key={item.id}
-                              type="button"
-                              onClick={() => setSectionTransitions(item.id as any)}
-                              className={`p-2 rounded-xl text-left border transition-all cursor-pointer ${
-                                sectionTransitions === item.id
-                                  ? 'bg-purple-950/70 border-purple-500 text-white shadow-sm ring-1 ring-purple-500/50'
-                                  : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
-                              }`}
-                            >
-                              <div className="text-xs font-bold truncate">{item.label}</div>
-                              <div className="text-[10px] opacity-70 truncate">{item.desc}</div>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Stack Tecnológica Ativa */}
-                      <div className="p-3 bg-slate-950/60 border border-slate-800/80 rounded-xl space-y-1.5">
-                        <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 block">
-                          Tecnologias Injetadas no Prompt Final:
-                        </span>
-                        <div className="flex flex-wrap gap-1.5">
-                          <span className="px-2 py-0.5 bg-blue-950/80 text-blue-300 border border-blue-500/30 rounded text-[10px] font-mono">Tailwind CSS</span>
-                          <span className="px-2 py-0.5 bg-orange-950/80 text-orange-300 border border-orange-500/30 rounded text-[10px] font-mono">Lucide Icons</span>
-                          <span className="px-2 py-0.5 bg-emerald-950/80 text-emerald-300 border border-emerald-500/30 rounded text-[10px] font-mono">GSAP + ScrollTrigger</span>
-                          <span className="px-2 py-0.5 bg-purple-950/80 text-purple-300 border border-purple-500/30 rounded text-[10px] font-mono">Lenis Smooth Scroll</span>
-                          <span className="px-2 py-0.5 bg-pink-950/80 text-pink-300 border border-pink-500/30 rounded text-[10px] font-mono">Swiper.js 3D</span>
-                          <span className="px-2 py-0.5 bg-cyan-950/80 text-cyan-300 border border-cyan-500/30 rounded text-[10px] font-mono">Spline Viewer 3D</span>
-                        </div>
-                      </div>
-
-                      {/* Instruções Extras */}
-                      <div>
-                        <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
-                          Instruções e Seções Específicas (Opcional)
-                        </label>
-                        <textarea
-                          placeholder="Ex: Incluir botão de WhatsApp flutuante, tabela de preços comparativa, seção de depoimentos de clientes e formulário de contato com validação."
-                          value={newProjectDesc}
-                          onChange={(e) => setNewProjectDesc(e.target.value)}
-                          rows={2}
-                          className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 focus:border-purple-500 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500/30 text-xs text-white resize-none placeholder-slate-600"
-                        />
-                      </div>
-                    </>
-                  )}
                 </div>
               )}
 
@@ -5137,48 +4906,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'general', on
                     Cancelar
                   </button>
 
-                  {creationMode === 'ai' ? (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        if (!businessName.trim() || !segment.trim()) {
-                          notify.warning('Preencha o Nome do Negócio e o Segmento.', 'Campos Obrigatórios');
-                          return;
-                        }
-                        const compiled = buildStructuredSitePrompt({
-                          businessName: businessName.trim(),
-                          segment: segment.trim(),
-                          visualStyle: visualStyle.trim(),
-                          colorPalette: colorPalette.trim(),
-                          heroLayout: heroLayout,
-                          sectionTransitions: sectionTransitions,
-                          pagesList: selectedPagesList,
-                          extraInstructions: newProjectDesc.trim(),
-                          leadInfo: targetLeadForProject ? {
-                            phone: targetLeadForProject.phone,
-                            address: targetLeadForProject.address,
-                            rating: targetLeadForProject.rating,
-                            reviewsCount: targetLeadForProject.totalReviews,
-                            website: targetLeadForProject.website || undefined
-                          } : undefined
-                        });
-                        setAiFinalPrompt(compiled);
-                        setAiStep('preview_prompt');
-                      }}
-                      className="px-5 py-2.5 bg-purple-600 hover:bg-purple-500 text-white font-semibold rounded-xl text-sm shadow-md transition-all cursor-pointer flex items-center gap-2"
-                    >
-                      Avançar: Ver Prompt Final da IA ➔
-                    </button>
-                  ) : (
-                    <button
-                      type="submit"
-                      disabled={creating}
-                      className="px-5 py-2.5 bg-purple-700 hover:bg-purple-600 disabled:opacity-50 text-white font-semibold rounded-xl text-sm shadow-md transition-all cursor-pointer"
-                    >
-                      {creating ? 'Criando...' : 'Confirmar e Criar'}
-                    </button>
-                  )}
+                  <button
+                    type="submit"
+                    disabled={creating}
+                    className="px-5 py-2.5 bg-purple-700 hover:bg-purple-600 disabled:opacity-50 text-white font-semibold rounded-xl text-sm shadow-md transition-all cursor-pointer"
+                  >
+                    {creating ? 'Criando...' : 'Confirmar e Criar'}
+                  </button>
               </div>
             </form>
           </div>

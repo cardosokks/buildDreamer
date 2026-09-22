@@ -8,9 +8,9 @@ import {
   processCustomRemasterGenerationJob,
   detectMedia,
   extractAndBundlePageComponents,
-  extractNavbarAndFooter
+  extractNavbarAndFooter,
+  ensureAndDeduplicateGlobalElements
 } from '../services/siteRemaster';
-import { processGlobalElements, PageRouteInfo } from '../services/globalElementsManager';
 import { projectJobsQueue } from './projects';
 import { prisma } from '../db';
 import { AuthenticatedRequest } from '../middleware/auth';
@@ -93,32 +93,11 @@ async function processAIChatJob(
       projectId: page.projectId
     };
 
-    // Buscar informações do projeto e páginas para processamento de elementos globais
-    const allProjectPages = await prisma.page.findMany({
-      where: { projectId: page.projectId }
-    });
-    const projectRecord = await prisma.project.findUnique({
-      where: { id: page.projectId },
-      select: { name: true }
-    });
-    const businessName = projectRecord?.name || 'Sua Empresa';
-    const pagesInfoList: PageRouteInfo[] = allProjectPages.map(p => ({ name: p.name, slug: p.slug }));
-
-    const homePageRecord = allProjectPages.find(p => p.isHomepage) || page;
-    const isHomeBeingProcessed = (page.id === homePageRecord.id);
-
-    // Primeiro processa a Home para garantir que temos os elementos mestres atualizados
-    const homeInitialProcessed = processGlobalElements({
-      html: homePageRecord.html || '',
-      businessName,
-      pages: pagesInfoList,
-      currentSlug: homePageRecord.slug || 'index',
-      isHomepage: true
-    });
-
-    const masterNavbar = homeInitialProcessed.navbarHtml;
-    const masterFooter = homeInitialProcessed.footerHtml;
-    const masterWhatsApp = homeInitialProcessed.whatsAppHtml;
+    // Buscar Home do projeto para reutilizar ou verificar Navbar/Footer
+    const homePage = await prisma.page.findFirst({
+      where: { projectId: page.projectId, isHomepage: true }
+    }) || page;
+    const { navbarHtml, footerHtml } = extractNavbarAndFooter(homePage.html || '');
 
     if (isMultiPage) {
       const updatedPages: Array<{ id: string; name: string; slug: string; html: string; css: string; js: string }> = [];
@@ -146,20 +125,7 @@ async function processAIChatJob(
           }
         });
 
-        const isCurrentHome = currentPage.isHomepage || currentPage.id === homePageRecord.id;
-
-        const processed = processGlobalElements({
-          html: res.html,
-          businessName,
-          pages: pagesInfoList,
-          currentSlug: currentPage.slug,
-          isHomepage: isCurrentHome,
-          globalNavbarHtml: masterNavbar,
-          globalFooterHtml: masterFooter,
-          globalWhatsAppHtml: masterWhatsApp
-        });
-
-        const sanitizedHtml = processed.html;
+        const sanitizedHtml = ensureAndDeduplicateGlobalElements(res.html, navbarHtml, footerHtml);
 
         await prisma.page.update({
           where: { id: currentPage.id },
@@ -215,18 +181,7 @@ async function processAIChatJob(
         }
       });
 
-      const processed = processGlobalElements({
-        html: result.html,
-        businessName,
-        pages: pagesInfoList,
-        currentSlug: page.slug,
-        isHomepage: page.isHomepage || page.id === homePageRecord.id,
-        globalNavbarHtml: masterNavbar,
-        globalFooterHtml: masterFooter,
-        globalWhatsAppHtml: masterWhatsApp
-      });
-
-      const sanitizedHtml = processed.html;
+      const sanitizedHtml = ensureAndDeduplicateGlobalElements(result.html, navbarHtml, footerHtml);
 
       await prisma.page.update({
         where: { id: page.id },

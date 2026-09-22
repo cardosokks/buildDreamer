@@ -1,8 +1,7 @@
 import { prisma } from '../db';
 import { executeAIRequest } from './aiEngine';
 import { executeSiteRemaster } from './siteRemasterWorker';
-import { processPageAssets, extractNavbarAndFooter } from './siteRemaster';
-import { processGlobalElements, PageRouteInfo } from './globalElementsManager';
+import { processPageAssets, extractNavbarAndFooter, ensureAndDeduplicateGlobalElements } from './siteRemaster';
 
 export interface AIQueueItem {
   id: string;
@@ -504,24 +503,8 @@ ${brandDirective}
 
     if ((item.status as string) === 'cancelled') return;
 
-    const allPagesInfo: PageRouteInfo[] = [
-      { name: homePage.name, slug: homePage.slug },
-      ...subPages.map(s => ({ name: s.name, slug: s.slug }))
-    ];
-
-    // Processa a Home garantindo Navbar, Footer Mestre e Botão Flutuante de WhatsApp Mestre
-    const homeProcessed = processGlobalElements({
-      html: homeAiResponse.html || homePage.html,
-      businessName: resolvedBusinessName,
-      pages: allPagesInfo,
-      currentSlug: homePage.slug,
-      isHomepage: true
-    });
-
-    const updatedHomeHtml = homeProcessed.html;
-    const masterNavbarHtml = homeProcessed.navbarHtml;
-    const masterFooterHtml = homeProcessed.footerHtml;
-    const masterWhatsAppHtml = homeProcessed.whatsAppHtml;
+    let updatedHomeHtml = homeAiResponse.html || homePage.html;
+    updatedHomeHtml = ensureAndDeduplicateGlobalElements(updatedHomeHtml);
 
     const updatedHomeCss = homeAiResponse.css || homePage.css;
     const updatedHomeJs = homeAiResponse.js || homePage.js;
@@ -545,6 +528,9 @@ ${brandDirective}
         js: updatedHomeJs
       }
     ];
+
+    // Extrair Navbar e Footer da Home para reaproveitamento padronizado nas subpáginas
+    const { navbarHtml, footerHtml } = extractNavbarAndFooter(updatedHomeHtml);
 
     // 4. GERAÇÃO SEQUENCIAL DAS SUBPÁGINAS (SE HOUVER)
     for (let idx = 0; idx < subPages.length; idx++) {
@@ -640,10 +626,10 @@ DIRETRIZES RÍGIDAS DE COERÊNCIA VISUAL E REAPROVEITAMENTO
    - Na Navbar, marque o link da subpágina atual "${sub.name}" com o indicador visual de classe ativa (ex: tom de destaque, borda inferior ou badge ativo).
 
 NAVBAR BASE DA HOME:
-${masterNavbarHtml || 'Navbar base não disponível.'}
+${navbarHtml || 'Navbar base não disponível.'}
 
 FOOTER BASE DA HOME:
-${masterFooterHtml || 'Footer base não disponível.'}
+${footerHtml || 'Footer base não disponível.'}
 
 ROTAS DE NAVEGAÇÃO ENTRE AS PÁGINAS DO SITE:
 ${navLinksDoc}
@@ -691,19 +677,8 @@ ${brandDirective}
 
         if ((item.status as string) === 'cancelled') return;
 
-        // Processa a subpágina garantindo exatamente a mesma Navbar (link ativo), mesmo Footer Mestre e mesmo WhatsApp Mestre
-        const subProcessed = processGlobalElements({
-          html: subAiResponse.html || sub.html,
-          businessName: resolvedBusinessName,
-          pages: allPagesInfo,
-          currentSlug: sub.slug,
-          isHomepage: false,
-          globalNavbarHtml: masterNavbarHtml,
-          globalFooterHtml: masterFooterHtml,
-          globalWhatsAppHtml: masterWhatsAppHtml
-        });
-
-        const updatedSubHtml = subProcessed.html;
+        let updatedSubHtml = subAiResponse.html || sub.html;
+        updatedSubHtml = ensureAndDeduplicateGlobalElements(updatedSubHtml, navbarHtml, footerHtml);
 
         const updatedSubCss = [updatedHomeCss, subAiResponse.css || ''].filter(Boolean).join('\n\n');
         const updatedSubJs = [updatedHomeJs, subAiResponse.js || ''].filter(Boolean).join('\n\n');

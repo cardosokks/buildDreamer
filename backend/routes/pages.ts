@@ -2,7 +2,6 @@ import { Router } from 'express';
 import { prisma } from '../db';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { cleanHtmlExtractAssets } from '../services/gemini';
-import { processGlobalElements, PageRouteInfo } from '../services/globalElementsManager';
 
 const router = Router();
 
@@ -40,45 +39,6 @@ router.post(['/projects/:projectId/pages', '/pages'], async (req: AuthenticatedR
     // Separa rigorosamente HTML, CSS e JS para a nova página
     const cleaned = cleanHtmlExtractAssets(html || '<div></div>', css || '', js || '');
 
-    // Buscar páginas existentes no projeto e a Home do projeto
-    const existingPages = await prisma.page.findMany({ where: { projectId } });
-    const projectRecord = await prisma.project.findUnique({ where: { id: projectId }, select: { name: true } });
-    const businessName = projectRecord?.name || 'Sua Empresa';
-
-    const allPagesInfo: PageRouteInfo[] = [
-      ...existingPages.map(p => ({ name: p.name, slug: p.slug })),
-      { name, slug }
-    ];
-
-    const homePageRecord = existingPages.find(p => p.isHomepage);
-    let masterNav = '';
-    let masterFoot = '';
-    let masterWa = '';
-
-    if (homePageRecord && homePageRecord.html) {
-      const homeProcessed = processGlobalElements({
-        html: homePageRecord.html,
-        businessName,
-        pages: allPagesInfo,
-        currentSlug: homePageRecord.slug || 'index',
-        isHomepage: true
-      });
-      masterNav = homeProcessed.navbarHtml;
-      masterFoot = homeProcessed.footerHtml;
-      masterWa = homeProcessed.whatsAppHtml;
-    }
-
-    const processedNewPage = processGlobalElements({
-      html: cleaned.html || '<div></div>',
-      businessName,
-      pages: allPagesInfo,
-      currentSlug: slug,
-      isHomepage: isHomepage === true,
-      globalNavbarHtml: masterNav,
-      globalFooterHtml: masterFoot,
-      globalWhatsAppHtml: masterWa
-    });
-
     const page = await prisma.page.create({
       data: {
         name,
@@ -87,7 +47,7 @@ router.post(['/projects/:projectId/pages', '/pages'], async (req: AuthenticatedR
         description: description || '',
         seoTitle: seoTitle || title || name,
         seoDescription: seoDescription || description || '',
-        html: processedNewPage.html,
+        html: cleaned.html || '<div></div>',
         css: cleaned.css || '',
         js: cleaned.js || '',
         isHomepage: isHomepage === true,

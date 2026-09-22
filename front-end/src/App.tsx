@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { ThemeProvider } from './context/ThemeContext';
+import { NotificationProvider } from './context/NotificationContext';
 import { AuthPage } from './pages/auth/AuthPage';
 import { Dashboard } from './pages/dashboard/Dashboard';
 import { VisualBuilder } from './pages/builder/VisualBuilder';
 import { AIImprover } from './pages/ai-improver/AIImprover';
+import { GlobalLayout } from './components/GlobalLayout';
 
 export interface AppRoute {
   type: 'dashboard' | 'builder' | 'ai-improver' | 'auth';
@@ -11,7 +14,30 @@ export interface AppRoute {
   projectId?: string;
 }
 
-// Parse current window URL into state
+export interface RouteDefinition {
+  path: string;
+  type: AppRoute['type'];
+  tab?: AppRoute['tab'];
+  title: string;
+  requiresAuth: boolean;
+}
+
+// Configuração estruturada de Rotas do Sistema
+export const ROUTE_DEFINITIONS: RouteDefinition[] = [
+  { path: '/', type: 'dashboard', tab: 'general', title: 'Dashboard', requiresAuth: true },
+  { path: '/projects', type: 'dashboard', tab: 'projects', title: 'Meus Projetos', requiresAuth: true },
+  { path: '/crm', type: 'dashboard', tab: 'crm', title: 'CRM & Vendas', requiresAuth: true },
+  { path: '/leads', type: 'dashboard', tab: 'leads', title: 'Leads Encontrados', requiresAuth: true },
+  { path: '/saved-leads', type: 'dashboard', tab: 'saved-leads', title: 'Leads Salvos', requiresAuth: true },
+  { path: '/presets', type: 'dashboard', tab: 'presets', title: 'Modelos & Presets', requiresAuth: true },
+  { path: '/settings', type: 'dashboard', tab: 'settings', title: 'Configurações', requiresAuth: true },
+  { path: '/users', type: 'dashboard', tab: 'users', title: 'Usuários & Equipe', requiresAuth: true },
+  { path: '/builder/:projectId', type: 'builder', title: 'Editor Visual', requiresAuth: true },
+  { path: '/ai-improver/:projectId', type: 'ai-improver', title: 'Remasterizador IA', requiresAuth: true },
+  { path: '/auth', type: 'auth', title: 'Autenticação', requiresAuth: false },
+];
+
+// Mapeador de URL atual para o estado de rota
 const parseUrlToRoute = (): AppRoute => {
   const path = window.location.pathname;
   
@@ -25,13 +51,11 @@ const parseUrlToRoute = (): AppRoute => {
     if (projectId) return { type: 'ai-improver', projectId };
   }
   
-  if (path === '/projects') return { type: 'dashboard', tab: 'projects' };
-  if (path === '/crm') return { type: 'dashboard', tab: 'crm' };
-  if (path === '/leads') return { type: 'dashboard', tab: 'leads' };
-  if (path === '/saved-leads') return { type: 'dashboard', tab: 'saved-leads' };
-  if (path === '/presets') return { type: 'dashboard', tab: 'presets' };
-  if (path === '/settings') return { type: 'dashboard', tab: 'settings' };
-  if (path === '/users') return { type: 'dashboard', tab: 'users' };
+  const matchedRoute = ROUTE_DEFINITIONS.find(r => r.path === path && r.type === 'dashboard');
+  if (matchedRoute && matchedRoute.tab) {
+    return { type: 'dashboard', tab: matchedRoute.tab };
+  }
+  
   if (path === '/auth') return { type: 'auth' };
 
   return { type: 'dashboard', tab: 'general' };
@@ -41,7 +65,7 @@ const MainApp: React.FC = () => {
   const { isAuthenticated, loading } = useAuth();
   const [route, setRoute] = useState<AppRoute>(parseUrlToRoute);
 
-  // Sync route on browser navigation (Back/Forward buttons)
+  // Sincroniza navegação pelos botões de Voltar/Avançar do navegador
   useEffect(() => {
     const handlePopState = () => {
       setRoute(parseUrlToRoute());
@@ -54,7 +78,7 @@ const MainApp: React.FC = () => {
     document.title = 'BuildDreamer';
   }, []);
 
-  // Update browser URL
+  // Atualiza URL do navegador mantendo integridade das rotas
   const navigate = (newRoute: AppRoute) => {
     let url = '/';
     if (newRoute.type === 'builder' && newRoute.projectId) {
@@ -62,14 +86,8 @@ const MainApp: React.FC = () => {
     } else if (newRoute.type === 'ai-improver' && newRoute.projectId) {
       url = `/ai-improver/${newRoute.projectId}`;
     } else if (newRoute.type === 'dashboard') {
-      if (newRoute.tab === 'projects') url = '/projects';
-      else if (newRoute.tab === 'crm') url = '/crm';
-      else if (newRoute.tab === 'leads') url = '/leads';
-      else if (newRoute.tab === 'saved-leads') url = '/saved-leads';
-      else if (newRoute.tab === 'presets') url = '/presets';
-      else if (newRoute.tab === 'settings') url = '/settings';
-      else if (newRoute.tab === 'users') url = '/users';
-      else url = '/';
+      const def = ROUTE_DEFINITIONS.find(r => r.type === 'dashboard' && r.tab === newRoute.tab);
+      url = def ? def.path : '/';
     } else if (newRoute.type === 'auth') {
       url = '/auth';
     }
@@ -97,52 +115,61 @@ const MainApp: React.FC = () => {
     );
   }
 
+  // Se não autenticado, injeta o GlobalLayout na tela de login/cadastro
   if (!isAuthenticated) {
     return (
-      <AuthPage
-        onSuccess={() => {
-          navigate({ type: 'dashboard', tab: 'general' });
-        }}
+      <GlobalLayout currentRoute={{ type: 'auth' }} onNavigate={navigate}>
+        <AuthPage
+          onSuccess={() => {
+            navigate({ type: 'dashboard', tab: 'general' });
+          }}
+        />
+      </GlobalLayout>
+    );
+  }
+
+  // Renderização estruturada de visões envolvendo automaticamente o GlobalLayout
+  const renderCurrentView = () => {
+    if (route.type === 'builder' && route.projectId) {
+      return (
+        <div className="h-screen w-screen overflow-hidden">
+          <VisualBuilder 
+            projectId={route.projectId} 
+            onBack={() => navigate({ type: 'dashboard', tab: 'projects' })} 
+            onOpenAIImprover={() => navigate({ type: 'ai-improver', projectId: route.projectId })}
+          />
+        </div>
+      );
+    }
+
+    if (route.type === 'ai-improver' && route.projectId) {
+      return (
+        <div className="h-screen w-screen overflow-hidden">
+          <AIImprover 
+            projectId={route.projectId} 
+            onBack={() => navigate({ type: 'dashboard', tab: 'projects' })} 
+            onOpenEditor={() => navigate({ type: 'builder', projectId: route.projectId })}
+          />
+        </div>
+      );
+    }
+
+    return (
+      <Dashboard 
+        initialTab={route.tab || 'general'}
+        onTabChange={(tab) => navigate({ type: 'dashboard', tab })}
+        onSelectProject={(id) => navigate({ type: 'builder', projectId: id })} 
+        onSelectProjectAI={(id) => navigate({ type: 'ai-improver', projectId: id })} 
       />
     );
-  }
-
-  if (route.type === 'builder' && route.projectId) {
-    return (
-      <div className="h-screen w-screen overflow-hidden">
-        <VisualBuilder 
-          projectId={route.projectId} 
-          onBack={() => navigate({ type: 'dashboard', tab: 'projects' })} 
-          onOpenAIImprover={() => navigate({ type: 'ai-improver', projectId: route.projectId })}
-        />
-      </div>
-    );
-  }
-
-  if (route.type === 'ai-improver' && route.projectId) {
-    return (
-      <div className="h-screen w-screen overflow-hidden">
-        <AIImprover 
-          projectId={route.projectId} 
-          onBack={() => navigate({ type: 'dashboard', tab: 'projects' })} 
-          onOpenEditor={() => navigate({ type: 'builder', projectId: route.projectId })}
-        />
-      </div>
-    );
-  }
+  };
 
   return (
-    <Dashboard 
-      initialTab={route.tab || 'general'}
-      onTabChange={(tab) => navigate({ type: 'dashboard', tab })}
-      onSelectProject={(id) => navigate({ type: 'builder', projectId: id })} 
-      onSelectProjectAI={(id) => navigate({ type: 'ai-improver', projectId: id })} 
-    />
+    <GlobalLayout currentRoute={route} onNavigate={navigate}>
+      {renderCurrentView()}
+    </GlobalLayout>
   );
 };
-
-import { ThemeProvider } from './context/ThemeContext';
-import { NotificationProvider } from './context/NotificationContext';
 
 export default function App() {
   return (

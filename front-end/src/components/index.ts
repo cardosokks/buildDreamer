@@ -2,6 +2,7 @@
 export { ChatPanel } from './ChatPanel';
 export { TeamChatPanel } from './TeamChatPanel';
 export { ProductManagerModal } from './ProductManagerModal';
+export { GlobalLayout } from './GlobalLayout';
 
 // Re-export pages for backward compatibility
 export { AuthPage } from '../pages/auth/AuthPage';
