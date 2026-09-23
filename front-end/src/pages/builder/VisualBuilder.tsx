@@ -1799,6 +1799,10 @@ export const VisualBuilder: React.FC<VisualBuilderProps> = ({ projectId, onBack,
             css={activePage.css || ''}
             onCssChange={(newCss) => handleCodeChange('css', newCss)}
             onClose={() => setActiveLeftSidebar(null)}
+            projectId={project?.id}
+            onGlobalElementsUpdated={() => {
+              fetchProjectDetails();
+            }}
           />
         )}
 

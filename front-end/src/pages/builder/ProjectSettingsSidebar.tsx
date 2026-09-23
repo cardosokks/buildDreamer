@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, Image, Phone, Mail, Palette, Check, X, RefreshCw, Save, Globe } from 'lucide-react';
+import { Settings, Image, Phone, Mail, Palette, Check, X, RefreshCw, Save, Globe, Sparkles, Wand2, Loader2 } from 'lucide-react';
+import { ThemeSuggestionCard, ThemeSuggestion } from '../../components/ThemeSuggestionCard';
+import { API_URL } from '../../config';
 
 interface ProjectSettingsSidebarProps {
   project: {
@@ -71,6 +73,11 @@ export const ProjectSettingsSidebar: React.FC<ProjectSettingsSidebarProps> = ({
   const [colorPalette, setColorPalette] = useState(project.colorPalette || '');
   const [saving, setSaving] = useState(false);
 
+  // AI Theme Suggestion State
+  const [suggestedTheme, setSuggestedTheme] = useState<ThemeSuggestion | null>(null);
+  const [isSuggestingTheme, setIsSuggestingTheme] = useState(false);
+  const [themeApplied, setThemeApplied] = useState(false);
+
   useEffect(() => {
     setName(project.name || '');
     setLogoUrl(project.logoUrl || '');
@@ -78,6 +85,38 @@ export const ProjectSettingsSidebar: React.FC<ProjectSettingsSidebarProps> = ({
     setEmail(project.email || '');
     setColorPalette(project.colorPalette || '');
   }, [project]);
+
+  const handleRequestThemeSuggestion = async () => {
+    if (!name.trim()) return;
+    setIsSuggestingTheme(true);
+    setThemeApplied(false);
+    try {
+      const res = await fetch(`${API_URL}/api/ai/suggest-theme`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          companyName: name.trim(),
+          industry: name.trim(),
+          tone: colorPalette || 'Moderno e Elegante',
+          mission: `Posicionamento de mercado para ${name.trim()}.`
+        })
+      });
+      const data = await res.json();
+      if (data.success && data.theme) {
+        setSuggestedTheme(data.theme);
+      }
+    } catch (err) {
+      console.error('Erro ao sugerir tema no sidebar:', err);
+    } finally {
+      setIsSuggestingTheme(false);
+    }
+  };
+
+  const handleApplyTheme = (theme: ThemeSuggestion) => {
+    const themeSummary = `${theme.themeName} (${theme.colorPalette.mood}) — Primária: ${theme.colorPalette.primary}, Fundo: ${theme.colorPalette.bg}, Tipografia: ${theme.typography.headingFont} & ${theme.typography.bodyFont}`;
+    setColorPalette(themeSummary);
+    setThemeApplied(true);
+  };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -217,20 +256,54 @@ export const ProjectSettingsSidebar: React.FC<ProjectSettingsSidebarProps> = ({
 
         {/* Paleta de Cores */}
         <div className="space-y-2">
-          <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-            <Palette className="w-3.5 h-3.5 text-amber-400" />
-            Regra de Paleta de Cores para a IA
-          </label>
+          <div className="flex items-center justify-between">
+            <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+              <Palette className="w-3.5 h-3.5 text-amber-400" />
+              Regra de Paleta de Cores para a IA
+            </label>
+            <button
+              type="button"
+              onClick={handleRequestThemeSuggestion}
+              disabled={isSuggestingTheme || !name.trim()}
+              className="px-2.5 py-1 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-lg text-[10px] font-bold flex items-center gap-1.5 shadow-md transition-all cursor-pointer disabled:opacity-50"
+            >
+              {isSuggestingTheme ? (
+                <>
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  <span>Analisando...</span>
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-3 h-3" />
+                  <span>Sugerir Tema com IA</span>
+                </>
+              )}
+            </button>
+          </div>
+
           <textarea
             value={colorPalette}
             onChange={(e) => setColorPalette(e.target.value)}
             placeholder="Descreva a paleta ou clique em um preset abaixo..."
-            rows={4}
+            rows={3}
             className="w-full bg-slate-900/50 border border-slate-850 hover:border-slate-800 focus:border-amber-500 focus:outline-none rounded-xl p-3 text-xs text-slate-200 transition-all shadow-sm placeholder:text-slate-600 leading-relaxed resize-none font-sans"
           />
           <p className="text-[10px] text-slate-500">
             A IA usará esta regra em todos os prompts futuros para preencher ou manter o site nessas cores.
           </p>
+
+          {/* Sugestão Interativa Gerada pela IA */}
+          {suggestedTheme && (
+            <div className="pt-2">
+              <ThemeSuggestionCard
+                theme={suggestedTheme}
+                onApply={handleApplyTheme}
+                onRegenerate={handleRequestThemeSuggestion}
+                isGenerating={isSuggestingTheme}
+                applied={themeApplied}
+              />
+            </div>
+          )}
 
           {/* Presets Grid */}
           <div className="space-y-1.5 pt-2">

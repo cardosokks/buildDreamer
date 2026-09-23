@@ -324,10 +324,18 @@ export const DEFAULT_AI_SKILLS: AISkill[] = [
   },
   {
     id: 'skill-section-transitions',
-    name: 'Transições Orgânicas & Divisores de Seção (Anti-Quadrado)',
+    name: 'Transições Orgânicas & Divisores de Seção (Anti-Layout Reto)',
     category: 'layout',
-    description: 'Elimina o visual de blocos quadrados engessados adicionando divisores de seção em SVG (ondas, slants diagonais, curvas), linhas néon com glow e cartões flutuantes sobrepostos.',
-    promptSnippet: 'Aplique o princípio Anti-Quadrado entre seções: insira divisores SVG de transição orgânica (ondas "wave", cortes diagonais "slant", curvas suaves) sempre que houver mudança de cor de fundo, e adicione cartões flutuantes com margem negativa (-mt-12 relative z-20) que cruzam a fronteira entre seções.',
+    description: 'Garante a aplicação de Anti-Layout Reto em TODAS e cada uma das seções do site, adicionando divisores SVG (ondas, slants diagonais, curvas), linhas néon com glow, cartões flutuantes sobrepostos e Bento Grids.',
+    promptSnippet: 'REQUISITO MANDATÓRIO DE ANTI-LAYOUT RETO EM TODAS AS SEÇÕES: Nenhuma seção pode ter divisões de blocos retos simples. Aplique em TODAS as seções do site divisores SVG de transição orgânica (ondas "wave", cortes "slant", curvas suaves), cartões flutuantes com margem negativa (-mt-12 sm:-mt-20 relative z-20) que cruzam a fronteira entre seções, Bento Grids com cantos arredondados (rounded-2xl / rounded-3xl) e luzes radiais de fundo.',
+    enabled: true
+  },
+  {
+    id: 'skill-ai-smart-adaptive-palette',
+    name: 'IA Autônoma & Paleta Dinâmica Customizada',
+    category: 'design',
+    description: 'A IA monta autonomamente a paleta de cores, atmosfera visual, tipografia e tecnologias de UI de acordo com o negócio e informações prestadas pelo cliente.',
+    promptSnippet: 'MODO PALETA & TECNOLOGIAS DINÂMICAS: Analise o perfil do cliente, segmento e proposta. Sintetize autonomamente uma paleta de cores exclusiva e selecione as melhores tecnologias de UI (Swiper 3D, GSAP ScrollTrigger, Bento Grid, Spline 3D, Status comercial, Widget WhatsApp) para construir o site.',
     enabled: true
   }
 ];

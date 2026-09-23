@@ -680,78 +680,997 @@ export async function crawlEntireClientWebsite(
   return pages;
 }
 
+export function parseThemeColors(themeOrPalette?: any) {
+  let primary = '#a855f7';
+  let secondary = '#ec4899';
+  let accent = '#3b82f6';
+  let bg = '#090d16';
+  let cardBg = '#111827';
+  let textColor = '#f8fafc';
+  let textMuted = '#94a3b8';
+
+  if (!themeOrPalette) return { primary, secondary, accent, bg, cardBg, textColor, textMuted };
+
+  if (typeof themeOrPalette === 'object') {
+    if (themeOrPalette.colorPalette) {
+      if (typeof themeOrPalette.colorPalette === 'object') {
+        const p = themeOrPalette.colorPalette;
+        return {
+          primary: p.primary || primary,
+          secondary: p.secondary || secondary,
+          accent: p.accent || accent,
+          bg: p.bg || p.background || bg,
+          cardBg: p.cardBg || p.surface || cardBg,
+          textColor: p.textColor || p.text || textColor,
+          textMuted: p.textMuted || textMuted
+        };
+      } else if (typeof themeOrPalette.colorPalette === 'string') {
+        themeOrPalette = themeOrPalette.colorPalette;
+      }
+    } else {
+      return {
+        primary: themeOrPalette.primary || primary,
+        secondary: themeOrPalette.secondary || secondary,
+        accent: themeOrPalette.accent || accent,
+        bg: themeOrPalette.bg || themeOrPalette.background || bg,
+        cardBg: themeOrPalette.cardBg || themeOrPalette.surface || cardBg,
+        textColor: themeOrPalette.textColor || themeOrPalette.text || textColor,
+        textMuted: themeOrPalette.textMuted || textMuted
+      };
+    }
+  }
+
+  if (typeof themeOrPalette === 'string') {
+    try {
+      const parsed = JSON.parse(themeOrPalette);
+      if (parsed && typeof parsed === 'object') {
+        return parseThemeColors(parsed);
+      }
+    } catch {}
+
+    const str = themeOrPalette.toLowerCase();
+    const hexes = themeOrPalette.match(/#[0-9a-fA-F]{3,8}/g);
+    if (hexes && hexes.length > 0) {
+      bg = hexes[0];
+      if (hexes.length > 1) primary = hexes[1];
+      if (hexes.length > 2) secondary = hexes[2];
+      if (hexes.length > 3) cardBg = hexes[3];
+    } else if (str.includes('gold') || str.includes('dourad') || str.includes('adv') || str.includes('jur')) {
+      primary = '#d97706';
+      secondary = '#3b82f6';
+      bg = '#090d16';
+      cardBg = '#111827';
+    } else if (str.includes('teal') || str.includes('esmerald') || str.includes('saú') || str.includes('méd')) {
+      primary = '#0d9488';
+      secondary = '#0284c7';
+      bg = '#041212';
+      cardBg = '#0a2121';
+    } else if (str.includes('orange') || str.includes('terracota') || str.includes('restaurante')) {
+      primary = '#ea580c';
+      secondary = '#dc2626';
+      bg = '#0f0d0e';
+      cardBg = '#1c1719';
+    }
+  }
+
+  return { primary, secondary, accent, bg, cardBg, textColor, textMuted };
+}
+
+/**
+ * Sanitiza links de navegação em HTML para garantir que nenhum link leve a arquivos .html que não existem no projeto.
+ * Se um link apontar para `pagina.html` e `pagina.html` não constar nas rotas reais do projeto:
+ * - Se for `sobre.html`, converte para `#sobre` ou `index.html#sobre`
+ * - Se for `servicos.html`, converte para `#servicos` ou `index.html#servicos`
+ * - Se for `contato.html`, converte para `#contato` ou `index.html#contato`
+ * - Caso contrário, converte `href="outro.html"` para `href="#outro"` ou `href="index.html#outro"`
+ */
+export function sanitizeNavLinks(
+  html: string,
+  navigationRoutes: Array<{ name: string; href: string }> = [],
+  activePageSlug: string = 'index'
+): string {
+  if (!html || typeof html !== 'string') return html || '';
+
+  // Lista de arquivos .html válidos e existentes no projeto
+  const validHrefs = new Set<string>();
+  validHrefs.add('index.html');
+
+  if (Array.isArray(navigationRoutes)) {
+    navigationRoutes.forEach(r => {
+      if (r && r.href) {
+        validHrefs.add(r.href.toLowerCase().trim());
+      }
+    });
+  }
+
+  const isHome = activePageSlug === 'index' || activePageSlug === 'homepage' || activePageSlug === '';
+
+  // Substituir href="nome.html" por âncoras #nome ou index.html#nome caso nome.html não exista no projeto
+  return html.replace(/href=["']([^"']+\.html)["']/gi, (match, hrefValue) => {
+    const cleanHref = hrefValue.toLowerCase().trim();
+
+    // Se a página .html existe nas rotas reais do projeto, mantém o link!
+    if (validHrefs.has(cleanHref)) {
+      return match;
+    }
+
+    // Se a página .html NÃO existe no projeto, converte para âncora de seção
+    const pageNameMatch = cleanHref.match(/^([^/]+)\.html$/);
+    if (pageNameMatch) {
+      const pageKey = pageNameMatch[1];
+      const anchor = `#${pageKey}`;
+      const targetHref = isHome ? anchor : `index.html${anchor}`;
+      return `href="${targetHref}"`;
+    }
+
+    return match;
+  });
+}
+
+/**
+ * Gera uma Navbar fallback elegante e responsiva harmonizada com o Tema do Projeto
+ */
+export function buildFallbackNavbar(
+  businessName?: string,
+  navigationRoutes?: Array<{ name: string; href: string }>,
+  themeOrPalette?: any
+): string {
+  const name = businessName || 'Sua Empresa';
+  const colors = parseThemeColors(themeOrPalette);
+
+  let routes: Array<{ name: string; href: string }> = [];
+
+  if (navigationRoutes && navigationRoutes.length > 1) {
+    routes = navigationRoutes;
+  } else if (navigationRoutes && navigationRoutes.length === 1) {
+    routes = [
+      { name: navigationRoutes[0].name || 'Início', href: 'index.html' },
+      { name: 'Sobre Nós', href: '#sobre' },
+      { name: 'Serviços', href: '#servicos' },
+      { name: 'Contato', href: '#contato' }
+    ];
+  } else {
+    routes = [
+      { name: 'Início', href: 'index.html' },
+      { name: 'Sobre Nós', href: '#sobre' },
+      { name: 'Serviços', href: '#servicos' },
+      { name: 'Contato', href: '#contato' }
+    ];
+  }
+
+  const navLinksHtml = routes.map(r => 
+    `<a href="${r.href}" style="color: ${colors.textColor}" class="opacity-80 hover:opacity-100 transition-opacity text-sm font-semibold hover:underline">${r.name}</a>`
+  ).join('\n      ');
+
+  const ctaHref = routes.find(r => r.href.includes('contat') || r.name.toLowerCase().includes('contat'))?.href || '#contato';
+
+  return `<header style="background-color: ${colors.bg}; color: ${colors.textColor}; border-color: ${colors.cardBg}" class="sticky top-0 z-50 backdrop-blur-md border-b px-4 sm:px-6 lg:px-8 py-3.5">
+  <div class="max-w-7xl mx-auto flex items-center justify-between">
+    <a href="index.html" class="flex items-center gap-2.5 group">
+      <div style="background-color: ${colors.primary}; color: #ffffff" class="w-8 h-8 rounded-xl flex items-center justify-center font-extrabold text-sm shadow-md">
+        ${name.charAt(0).toUpperCase()}
+      </div>
+      <span style="color: ${colors.textColor}" class="text-lg font-extrabold tracking-tight">${name}</span>
+    </a>
+    <nav class="hidden md:flex items-center gap-6">
+      ${navLinksHtml}
+    </nav>
+    <div class="flex items-center gap-3">
+      <a href="${ctaHref}" style="background-color: ${colors.primary}; color: #ffffff" class="px-4 py-2 text-xs font-bold rounded-xl transition-transform hover:scale-105 shadow-md">
+        Falar Conosco
+      </a>
+    </div>
+  </div>
+</header>`;
+}
+
+/**
+ * Gera um Footer fallback rico, 100% full-width, responsivo e adaptado ao tema do projeto
+ */
+export function buildFallbackFooter(
+  businessName: string,
+  navigationRoutes?: Array<{ name: string; href: string }>,
+  contactInfo?: { phone?: string; address?: string; email?: string },
+  themeOrPalette?: any
+): string {
+  const currentYear = new Date().getFullYear();
+  const phoneStr = contactInfo?.phone || '(11) 99999-9999';
+  const addressStr = contactInfo?.address || 'Atendimento em todo o Brasil';
+  const emailStr = contactInfo?.email || ('contato@' + (businessName ? businessName.toLowerCase().replace(/[^a-z0-9]/g, '') : 'empresa') + '.com');
+  const name = businessName || 'Sua Empresa';
+  const colors = parseThemeColors(themeOrPalette);
+
+  let routes: Array<{ name: string; href: string }> = [];
+
+  if (navigationRoutes && navigationRoutes.length > 1) {
+    routes = navigationRoutes;
+  } else if (navigationRoutes && navigationRoutes.length === 1) {
+    routes = [
+      { name: navigationRoutes[0].name || 'Início', href: 'index.html' },
+      { name: 'Sobre Nós', href: '#sobre' },
+      { name: 'Serviços', href: '#servicos' },
+      { name: 'Contato', href: '#contato' }
+    ];
+  } else {
+    routes = [
+      { name: 'Início', href: 'index.html' },
+      { name: 'Sobre Nós', href: '#sobre' },
+      { name: 'Serviços', href: '#servicos' },
+      { name: 'Contato', href: '#contato' }
+    ];
+  }
+
+  const navLinksHtml = routes.map(r => 
+    `<li><a href="${r.href}" style="color: ${colors.textMuted}" class="hover:opacity-100 transition-colors text-sm font-medium hover:underline">${r.name}</a></li>`
+  ).join('\n          ');
+
+  return `<footer style="background-color: ${colors.bg}; color: ${colors.textColor}; border-color: ${colors.cardBg}" class="w-full border-t pt-16 pb-12 px-4 sm:px-6 lg:px-8 mt-auto relative z-10 select-none">
+  <div class="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-10">
+    <div class="space-y-4 md:col-span-1">
+      <div class="flex items-center gap-2.5">
+        <div style="background-color: ${colors.primary}; color: #ffffff" class="w-9 h-9 rounded-xl flex items-center justify-center font-extrabold text-base shadow-lg">
+          ${name.charAt(0).toUpperCase()}
+        </div>
+        <span style="color: ${colors.textColor}" class="text-xl font-extrabold tracking-tight">${name}</span>
+      </div>
+      <p style="color: ${colors.textMuted}" class="text-sm leading-relaxed">
+        Soluções inovadoras e serviços de excelência para impulsionar seus resultados com máxima qualidade.
+      </p>
+    </div>
+
+    <div>
+      <h4 style="color: ${colors.textColor}" class="font-bold text-xs uppercase tracking-wider mb-4 opacity-90">Navegação Principal</h4>
+      <ul class="space-y-2.5">
+        ${navLinksHtml}
+      </ul>
+    </div>
+
+    <div>
+      <h4 style="color: ${colors.textColor}" class="font-bold text-xs uppercase tracking-wider mb-4 opacity-90">Atendimento & Contato</h4>
+      <ul style="color: ${colors.textMuted}" class="space-y-3 text-sm">
+        <li class="flex items-center gap-2">
+          <span>📞</span> <span>${phoneStr}</span>
+        </li>
+        <li class="flex items-center gap-2">
+          <span>✉️</span> <span>${emailStr}</span>
+        </li>
+        <li class="flex items-center gap-2">
+          <span>📍</span> <span>${addressStr}</span>
+        </li>
+      </ul>
+    </div>
+
+    <div class="space-y-4">
+      <h4 style="color: ${colors.textColor}" class="font-bold text-xs uppercase tracking-wider mb-4 opacity-90">Fale Conosco</h4>
+      <p style="color: ${colors.textMuted}" class="text-sm leading-relaxed">Entre em contato para um orçamento rápido e personalizado.</p>
+      <a href="https://wa.me/55${phoneStr.replace(/\D/g, '') || '11999999999'}" target="_blank" rel="noopener noreferrer" style="background-color: ${colors.primary}; color: #ffffff" class="inline-flex items-center justify-center px-4 py-3 text-sm font-bold rounded-xl transition-transform hover:scale-105 shadow-lg gap-2 w-full">
+        <span>Falar no WhatsApp</span>
+      </a>
+    </div>
+  </div>
+
+  <div style="border-color: ${colors.cardBg}" class="max-w-7xl mx-auto border-t mt-12 pt-6 flex flex-col sm:flex-row justify-between items-center text-xs gap-4">
+    <p style="color: ${colors.textMuted}">© ${currentYear} ${name}. Todos os direitos reservados.</p>
+    <div style="color: ${colors.textMuted}" class="flex gap-6">
+      <a href="#" class="hover:underline transition-colors">Termos de Uso</a>
+      <a href="#" class="hover:underline transition-colors">Política de Privacidade</a>
+    </div>
+  </div>
+</footer>`;
+}
+
+/**
+ * Cria uma requisição dedicada para geração autônoma de Header e Footer globais alinhados ao tema do projeto
+ */
+/**
+ * Gera os componentes e widgets flutuantes globais harmonizados com o Tema do Projeto
+ */
+export function buildFallbackGlobalItems(
+  businessName?: string,
+  contacts?: string,
+  themeOrPalette?: any
+): string {
+  const name = businessName || 'Sua Empresa';
+  const colors = parseThemeColors(themeOrPalette);
+  const cleanPhone = (contacts || '11999999999').replace(/\D/g, '') || '11999999999';
+
+  return `<!-- Elementos Globais Flutuantes do Tema -->
+<div id="global-floating-widgets">
+  <!-- Badge de Status Comercial em Tempo Real -->
+  <div class="fixed bottom-6 left-6 z-40 hidden sm:flex items-center gap-2.5 px-3.5 py-2 rounded-full backdrop-blur-md border shadow-xl text-xs font-medium transition-all" style="background-color: ${colors.cardBg}ee; border-color: ${colors.cardBg}; color: ${colors.textColor}">
+    <span class="relative flex h-2 w-2">
+      <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+      <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+    </span>
+    <span>Atendimento Online | Plantão Ativo</span>
+  </div>
+
+  <!-- Botão Flutuante do WhatsApp Oficial -->
+  <a href="https://wa.me/55${cleanPhone}?text=Ol%C3%A1,%20gostaria%20de%20um%20atendimento%20com%20${encodeURIComponent(name)}" target="_blank" rel="noopener noreferrer" class="fixed bottom-6 right-6 z-50 bg-emerald-500 hover:bg-emerald-400 text-white p-3.5 rounded-full shadow-2xl hover:scale-110 active:scale-95 transition-all flex items-center justify-center gap-2 group cursor-pointer" title="Falar no WhatsApp" aria-label="Falar no WhatsApp">
+    <svg class="w-6 h-6 fill-current" viewBox="0 0 24 24"><path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.711 2.598 2.669-.699c.969.54 1.771.82 2.79.82h.001c3.182 0 5.768-2.587 5.769-5.766.001-3.182-2.585-5.768-5.77-5.768zm3.364 8.163c-.144.405-.837.774-1.17.825-.312.048-.718.077-2.146-.514-1.22-.505-1.996-1.748-2.057-1.829-.06-.08-1.429-1.901-1.429-3.626 0-1.724.903-2.571 1.225-2.923.322-.352.704-.442.939-.442.235 0 .47 0 .677.011.22.01.512-.084.8.608.298.718 1.015 2.478 1.104 2.658.089.18.149.392.03.628-.119.236-.179.383-.353.587-.174.204-.367.456-.525.612-.175.174-.358.363-.153.714.205.352.913 1.503 1.96 2.434 1.348 1.198 2.484 1.57 2.836 1.745.352.175.558.146.764-.09.206-.235.882-1.028 1.117-1.38.235-.353.47-.294.793-.176.323.118 2.057.971 2.41 1.147.353.176.587.264.675.411.088.147.088.852-.056 1.257z"></path></svg>
+    <span class="max-w-0 overflow-hidden whitespace-nowrap group-hover:max-w-xs transition-all duration-300 text-xs font-bold pr-1">Fale Conosco</span>
+  </a>
+</div>`;
+}
+
+/**
+ * Cria requisições dedicadas e separadas para geração autônoma de:
+ * 1) Header/Navbar no tema proposto
+ * 2) Footer no tema proposto
+ * 3) Itens e Widgets Globais no tema proposto
+ */
+export async function generateGlobalThemeElements(params: {
+  businessName: string;
+  theme: any;
+  logoUrl?: string;
+  contacts?: string;
+  email?: string;
+  segment?: string;
+  visualStyle?: string;
+  navigationRoutes?: Array<{ name: string; href: string }>;
+  aiProvider?: string;
+  apiKey?: string;
+  model?: string;
+  registeredModels?: any;
+  proxyUrl?: string;
+  ollamaEndpoint?: string;
+  lowSpecMode?: boolean;
+}): Promise<{
+  navbarHtml: string;
+  footerHtml: string;
+  globalItemsHtml: string;
+  css?: string;
+  js?: string;
+}> {
+  const {
+    businessName,
+    theme,
+    logoUrl,
+    contacts,
+    email,
+    segment,
+    visualStyle,
+    navigationRoutes,
+    aiProvider,
+    apiKey,
+    model,
+    registeredModels,
+    proxyUrl,
+    ollamaEndpoint,
+    lowSpecMode
+  } = params;
+
+  const colors = parseThemeColors(theme);
+  const currentYear = new Date().getFullYear();
+  const routesStr = navigationRoutes && navigationRoutes.length > 0
+    ? navigationRoutes.map(r => `"${r.name}" (href="${r.href}")`).join(', ')
+    : '"Início" (href="index.html"), "Sobre Nós" (href="#sobre"), "Serviços" (href="#servicos"), "Contato" (href="#contato")';
+
+  const ctaHref = navigationRoutes?.find(r => r.href.includes('contat') || r.name.toLowerCase().includes('contat'))?.href || '#contato';
+  const cleanPhone = (contacts || '11999999999').replace(/\D/g, '') || '11999999999';
+  const phoneFormatted = contacts || '(11) 99999-8888';
+  const emailFormatted = email || `contato@${businessName.toLowerCase().replace(/[^a-z0-9]/g, '') || 'empresa'}.com.br`;
+
+  // Fallbacks instantâneos pré-computados com os mesmos tokens de design do tema
+  const fallbackNav = sanitizeNavLinks(buildFallbackNavbar(businessName, navigationRoutes, colors), navigationRoutes || [], 'index');
+  const fallbackFoot = sanitizeNavLinks(buildFallbackFooter(businessName, navigationRoutes, { phone: contacts, email }, colors), navigationRoutes || [], 'index');
+  const fallbackItems = buildFallbackGlobalItems(businessName, contacts, colors);
+
+  // Helper de extração tolerante a formatos de retorno JSON
+  const extractCode = (res: any, fallbackStr: string): string => {
+    if (!res) return fallbackStr;
+    const candidates = [res.html, res.navbarHtml, res.footerHtml, res.globalItemsHtml, res.navbar, res.footer];
+    for (const c of candidates) {
+      if (typeof c === 'string' && c.trim().length > 25) {
+        return c.trim();
+      }
+    }
+    return fallbackStr;
+  };
+
+  const aiOptions = {
+    provider: (aiProvider as any) || 'gemini',
+    apiKey,
+    model,
+    registeredModels,
+    proxyUrl,
+    ollamaEndpoint,
+    lowSpecMode
+  };
+
+  // --------------------------------------------------------------------------
+  // REQUISIÇÃO 1: NAVBAR / CABEÇALHO DEDICADO NO TEMA PROPOSTO
+  // --------------------------------------------------------------------------
+  const promptNavbar = `
+Você é o Engenheiro UI/UX e Especialista em Design Systems.
+Sua missão é criar EXCLUSIVAMENTE a NAVBAR / CABEÇALHO GLOBAL (<header>) para o site da empresa "${businessName}".
+
+[TEMA E CARACTERÍSTICAS OBRIGATÓRIAS DO PROJETO]:
+- Estilo Visual: ${visualStyle || 'Moderno, Elegante e Responsivo'}
+- Segmento: ${segment || 'Serviços Profissionais'}
+- Cor de Fundo: ${colors.bg} (use efeito backdrop-blur-md com transparência elegante e glassmorphism)
+- Borda Inferior: ${colors.cardBg}
+- Cor Primária do CTA: ${colors.primary}
+- Cor Secundária/Acento: ${colors.secondary}
+- Cor dos Textos Principais: ${colors.textColor}
+- Cor dos Links de Navegação: ${colors.textMuted}
+
+[LOGOTIPO E IDENTIDADE]:
+${logoUrl ? `- Logotipo Oficial: "${logoUrl}" (Use: <img src="${logoUrl}" referrerPolicy="no-referrer" alt="${businessName}" class="h-8 md:h-10 object-contain">)` : `- Logotipo Tipográfico: Use uma tipografia moderna destacando o nome "${businessName}" com um badge inicial na cor primária.`}
+
+[ROTAS OFICIAIS DE NAVEGAÇÃO]:
+- Links permitidos: ${routesStr}
+- O botão CTA de conversão no desktop e mobile deve direcionar para "${ctaHref}".
+
+[REGRAS ESTRUTURAIS RÍGIDAS]:
+1. Tag raiz: <header class="sticky top-0 z-50 backdrop-blur-md border-b ...">
+2. Navegação Desktop: Menu centralizado ou alinhado com links espaçados, hover transitions suaves nas cores do tema e botão CTA em destaque (${colors.primary}).
+3. Menu Mobile: Botão hambúrguer acessível (<button aria-label="Abrir Menu" id="mobile-menu-btn" class="md:hidden ...">) e gaveta/dropdown (<div id="mobile-menu" class="hidden md:hidden ...">) contendo todos os links e o botão de ação.
+4. Inclua micro-script inline funcional para alternar o menu mobile de forma segura.
+
+Retorne EXCLUSIVAMENTE um objeto JSON no formato:
+{
+  "html": "<header ...>...</header>",
+  "navbarHtml": "<header ...>...</header>",
+  "css": "",
+  "js": ""
+}
+`;
+
+  // --------------------------------------------------------------------------
+  // REQUISIÇÃO 2: FOOTER / RODAPÉ DEDICADO NO TEMA PROPOSTO
+  // --------------------------------------------------------------------------
+  const promptFooter = `
+Você é o Engenheiro UI/UX e Especialista em Design Systems.
+Sua missão é criar EXCLUSIVAMENTE o FOOTER / RODAPÉ GLOBAL (<footer>) para o site da empresa "${businessName}".
+
+[TEMA E CARACTERÍSTICAS OBRIGATÓRIAS DO PROJETO]:
+- Estilo Visual: ${visualStyle || 'Moderno, Elegante e Responsivo'}
+- Segmento: ${segment || 'Serviços Profissionais'}
+- Cor de Fundo: ${colors.bg}
+- Borda Superior: ${colors.cardBg}
+- Cor Primária: ${colors.primary}
+- Cor Secundária/Acento: ${colors.secondary}
+- Cor dos Textos: ${colors.textColor}
+- Cor dos Links/Textos Secundários: ${colors.textMuted}
+
+[REGRAS ESTRUTURAIS DO FOOTER (100% WIDE NO NÍVEL RAIZ)]:
+1. Tag raiz: <footer class="w-full relative z-10 border-t pt-16 pb-12 px-4 sm:px-6 lg:px-8 ...">
+2. Container interno: <div class="max-w-7xl mx-auto ...">
+3. Grid responsivo (1 coluna mobile, 4 colunas desktop):
+   - Coluna 1: Nome da empresa "${businessName}", resumo de autoridade e diferenciais da marca.
+   - Coluna 2: Navegação rápida com links oficiais para todas as páginas (${routesStr}).
+   - Coluna 3: Informações de Atendimento (WhatsApp / Telefone: "${phoneFormatted}", E-mail: "${emailFormatted}", Atendimento Nacional e Regional).
+   - Coluna 4: Canal de Atendimento / Newsletter com campo de input estilizado no tema e botão de envio na cor primária (${colors.primary}).
+4. Barra inferior de copyright: "© ${currentYear} ${businessName}. Todos os direitos reservados." + links para Termos de Uso e Política de Privacidade.
+
+Retorne EXCLUSIVAMENTE um objeto JSON no formato:
+{
+  "html": "<footer class=\"w-full ...\">...</footer>",
+  "footerHtml": "<footer class=\"w-full ...\">...</footer>",
+  "css": "",
+  "js": ""
+}
+`;
+
+  // --------------------------------------------------------------------------
+  // REQUISIÇÃO 3: ITENS E WIDGETS GLOBAIS FLUTUANTES NO TEMA PROPOSTO
+  // --------------------------------------------------------------------------
+  const promptGlobalItems = `
+Você é o Engenheiro Frontend Especialista em Componentes e Micro-interações Globais.
+Sua missão é criar EXCLUSIVAMENTE os ITENS GLOBAIS E WIDGETS FLUTUANTES transversais do site da empresa "${businessName}".
+
+[TEMA DO PROJETO]:
+- Cor Primária: ${colors.primary}
+- Cor Secundária: ${colors.secondary}
+- Cor de Superfície: ${colors.cardBg}
+- Cor dos Textos: ${colors.textColor}
+
+[COMPONENTES GLOBAIS OBRIGATÓRIOS]:
+1. BOTÃO FLUTUANTE DO WHATSAPP:
+   - Link: href="https://wa.me/55${cleanPhone}?text=Ol%C3%A1,%20gostaria%20de%20um%20atendimento%20com%20${encodeURIComponent(businessName)}" target="_blank" rel="noopener noreferrer"
+   - Posicionamento: class="fixed bottom-6 right-6 z-50 bg-emerald-500 hover:bg-emerald-400 text-white p-3.5 rounded-full shadow-2xl hover:scale-110 active:scale-95 transition-all flex items-center justify-center gap-2 group cursor-pointer"
+   - Ícone SVG oficial do WhatsApp e texto retrátil ou tooltip com "Fale Conosco".
+2. BADGE DE STATUS COMERCIAL EM TEMPO REAL:
+   - Posicionamento: class="fixed bottom-6 left-6 z-40 hidden sm:flex items-center gap-2.5 px-3.5 py-2 rounded-full backdrop-blur-md border shadow-xl text-xs font-medium transition-all"
+   - Use as cores do tema: style="background-color: ${colors.cardBg}ee; border-color: ${colors.cardBg}; color: ${colors.textColor}"
+   - Ponto pulsante animado (animate-ping) verde indicando: "Atendimento Online | Resposta Imediata".
+
+Retorne EXCLUSIVAMENTE um objeto JSON no formato:
+{
+  "html": "<!-- Botão flutuante WhatsApp oficial e Badge de status comercial -->",
+  "globalItemsHtml": "<!-- Botão flutuante WhatsApp oficial e Badge de status comercial -->",
+  "css": "",
+  "js": ""
+}
+`;
+
+  // Disparo das 3 requisições separadas em paralelo com isolamento total de falhas
+  let generatedNavbar = fallbackNav;
+  let generatedFooter = fallbackFoot;
+  let generatedItems = fallbackItems;
+  let combinedCss = '';
+  let combinedJs = '';
+
+  try {
+    const [navPromise, footerPromise, itemsPromise] = await Promise.allSettled([
+      executeAIRequest(promptNavbar, { html: '', css: '', js: '' }, aiOptions),
+      executeAIRequest(promptFooter, { html: '', css: '', js: '' }, aiOptions),
+      executeAIRequest(promptGlobalItems, { html: '', css: '', js: '' }, aiOptions)
+    ]);
+
+    if (navPromise.status === 'fulfilled') {
+      const code = extractCode(navPromise.value, fallbackNav);
+      generatedNavbar = sanitizeNavLinks(code, navigationRoutes || [], 'index');
+      if (navPromise.value.css) combinedCss += `\n${navPromise.value.css}`;
+      if (navPromise.value.js) combinedJs += `\n${navPromise.value.js}`;
+    } else {
+      console.warn('[GlobalThemeElements] Requisição da Navbar falhou, aplicando fallback do tema:', navPromise.reason?.message);
+    }
+
+    if (footerPromise.status === 'fulfilled') {
+      const code = extractCode(footerPromise.value, fallbackFoot);
+      generatedFooter = sanitizeNavLinks(fixFooterClasses(code), navigationRoutes || [], 'index');
+      if (footerPromise.value.css) combinedCss += `\n${footerPromise.value.css}`;
+      if (footerPromise.value.js) combinedJs += `\n${footerPromise.value.js}`;
+    } else {
+      console.warn('[GlobalThemeElements] Requisição do Footer falhou, aplicando fallback do tema:', footerPromise.reason?.message);
+    }
+
+    if (itemsPromise.status === 'fulfilled') {
+      const code = extractCode(itemsPromise.value, fallbackItems);
+      generatedItems = code;
+      if (itemsPromise.value.css) combinedCss += `\n${itemsPromise.value.css}`;
+      if (itemsPromise.value.js) combinedJs += `\n${itemsPromise.value.js}`;
+    } else {
+      console.warn('[GlobalThemeElements] Requisição dos Itens Globais falhou, aplicando fallback do tema:', itemsPromise.reason?.message);
+    }
+  } catch (allErr: any) {
+    console.warn('[GlobalThemeElements] Erro geral ao orquestrar requisições separadas:', allErr?.message);
+  }
+
+  return {
+    navbarHtml: generatedNavbar,
+    footerHtml: fixFooterClasses(generatedFooter),
+    globalItemsHtml: generatedItems,
+    css: combinedCss.trim(),
+    js: combinedJs.trim()
+  };
+}
+
 /**
  * Extrai o bloco exato de Header/Navbar e Footer gerado na Home para reutilização idêntica em todas as subpáginas
  */
-export function extractNavbarAndFooter(homeHtml: string): { navbarHtml: string; footerHtml: string } {
+export function buildFallbackSubpageHtml(
+  subName: string,
+  businessName: string,
+  navbarHtml: string,
+  footerHtml: string,
+  globalItemsHtml?: string
+): string {
+  const cleanNav = navbarHtml && navbarHtml.trim().length > 20 ? navbarHtml : buildFallbackNavbar(businessName);
+  const cleanFoot = footerHtml && footerHtml.trim().length > 20 ? footerHtml : buildFallbackFooter(businessName);
+  const cleanItems = globalItemsHtml && globalItemsHtml.trim().length > 20 ? `\n\n${globalItemsHtml.trim()}` : '';
+
+  return `${cleanNav}
+<main class="min-h-[70vh] bg-slate-950 text-white py-20 px-4 sm:px-6 lg:px-8">
+  <div class="max-w-5xl mx-auto text-center space-y-8">
+    <div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-400 text-xs font-semibold">
+      <span>${businessName || 'Sua Empresa'}</span>
+    </div>
+    <h1 class="text-4xl sm:text-5xl font-extrabold text-white tracking-tight">${subName}</h1>
+    <p class="text-slate-400 max-w-2xl mx-auto text-lg leading-relaxed">
+      Bem-vindo à página de ${subName} da ${businessName || 'nossa empresa'}. Conheça nossas soluções com máxima qualidade e atendimento exclusivo.
+    </p>
+    <div class="pt-8 grid grid-cols-1 md:grid-cols-3 gap-6 text-left">
+      <div class="bg-slate-900/80 border border-slate-800 p-6 rounded-2xl shadow-xl">
+        <h3 class="text-white font-bold text-lg mb-2">Atendimento Prioritário</h3>
+        <p class="text-slate-400 text-sm mb-4">Entre em contato direto com nossos consultores para tirar dúvidas.</p>
+        <a href="contato.html" class="text-purple-400 hover:text-purple-300 text-sm font-semibold inline-flex items-center gap-1">Saiba mais →</a>
+      </div>
+      <div class="bg-slate-900/80 border border-slate-800 p-6 rounded-2xl shadow-xl">
+        <h3 class="text-white font-bold text-lg mb-2">Soluções Completas</h3>
+        <p class="text-slate-400 text-sm mb-4">Catálogo de serviços e produtos desenvolvidos sob medida.</p>
+        <a href="servicos.html" class="text-purple-400 hover:text-purple-300 text-sm font-semibold inline-flex items-center gap-1">Ver serviços →</a>
+      </div>
+      <div class="bg-slate-900/80 border border-slate-800 p-6 rounded-2xl shadow-xl">
+        <h3 class="text-white font-bold text-lg mb-2">Falar com Especialista</h3>
+        <p class="text-slate-400 text-sm mb-4">Canal direto de WhatsApp com resposta rápida em horário comercial.</p>
+        <a href="https://wa.me/5511999999999" target="_blank" class="text-emerald-400 hover:text-emerald-300 text-sm font-semibold inline-flex items-center gap-1">WhatsApp →</a>
+      </div>
+    </div>
+  </div>
+</main>
+${cleanFoot}${cleanItems}`;
+}
+
+/**
+ * Extrai o bloco exato de Header/Navbar e Footer gerado na Home para reutilização idêntica em todas as subpáginas
+ */
+export function extractNavbarAndFooter(
+  homeHtml: string,
+  businessName?: string,
+  navigationRoutes?: Array<{ name: string; href: string }>,
+  contactInfo?: any,
+  themeOrPalette?: any
+): { navbarHtml: string; footerHtml: string } {
   let navbarHtml = '';
   let footerHtml = '';
 
-  const navMatch = homeHtml.match(/<header\b[^>]*>[\s\S]*?<\/header>|<nav\b[^>]*>[\s\S]*?<\/nav>/i);
-  if (navMatch) {
-    navbarHtml = navMatch[0];
+  if (homeHtml && typeof homeHtml === 'string') {
+    const navMatch = homeHtml.match(/<header\b[^>]*>[\s\S]*?<\/header>|<nav\b[^>]*>[\s\S]*?<\/nav>/i);
+    if (navMatch && navMatch[0].length > 40) {
+      navbarHtml = navMatch[0];
+    }
+
+    const footMatch = homeHtml.match(/<footer\b[^>]*>[\s\S]*?<\/footer>/i);
+    if (footMatch && footMatch[0].length > 40) {
+      footerHtml = footMatch[0];
+    }
   }
 
-  const footMatch = homeHtml.match(/<footer\b[^>]*>[\s\S]*?<\/footer>/i);
-  if (footMatch) {
-    footerHtml = footMatch[0];
+  // Se a IA não gerou Navbar no HTML (ou veio vazio), gera o fallback oficial alinhado ao tema do projeto
+  if (!navbarHtml || navbarHtml.trim().length === 0) {
+    navbarHtml = buildFallbackNavbar(businessName || 'Empresa', navigationRoutes, themeOrPalette);
+  }
+
+  // Se a IA não gerou Footer no HTML (ou veio cortado/incompleto), gera o fallback oficial alinhado ao tema do projeto
+  if (!footerHtml || footerHtml.trim().length === 0) {
+    footerHtml = buildFallbackFooter(businessName || 'Empresa', navigationRoutes, contactInfo, themeOrPalette);
   }
 
   return { navbarHtml, footerHtml };
 }
 
+export interface AutomaticTheme {
+  name: string;
+  visualStyle: string;
+  colorPalette: string;
+  typography: string;
+  badgeStyle: string;
+  bgGradient: string;
+  accentGlow: string;
+}
+
+/**
+ * Motor de Derivação Automática de Tema Inteligente baseado nas informações do cliente e segmento.
+ */
+export function generateAutomaticClientTheme(
+  businessName: string,
+  segment: string = '',
+  description: string = ''
+): AutomaticTheme {
+  const context = (businessName + ' ' + segment + ' ' + description).toLowerCase();
+
+  // 1. TECH / SOFTWARE / AI / SAAS / DIGITAL
+  if (
+    context.includes('tech') ||
+    context.includes('soft') ||
+    context.includes('ai') ||
+    context.includes('ia') ||
+    context.includes('app') ||
+    context.includes('saas') ||
+    context.includes('digital') ||
+    context.includes('sistem') ||
+    context.includes('inov') ||
+    context.includes('start')
+  ) {
+    return {
+      name: 'Clean Tech Cyberpunk Glass',
+      visualStyle: 'Futurista, Dark Tech High-Contrast com componentes Glassmorphism e linhas neon luminosas.',
+      colorPalette: 'Base Obsidian (#030712), Acentos Neon Cyan (#06b6d4), Electric Indigo (#6366f1) e Emerald Glow (#10b981) para CTAs.',
+      typography: 'Títulos em Plus Jakarta Sans / Space Grotesk e corpo em Inter.',
+      badgeStyle: 'bg-cyan-500/10 border-cyan-500/30 text-cyan-400',
+      bgGradient: 'from-cyan-950/40 via-slate-950 to-indigo-950/30',
+      accentGlow: 'shadow-cyan-500/30'
+    };
+  }
+
+  // 2. ADVOCACIA / JURÍDICO / FINANCEIRO / CONTABILIDADE
+  if (
+    context.includes('adv') ||
+    context.includes('jur') ||
+    context.includes('direit') ||
+    context.includes('finan') ||
+    context.includes('contab') ||
+    context.includes('invest') ||
+    context.includes('banc') ||
+    context.includes('fisc') ||
+    context.includes('consult')
+  ) {
+    return {
+      name: 'Midnight Gold Executive Prestige',
+      visualStyle: 'Sóbrio, Imponente e Executivo de Alto Luxo com cartões escuros em bordas douradas e tipografia editorial.',
+      colorPalette: 'Base Deep Royal Navy (#090d16), Acentos Gold Champagne (#d97706 / #f59e0b) e Slate Blue (#3b82f6) para autoridade.',
+      typography: 'Títulos imponentes em Playfair Display / Cormorant Garamond e corpo ultra-legível em Inter.',
+      badgeStyle: 'bg-amber-500/10 border-amber-500/30 text-amber-400',
+      bgGradient: 'from-amber-950/20 via-slate-950 to-blue-950/20',
+      accentGlow: 'shadow-amber-500/30'
+    };
+  }
+
+  // 3. SAÚDE / MÉDICO / ODONTO / CLINICA / BEM-ESTAR
+  if (
+    context.includes('saud') ||
+    context.includes('medic') ||
+    context.includes('dent') ||
+    context.includes('odonto') ||
+    context.includes('clinic') ||
+    context.includes('psic') ||
+    context.includes('terap') ||
+    context.includes('estet') ||
+    context.includes('hosp') ||
+    context.includes('farm')
+  ) {
+    return {
+      name: 'Bio Vitality Clinical Clean',
+      visualStyle: 'Clean, Acolhedor e Tecnológico de Saúde com superfícies cristalinas, tom pastel profundo e iluminação suave.',
+      colorPalette: 'Base Midnight Teal (#04151f), Acentos Vital Teal (#0d9488), Medical Emerald (#10b981) e Cyan Soft (#22d3ee).',
+      typography: 'Títulos e corpo em Outfit / Montserrat (suave, moderno e acessível WCAG AA).',
+      badgeStyle: 'bg-teal-500/10 border-teal-500/30 text-teal-400',
+      bgGradient: 'from-teal-950/30 via-slate-950 to-emerald-950/20',
+      accentGlow: 'shadow-teal-500/30'
+    };
+  }
+
+  // 4. IMOBILIÁRIA / ARQUITETURA / ENGENHARIA / CONSTRUÇÃO
+  if (
+    context.includes('imob') ||
+    context.includes('arquit') ||
+    context.includes('engenh') ||
+    context.includes('constr') ||
+    context.includes('interi') ||
+    context.includes('decor') ||
+    context.includes('casa') ||
+    context.includes('lote')
+  ) {
+    return {
+      name: 'Architectural Bronze & Slate',
+      visualStyle: 'Arquitetônico, Estruturado e Minimalista Premium com proporções geométricas marcantes e texturas nobres.',
+      colorPalette: 'Base Charcoal Black (#0f141c), Acentos Metallic Bronze (#b45309), Warm Amber (#f59e0b) e Cool Stone (#64748b).',
+      typography: 'Títulos em Syne / Space Grotesk e corpo em Plus Jakarta Sans.',
+      badgeStyle: 'bg-orange-500/10 border-orange-500/30 text-orange-400',
+      bgGradient: 'from-orange-950/20 via-slate-950 to-stone-900/40',
+      accentGlow: 'shadow-orange-500/30'
+    };
+  }
+
+  // 5. BELEZA / SALÃO / ESTÉTICA / MODA / LUXO
+  if (
+    context.includes('belez') ||
+    context.includes('sal') ||
+    context.includes('cabel') ||
+    context.includes('barb') ||
+    context.includes('moda') ||
+    context.includes('fash') ||
+    context.includes('joia') ||
+    context.includes('lux')
+  ) {
+    return {
+      name: 'Rose Velvet & Gold Elegance',
+      visualStyle: 'Elegante, Sofisticado e Sedutor de Luxo com iluminação rosa champanhe e acabamentos em vidro espelhado.',
+      colorPalette: 'Base Deep Plum (#0f051d), Acentos Rose Gold (#f43f5e / #fb7185), Velvet Violet (#8b5cf6) e Cream Warm (#fef2f2).',
+      typography: 'Títulos sofisticados em Cinzel / Playfair Display e corpo suave em Plus Jakarta Sans.',
+      badgeStyle: 'bg-rose-500/10 border-rose-500/30 text-rose-300',
+      bgGradient: 'from-rose-950/30 via-slate-950 to-purple-950/30',
+      accentGlow: 'shadow-rose-500/30'
+    };
+  }
+
+  // 6. GASTRONOMIA / RESTAURANTE / PADARIA / BAR
+  if (
+    context.includes('gastr') ||
+    context.includes('resta') ||
+    context.includes('pizz') ||
+    context.includes('burg') ||
+    context.includes('bar') ||
+    context.includes('caf') ||
+    context.includes('padar') ||
+    context.includes('alimen') ||
+    context.includes('comid')
+  ) {
+    return {
+      name: 'Gourmet Amber & Crimson',
+      visualStyle: 'Apetite Visual, Quente e Vibrante com contraste em fundo escuro de alta gastronomia e fotos apetitosas.',
+      colorPalette: 'Base Obsidian Food (#0f0d0e), Acentos Crimson Red (#dc2626), Warm Terracotta Amber (#ea580c / #f59e0b).',
+      typography: 'Títulos em Cabinet Grotesk / Outfit e corpo em Inter.',
+      badgeStyle: 'bg-amber-500/10 border-amber-500/30 text-amber-400',
+      bgGradient: 'from-red-950/20 via-slate-950 to-amber-950/30',
+      accentGlow: 'shadow-red-500/30'
+    };
+  }
+
+  // 7. ACADEMIA / FITNESS / ESPORTES
+  if (
+    context.includes('fit') ||
+    context.includes('acad') ||
+    context.includes('cross') ||
+    context.includes('trein') ||
+    context.includes('espor') ||
+    context.includes('nutr')
+  ) {
+    return {
+      name: 'High Energy Volt & Nitro Carbon',
+      visualStyle: 'De Alta Energia, Dinâmico e Impactante com linhas diagonais, tipografia de grande porte e contraste elétrico.',
+      colorPalette: 'Base Nitro Carbon (#090a0f), Acentos Electric Lime Volt (#84cc16), Vibrant Orange (#f97316) e Pure White.',
+      typography: 'Títulos imponentes em Red Hat Display / Archivo e corpo em Inter.',
+      badgeStyle: 'bg-lime-500/10 border-lime-500/30 text-lime-400',
+      bgGradient: 'from-lime-950/20 via-slate-950 to-orange-950/20',
+      accentGlow: 'shadow-lime-500/30'
+    };
+  }
+
+  // 8. TEMA PADRÃO UNIVERSAL
+  return {
+    name: 'Universal Quantum Glassmorphism',
+    visualStyle: 'Ultra Moderno, Fluido, de Alta Conversão com Glassmorphism em multicamadas, bordas glowing e acabamento internacional.',
+    colorPalette: 'Base Space Dark (#030712 / #0b0f19), Acentos Vibrant Purple (#a855f7), Electric Indigo (#6366f1) e Emerald Glow (#10b981) para CTAs.',
+    typography: 'Títulos em Plus Jakarta Sans (bold) e corpo em Inter com espaçamento confortável.',
+    badgeStyle: 'bg-purple-500/10 border-purple-500/30 text-purple-300',
+    bgGradient: 'from-purple-950/30 via-slate-950 to-indigo-950/30',
+    accentGlow: 'shadow-purple-500/30'
+  };
+}
+
+/**
+ * Sanitiza e formata o bloco <footer> para garantir que o elemento <footer ...>
+ * expanda por 100% da largura da tela (w-full) sem estar limitado por max-width
+ * ou containers restritivos da página.
+ */
+export function fixFooterClasses(footerHtml: string): string {
+  if (!footerHtml || typeof footerHtml !== 'string') return footerHtml || '';
+
+  let sanitized = footerHtml.trim();
+
+  // 1. Sanitizar as classes diretamente da tag <footer ...> inicial
+  sanitized = sanitized.replace(/<footer\b([^>]*)>/i, (fullMatch, attrString) => {
+    let classMatch = attrString.match(/class=["']([^"']*)["']/i);
+    let classes = classMatch ? classMatch[1] : '';
+
+    // Remover classes de limitação de largura e alinhamento do elemento <footer ...> raiz
+    classes = classes
+      .replace(/\bmax-w-(?:xs|sm|md|lg|xl|2xl|3xl|4xl|5xl|6xl|7xl|full|prose|screen-\w+)\b/g, '')
+      .replace(/\bcontainer\b/g, '')
+      .replace(/\bmx-auto\b/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if (!classes.includes('w-full')) classes += ' w-full';
+    if (!classes.includes('relative')) classes += ' relative';
+    if (!classes.includes('z-10')) classes += ' z-10';
+
+    if (classMatch) {
+      attrString = attrString.replace(/class=["'][^"']*["']/i, `class="${classes.trim()}"`);
+    } else {
+      attrString += ` class="${classes.trim()}"`;
+    }
+
+    return `<footer ${attrString.trim()}>`;
+  });
+
+  // 2. Garantir que o conteúdo interno possua um container de alinhamento max-w-7xl mx-auto
+  const footerContentMatch = sanitized.match(/^<footer\b[^>]*>([\s\S]*)<\/footer>$/i);
+  if (footerContentMatch) {
+    const innerContent = footerContentMatch[1].trim();
+    // Se o conteúdo interno direto não possui container max-w- nem container, envelopa
+    if (!innerContent.includes('max-w-') && !innerContent.includes('container')) {
+      const openTagMatch = sanitized.match(/^<footer\b[^>]*>/i);
+      const openTag = openTagMatch ? openTagMatch[0] : '<footer class="w-full relative z-10">';
+      sanitized = `${openTag}\n  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">\n    ${innerContent}\n  </div>\n</footer>`;
+    }
+  }
+
+  return sanitized;
+}
+
 /**
  * Garante que a página possua exatamente 1 Navbar/Header no topo e 1 Footer no rodapé,
- * removendo duplicidades acidentais geradas pela IA em subpáginas ou edições.
+ * aplicando com autoridade e precisão a Navbar e o Footer mestres da Home em todas as subpáginas,
+ * reposicionando o Footer obrigatoriamente no nível RAIZ para ocupar 100% da largura.
  */
 export function ensureAndDeduplicateGlobalElements(
   html: string,
   globalNavbarHtml?: string,
-  globalFooterHtml?: string
+  globalFooterHtml?: string,
+  activePageSlug?: string,
+  navigationRoutes?: Array<{ name: string; href: string }>,
+  globalItemsHtml?: string
 ): string {
   if (!html || typeof html !== 'string') return html || '';
   let cleanHtml = html.trim();
 
-  // 1. DEDUPLICAÇÃO E GARANTIA DE NAVBAR / HEADER
   const headerRegex = /<(?:header|nav)\b[^>]*>[\s\S]*?<\/(?:header|nav)>/gi;
-  const headerMatches = [...cleanHtml.matchAll(headerRegex)];
-
-  if (headerMatches.length > 1) {
-    let count = 0;
-    cleanHtml = cleanHtml.replace(headerRegex, (match) => {
-      count++;
-      if (count === 1) return match;
-      return '';
-    });
-  } else if (headerMatches.length === 0 && globalNavbarHtml && globalNavbarHtml.trim()) {
-    cleanHtml = `${globalNavbarHtml.trim()}\n\n${cleanHtml}`;
-  }
-
-  // 2. DEDUPLICAÇÃO E GARANTIA DE FOOTER
   const footerRegex = /<footer\b[^>]*>[\s\S]*?<\/footer>/gi;
-  const footerMatches = [...cleanHtml.matchAll(footerRegex)];
 
-  if (footerMatches.length > 1) {
-    let count = 0;
-    cleanHtml = cleanHtml.replace(footerRegex, (match) => {
-      count++;
-      if (count === 1) return match;
-      return '';
-    });
-  } else if (footerMatches.length === 0 && globalFooterHtml && globalFooterHtml.trim()) {
-    cleanHtml = `${cleanHtml}\n\n${globalFooterHtml.trim()}`;
+  // 1. DEDUPLICAÇÃO E SUBSTITUIÇÃO DA NAVBAR / HEADER
+  if (globalNavbarHtml && globalNavbarHtml.trim().length > 20) {
+    cleanHtml = cleanHtml.replace(headerRegex, '');
+    let navToInsert = globalNavbarHtml.trim();
+    if (activePageSlug) {
+      const slugRegex = new RegExp(`(href=["']${activePageSlug}\\.html["'][^>]*class=["'])([^"']*)`, 'gi');
+      navToInsert = navToInsert.replace(slugRegex, '$1$2 text-purple-300 font-bold ');
+    }
+    cleanHtml = `${navToInsert}\n\n${cleanHtml.trim()}`;
+  } else {
+    const headerMatches = [...cleanHtml.matchAll(headerRegex)];
+    if (headerMatches.length > 1) {
+      let count = 0;
+      cleanHtml = cleanHtml.replace(headerRegex, (match) => {
+        count++;
+        if (count === 1) return match;
+        return '';
+      });
+    }
   }
 
-  // 3. DEDUPLICAÇÃO DE BOTÃO FLUTUANTE DE WHATSAPP
-  const waFloatingRegex = /<a\b[^>]*href=["'][^"']*wa\.me[^"']*["'][^>]*class=["'][^"']*fixed[^"']*["'][^>]*>[\s\S]*?<\/a>/gi;
-  const waMatches = [...cleanHtml.matchAll(waFloatingRegex)];
-  if (waMatches.length > 1) {
-    let count = 0;
+  // 2. DEDUPLICAÇÃO E INSERÇÃO PRECISA DO FOOTER (RODAPÉ 100% FULL-WIDTH RAIZ)
+  // Determinar qual HTML de Footer usar: o mestre global ou o footer local da própria página
+  let targetFooterSource = globalFooterHtml && globalFooterHtml.trim().length > 20
+    ? globalFooterHtml
+    : null;
+
+  if (!targetFooterSource) {
+    const localMatch = cleanHtml.match(footerRegex);
+    if (localMatch && localMatch[0].length > 20) {
+      targetFooterSource = localMatch[0];
+    }
+  }
+
+  if (targetFooterSource && targetFooterSource.trim().length > 20) {
+    // A) Remover TODAS as ocorrências locais de footer para desanexá-lo de seções contêineres restritivas
+    cleanHtml = cleanHtml.replace(footerRegex, '');
+
+    // B) Isolar elementos flutuantes fixos (ex: botão WhatsApp wa.me) para reanexar DEPOIS do footer
+    const waFloatingRegex = /<a\b[^>]*href=["'][^"']*wa\.me[^"']*["'][^>]*class=["'][^"']*fixed[^"']*["'][^>]*>[\s\S]*?<\/a>/gi;
+    const floatingMatches: string[] = [];
     cleanHtml = cleanHtml.replace(waFloatingRegex, (match) => {
-      count++;
-      if (count === 1) return match;
+      floatingMatches.push(match);
       return '';
     });
+
+    // Sanitizar e expandir o footer para 100% da largura da página (w-full)
+    const footerToInsert = fixFooterClasses(targetFooterSource.trim());
+
+    // C) Fechar corretamente as tags de conteúdo <main> caso estejam abertas no final
+    if (cleanHtml.includes('<main') && !cleanHtml.includes('</main>')) {
+      cleanHtml = `${cleanHtml.trim()}\n</main>`;
+    }
+
+    // D) Inserção do Footer no nível RAIZ (FORA de <main> e de qualquer container limitado)
+    if (cleanHtml.includes('</main>')) {
+      const mainEndIndex = cleanHtml.lastIndexOf('</main>');
+      const beforeMainEnd = cleanHtml.substring(0, mainEndIndex + 7);
+      const afterMainEnd = cleanHtml.substring(mainEndIndex + 7);
+      cleanHtml = `${beforeMainEnd.trim()}\n\n${footerToInsert}\n\n${afterMainEnd.trim()}`;
+    } else {
+      cleanHtml = `${cleanHtml.trim()}\n\n${footerToInsert}`;
+    }
+
+    // E) Reanexar ou Inserir os elementos flutuantes/globais (ex: botão WhatsApp, badge de status) após o footer
+    if (globalItemsHtml && globalItemsHtml.trim().length > 10) {
+      cleanHtml = cleanHtml.replace(/<div\b[^>]*id=["']global-floating-widgets["'][^>]*>[\s\S]*?<\/div>/gi, '');
+      cleanHtml = `${cleanHtml.trim()}\n\n${globalItemsHtml.trim()}`;
+    } else if (floatingMatches.length > 0) {
+      cleanHtml = `${cleanHtml.trim()}\n\n${floatingMatches.join('\n')}`;
+    }
+  } else {
+    const footerMatches = [...cleanHtml.matchAll(footerRegex)];
+    if (footerMatches.length > 1) {
+      let count = 0;
+      cleanHtml = cleanHtml.replace(footerRegex, (match) => {
+        count++;
+        if (count === 1) return match;
+        return '';
+      });
+    }
+    if (globalItemsHtml && globalItemsHtml.trim().length > 10 && !cleanHtml.includes('id="global-floating-widgets"') && !cleanHtml.includes('global-floating-widgets')) {
+      cleanHtml = `${cleanHtml.trim()}\n\n${globalItemsHtml.trim()}`;
+    }
+  }
+
+  // Sanitizar links para garantir que nenhum leve a arquivos .html que não existem no projeto
+  if (navigationRoutes && Array.isArray(navigationRoutes)) {
+    cleanHtml = sanitizeNavLinks(cleanHtml, navigationRoutes, activePageSlug || 'index');
   }
 
   return cleanHtml;
@@ -1035,7 +1954,7 @@ export async function processCustomRemasterGenerationJob(
       console.warn('[Remaster] Erro ao reprocessar assets da home gerada:', e);
     }
 
-    finalHomeHtml = ensureAndDeduplicateGlobalElements(finalHomeHtml);
+    finalHomeHtml = ensureAndDeduplicateGlobalElements(finalHomeHtml, undefined, undefined, 'index', allNavigationRoutes);
 
     await prisma.page.update({
       where: { id: homePage.dbId },
@@ -1046,7 +1965,7 @@ export async function processCustomRemasterGenerationJob(
       }
     });
 
-    const { navbarHtml, footerHtml } = extractNavbarAndFooter(finalHomeHtml);
+    const { navbarHtml, footerHtml } = extractNavbarAndFooter(finalHomeHtml, businessName, allNavigationRoutes);
     const globalCss = homeAiResponse.css || '';
     const globalJs = homeAiResponse.js || '';
 
@@ -1113,7 +2032,7 @@ export async function processCustomRemasterGenerationJob(
           console.warn(`[Remaster] Erro ao reprocessar assets da subpágina ${sub.name}:`, e);
         }
 
-        finalSubHtml = ensureAndDeduplicateGlobalElements(finalSubHtml, navbarHtml, footerHtml);
+        finalSubHtml = ensureAndDeduplicateGlobalElements(finalSubHtml, navbarHtml, footerHtml, sub.slug, allNavigationRoutes);
 
         await prisma.page.update({
           where: { id: sub.dbId },

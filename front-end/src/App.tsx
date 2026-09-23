@@ -115,16 +115,14 @@ const MainApp: React.FC = () => {
     );
   }
 
-  // Se não autenticado, injeta o GlobalLayout na tela de login/cadastro
+  // Se não autenticado, renderiza a tela de login/cadastro diretamente sem footer ou elementos do sistema
   if (!isAuthenticated) {
     return (
-      <GlobalLayout currentRoute={{ type: 'auth' }} onNavigate={navigate}>
-        <AuthPage
-          onSuccess={() => {
-            navigate({ type: 'dashboard', tab: 'general' });
-          }}
-        />
-      </GlobalLayout>
+      <AuthPage
+        onSuccess={() => {
+          navigate({ type: 'dashboard', tab: 'general' });
+        }}
+      />
     );
   }
 

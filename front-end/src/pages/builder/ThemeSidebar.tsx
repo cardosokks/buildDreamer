@@ -1,10 +1,14 @@
 import React, { useState } from 'react';
-import { Palette, Type, Sliders, Check, Sparkles, X, RefreshCw } from 'lucide-react';
+import { Palette, Type, Sliders, Check, Sparkles, X, RefreshCw, Wand2, Loader2, Info } from 'lucide-react';
+import { ThemeSuggestionCard, ThemeSuggestion } from '../../components/ThemeSuggestionCard';
+import { API_URL } from '../../config';
 
 interface ThemeSidebarProps {
   css: string;
   onCssChange: (newCss: string) => void;
   onClose: () => void;
+  projectId?: string;
+  onGlobalElementsUpdated?: () => void;
 }
 
 interface ColorPreset {
@@ -85,7 +89,9 @@ const FONT_PRESETS = [
 export const ThemeSidebar: React.FC<ThemeSidebarProps> = ({
   css,
   onCssChange,
-  onClose
+  onClose,
+  projectId,
+  onGlobalElementsUpdated
 }) => {
   const [selectedPreset, setSelectedPreset] = useState<string | null>(null);
   const [bodyBg, setBodyBg] = useState('#090d16');
@@ -95,6 +101,96 @@ export const ThemeSidebar: React.FC<ThemeSidebarProps> = ({
   const [bodyFont, setBodyFont] = useState("'Plus Jakarta Sans', sans-serif");
   const [headingFont, setHeadingFont] = useState("'Syne', sans-serif");
   const [borderRadius, setBorderRadius] = useState('0.75rem');
+
+  // AI Theme Suggestion State
+  const [suggestedTheme, setSuggestedTheme] = useState<ThemeSuggestion | null>(null);
+  const [isSuggestingTheme, setIsSuggestingTheme] = useState(false);
+  const [themeApplied, setThemeApplied] = useState(false);
+  const [industryInput, setIndustryInput] = useState('');
+  const [toneInput, setToneInput] = useState('');
+
+  // Sincronização dos Elementos Globais (Navbar, Footer e Widgets) com o Tema Proposto
+  const [isRegeneratingGlobal, setIsRegeneratingGlobal] = useState(false);
+  const [globalSuccessMsg, setGlobalSuccessMsg] = useState<string | null>(null);
+
+  const handleRegenerateGlobalElements = async () => {
+    if (!projectId) return;
+    setIsRegeneratingGlobal(true);
+    setGlobalSuccessMsg(null);
+    try {
+      const res = await fetch(`${API_URL}/api/ai/generate-global-elements`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId,
+          theme: {
+            bg: bodyBg,
+            textColor: bodyText,
+            primary: primaryColor,
+            accent: accentColor,
+            cardBg: bodyBg === '#ffffff' ? '#f1f5f9' : '#111827',
+            secondary: accentColor,
+            textMuted: bodyBg === '#ffffff' ? '#64748b' : '#94a3b8'
+          }
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setGlobalSuccessMsg('Navbar, Footer e Itens Globais sincronizados no tema com sucesso!');
+        onGlobalElementsUpdated?.();
+        setTimeout(() => setGlobalSuccessMsg(null), 4000);
+      }
+    } catch (err) {
+      console.error('Erro ao sincronizar elementos globais no tema:', err);
+    } finally {
+      setIsRegeneratingGlobal(false);
+    }
+  };
+
+  const handleRequestAITheme = async () => {
+    setIsSuggestingTheme(true);
+    setThemeApplied(false);
+    try {
+      const res = await fetch(`${API_URL}/api/ai/suggest-theme`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          industry: industryInput.trim() || 'Serviços Profissionais / Tecnologia',
+          tone: toneInput.trim() || 'Moderno e Elegante',
+          mission: 'Criar uma presença digital marcante com alta conversão.'
+        })
+      });
+      const data = await res.json();
+      if (data.success && data.theme) {
+        setSuggestedTheme(data.theme);
+      }
+    } catch (err) {
+      console.error('Erro ao gerar tema com IA no ThemeSidebar:', err);
+    } finally {
+      setIsSuggestingTheme(false);
+    }
+  };
+
+  const handleApplyAITheme = (theme: ThemeSuggestion) => {
+    const bg = theme.colorPalette.bg || '#090d16';
+    const text = theme.colorPalette.textColor || '#f8fafc';
+    const primary = theme.colorPalette.primary || '#a855f7';
+    const accent = theme.colorPalette.accent || '#ec4899';
+    const bFont = `'${theme.typography.bodyFont}', sans-serif`;
+    const hFont = `'${theme.typography.headingFont}', sans-serif`;
+    const radius = theme.designTokens?.borderRadius === 'rounded-xl' ? '0.75rem' : '1rem';
+
+    setBodyBg(bg);
+    setBodyText(text);
+    setPrimaryColor(primary);
+    setAccentColor(accent);
+    setBodyFont(bFont);
+    setHeadingFont(hFont);
+    setBorderRadius(radius);
+    setThemeApplied(true);
+
+    applyThemeToCss(bg, text, primary, accent, bFont, hFont, radius);
+  };
 
   const applyThemeToCss = (
     bg: string,
@@ -190,6 +286,71 @@ h1, h2, h3, h4, h5, h6 {
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-6">
+        {/* GERADOR DE TEMAS POR IA */}
+        <div className="p-3.5 bg-gradient-to-b from-purple-950/40 via-slate-900/60 to-slate-950 border border-purple-500/30 rounded-2xl space-y-3 shadow-xl">
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+              <Wand2 className="w-4 h-4 text-purple-400 animate-pulse" />
+              Sugerir Tema com IA
+            </label>
+            <span className="text-[10px] bg-purple-500/20 text-purple-300 font-bold px-2 py-0.5 rounded-full border border-purple-500/30">
+              Análise de Nicho
+            </span>
+          </div>
+
+          <p className="text-[11px] text-slate-400 leading-relaxed">
+            Informe o segmento ou tom de voz da empresa para a IA sintetizar a paleta e tipografia sob medida:
+          </p>
+
+          <div className="space-y-2">
+            <input
+              type="text"
+              value={industryInput}
+              onChange={(e) => setIndustryInput(e.target.value)}
+              placeholder="Indústria/Nicho (ex: Advocacia, Odontologia, Restaurante)..."
+              className="w-full bg-slate-950 border border-slate-800 focus:border-purple-500 rounded-xl px-3 py-1.5 text-xs text-white placeholder-slate-600 focus:outline-none"
+            />
+            <input
+              type="text"
+              value={toneInput}
+              onChange={(e) => setToneInput(e.target.value)}
+              placeholder="Tom de voz (ex: Sóbrio, Marcante, Minimalista)..."
+              className="w-full bg-slate-950 border border-slate-800 focus:border-purple-500 rounded-xl px-3 py-1.5 text-xs text-white placeholder-slate-600 focus:outline-none"
+            />
+            <button
+              type="button"
+              onClick={handleRequestAITheme}
+              disabled={isSuggestingTheme}
+              className="w-full py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-lg shadow-purple-950/50 transition-all cursor-pointer disabled:opacity-50 hover:scale-[1.01]"
+            >
+              {isSuggestingTheme ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Sintetizando Tema & Tipografia...</span>
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Gerar Sugestão de Tema com IA</span>
+                </>
+              )}
+            </button>
+          </div>
+
+          {/* Renderização do Card de Sugestão de Tema */}
+          {suggestedTheme && (
+            <div className="pt-2">
+              <ThemeSuggestionCard
+                theme={suggestedTheme}
+                onApply={handleApplyAITheme}
+                onRegenerate={handleRequestAITheme}
+                isGenerating={isSuggestingTheme}
+                applied={themeApplied}
+              />
+            </div>
+          )}
+        </div>
+
         {/* Presets de Cores Prontos */}
         <div>
           <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block mb-3 flex items-center gap-1.5">
@@ -364,6 +525,42 @@ h1, h2, h3, h4, h5, h6 {
             ))}
           </div>
         </div>
+
+        {/* Sincronizar Elementos Globais com o Tema Atual */}
+        {projectId && (
+          <div className="pt-3 border-t border-slate-900 space-y-2.5">
+            <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block flex items-center gap-1.5">
+              <RefreshCw className="w-3.5 h-3.5 text-emerald-400" />
+              Elementos Globais do Site
+            </label>
+            <p className="text-[11px] text-slate-400 leading-relaxed">
+              Gera a <strong>Navbar</strong>, o <strong>Footer</strong> e os <strong>Widgets globais</strong> (botão WhatsApp, status comercial) em requisições separadas alinhadas a este tema.
+            </p>
+            <button
+              onClick={handleRegenerateGlobalElements}
+              disabled={isRegeneratingGlobal}
+              className="w-full py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/50 transition-all cursor-pointer disabled:opacity-50 hover:scale-[1.01]"
+            >
+              {isRegeneratingGlobal ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Sincronizando Navbar, Footer & Widgets...</span>
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-200" />
+                  <span>Aplicar Tema em Navbar & Footer</span>
+                </>
+              )}
+            </button>
+            {globalSuccessMsg && (
+              <div className="p-2.5 rounded-xl bg-emerald-950/40 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-2 animate-in fade-in duration-300">
+                <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>{globalSuccessMsg}</span>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </aside>
   );

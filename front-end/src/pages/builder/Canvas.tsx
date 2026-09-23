@@ -801,35 +801,11 @@ export const Canvas: React.FC<CanvasProps> = ({
           }
 
           if (typeof msg.data.js === 'string' && msg.data.js.trim()) {
-            try {
-              new Function(msg.data.js)();
-            } catch (err) {
-              console.warn('Erro ao executar script atualizado:', err);
-            }
+            runUserScriptSafely(msg.data.js);
           }
 
           // Re-initialize dynamic icons and plugins
-          setTimeout(function() {
-            if (window.lucide) { try { lucide.createIcons(); } catch(e){} }
-            if (typeof Swiper !== 'undefined' && document.querySelector('.maps-reviews-swiper')) {
-              try {
-                new Swiper('.maps-reviews-swiper', {
-                  effect: 'cards',
-                  grabCursor: true,
-                  pagination: { el: '.swiper-pagination', clickable: true },
-                  autoplay: { delay: 4000, disableOnInteraction: false }
-                });
-              } catch(e){}
-            }
-            if (typeof gsap !== 'undefined' && typeof ScrollTrigger !== 'undefined') {
-              try {
-                gsap.registerPlugin(ScrollTrigger);
-                gsap.utils.toArray('.gsap-reveal').forEach(function(el) {
-                  gsap.from(el, { opacity: 0, y: 35, duration: 0.8, ease: 'power2.out', scrollTrigger: { trigger: el, start: 'top 85%' } });
-                });
-              } catch(e){}
-            }
-          }, 100);
+          refreshInteractivePlugins();
 
           window.scrollTo(scrollX, scrollY);
 
@@ -895,34 +871,53 @@ export const Canvas: React.FC<CanvasProps> = ({
         }
       });
 
-      try {
-        ${rawJs}
-      } catch (err) {
-        console.warn('Erro na execução do script personalizado:', err);
+      // Shared runner for user JS that handles DOMContentLoaded shims and plugin refreshes
+      function runUserScriptSafely(code) {
+        if (!code || !code.trim()) return;
+        try {
+          const shim = 'const _origAdd = document.addEventListener.bind(document);' +
+            'document.addEventListener = function(type, listener, options) {' +
+            '  if ((type === "DOMContentLoaded" || type === "load") && (document.readyState === "interactive" || document.readyState === "complete")) {' +
+            '    try { setTimeout(function() { listener(new Event(type)); }, 10); } catch(e){}' +
+            '    return;' +
+            '  }' +
+            '  return _origAdd(type, listener, options);' +
+            '};';
+          new Function(shim + '\n try {\n' + code + '\n} catch(e) { console.warn("Aviso script:", e); }')();
+        } catch (err) {
+          console.warn('Erro ao executar script do usuário:', err);
+        }
       }
 
+      function refreshInteractivePlugins() {
+        setTimeout(function() {
+          if (window.lucide) { try { lucide.createIcons(); } catch(e){} }
+          if (typeof Swiper !== 'undefined' && document.querySelector('.maps-reviews-swiper')) {
+            try {
+              new Swiper('.maps-reviews-swiper', {
+                effect: 'cards',
+                grabCursor: true,
+                pagination: { el: '.swiper-pagination', clickable: true },
+                autoplay: { delay: 4000, disableOnInteraction: false }
+              });
+            } catch(e){}
+          }
+          if (typeof gsap !== 'undefined' && typeof ScrollTrigger !== 'undefined') {
+            try {
+              gsap.registerPlugin(ScrollTrigger);
+              gsap.utils.toArray('.gsap-reveal').forEach(function(el) {
+                gsap.from(el, { opacity: 0, y: 35, duration: 0.8, ease: 'power2.out', scrollTrigger: { trigger: el, start: 'top 85%' } });
+              });
+              ScrollTrigger.refresh();
+            } catch(e){}
+          }
+        }, 150);
+      }
+
+      runUserScriptSafely(${JSON.stringify(rawJs)});
+
       // Auto-initialize canvas dynamic features
-      setTimeout(function() {
-        if (window.lucide) { try { lucide.createIcons(); } catch(e){} }
-        if (typeof Swiper !== 'undefined' && document.querySelector('.maps-reviews-swiper')) {
-          try {
-            new Swiper('.maps-reviews-swiper', {
-              effect: 'cards',
-              grabCursor: true,
-              pagination: { el: '.swiper-pagination', clickable: true },
-              autoplay: { delay: 4000, disableOnInteraction: false }
-            });
-          } catch(e){}
-        }
-        if (typeof gsap !== 'undefined' && typeof ScrollTrigger !== 'undefined') {
-          try {
-            gsap.registerPlugin(ScrollTrigger);
-            gsap.utils.toArray('.gsap-reveal').forEach(function(el) {
-              gsap.from(el, { opacity: 0, y: 35, duration: 0.8, ease: 'power2.out', scrollTrigger: { trigger: el, start: 'top 85%' } });
-            });
-          } catch(e){}
-        }
-      }, 300);
+      refreshInteractivePlugins();
       try { window.parent.postMessage({ type: 'CANVAS_READY' }, '*'); } catch(e){}
     })();
   </script>

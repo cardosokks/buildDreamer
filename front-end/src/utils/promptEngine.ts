@@ -132,6 +132,13 @@ export const DIGITAL_DESIGN_SOLUTIONS: DigitalFeatureOption[] = [
 
 export const VISUAL_STYLE_PRESETS = [
   {
+    id: 'ai_smart_adaptive',
+    name: '✨ IA Autônoma & Paleta Dinâmica Customizada',
+    tagline: 'A IA analisa a proposta do cliente para criar uma paleta de cores, tema e tecnologias 100% sob medida',
+    previewColors: ['#3b82f6', '#8b5cf6', '#ec4899', '#10b981'],
+    description: 'A inteligência artificial analisa a marca, nicho, proposta e público do cliente para construir dinamicamente a paleta de cores, tipografia, atmosfera e tecnologias de UI ideais.'
+  },
+  {
     id: 'dark_cyber_luxury',
     name: 'Dark Luxury & Neon Glow',
     tagline: 'Obsidiana profunda, roxo e ciano néon, glassmorphism sofisticado',
@@ -368,9 +375,13 @@ PASSO 1: IDENTIDADE DA MARCA, DADOS DO CLIENTE & PALETA VISUAL EXCLUSIVA
   • Website / Domínio: "${leadInfo?.website || 'Disponível no site'}"
 
 - DIRETRIZES DE DESIGN SYSTEM & PALETA DE CORES (100% PERSONALIZADA PELA IA):
-  • Estilo Visual Solicitado: "${visualStyle || 'Ultra Moderno, Tecnológico e Persuasivo'}"
+  • Estilo Visual Solicitado: "${visualStyle || '✨ IA Autônoma & Paleta Dinâmica Customizada'}"
   • Cores & Atmosfera: "${colorPalette || 'Paleta refinada sob medida com contraste nítido, sombras suaves e detalhes luminosos'}"
-  • Tipografia Google Fonts: Plus Jakarta Sans para títulos impactantes e Inter / Plus Jakarta Sans para leitura clara no corpo.
+  • MODO IA AUTÔNOMA (MONTAGEM DINÂMICA DE PALETA & TECNOLOGIAS):
+    - Analise profundamente o cliente "${businessName}", nicho "${segment}" e os dados fornecidos.
+    - SINTETIZE UMA PALETA DE CORES DEDICADA, ATMOSFERA E SELEÇÃO DE TIPOGRAFIA (Google Fonts) perfeitamente alinhadas à psicologia das cores do segmento do cliente.
+    - SELECIONE E COMBINE AS MELHORES TECNOLOGIAS DE UI (ex: Swiper 3D, GSAP ScrollTrigger, Spline Viewer 3D, Status comercial dinâmico em tempo real, Widget WhatsApp, Bento Grid, Comparador Antes e Depois) de acordo com os objetivos e proposta do cliente.
+  • Tipografia Google Fonts: Plus Jakarta Sans / Syne para títulos impactantes e Inter / Plus Jakarta Sans para leitura clara no corpo.
   • É ESTRITAMENTE PROIBIDO utilizar templates genéricos, cores desbotadas ou layouts ultrapassados! Entregue uma experiência visual digna das melhores agências de design do mundo (Awwwards / Webflow Showcase).
 
 PASSO 2: ARQUITETURA MULTI-PÁGINAS INTEGRADA COM ELEMENTOS GLOBAIS
@@ -410,8 +421,14 @@ PASSO 3: MOTOR DE RECURSOS DE DESIGN & SOLUÇÕES DIGITAIS DE PONTA
   • SaaS Mockup Showcase: Headline clara focada em resolver dores, CTAs duplos e preview interativo de interface (mockup com abas ou navegador estilizado).
   `}
 
-- TRANSIÇÕES DE SEÇÃO (ANTI-LAYOUT QUADRADO): [${sectionTransitions.toUpperCase()}]
-  • Alterne as seções utilizando divisores em Ondas SVG orgânicas, Cortes Diagonais modernos (Slants), Cartões Flutuantes Sobrepostos cruzando a fronteira de seções (-mt-14 relative z-20) e Linhas Néon com Glow.
+- DIRETRIZ MANDATÓRIA DE ANTI-LAYOUT RETO EM 100% DAS SEÇÕES:
+  • É ESTRITAMENTE PROIBIDO criar seções com divisões quadradas, retas ou blocos planos simples!
+  • CADA UMA DAS SEÇÕES DO SITE (Hero, Benefícios, Sobre Nós, Serviços, Recursos, Depoimentos, Tabela de Preços, FAQ, CTA, Rodapé, etc.) DEVE OBRIGATORIAMENTE possuir elementos de quebra de layout reto:
+    1. Divisores de Seção em Ondas SVG orgânicas ou curvas fluidas entre tons de fundo.
+    2. Cortes Diagonais Assimétricos (Slants com transform-skew ou clip-path).
+    3. Cards, estatísticas e containers flutuantes sobrepostos que cruzam a margem entre seções (ex: -mt-12 sm:-mt-20 relative z-20 shadow-2xl rounded-3xl).
+    4. Módulos Bento Grid com cantos arredondados expressivos (rounded-2xl / rounded-3xl), iluminação radial de fundo (radial gradient glows) e bordas luminosas.
+  • Garanta que o efeito de quebra de linha reta seja visível e contínuo do topo ao rodapé do site.
 
 ------------------------------------------------------------------------------
 CDNS E BIBLIOTECAS OBRIGATÓRIAS NO <head> (INCLUÍDAS PELA PLATAFORMA):
@@ -424,6 +441,17 @@ CDNS E BIBLIOTECAS OBRIGATÓRIAS NO <head> (INCLUÍDAS PELA PLATAFORMA):
 - Swiper.js 11: Sliders e Carrosséis 3D (swiper-bundle.min.js & swiper-bundle.min.css).
 - Spline Viewer 3D: <script type="module" src="https://unpkg.com/@splinetool/viewer/build/spline-viewer.js"></script>
 - Canvas Confetti: <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js"></script>
+
+------------------------------------------------------------------------------
+PASSO 4: CONTRATO RIGOROSO DE SAÍDA JSON (HTML, CSS E JS SEPARADOS):
+------------------------------------------------------------------------------
+A resposta da IA DEVE ser EXCLUSIVAMENTE um objeto JSON válido no formato abaixo:
+{
+  "html": "<!-- APENAS código HTML semântico com Tailwind CSS. NUNCA insira tags <style> ou <script> dentro do HTML. Insira a classe 'gsap-reveal' nos blocos para animação de scroll. -->",
+  "css": "/* Todo CSS customizado, animações @keyframes, variáveis, glassmorphism e efeitos luminosos separados aqui. NUNCA coloque tags <style>. */",
+  "js": "// Todo JavaScript funcional interativo separado aqui. NUNCA coloque tags <script>. Inclua código funcional para: (1) Animações GSAP ScrollTrigger para elementos .gsap-reveal; (2) Sliders 3D Swiper.js; (3) Ícones Lucide (lucide.createIcons()); (4) Menu mobile responsivo; (5) FAQ accordions; (6) Contadores numéricos animados; (7) Confetti em envios de formulário. REGRA DE OURO: Execute imediatamente se document.readyState !== 'loading' para garantir animações ativas no canvas.",
+  "explanation": "Resumo objetivo das páginas, paleta e soluções de animação aplicadas."
+}
 
 ------------------------------------------------------------------------------
 INSTRUÇÕES ESPECÍFICAS ADICIONAIS:

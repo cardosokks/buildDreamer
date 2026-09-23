@@ -9,7 +9,8 @@ import {
   detectMedia,
   extractAndBundlePageComponents,
   extractNavbarAndFooter,
-  ensureAndDeduplicateGlobalElements
+  ensureAndDeduplicateGlobalElements,
+  generateGlobalThemeElements
 } from '../services/siteRemaster';
 import { projectJobsQueue } from './projects';
 import { prisma } from '../db';
@@ -93,11 +94,27 @@ async function processAIChatJob(
       projectId: page.projectId
     };
 
-    // Buscar Home do projeto para reutilizar ou verificar Navbar/Footer
+    // Buscar Home e páginas do projeto para reutilizar ou verificar Navbar/Footer com rotas reais
     const homePage = await prisma.page.findFirst({
       where: { projectId: page.projectId, isHomepage: true }
     }) || page;
-    const { navbarHtml, footerHtml } = extractNavbarAndFooter(homePage.html || '');
+    const projectInfo = await prisma.project.findUnique({
+      where: { id: page.projectId },
+      include: { pages: true }
+    });
+
+    const navigationRoutes = projectInfo?.pages?.map(p => ({
+      name: p.name,
+      href: p.isHomepage ? 'index.html' : `${p.slug}.html`
+    })) || [{ name: 'Início', href: 'index.html' }];
+
+    const { navbarHtml, footerHtml } = extractNavbarAndFooter(
+      homePage.html || '',
+      projectInfo?.name || 'Empresa',
+      navigationRoutes,
+      { phone: projectInfo?.contacts, email: projectInfo?.email },
+      projectInfo?.colorPalette
+    );
 
     if (isMultiPage) {
       const updatedPages: Array<{ id: string; name: string; slug: string; html: string; css: string; js: string }> = [];
@@ -125,7 +142,7 @@ async function processAIChatJob(
           }
         });
 
-        const sanitizedHtml = ensureAndDeduplicateGlobalElements(res.html, navbarHtml, footerHtml);
+        const sanitizedHtml = ensureAndDeduplicateGlobalElements(res.html, navbarHtml, footerHtml, currentPage.slug, navigationRoutes);
 
         await prisma.page.update({
           where: { id: currentPage.id },
@@ -181,7 +198,7 @@ async function processAIChatJob(
         }
       });
 
-      const sanitizedHtml = ensureAndDeduplicateGlobalElements(result.html, navbarHtml, footerHtml);
+      const sanitizedHtml = ensureAndDeduplicateGlobalElements(result.html, navbarHtml, footerHtml, page.slug, navigationRoutes);
 
       await prisma.page.update({
         where: { id: page.id },
@@ -415,7 +432,13 @@ router.post('/generate-page', async (req: AuthenticatedRequest, res: any) => {
     let globalJs = '';
 
     if (homePage?.html) {
-      const extracted = extractNavbarAndFooter(homePage.html);
+      const extracted = extractNavbarAndFooter(
+        homePage.html,
+        project?.name || 'Empresa',
+        undefined,
+        { phone: project?.contacts, email: project?.email },
+        project?.colorPalette
+      );
       navbarHtml = extracted.navbarHtml;
       footerHtml = extracted.footerHtml;
       globalCss = homePage.css || '';
@@ -439,9 +462,9 @@ Sua tarefa é criar a subpágina "${pageName}" (slug: ${pageSlug}) com nível de
 TEMA E OBJETIVO DA PÁGINA:
 ${prompt}
 
-DIRETRIZES DE DESIGN SYSTEM & DINÂMICA DE SEÇÃO (ANTI-QUADRADO):
+DIRETRIZES DE DESIGN SYSTEM & DINÂMICA DE SEÇÃO (ANTI-LAYOUT RETO EM TODAS AS SEÇÕES):
 1. Mantenha a mesma identidade visual, paleta de cores e tipografia de alto padrão da página principal.
-2. TRANSIÇÕES DE SEÇÃO DINÂMICAS: NUNCA crie blocos retangulares planos e quadrados retos. Insira divisores SVG de transição orgânica (ondas, cortes diagonais slants ou curvas) e elementos flutuantes sobrepostos (-mt-12 relative z-20) entre seções de cores de fundo diferentes.
+2. ANTI-LAYOUT RETO EM 100% DAS SEÇÕES: NUNCA crie seções retangulares planas com cortes retos planos! CADA UMA DAS SEÇÕES (Hero, Recursos, Sobre, Serviços, Depoimentos, Tabela de Preços, FAQ, CTA, Rodapé) DEVE OBRIGATORIAMENTE conter elementos de quebra de layout reto: divisores SVG de transição orgânica (ondas "wave", cortes diagonais slants ou curvas fluídas), cartões flutuantes sobrepostos que cruzam a margem entre seções (-mt-12 sm:-mt-20 relative z-20) e Bento Grids com cantos arredondados (rounded-2xl/3xl) e luzes radiais em gradiente.
 3. NAVBAR E FOOTER:
 ${navbarHtml ? `Utilize a estrutura de Navbar padronizada abaixo (destaque o link "${pageName}" como ativo):\n${navbarHtml}\n` : 'Crie um Header/Navbar moderno com links para as páginas.'}
 ${footerHtml ? `Utilize o Footer padronizado abaixo:\n${footerHtml}\n` : 'Crie um Footer completo multicolunas.'}
@@ -640,6 +663,305 @@ Retorne EXATAMENTE no formato JSON:
   } catch (err: any) {
     console.error('Erro no planejamento de site por IA:', err);
     return res.status(500).json({ error: err.message || 'Erro ao realizar o planejamento por IA.' });
+  }
+});
+
+// POST /api/ai/suggest-theme - Sistema de Sugestão de Temas, Paleta de Cores e Tipografia por IA
+router.post('/suggest-theme', async (req: AuthenticatedRequest, res: any) => {
+  try {
+    const { industry, tone, mission, companyName, description } = req.body;
+
+    const provider = (req.headers['x-ai-provider'] as string) || 'gemini';
+    const customApiKey = decodeHeader(req.headers['x-ai-api-key']);
+    const customModel = decodeHeader(req.headers['x-ai-model']);
+
+    const resolvedIndustry = (industry || companyName || 'Tecnologia / Serviços').trim();
+    const resolvedTone = (tone || 'Profissional e Inovador').trim();
+    const resolvedMission = (mission || description || 'Oferecer soluções de alta qualidade com foco na excelência e na melhor experiência para o cliente.').trim();
+    const resolvedName = (companyName || 'Sua Empresa').trim();
+
+    const promptTheme = `
+Você é um Diretor de Arte Sênior, Especialista em Design Systems, Teoria das Cores e Tipografia Editorial para a Web.
+Sua missão é analisar o conteúdo fornecido de um projeto/empresa e SUGERIR UM TEMA VISUAL COMPLETO, INCLUINDO PALETA DE CORES EXCLUSIVA E PAR TIPOGRÁFICO DO GOOGLE FONTS.
+
+DADOS DA EMPRESA E CONTEÚDO:
+- Nome da Empresa: "${resolvedName}"
+- Indústria / Segmento: "${resolvedIndustry}"
+- Tom de Voz / Estilo Solicitado: "${resolvedTone}"
+- Missão / Proposta de Valor / Descrição: "${resolvedMission}"
+
+INSTRUÇÕES DE ANÁLISE:
+1. Analise a psicologia das cores ideal para o nicho "${resolvedIndustry}" combinada com o tom de voz "${resolvedTone}".
+2. Crie uma paleta harmônica de 6 cores em HEX:
+   - Primary: Cor de destaque principal (buttons CTAs, links principais).
+   - Secondary: Cor complementar de suporte (badges, iluminação secundária).
+   - Accent: Cor de brilho/glow para elementos interativos.
+   - Background (bg): Cor de fundo do site (pode ser dark em tom ardósia/obsidian ou light limpo).
+   - Surface (cardBg): Cor de fundo de cards e contêineres.
+   - Text (textColor): Cor principal de texto (alto contraste contra o bg).
+   - TextMuted: Cor de texto secundário/subtítulos.
+3. Escolha uma combinação de DUAS FONTES do Google Fonts perfeitamente harmonizadas:
+   - HeadingFont: Fonte para títulos imponentes (ex: 'Plus Jakarta Sans', 'Playfair Display', 'Space Grotesk', 'Outfit', 'Cinzel', 'Montserrat', 'Syne', 'Cabinet Grotesk', 'Inter', 'Oswald').
+   - BodyFont: Fonte de alta legibilidade para parágrafos (ex: 'Inter', 'Plus Jakarta Sans', 'Roboto', 'Outfit').
+   - GoogleFontsUrl: Link oficial do Google Fonts para importar ambas as fontes (ex: 'https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=Inter:wght@400;500;600;700&display=swap').
+4. Defina Tokens de Design (borderRadius, glassmorphism, buttonGlow, badgeStyle).
+5. Forneça um raciocínio detalhado ("reasoning") justificando a escolha das cores e fontes em relação à missão e tom da empresa.
+
+Retorne EXCLUSIVAMENTE um objeto JSON no seguinte formato estrito:
+{
+  "themeName": "Nome Criativo do Tema",
+  "visualStyle": "Descrição concisa do estilo visual e atmosfera",
+  "colorPalette": {
+    "primary": "#hex",
+    "secondary": "#hex",
+    "accent": "#hex",
+    "bg": "#hex",
+    "cardBg": "#hex",
+    "textColor": "#hex",
+    "textMuted": "#hex",
+    "mood": "Atmosfera e sentimento transmitido"
+  },
+  "typography": {
+    "headingFont": "Nome da Fonte de Título",
+    "bodyFont": "Nome da Fonte do Corpo",
+    "headingStyle": "font-bold tracking-tight",
+    "googleFontsUrl": "URL do Google Fonts"
+  },
+  "designTokens": {
+    "borderRadius": "rounded-2xl",
+    "glassmorphism": true,
+    "buttonGlow": "shadow-lg shadow-purple-500/20",
+    "badgeStyle": "bg-purple-500/10 border border-purple-500/30 text-purple-300"
+  },
+  "reasoning": "Justificativa técnica e psicológica para a escolha da paleta e tipografia."
+}
+`;
+
+    let themeSuggestionData: any = null;
+    try {
+      const result = await executeAIRequest(
+        promptTheme,
+        { html: '', css: '', js: '' },
+        { provider: provider as any, apiKey: customApiKey, model: customModel }
+      );
+
+      const cleanText = result.explanation ? result.explanation.replace(/```json|```/g, '').trim() : '';
+      const firstBrace = cleanText.indexOf('{');
+      const lastBrace = cleanText.lastIndexOf('}');
+      if (firstBrace !== -1 && lastBrace !== -1) {
+        themeSuggestionData = JSON.parse(cleanText.substring(firstBrace, lastBrace + 1));
+      }
+    } catch (e: any) {
+      console.warn('Alerta na chamada da IA para sugestão de tema, utilizando motor de síntese autônomo:', e?.message || e);
+    }
+
+    if (!themeSuggestionData || !themeSuggestionData.colorPalette) {
+      // Motor de Síntese Autônomo com Heurística de Fallback por Indústria & Tom
+      const ctx = (resolvedIndustry + ' ' + resolvedTone + ' ' + resolvedMission).toLowerCase();
+
+      if (ctx.includes('adv') || ctx.includes('jur') || ctx.includes('finan') || ctx.includes('invest') || ctx.includes('contab')) {
+        themeSuggestionData = {
+          themeName: 'Midnight Gold Executive Prestige',
+          visualStyle: 'Sóbrio, Imponente e Executivo com cartões escuros em bordas douradas e tipografia editorial.',
+          colorPalette: {
+            primary: '#d97706',
+            secondary: '#3b82f6',
+            accent: '#f59e0b',
+            bg: '#090d16',
+            cardBg: '#111827',
+            textColor: '#f8fafc',
+            textMuted: '#94a3b8',
+            mood: 'Prestígio Executivo, Confiança e Autoridade Imutável'
+          },
+          typography: {
+            headingFont: 'Playfair Display',
+            bodyFont: 'Inter',
+            headingStyle: 'font-serif font-bold tracking-tight',
+            googleFontsUrl: 'https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=Inter:wght@400;500;600;700&display=swap'
+          },
+          designTokens: {
+            borderRadius: 'rounded-xl',
+            glassmorphism: true,
+            buttonGlow: 'shadow-lg shadow-amber-500/25',
+            badgeStyle: 'bg-amber-500/10 border border-amber-500/30 text-amber-400'
+          },
+          reasoning: 'Para empresas do setor corporativo, jurídico e financeiro, o par de fontes Playfair Display (editorial refinado) e Inter (legibilidade absoluta) transmite tradição e solidez. A paleta Midnight Gold combina o azul marinho profundo (#090d16) com detalhes em dourado champagne (#d97706), estabelecendo de imediato um patamar de alto prestígio e autoridade.'
+        };
+      } else if (ctx.includes('saú') || ctx.includes('med') || ctx.includes('odonto') || ctx.includes('clinic') || ctx.includes('estét')) {
+        themeSuggestionData = {
+          themeName: 'BioVitality Clinical Glass',
+          visualStyle: 'Humano, Limpo, Respirável e de Alta Confiança com toques de ciano e esmeralda.',
+          colorPalette: {
+            primary: '#0d9488',
+            secondary: '#0284c7',
+            accent: '#10b981',
+            bg: '#041212',
+            cardBg: '#0a2121',
+            textColor: '#f0fdf4',
+            textMuted: '#86efac',
+            mood: 'Bem-Estar, Calma e Tecnologia Médica Humanizada'
+          },
+          typography: {
+            headingFont: 'Plus Jakarta Sans',
+            bodyFont: 'Inter',
+            headingStyle: 'font-sans font-extrabold tracking-tight',
+            googleFontsUrl: 'https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@700;800&family=Inter:wght@400;500;600;700&display=swap'
+          },
+          designTokens: {
+            borderRadius: 'rounded-2xl',
+            glassmorphism: true,
+            buttonGlow: 'shadow-lg shadow-teal-500/25',
+            badgeStyle: 'bg-teal-500/10 border border-teal-500/30 text-teal-300'
+          },
+          reasoning: 'No ecossistema de saúde e bem-estar, a fonte Plus Jakarta Sans passa uma sensação moderna e acolhedora. O esquema de cores em tom teal/esmeralda com fundo verde-escuro obsidian acalma o visitante, transmitindo higiene, higiene e avançada biotecnologia.'
+        };
+      } else if (ctx.includes('gastr') || ctx.includes('resta') || ctx.includes('caf') || ctx.includes('pizz') || ctx.includes('bar')) {
+        themeSuggestionData = {
+          themeName: 'Gourmet Terracotta & Amber',
+          visualStyle: 'Apetite Visual Quente com fundo gastronômico sofisticado e botões vibrantes.',
+          colorPalette: {
+            primary: '#ea580c',
+            secondary: '#dc2626',
+            accent: '#f59e0b',
+            bg: '#0f0d0e',
+            cardBg: '#1c1719',
+            textColor: '#fff7ed',
+            textMuted: '#fdba74',
+            mood: 'Apetite Visual, Calor e Sabor Autêntico'
+          },
+          typography: {
+            headingFont: 'Cabinet Grotesk',
+            bodyFont: 'Inter',
+            headingStyle: 'font-sans font-black tracking-tight uppercase',
+            googleFontsUrl: 'https://fonts.googleapis.com/css2?family=Cabinet+Grotesk:wght@800;900&family=Inter:wght@400;500;600;700&display=swap'
+          },
+          designTokens: {
+            borderRadius: 'rounded-2xl',
+            glassmorphism: true,
+            buttonGlow: 'shadow-lg shadow-orange-500/25',
+            badgeStyle: 'bg-orange-500/10 border border-orange-500/30 text-orange-400'
+          },
+          reasoning: 'Para a gastronomia, tons quentes de âmbar e terracota estimulam o apetite e criam uma conexão sensorial imediata. A tipografia marcante em Cabinet Grotesk reforça o sabor artesanal e a qualidade do menu.'
+        };
+      } else {
+        themeSuggestionData = {
+          themeName: 'Cyberpunk Clean Tech Glass',
+          visualStyle: 'Futurista, Dark High-Contrast com Glassmorphism em camadas e iluminação de ciano e roxo néon.',
+          colorPalette: {
+            primary: '#8b5cf6',
+            secondary: '#06b6d4',
+            accent: '#10b981',
+            bg: '#030712',
+            cardBg: '#0f172a',
+            textColor: '#f8fafc',
+            textMuted: '#94a3b8',
+            mood: 'Futurismo Tecnológico, Inovação e Alta Conversão'
+          },
+          typography: {
+            headingFont: 'Space Grotesk',
+            bodyFont: 'Plus Jakarta Sans',
+            headingStyle: 'font-sans font-bold tracking-tight',
+            googleFontsUrl: 'https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@700&family=Plus+Jakarta+Sans:wght@400;600;700&display=swap'
+          },
+          designTokens: {
+            borderRadius: 'rounded-2xl',
+            glassmorphism: true,
+            buttonGlow: 'shadow-lg shadow-purple-500/25',
+            badgeStyle: 'bg-purple-500/10 border border-purple-500/30 text-purple-300'
+          },
+          reasoning: 'A combinação de Space Grotesk com Plus Jakarta Sans estabelece um tom de vanguarda digital e alta inovação. A paleta Cyberpunk une a energia do roxo vibrante com ciano futurista, garantindo altíssimo impacto visual em displays modernos.'
+        };
+      }
+    }
+
+    return res.json({
+      success: true,
+      theme: themeSuggestionData
+    });
+  } catch (err: any) {
+    console.error('Erro ao sugerir tema por IA:', err);
+    return res.status(500).json({ error: err.message || 'Erro ao gerar sugestão de tema por IA.' });
+  }
+});
+
+// POST /api/ai/generate-global-elements - Gerar/Regerar Header e Footer alinhados ao tema do projeto
+router.post('/generate-global-elements', async (req: AuthenticatedRequest, res: any) => {
+  try {
+    const { projectId, theme, businessName, logoUrl, contacts, email } = req.body;
+
+    let targetBusinessName = businessName || 'Sua Empresa';
+    let targetTheme = theme;
+    let targetLogo = logoUrl;
+    let targetContacts = contacts;
+    let targetEmail = email;
+    let routes: Array<{ name: string; href: string }> = [
+      { name: 'Início', href: 'index.html' }
+    ];
+
+    if (projectId) {
+      const project = await prisma.project.findUnique({
+        where: { id: projectId },
+        include: { pages: true }
+      });
+      if (project) {
+        targetBusinessName = project.name || targetBusinessName;
+        targetTheme = theme || project.colorPalette || targetTheme;
+        targetLogo = logoUrl || project.logoUrl || undefined;
+        targetContacts = contacts || project.contacts || undefined;
+        targetEmail = email || project.email || undefined;
+        if (project.pages && project.pages.length > 0) {
+          routes = project.pages.map(p => ({
+            name: p.name,
+            href: p.isHomepage ? 'index.html' : `${p.slug}.html`
+          }));
+        }
+      }
+    }
+
+    const customApiKey = decodeHeader(req.headers['x-gemini-key']) || undefined;
+    const customModel = decodeHeader(req.headers['x-gemini-model']) || undefined;
+    const provider = (req.headers['x-ai-provider'] as any) || 'gemini';
+
+    const globalElements = await generateGlobalThemeElements({
+      businessName: targetBusinessName,
+      theme: targetTheme,
+      logoUrl: targetLogo,
+      contacts: targetContacts,
+      email: targetEmail,
+      navigationRoutes: routes,
+      aiProvider: provider,
+      apiKey: customApiKey,
+      model: customModel
+    });
+
+    // Se projectId fornecido, atualiza automaticamente todas as páginas do projeto
+    if (projectId) {
+      const pages = await prisma.page.findMany({ where: { projectId } });
+      for (const p of pages) {
+        const updatedHtml = ensureAndDeduplicateGlobalElements(
+          p.html,
+          globalElements.navbarHtml,
+          globalElements.footerHtml,
+          p.isHomepage ? 'index' : p.slug,
+          routes,
+          globalElements.globalItemsHtml
+        );
+        await prisma.page.update({
+          where: { id: p.id },
+          data: { html: updatedHtml }
+        });
+      }
+    }
+
+    return res.json({
+      success: true,
+      navbarHtml: globalElements.navbarHtml,
+      footerHtml: globalElements.footerHtml,
+      globalItemsHtml: globalElements.globalItemsHtml
+    });
+  } catch (err: any) {
+    console.error('Erro ao gerar elementos globais no tema:', err);
+    return res.status(500).json({ error: err.message || 'Erro ao gerar elementos globais.' });
   }
 });
 

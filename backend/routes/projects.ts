@@ -215,7 +215,11 @@ router.post('/', async (req: AuthenticatedRequest, res: any) => {
       siteStyle,
       segment,
       colorPalette,
-      businessName
+      businessName,
+      heroLayout,
+      sectionTransitions,
+      digitalFeatures,
+      extraInstructions
     } = req.body;
     if (!name) {
       return res.status(400).json({ error: 'Project name is required' });
@@ -260,15 +264,19 @@ router.post('/', async (req: AuthenticatedRequest, res: any) => {
         };
       });
     } else {
-      pagesCreateData = [{
-        name: 'Home',
-        slug: 'index',
-        title: 'Home',
-        isHomepage: true,
+      const defaultPages = [
+        { name: 'Home', slug: 'index', title: 'Home', isHomepage: true },
+        { name: 'Sobre Nós', slug: 'sobre', title: 'Sobre Nós', isHomepage: false },
+        { name: 'Serviços', slug: 'servicos', title: 'Serviços', isHomepage: false },
+        { name: 'Contato', slug: 'contato', title: 'Contato', isHomepage: false },
+        { name: 'FAQ', slug: 'faq', title: 'FAQ', isHomepage: false }
+      ];
+      pagesCreateData = defaultPages.map(p => ({
+        ...p,
         html: initialHtml,
         css: initialCss,
         js: initialJs
-      }];
+      }));
     }
 
     const project = await prisma.project.create({
@@ -415,7 +423,12 @@ Descrição e Objetivos: ${description || 'Site institucional de alta conversão
           businessName: targetBusinessName,
           segment,
           visualStyle: siteStyle,
-          colorPalette
+          colorPalette,
+          heroLayout,
+          sectionTransitions,
+          digitalFeatures,
+          extraInstructions,
+          leadId
         }
       );
     }

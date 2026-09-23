@@ -1,7 +1,15 @@
 import { prisma } from '../db';
 import { executeAIRequest } from './aiEngine';
 import { executeSiteRemaster } from './siteRemasterWorker';
-import { processPageAssets, extractNavbarAndFooter, ensureAndDeduplicateGlobalElements } from './siteRemaster';
+import {
+  processPageAssets,
+  extractNavbarAndFooter,
+  ensureAndDeduplicateGlobalElements,
+  buildFallbackSubpageHtml,
+  generateAutomaticClientTheme,
+  generateGlobalThemeElements
+} from './siteRemaster';
+import { buildStructuredSitePrompt } from '../../front-end/src/utils/promptEngine';
 
 export interface AIQueueItem {
   id: string;
@@ -299,33 +307,53 @@ class ProjectQueue {
       businessName,
       segment,
       visualStyle,
-      colorPalette
+      colorPalette,
+      heroLayout,
+      sectionTransitions,
+      digitalFeatures,
+      extraInstructions
     } = options;
 
     const project = await prisma.project.findUnique({
-      where: { id: projectId }
+      where: { id: projectId },
+      include: { leads: true }
     });
 
+    const attachedLead = (project?.leads && project.leads.length > 0) ? project.leads[0] : null;
+    const leadInfo = attachedLead ? {
+      phone: attachedLead.phone || undefined,
+      address: attachedLead.address || undefined,
+      openingHours: 'Segunda a Sábado: 08:00 - 20:00',
+      rating: attachedLead.rating || '5.0',
+      reviewsCount: 128,
+      website: attachedLead.website || undefined,
+      email: attachedLead.email || undefined
+    } : undefined;
+
     const resolvedApiKey = await this.resolveApiKeyAndSettings(projectId, customApiKey);
-    const resolvedBusinessName = (businessName || '').trim() || project?.name || 'Sua Empresa';
-    const resolvedSegment = (segment || '').trim() || 'Serviços Profissionais';
-    const resolvedStyle = (visualStyle || '').trim() || 'Ultra Moderno, Dark Luxury ou Clean Tech com alto contraste e elegância';
-    const resolvedPalette = (colorPalette || '').trim() || project?.colorPalette || 'Paleta refinada com gradientes sutis e harmônicos';
+    const resolvedBusinessName = (businessName || '').trim() || attachedLead?.name || project?.name || 'Sua Empresa';
+    const resolvedSegment = (segment || '').trim() || attachedLead?.company || 'Serviços Profissionais';
+
+    // SÍNTESE AUTOMÁTICA DE TEMA INTELIGENTE BASEADO NO CLIENTE E SEGMENTO
+    const autoTheme = generateAutomaticClientTheme(resolvedBusinessName, resolvedSegment, project?.description || '');
+
+    const resolvedStyle = (visualStyle || '').trim() || autoTheme.visualStyle;
+    const resolvedPalette = (colorPalette || '').trim() || project?.colorPalette || autoTheme.colorPalette;
 
     let brandDirective = "";
     if (project) {
       brandDirective = `
-\n[REGRAS CRÍTICAS DE IDENTIDADE DA MARCA E DESIGN SYSTEM AUTORAL]
-Você DEVE aplicar rigorosamente as informações oficiais da marca e o Design System abaixo:
+\n[REGRAS CRÍTICAS DE IDENTIDADE DA MARCA E DESIGN SYSTEM AUTORAL AUTOMÁTICO]
+Você DEVE aplicar rigorosamente o tema derivado automaticamente para "${project.name}" (Segmento: ${resolvedSegment}):
 - Nome da Marca / Site: "${project.name}"
-${project.logoUrl ? `- Logotipo Oficial: "${project.logoUrl}" (Insira a imagem de forma responsiva e elegante nos cabeçalhos, navbar ou menus: <img src="${project.logoUrl}" referrerPolicy="no-referrer" alt="${project.name}" class="h-8 md:h-10 object-contain tracking-tight">)` : '- Logotipo: Use um logotipo elegante baseado em texto/tipografia estilizada com o nome do site'}
-- Contatos Oficiais: Telefone / WhatsApp "${project.contacts || 'Não especificado'}" | E-mail: "${project.email || 'Não especificado'}"
+${project.logoUrl ? `- Logotipo Oficial: "${project.logoUrl}" (Insira a imagem de forma responsiva nos cabeçalhos e navbar: <img src="${project.logoUrl}" referrerPolicy="no-referrer" alt="${project.name}" class="h-8 md:h-10 object-contain tracking-tight">)` : '- Logotipo: Use um logotipo baseado em texto/tipografia estilizada com o nome do site'}
+- Contatos Oficiais: Telefone / WhatsApp "${attachedLead?.phone || project.contacts || 'Não especificado'}" | E-mail: "${attachedLead?.email || project.email || 'Não especificado'}"
 
-- MOTOR DE DERIVAÇÃO ESTÉTICA E PALETA DE CORES:
-  Paleta Solicitada/Configurada: "${project.colorPalette || resolvedPalette}".
-  • PROIBIDO usar layouts monocromáticos cinza estéreis, preto puro \`#000000\` descontextualizado ou o padrão cyberpunk clichê (a menos que o segmento exija).
-  • A IA deve adaptar a paleta ao nicho do negócio: crie uma hierarquia visual sofisticada com tom de base imersivo, cores de superfície translúcidas (Glassmorphic) e acentos vibrantes de alto contraste focados em guiagem visual e conversão (CTA Glow).
-  • TIPOGRAFIA: Escolha e combine pelo menos 2 famílias do Google Fonts apropriadas ao tom da marca (ex: uma fonte imponente display/serifada para títulos e uma sans-serif ultra-legível para o corpo).
+- TEMA AUTOMÁTICO SINTETIZADO PARA O CLIENTE (${autoTheme.name}):
+  • Estilo Visual: ${resolvedStyle}
+  • Paleta de Cores Recomendada: ${resolvedPalette}
+  • Tipografia Recomendada: ${autoTheme.typography}
+  • Diretrizes de UI: Crie uma hierarquia visual sofisticada com fundo imersivo (${autoTheme.bgGradient}), superfícies translúcidas em Glassmorphism, badges em tom (${autoTheme.badgeStyle}) e botões de ação em destaque com brilho sutil (${autoTheme.accentGlow}).
 `;
     }
 
@@ -378,6 +406,35 @@ ${project.logoUrl ? `- Logotipo Oficial: "${project.logoUrl}" (Insira a imagem d
       existingPages.push(home);
     }
 
+    // Garantir que qualquer geração de site crie uma arquitetura completa com subpáginas (Sobre Nós, Serviços, Contato, FAQ)
+    if (existingPages.length <= 1) {
+      const defaultSubpages = [
+        { name: 'Sobre Nós', slug: 'sobre', title: 'Sobre Nós' },
+        { name: 'Serviços', slug: 'servicos', title: 'Serviços' },
+        { name: 'Contato', slug: 'contato', title: 'Contato' },
+        { name: 'FAQ', slug: 'faq', title: 'FAQ' }
+      ];
+
+      for (const sp of defaultSubpages) {
+        const alreadyExists = existingPages.some(ep => ep.slug === sp.slug);
+        if (!alreadyExists) {
+          const created = await prisma.page.create({
+            data: {
+              projectId,
+              name: sp.name,
+              slug: sp.slug,
+              title: sp.title,
+              isHomepage: false,
+              html: '<div class="min-h-screen bg-slate-900 text-white flex flex-col items-center justify-center p-8"><h2 class="text-2xl font-bold mb-2">Gerando página...</h2><p class="text-slate-400 text-sm">Construindo layout profissional com IA.</p></div>',
+              css: 'body { margin: 0; font-family: sans-serif; }',
+              js: ''
+            }
+          });
+          existingPages.push(created);
+        }
+      }
+    }
+
     const homePage = existingPages.find(p => p.isHomepage || p.slug === 'index') || existingPages[0];
     const subPages = existingPages.filter(p => p.id !== homePage.id);
     const totalPages = 1 + subPages.length;
@@ -392,91 +449,81 @@ ${project.logoUrl ? `- Logotipo Oficial: "${project.logoUrl}" (Insira a imagem d
     ];
     const navLinksDoc = navigationRoutes.map(r => `- "${r.name}" -> href="${r.href}"`).join('\n');
 
-    // 3. GERAÇÃO DA HOME (PÁGINA 1)
+    // 3. CONSTRUÇÃO DO PROMPT MESTRE ESTRUTURADO (SE NÃO FOR PRÉ-COMPILADO)
+    let masterStructuredPrompt = prompt;
+    if (!masterStructuredPrompt || !masterStructuredPrompt.includes('SISTEMA MESTRE DE GERAÇÃO')) {
+      masterStructuredPrompt = buildStructuredSitePrompt({
+        businessName: resolvedBusinessName,
+        segment: resolvedSegment,
+        visualStyle: resolvedStyle,
+        colorPalette: resolvedPalette,
+        heroLayout: (heroLayout as any) || 'auto',
+        sectionTransitions: (sectionTransitions as any) || 'auto',
+        pagesList: existingPages.map(p => ({
+          name: p.name,
+          slug: p.slug,
+          isHomepage: p.isHomepage
+        })),
+        digitalFeatures: Array.isArray(digitalFeatures) && digitalFeatures.length > 0
+          ? digitalFeatures
+          : ['swiper_3d', 'realtime_status', 'floating_whatsapp', 'pricing_toggle', 'animated_counters', 'faq_search', 'lead_confetti', 'interactive_map'],
+        extraInstructions: extraInstructions || prompt,
+        leadInfo
+      });
+    }
+
+    // 4. SÍNTESE DEDICADA DOS ELEMENTOS GLOBAIS NO TEMA PROPOSTO (NAVBAR, FOOTER E ITENS GLOBAIS) EM REQUISIÇÕES SEPARADAS
+    item.currentModel = `Sintetizando elementos globais no tema proposto (Navbar, Footer, Widgets)...`;
+    const globalElements = await generateGlobalThemeElements({
+      businessName: resolvedBusinessName,
+      theme: resolvedPalette || autoTheme,
+      logoUrl: project?.logoUrl || undefined,
+      contacts: attachedLead?.phone || project?.contacts || undefined,
+      email: attachedLead?.email || project?.email || undefined,
+      segment: resolvedSegment,
+      visualStyle: resolvedStyle,
+      navigationRoutes,
+      aiProvider: (aiProvider as any) || 'gemini',
+      apiKey: resolvedApiKey,
+      model: customModel,
+      registeredModels,
+      proxyUrl: customProxyUrl,
+      ollamaEndpoint,
+      lowSpecMode
+    });
+
+    const navbarHtml = globalElements.navbarHtml;
+    const footerHtml = globalElements.footerHtml;
+    const globalItemsHtml = globalElements.globalItemsHtml;
+
+    // 5. GERAÇÃO DA HOME (PÁGINA 1 - ESCOPO DEDICADO)
     item.currentModel = `Construindo Página Inicial (1/${totalPages})...`;
 
     const homePrompt = `
-Você é um Arquiteto de Software Frontend de Elite e Designer UI/UX Master (especialista no nível Webflow, Framer, Tailwind UI e v0).
-Sua missão é projetar a PÁGINA INICIAL (HOME) mestre de altíssimo impacto, responsiva, fluida e de padrão internacional para "${resolvedBusinessName}".
+Você é um Arquiteto de Software Frontend de Elite e Designer UI/UX Master (nível Webflow, Framer, Tailwind UI).
+Sua missão é projetar o CONTEÚDO PRINCIPAL da PÁGINA INICIAL (HOME) para "${resolvedBusinessName}".
 
-DADOS DO PROJETO:
-- Nome do Negócio: ${resolvedBusinessName}
-- Segmento / Ramo de Atuação: ${resolvedSegment}
-- Estilo Visual & Paleta Pretendida: ${resolvedStyle} | ${resolvedPalette}
-- Instruções Específicas do Usuário: ${prompt}
+${masterStructuredPrompt}
 
-ROTAS DE NAVEGAÇÃO DO SITE (OBRIGATÓRIO incluir na Navbar e no Footer):
+[ELEMENTOS GLOBAIS JÁ SINTETIZADOS NO TEMA DO PROJETO]:
+A Navbar, o Footer e os Widgets globais já foram gerados com as características e cores do tema do site em requisições separadas e serão anexados automaticamente.
+Foque a geração no CONTEÚDO PRINCIPAL dentro da tag <main class="flex-grow"> (Hero impactante, Seção de Recursos/Bento Grid, Prova Social, Preços/Planos, FAQ e CTA de conversão).
+
+ROTAS DE NAVEGAÇÃO DO SITE:
 ${navLinksDoc}
 
-==============================================================================
-ESTRUTURA COMPLETA E ASSIMÉTRICA DA PÁGINA INICIAL (ANTI-LAYOUT GENÉRICO)
-==============================================================================
-
-1. HEADER / NAVBAR FLUTUANTE (DYNAMIC FLOATING ISLAND):
-   - Container flutuante com blur glassmorphism (ex: backdrop-blur-xl bg-slate-950/70 border border-white/10 rounded-full shadow-2xl).
-   - Logomarca de ${resolvedBusinessName} integrada perfeitamente com altura proporcional.
-   - Links de navegação apontando EXATAMENTE para as rotas acima com estado ativo e micro-hover. Links: ${navigationRoutes.map(r => `<a href="${r.href}">${r.name}</a>`).join(', ')}.
-   - Botão de Ação CTA em destaque no canto direito com brilho sutil/glow.
-   - Menu mobile hambúrguer responsivo com gaveta deslizante ou overlay totalmente interativo no JS.
-
-2. HERO SECTION MASTERPIECE (SPLITSCREEN 3D OU COMPOSIÇÃO EDITORIAL):
-   - Badge Flutuante Duplo Interativo:
-     a) Badge de Autoridade/Google Reviews: "⭐ 4.9/5 (Avaliações Reais)" com selo de verificação.
-     b) Badge de Status Vivo em Tempo Real: Elemento dinâmico calculado via JS com ID \`#realtime-status-badge\` ("🟢 ABERTO AGORA" ou "🔴 FECHADO NO MOMENTO").
-   - Headline Imponente: Título de alto impacto visual com texto em gradiente semântico (bg-clip-text) e revelação dinâmica.
-   - Subtítulo focado no benefício claro e na transformação do cliente.
-   - CTAs Duplos de Alta Conversão: Primário com efeito Glow animado + Secundário transparente com ícone Lucide.
-   - Container Visual em Destaque: Objeto 3D interativo via <spline-viewer> ou mockup visual translúcido em vidro fosco com iluminação radial (glow de fundo).
-
-3. BARRA DE CONFIANÇA & AUTORIDADE (TRUST BAR):
-   - Faixa minimalista estilizada: "Empresas e parceiros que confiam em nossa excelência", com logos translúcidos em grayscale hover-color.
-
-4. BENTO GRID ASSIMÉTRICO DE DIFERENCIAIS (NADA DE 3 COLUNAS IGUAIS!):
-   - Layout de 12 colunas com proporções variadas (ex: col-span-8, col-span-4, row-span-2).
-   - Cartões translúcidos Glassmorphism, com bordas com brilho sutil ao passar o mouse, métricas destacadas, ícones Lucide glowing e overlays de imagem imersivos.
-
-5. VITRINE DE SERVIÇOS / PRODUTOS INTERATIVA:
-   - Apresentação dos principais produtos/serviços de ${resolvedBusinessName} com tags de categoria, lista de diferenciais (✓) e botões diretos para WhatsApp ou a página "servicos.html".
-
-6. SEÇÃO SOBRE & PROPRIEDADE INTELECTUAL:
-   - Narrativa envolvente sobre a missão e fundação de ${resolvedBusinessName}, alinhada com contadores numéricos de estatísticas (ex: 99.8% Satisfação, +10 Anos no Mercado). Link direcionando para "sobre.html".
-
-7. PROVA SOCIAL & DEPOIMENTOS (CARROSSEL SWIPER.JS 3D):
-   - Slider com efeito 3D (Cards ou Coverflow) contendo depoimentos autênticos com fotos de perfil em alta definição (Unsplash), estrelas glowing, nome, cargo e depoimento persuasivo.
-
-8. PERGUNTAS FREQUENTES (FAQ ACCORDION INTERATIVO):
-   - 4 a 6 perguntas estratégicas do segmento ${resolvedSegment}. O clique deve abrir/fechar o acordeão suavemente via JavaScript com rotação do ícone Chevron (+ / -).
-
-9. CHAMADA FINAL PARA AÇÃO (CTA MASTER) & NEWSLETTER:
-   - Seção de fechamento persuasiva incentivando agendamento ou contato imediato via formulário ou WhatsApp.
-
-10. BOTÃO FLUTUANTE DE CONVERSÃO (WHATSAPP/RESERVA):
-    - Botão fixo no canto inferior direito com pulso luminoso, tooltip e link direto wa.me preenchido.
-
-11. FOOTER MULTICOLUNAS COMPLETO:
-    - Bio da marca, links organizados para todas as rotas do site (${navigationRoutes.map(r => r.name).join(', ')}), dados de contato oficial, redes sociais com ícones e copyright.
-
-==============================================================================
-REGRAS TÉCNICAS E ARQUITETURA DE SAÍDA
-==============================================================================
-- DICA CRÍTICA DE LIMITES DE TOKENS: O layout exigido é gigante. Para evitar que a geração seja interrompida no meio (HTML cortado), seja conciso no preenchimento de textos, reduza o número de cards repetidos em listas/grids para no máximo 2 ou 3, e foque em entregar TODAS as seções até o Footer fechado (</footer>).
-- Retorne EXCLUSIVAMENTE um objeto JSON válido no formato:
-  {
-    "html": "...",
-    "css": "...",
-    "js": "...",
-    "explanation": "..."
-  }
-- HTML: Utilize apenas classes Tailwind CSS semânticas. NUNCA inclua tags <style> ou <script> dentro da string HTML.
-- ANIMAÇÕES E REVEALS (GSAP): Adicione a classe 'gsap-reveal' nas seções principais, cabeçalhos, bento grids e cards para acionar as animações de scroll reveal controladas pela plataforma.
-- CSS: Inclua no campo "css" estilos customizados necessários, como animações @keyframes customizadas, efeitos de profundidade, filtros de overlay e regras do Swiper.
-- JS: Inclua no campo "js" JavaScript puro e funcional para os handlers da página: menu mobile responsive, acordeão interativo do FAQ, script do status em tempo real, inicialização do Swiper 3D e manipuladores dos botões de contato.
-
+SAÍDA TÉCNICA OBRIGATÓRIA (JSON VÁLIDO COM SEPARAÇÃO ESTRITA):
+Retorne EXCLUSIVAMENTE um objeto JSON no formato:
+{
+  "html": "<!-- APENAS estrutura HTML sem tags <style> ou <script>. Adicione a classe 'gsap-reveal' nos blocos e cards para animação de scroll -->",
+  "css": "/* Todo CSS customizado, regras @keyframes de animação, gradientes glow e variáveis aqui. NUNCA coloque tags <style> */",
+  "js": "// Todo JavaScript funcional aqui. NUNCA coloque tags <script>. Inclua código ativo para: (1) Animações GSAP ScrollTrigger para elementos .gsap-reveal; (2) Sliders Swiper 3D; (3) Ícones Lucide (lucide.createIcons()); (4) Menu mobile responsivo; (5) FAQ accordions; (6) Contadores animados; (7) Confetti. IMPORTANTE: Execute imediatamente se document.readyState !== 'loading' para garantir animações ativas no canvas.",
+  "explanation": "Resumo do que foi construído nesta página inicial."
+}
 ${brandDirective}
 `;
 
     let homeAiResponse: any = null;
-    let usedFallback = false;
 
     try {
       homeAiResponse = await executeAIRequest(
@@ -497,14 +544,23 @@ ${brandDirective}
         }
       );
     } catch (homeAiErr: any) {
-      console.warn(`[AIQueueManager] Chamada de IA para a Home falhou (${homeAiErr.message}). Interrompendo processo de geração.`);
+      console.warn(`[AIQueueManager] Chamada de IA para a Home falhou (${homeAiErr.message}). Interrompendo processo.`);
       throw homeAiErr;
     }
 
     if ((item.status as string) === 'cancelled') return;
 
     let updatedHomeHtml = homeAiResponse.html || homePage.html;
-    updatedHomeHtml = ensureAndDeduplicateGlobalElements(updatedHomeHtml);
+
+    // Garantir que a Home possui obrigatoriamente Navbar no topo, Footer no rodapé e Itens Globais, 100% no tema proposto
+    updatedHomeHtml = ensureAndDeduplicateGlobalElements(
+      updatedHomeHtml,
+      navbarHtml,
+      footerHtml,
+      'index',
+      navigationRoutes,
+      globalItemsHtml
+    );
 
     const updatedHomeCss = homeAiResponse.css || homePage.css;
     const updatedHomeJs = homeAiResponse.js || homePage.js;
@@ -529,132 +585,94 @@ ${brandDirective}
       }
     ];
 
-    // Extrair Navbar e Footer da Home para reaproveitamento padronizado nas subpáginas
-    const { navbarHtml, footerHtml } = extractNavbarAndFooter(updatedHomeHtml);
-
-    // 4. GERAÇÃO SEQUENCIAL DAS SUBPÁGINAS (SE HOUVER)
+    // 4. GERAÇÃO SEQUENCIAL DAS SUBPÁGINAS (CADA PÁGINA COM SEU ESCOPO DEDICADO DE REQUISIÇÃO IA)
     for (let idx = 0; idx < subPages.length; idx++) {
       if ((item.status as string) === 'cancelled') return;
 
       const sub = subPages[idx];
       const pageNum = idx + 2;
-      item.currentModel = `Construindo ${sub.name} (${pageNum}/${totalPages})...`;
+      item.currentModel = `Construindo ${sub.name} (${pageNum}/${totalPages}) - Escopo Dedicado...`;
 
-      let subpageContextGuidance = '';
+      let subpageScopeInstructions = '';
       const lowerSubName = (sub.name + ' ' + sub.slug).toLowerCase();
 
       if (lowerSubName.includes('sobre') || lowerSubName.includes('about') || lowerSubName.includes('quem')) {
-        subpageContextGuidance = `
-Esta é a PÁGINA SOBRE NÓS / INSTITUCIONAL.
-Estrutura obrigatória das seções centrais (entre a Navbar e o Rodapé):
-1. Hero Institucional com propósito, missão e visão inspiradora da ${resolvedBusinessName}.
-2. Linha do Tempo / História: Trajetória de evolução e marcos históricos.
-3. Nossos Pilares e Valores: 4 cards com ícones e princípios inegociáveis.
-4. Equipe Executiva / Liderança: Fotos profissionais de liderança (Unsplash), nomes, cargos e mini-bios.
-5. Certificações, Prêmios e Estatísticas de Impacto no Mercado.
-6. Seção de CTA convidando para conhecer os serviços ou agendar uma reunião.
+        subpageScopeInstructions = `
+ESTRUTURA DENSE E COMPLETA DA PÁGINA SOBRE NÓS:
+1. HERO INSTITUCIONAL: Manifesto inspirador, propósito e história de fundação da ${resolvedBusinessName}.
+2. LINHA DO TEMPO / EVOLUÇÃO HISTÓRICA: Marcos de crescimento, anos de atuação e conquistas do negócio.
+3. PILARES & VALORES FUNDAMENTAIS: 4 cards com ícones Lucide glowing e descrições detalhadas.
+4. CORPO EXECUTIVO E EQUIPE: Cards de liderança com imagens de alta definição (Unsplash), nomes, cargos e minibios.
+5. CONQUISTAS & MÉTRICAS EM NÚMEROS: +10k clientes, 99.8% satisfação, cobertura nacional.
+6. CHAMADA PARA AÇÃO (CTA SOBRE): Concatenação para entrar em contato ou explorar nossos serviços.
         `;
       } else if (lowerSubName.includes('servi') || lowerSubName.includes('service') || lowerSubName.includes('solu')) {
-        subpageContextGuidance = `
-Esta é a PÁGINA DE SERVIÇOS & SOLUÇÕES.
-Estrutura obrigatória das seções centrais:
-1. Hero de Serviços: Título focado em resolver dores e acelerar resultados para o cliente de ${resolvedBusinessName}.
-2. Catálogo Completo de Serviços: Grade rica com cards detalhados, cada um contendo ícone, descrição aprofundada, tags de recursos, entregáveis inclusos (✓) e botão de contratação/orçamento.
-3. Processo em 4 Etapas ("Como Funciona / Metodologia"): Diagnóstico -> Planejamento -> Execução -> Resultados.
-4. Tabela de Comparação ou Diferenciais Técnicos em relação ao mercado.
-5. Garantia de Qualidade e Segurança.
-6. CTA final para solicitar proposta comercial personalizada.
-        `;
-      } else if (lowerSubName.includes('prec') || lowerSubName.includes('pric') || lowerSubName.includes('plan')) {
-        subpageContextGuidance = `
-Esta é a PÁGINA DE PREÇOS & PLANOS.
-Estrutura obrigatória das seções centrais:
-1. Hero de Preços: Clareza e transparência no investimento em ${resolvedBusinessName}.
-2. Seletor Interativo Mensal / Anual (com desconto de 20%) funcionando com script JavaScript.
-3. Tabela Comparativa de 3 Planos (ex: Básico, Pro / Mais Popular com destaque luminoso, Enterprise).
-4. Checklist completo de recursos incluídos em cada plano.
-5. FAQ sobre pagamentos, cancelamento, garantia de 30 dias e emissão de nota fiscal.
-6. Banner de Segurança e Suporte Dedicado.
+        subpageScopeInstructions = `
+ESTRUTURA DENSE E COMPLETA DA PÁGINA DE SERVIÇOS & SOLUÇÕES:
+1. HERO DE SERVIÇOS: Título de alto impacto focado nos problemas resolvidos e entregáveis para o cliente.
+2. CATÁLOGO COMPLETO DE SERVIÇOS: Grade rica de cartões detalhados contendo ícones, tags de categoria, descrição profunda, lista de entregáveis (✓) e botão para solicitar orçamento.
+3. METODOLOGIA EM 4 ETAPAS ("Como Funciona"): Diagnóstico -> Planejamento -> Execução -> Resultados.
+4. TABELA DE DIFERENCIAIS TÉCNICOS & GARANTIA DE QUALIDADE.
+5. CTA COMERCIAL DEDICADO: Formulário rápido ou botão direto para proposta comercial personalizada.
         `;
       } else if (lowerSubName.includes('contat') || lowerSubName.includes('contact') || lowerSubName.includes('fale') || lowerSubName.includes('local')) {
-        subpageContextGuidance = `
-Esta é a PÁGINA DE CONTATO & ATENDIMENTO.
-Estrutura obrigatória das seções centrais:
-1. Hero de Contato: "Estamos prontos para atender você".
-2. Formulário Interativo Completo (Nome, E-mail, Telefone/WhatsApp, Assunto, Mensagem) com validação e feedback de envio no JS.
-3. Informações de Atendimento Direto: Botão grande de WhatsApp com clique direto, telefone comercial, e-mail de suporte, endereço físico e horários de funcionamento.
-4. Card Visual Interativo de Localização / Mapa.
-5. FAQ Rápido de Atendimento.
+        subpageScopeInstructions = `
+ESTRUTURA DENSE E COMPLETA DA PÁGINA DE CONTATO & ATENDIMENTO:
+1. HERO DE CONTATO: "Canais oficiais de atendimento e suporte humanizado".
+2. FORMULÁRIO INTERATIVO DE CONTATO COMPLETO: Campos para Nome, E-mail, Telefone/WhatsApp, Assunto e Mensagem com validação JS e feedback de envio.
+3. CARDS DE ATENDIMENTO DIRETO: Botão em destaque para WhatsApp (wa.me), Telefone comercial, E-mail oficial, Endereço físico e Horário de funcionamento.
+4. EMBED DE MAPA INTERATIVO / LOCALIZAÇÃO VISUAL.
+5. FAQ RÁPIDO DE ATENDIMENTO.
         `;
       } else if (lowerSubName.includes('faq') || lowerSubName.includes('duvid') || lowerSubName.includes('ajuda')) {
-        subpageContextGuidance = `
-Esta é a PÁGINA DE FAQ & CENTRAL DE AJUDA.
-Estrutura obrigatória das seções centrais:
-1. Hero de Suporte com barra de pesquisa interativa em JS para filtrar perguntas.
-2. Accordion Completo de Dúvidas dividido por categorias (Geral, Contratação, Pagamento, Prazos).
-3. Botão de Suporte Humano via WhatsApp ou Ticket caso a dúvida não seja respondida.
-        `;
-      } else if (lowerSubName.includes('port') || lowerSubName.includes('case') || lowerSubName.includes('galer')) {
-        subpageContextGuidance = `
-Esta é a PÁGINA DE PORTFÓLIO & CASOS DE SUCESSO.
-Estrutura obrigatória das seções centrais:
-1. Hero de Portfólio: Vitrine dos melhores projetos e resultados gerados por ${resolvedBusinessName}.
-2. Filtros de Categoria interativos com JavaScript.
-3. Grade de Projetos com imagens em alta resolução, métricas de resultado alcançadas e depoimento do cliente.
-4. CTA para iniciar um novo projeto com a empresa.
+        subpageScopeInstructions = `
+ESTRUTURA DENSE E COMPLETA DA PÁGINA DE FAQ & CENTRAL DE AJUDA:
+1. HERO DE SUPORTE: Barra de pesquisa interativa em JS para filtragem de perguntas em tempo real.
+2. ACCORDION COMPLETO DE PERGUNTAS & RESPOSTAS: Categorizado por seções (Geral, Serviços, Prazos, Pagamentos).
+3. SCRIPT JS DE ACCORDION INTERATIVO: Abertura e fechamento fluido das respostas com rotação do ícone.
+4. BANNER DE SUPORTE DIRETO: Link para atendimento via WhatsApp com consultor.
         `;
       } else {
-        subpageContextGuidance = `
-Esta é a subpágina "${sub.name}".
-Desenvolva uma página rica, altamente detalhada e relevante para "${sub.name}", com hero exclusivo, seções informativas com cards modernos, ilustrações/mídias em alta qualidade e chamadas para ação.
+        subpageScopeInstructions = `
+ESTRUTURA DENSE E COMPLETA DA PÁGINA "${sub.name}":
+1. HERO EXCLUSIVO COM TÍTULO E SUBTÍTULO IMPACTANTE.
+2. CONTEÚDO RICO EM SEÇÕES BENTO GRID, CARDS INFORMATIVOS E ILUSTRAÇÕES DE ALTA QUALIDADE.
+3. RECURSOS DEDICADOS E TABELAS/LISTAS RELEVANTES PARA "${sub.name}".
+4. CHAMADA PARA AÇÃO (CTA) PERSUASIVA AO FINAL.
         `;
       }
 
       const subPrompt = `
-Você é o Arquiteto Frontend Líder do site "${resolvedBusinessName}".
-Sua missão é gerar o código completo, responsivo e exclusivo da subpágina "${sub.name}" (slug: ${sub.slug}).
+Você é o Arquiteto Frontend Líder do projeto "${resolvedBusinessName}".
+Sua missão é gerar O CONTEÚDO CORPO EXCLUSIVO, COMPLETO E APROFUNDADO da página "${sub.name}" (slug: /${sub.slug}).
 
-ESTILO VISUAL & DESIGN SYSTEM DA MARCA:
+ATENÇÃO ABSOLUTA ÀS INSTRUÇÕES DE ESCOPO E DENSIDADE:
+- Concentre 100% da sua capacidade de tokens na geração do CONTEÚDO ESPECÍFICO RICO da página (entre o Header e o Footer).
+- NÃO GERE a Navbar e NÃO GERE o Footer no HTML. A plataforma injetará automaticamente a Navbar e o Footer mestre oficiais do projeto ao redor do seu código.
+
+ESTILO VISUAL & PALETA DA MARCA:
 ${resolvedStyle} | ${resolvedPalette}
 
-==============================================================================
-DIRETRIZES RÍGIDAS DE COERÊNCIA VISUAL E REAPROVEITAMENTO
-==============================================================================
-1. A subpágina DEVE manter 100% de coerência visual com a Home (mesma tipografia, paleta de cores, arredondamentos e estilo de vidro/glassmorphism).
-2. NAVBAR E FOOTER:
-   - Utilize a mesma estrutura mestre fornecida abaixo.
-   - Na Navbar, marque o link da subpágina atual "${sub.name}" com o indicador visual de classe ativa (ex: tom de destaque, borda inferior ou badge ativo).
+DIRETRIZ MANDATÓRIA DE ANTI-LAYOUT RETO EM 100% DAS SEÇÕES:
+- É PROIBIDO utilizar seções com divisões quadradas, retas ou blocos planos simples!
+- CADA UMA DAS SEÇÕES DESTA PÁGINA (Hero da subpágina, Conteúdos, Galeria, Cards, Tabela, FAQ, CTA, etc.) DEVE OBRIGATORIAMENTE utilizar elementos de quebra de layout reto: divisores SVG de transição orgânica (ondas "wave", cortes diagonais slants ou curvas fluídas), cartões flutuantes sobrepostos (-mt-12 sm:-mt-20 relative z-20) e Bento Grids com cantos arredondados (rounded-2xl/3xl) e luzes radiais em gradiente.
 
-NAVBAR BASE DA HOME:
-${navbarHtml || 'Navbar base não disponível.'}
+REQUISITOS E CONTEÚDO OBRIGATÓRIO DESTA PÁGINA:
+${subpageScopeInstructions}
 
-FOOTER BASE DA HOME:
-${footerHtml || 'Footer base não disponível.'}
-
-ROTAS DE NAVEGAÇÃO ENTRE AS PÁGINAS DO SITE:
+ROTAS DE NAVEGAÇÃO DO SITE PARA CONTEXTO:
 ${navLinksDoc}
 
-CONTEÚDO ESPECÍFICO E OBRIGATÓRIO DESTA SUBPÁGINA:
-${subpageContextGuidance}
-
-==============================================================================
-REGRAS MANDATÓRIAS E SAÍDA TÉCNICA
-==============================================================================
-- O retorno DEVE ser estritamente um JSON no formato:
-  { 
-    "html": "...", 
-    "css": "...", 
-    "js": "...", 
-    "explanation": "..." 
-  }
-- HTML: Código semântico limpo usando Tailwind CSS. NUNCA insira tags <style> ou <script> no HTML.
-- ANIMAÇÕES GSAP: Adicione obrigatoriamente a classe 'gsap-reveal' nos blocos principais, bento grids, tabelas/menus e cartões de destaque da subpágina para garantir a entrada animada fluida no scroll.
-- JAVASCRIPT MODULAR (campo "js"): Escreva scripts específicos para esta subpágina (ex: formulário interativo de contato com popup interno de sucesso, alternador de abas/tabs para preços ou serviços, calculadoras ou acordeões).
-- CSS ESPECÍFICO (campo "css"): Estilos customizados e keyframes necessários apenas para esta subpágina.
-- Mantenha o botão flutuante de WhatsApp fixo no canto inferior direito.
-
+SAÍDA TÉCNICA OBRIGATÓRIA (JSON VÁLIDO COM SEPARAÇÃO ESTRITA):
+Retorne EXCLUSIVAMENTE um objeto JSON no formato:
+{
+  "html": "<!-- APENAS estrutura HTML com classes Tailwind. NUNCA coloque tags <style> ou <script> aqui. Adicione a classe 'gsap-reveal' nos blocos e cards para animação de scroll -->",
+  "css": "/* Todo CSS customizado, regras @keyframes de animação, gradientes glow e variáveis aqui. NUNCA coloque tags <style> */",
+  "js": "// Todo JavaScript funcional aqui. NUNCA coloque tags <script>. Inclua código ativo para: (1) Animações GSAP ScrollTrigger para elementos .gsap-reveal; (2) Sliders Swiper 3D; (3) Ícones Lucide (lucide.createIcons()); (4) Menu mobile responsivo; (5) FAQ accordions; (6) Contadores animados; (7) Confetti. IMPORTANTE: Execute imediatamente se document.readyState !== 'loading' para garantir animações ativas no canvas.",
+  "explanation": "Resumo do que foi construído nesta subpágina."
+}
 ${brandDirective}
-      `;
+`;
 
       try {
         const subAiResponse = await executeAIRequest(
@@ -678,7 +696,16 @@ ${brandDirective}
         if ((item.status as string) === 'cancelled') return;
 
         let updatedSubHtml = subAiResponse.html || sub.html;
-        updatedSubHtml = ensureAndDeduplicateGlobalElements(updatedSubHtml, navbarHtml, footerHtml);
+
+        // INJEÇÃO DINÂMICA E AUTOMÁTICA DOS ELEMENTOS GLOBAIS MESTRES (Navbar com ativo, Footer e Widgets)
+        updatedSubHtml = ensureAndDeduplicateGlobalElements(
+          updatedSubHtml,
+          navbarHtml,
+          footerHtml,
+          sub.slug,
+          navigationRoutes,
+          globalItemsHtml
+        );
 
         const updatedSubCss = [updatedHomeCss, subAiResponse.css || ''].filter(Boolean).join('\n\n');
         const updatedSubJs = [updatedHomeJs, subAiResponse.js || ''].filter(Boolean).join('\n\n');
@@ -701,8 +728,35 @@ ${brandDirective}
           js: updatedSubJs
         });
       } catch (subErr: any) {
-        console.warn(`[AIQueueManager] Erro na IA da subpágina ${sub.name} (${subErr.message}). Interrompendo processo.`);
-        throw subErr;
+        console.warn(`[AIQueueManager] Erro na IA da subpágina ${sub.name} (${subErr.message}). Utilizando layout fallback para garantir subpágina gerada.`);
+        
+        const fallbackSubHtml = buildFallbackSubpageHtml(
+          sub.name,
+          resolvedBusinessName,
+          navbarHtml,
+          footerHtml,
+          globalItemsHtml
+        );
+        const updatedSubCss = updatedHomeCss;
+        const updatedSubJs = updatedHomeJs;
+
+        await prisma.page.update({
+          where: { id: sub.id },
+          data: {
+            html: fallbackSubHtml,
+            css: updatedSubCss,
+            js: updatedSubJs
+          }
+        });
+
+        updatedPagesList.push({
+          id: sub.id,
+          name: sub.name,
+          slug: sub.slug,
+          html: fallbackSubHtml,
+          css: updatedSubCss,
+          js: updatedSubJs
+        });
       }
     }
 

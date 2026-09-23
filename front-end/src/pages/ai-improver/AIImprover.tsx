@@ -739,7 +739,30 @@ export const AIImprover: React.FC<AIImproverProps> = ({ projectId, onBack, onOpe
                             </style>
                           </head>
                           <body class="bg-transparent m-0 p-0">${beforeSnapshot?.html || originalHtml}</body>
-                          <script>${beforeSnapshot?.js || originalJs}</script>
+                          <script>
+                            (function() {
+                              const _orig = document.addEventListener.bind(document);
+                              document.addEventListener = function(t, l, o) {
+                                if ((t === 'DOMContentLoaded' || t === 'load') && (document.readyState === 'interactive' || document.readyState === 'complete')) {
+                                  setTimeout(function() { try { l(new Event(t)); } catch(e){} }, 10);
+                                  return;
+                                }
+                                return _orig(t, l, o);
+                              };
+                              try { ${beforeSnapshot?.js || originalJs} } catch(e) { console.warn(e); }
+                              setTimeout(function() {
+                                if (window.lucide) { try { lucide.createIcons(); } catch(e){} }
+                                if (typeof gsap !== 'undefined' && typeof ScrollTrigger !== 'undefined') {
+                                  try {
+                                    gsap.registerPlugin(ScrollTrigger);
+                                    gsap.utils.toArray('.gsap-reveal').forEach(function(el) {
+                                      gsap.from(el, { opacity: 0, y: 30, duration: 0.8, ease: 'power2.out', scrollTrigger: { trigger: el, start: 'top 85%' } });
+                                    });
+                                  } catch(e){}
+                                }
+                              }, 150);
+                            })();
+                          </script>
                         </html>
                       `}
                       className="w-full h-full border-none"
@@ -772,7 +795,30 @@ export const AIImprover: React.FC<AIImproverProps> = ({ projectId, onBack, onOpe
                             </style>
                           </head>
                           <body class="bg-transparent m-0 p-0">${activePage?.html || ''}</body>
-                          <script>${activePage?.js || ''}</script>
+                          <script>
+                            (function() {
+                              const _orig = document.addEventListener.bind(document);
+                              document.addEventListener = function(t, l, o) {
+                                if ((t === 'DOMContentLoaded' || t === 'load') && (document.readyState === 'interactive' || document.readyState === 'complete')) {
+                                  setTimeout(function() { try { l(new Event(t)); } catch(e){} }, 10);
+                                  return;
+                                }
+                                return _orig(t, l, o);
+                              };
+                              try { ${activePage?.js || ''} } catch(e) { console.warn(e); }
+                              setTimeout(function() {
+                                if (window.lucide) { try { lucide.createIcons(); } catch(e){} }
+                                if (typeof gsap !== 'undefined' && typeof ScrollTrigger !== 'undefined') {
+                                  try {
+                                    gsap.registerPlugin(ScrollTrigger);
+                                    gsap.utils.toArray('.gsap-reveal').forEach(function(el) {
+                                      gsap.from(el, { opacity: 0, y: 30, duration: 0.8, ease: 'power2.out', scrollTrigger: { trigger: el, start: 'top 85%' } });
+                                    });
+                                  } catch(e){}
+                                }
+                              }, 150);
+                            })();
+                          </script>
                         </html>
                       `}
                       className="w-full h-full border-none"
@@ -818,7 +864,30 @@ export const AIImprover: React.FC<AIImproverProps> = ({ projectId, onBack, onOpe
                             </style>
                           </head>
                           <body class="bg-transparent">${activePage.html}</body>
-                          <script>${activePage.js || ''}</script>
+                          <script>
+                            (function() {
+                              const _orig = document.addEventListener.bind(document);
+                              document.addEventListener = function(t, l, o) {
+                                if ((t === 'DOMContentLoaded' || t === 'load') && (document.readyState === 'interactive' || document.readyState === 'complete')) {
+                                  setTimeout(function() { try { l(new Event(t)); } catch(e){} }, 10);
+                                  return;
+                                }
+                                return _orig(t, l, o);
+                              };
+                              try { ${activePage.js || ''} } catch(e) { console.warn(e); }
+                              setTimeout(function() {
+                                if (window.lucide) { try { lucide.createIcons(); } catch(e){} }
+                                if (typeof gsap !== 'undefined' && typeof ScrollTrigger !== 'undefined') {
+                                  try {
+                                    gsap.registerPlugin(ScrollTrigger);
+                                    gsap.utils.toArray('.gsap-reveal').forEach(function(el) {
+                                      gsap.from(el, { opacity: 0, y: 30, duration: 0.8, ease: 'power2.out', scrollTrigger: { trigger: el, start: 'top 85%' } });
+                                    });
+                                  } catch(e){}
+                                }
+                              }, 150);
+                            })();
+                          </script>
                         </html>
                       `}
                       className="w-full h-full border-none"

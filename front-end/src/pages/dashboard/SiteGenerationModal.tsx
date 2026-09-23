@@ -23,7 +23,8 @@ import {
   Check,
   RotateCcw,
   Boxes,
-  HelpCircle
+  HelpCircle,
+  Loader2
 } from 'lucide-react';
 import {
   SITE_TYPE_PRESETS,
@@ -32,6 +33,8 @@ import {
   SitePageDefinition,
   buildStructuredSitePrompt
 } from '../../utils/promptEngine';
+import { ThemeSuggestionCard, ThemeSuggestion } from '../../components/ThemeSuggestionCard';
+import { API_URL } from '../../config';
 
 export interface LeadItem {
   id?: string;
@@ -102,7 +105,7 @@ export const SiteGenerationModal: React.FC<SiteGenerationModalProps> = ({
   const [newPagePurpose, setNewPagePurpose] = useState('');
 
   // Step 3: Visual Design & Solutions
-  const [selectedStyleId, setSelectedStyleId] = useState<string>('dark_cyber_luxury');
+  const [selectedStyleId, setSelectedStyleId] = useState<string>('ai_smart_adaptive');
   const [customStyleText, setCustomStyleText] = useState('');
   const [heroLayout, setHeroLayout] = useState<'auto' | 'bento' | 'splitscreen_3d' | 'parallax' | 'saas_mockup' | 'editorial'>('auto');
   const [sectionTransitions, setSectionTransitions] = useState<'waves' | 'slants' | 'curves' | 'overlapping_cards' | 'gradient_glows' | 'auto'>('auto');
@@ -117,9 +120,48 @@ export const SiteGenerationModal: React.FC<SiteGenerationModalProps> = ({
     'interactive_map'
   ]);
 
+  // Theme Suggestion System State
+  const [suggestedTheme, setSuggestedTheme] = useState<ThemeSuggestion | null>(null);
+  const [isSuggestingTheme, setIsSuggestingTheme] = useState(false);
+  const [themeApplied, setThemeApplied] = useState(false);
+
+  const handleGenerateThemeSuggestion = async () => {
+    if (!businessName.trim() && !segment.trim()) return;
+    setIsSuggestingTheme(true);
+    setThemeApplied(false);
+    try {
+      const selectedStyleObj = VISUAL_STYLE_PRESETS.find(s => s.id === selectedStyleId);
+      const res = await fetch(`${API_URL}/api/ai/suggest-theme`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          companyName: businessName.trim(),
+          industry: segment.trim(),
+          tone: customStyleText.trim() || selectedStyleObj?.name || 'Moderno e Elegante',
+          mission: extraInstructions.trim() || 'Oferecer aos clientes uma experiência digital impecável de altíssima conversão.'
+        })
+      });
+      const data = await res.json();
+      if (data.success && data.theme) {
+        setSuggestedTheme(data.theme);
+      }
+    } catch (err) {
+      console.error('Erro ao solicitar sugestão de tema por IA:', err);
+    } finally {
+      setIsSuggestingTheme(false);
+    }
+  };
+
+  const handleApplySuggestedTheme = (theme: ThemeSuggestion) => {
+    setCustomStyleText(`${theme.themeName} — ${theme.colorPalette.mood} | Fontes: ${theme.typography.headingFont} & ${theme.typography.bodyFont}`);
+    setThemeApplied(true);
+    recompilePrompt();
+  };
+
   // Step 4: Prompt Review
   const [compiledPrompt, setCompiledPrompt] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [aiPlanSummary, setAiPlanSummary] = useState<string | null>(null);
 
   // Sync initial lead when it changes or modal opens
   useEffect(() => {
@@ -189,7 +231,11 @@ export const SiteGenerationModal: React.FC<SiteGenerationModalProps> = ({
   const recompilePrompt = () => {
     const selectedStyleObj = VISUAL_STYLE_PRESETS.find(s => s.id === selectedStyleId);
     const finalStyleStr = customStyleText.trim() || selectedStyleObj?.name || 'Ultra Moderno & Fluído';
-    const finalPaletteStr = selectedStyleObj?.tagline || 'Cores vibrantes com alto contraste e iluminação sutil';
+    const finalPaletteStr = themeApplied && suggestedTheme
+      ? `${suggestedTheme.themeName} (Fundo: ${suggestedTheme.colorPalette.bg}, Primária: ${suggestedTheme.colorPalette.primary}, Secundária: ${suggestedTheme.colorPalette.secondary})`
+      : (selectedStyleObj?.previewColors && selectedStyleObj.previewColors.length >= 2
+        ? `${selectedStyleObj.name}: Fundo ${selectedStyleObj.previewColors[0]}, Primária ${selectedStyleObj.previewColors[1]}, Secundária ${selectedStyleObj.previewColors[2]}, Acento ${selectedStyleObj.previewColors[3] || selectedStyleObj.previewColors[1]} (${selectedStyleObj.tagline})`
+        : (selectedStyleObj?.tagline || 'Cores vibrantes com alto contraste e iluminação sutil'));
 
     const compiled = buildStructuredSitePrompt({
       businessName: businessName.trim() || 'Empresa Modelo',
@@ -220,21 +266,27 @@ export const SiteGenerationModal: React.FC<SiteGenerationModalProps> = ({
     if (!businessName.trim() || !segment.trim()) {
       return;
     }
+    setAiPlanSummary(null);
     if (onAutoPlanWithAI) {
       try {
-        const plan = await onAutoPlanWithAI(businessName.trim(), segment.trim(), extraInstructions.trim());
+        const responseData = await onAutoPlanWithAI(businessName.trim(), segment.trim(), extraInstructions.trim());
+        const plan = responseData?.plan || responseData;
         if (plan) {
           if (Array.isArray(plan.suggestedPages) && plan.suggestedPages.length > 0) {
-            setPagesList(plan.suggestedPages.map((p: any) => ({
+            const mappedPages = plan.suggestedPages.map((p: any) => ({
               name: p.name,
               slug: p.slug || p.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
               isHomepage: !!p.isHomepage,
               purpose: p.purpose || ''
-            })));
+            }));
+            setPagesList(mappedPages);
           }
           if (plan.colorPalette?.mood) {
-            setCustomStyleText(plan.colorPalette.mood);
+            setCustomStyleText(`${plan.colorPalette.mood} (Configurado pela IA)`);
           }
+          const pageCount = plan.suggestedPages?.length || 4;
+          const styleMood = plan.colorPalette?.mood || 'Tema Exclusivo Automático';
+          setAiPlanSummary(`✓ Planejamento Concluído para "${businessName.trim()}": ${pageCount} páginas definidas, paleta (${styleMood}) e diretrizes otimizadas.`);
           recompilePrompt();
         }
       } catch (err) {
@@ -251,6 +303,27 @@ export const SiteGenerationModal: React.FC<SiteGenerationModalProps> = ({
       const finalPrompt = compiledPrompt || recompilePrompt();
       const selectedStyleObj = VISUAL_STYLE_PRESETS.find(s => s.id === selectedStyleId);
 
+      let paletteString = selectedStyleObj?.tagline || 'Elegante';
+      if (themeApplied && suggestedTheme) {
+        paletteString = JSON.stringify({
+          name: suggestedTheme.themeName,
+          primary: suggestedTheme.colorPalette.primary,
+          secondary: suggestedTheme.colorPalette.secondary,
+          accent: suggestedTheme.colorPalette.accent,
+          bg: suggestedTheme.colorPalette.bg,
+          cardBg: suggestedTheme.colorPalette.cardBg,
+          textColor: suggestedTheme.colorPalette.textColor,
+          textMuted: suggestedTheme.colorPalette.textMuted
+        });
+      } else if (selectedStyleObj?.previewColors && selectedStyleObj.previewColors.length > 0) {
+        paletteString = JSON.stringify({
+          presetId: selectedStyleObj.id,
+          name: selectedStyleObj.name,
+          previewColors: selectedStyleObj.previewColors,
+          tagline: selectedStyleObj.tagline
+        });
+      }
+
       await onGenerate({
         name: businessName.trim(),
         description: finalPrompt,
@@ -258,7 +331,7 @@ export const SiteGenerationModal: React.FC<SiteGenerationModalProps> = ({
         pagesToGenerate: pagesList,
         siteStyle: customStyleText.trim() || selectedStyleObj?.name || 'Moderno',
         segment: segment.trim() || 'Geral',
-        colorPalette: selectedStyleObj?.tagline || 'Elegante',
+        colorPalette: paletteString,
         businessName: businessName.trim(),
         targetLead: targetLead,
         digitalFeatures: activeFeatures,
@@ -597,6 +670,14 @@ export const SiteGenerationModal: React.FC<SiteGenerationModalProps> = ({
                   )}
                 </button>
               </div>
+
+              {/* Banner de Feedback de Planejamento Concluído */}
+              {aiPlanSummary && (
+                <div className="p-3 bg-emerald-950/40 border border-emerald-500/40 rounded-xl flex items-center gap-2.5 text-xs text-emerald-200 animate-fade-in shadow-lg">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span className="flex-1 font-medium">{aiPlanSummary}</span>
+                </div>
+              )}
             </div>
           )}
 
@@ -754,11 +835,58 @@ export const SiteGenerationModal: React.FC<SiteGenerationModalProps> = ({
           {activeStep === 'design' && (
             <div className="space-y-4 animate-fade-in">
               
+              {/* Botão para Gerar Sugestão de Tema Inteligente por IA */}
+              <div className="p-4 bg-gradient-to-r from-purple-950/60 via-indigo-950/50 to-slate-950 border border-purple-500/40 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xl">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2">
+                    <Wand2 className="w-4 h-4 text-purple-400 animate-pulse" />
+                    <h4 className="text-xs font-bold text-white uppercase tracking-wider">
+                      Sistema de Sugestão de Tema & Tipografia por IA
+                    </h4>
+                  </div>
+                  <p className="text-[11px] text-slate-300">
+                    A IA analisa a empresa <strong className="text-purple-300">"{businessName || 'Sua Empresa'}"</strong>, segmento <strong className="text-purple-300">"{segment || 'Geral'}"</strong> e sintetiza a paleta e a fonte perfeitas.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleGenerateThemeSuggestion}
+                  disabled={isSuggestingTheme || (!businessName.trim() && !segment.trim())}
+                  className="px-4 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-lg shadow-purple-950/60 transition-all cursor-pointer disabled:opacity-50 hover:scale-105 shrink-0"
+                >
+                  {isSuggestingTheme ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin text-white" />
+                      <span>Analisando Psicologia das Cores...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4 text-amber-300" />
+                      <span>Sugerir Tema & Tipografia</span>
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {/* Exibição do Card da Sugestão do Tema */}
+              {suggestedTheme && (
+                <div className="animate-fade-in">
+                  <ThemeSuggestionCard
+                    theme={suggestedTheme}
+                    onApply={handleApplySuggestedTheme}
+                    onRegenerate={handleGenerateThemeSuggestion}
+                    isGenerating={isSuggestingTheme}
+                    applied={themeApplied}
+                  />
+                </div>
+              )}
+
               {/* Estilos Visuais */}
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2 flex items-center gap-1.5">
                   <Palette className="w-3.5 h-3.5 text-purple-400" />
-                  <span>Estilo Visual & Atmosfera da Marca:</span>
+                  <span>Presets de Estilo Visual & Atmosfera da Marca:</span>
                 </label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
                   {VISUAL_STYLE_PRESETS.map((style) => {
@@ -797,6 +925,15 @@ export const SiteGenerationModal: React.FC<SiteGenerationModalProps> = ({
                     );
                   })}
                 </div>
+
+                {selectedStyleId === 'ai_smart_adaptive' && (
+                  <div className="mt-2.5 p-3 bg-purple-950/40 border border-purple-500/50 rounded-xl flex items-center gap-2.5 text-xs text-purple-200 animate-fade-in shadow-inner">
+                    <Sparkles className="w-4 h-4 text-purple-400 shrink-0 animate-pulse" />
+                    <span>
+                      <strong>Modo Paleta & Tecnologias Dinâmicas Ativo:</strong> A IA irá analisar o negócio <strong>"{businessName || 'Sua Empresa'}"</strong>, segmento e objetivos para sintetizar uma paleta de cores, tipografia e tecnologias de UI totalmente exclusivas.
+                    </span>
+                  </div>
+                )}
 
                 <div className="mt-2.5">
                   <input

@@ -69,171 +69,26 @@ export const GlobalLayout: React.FC<GlobalLayoutProps> = ({
         {children}
       </main>
 
-      {/* Global Footer (Visible on Dashboard, Auth, Landing and main pages; streamlined on full workspaces) */}
-      {!isFullWorkspace && (
-        <footer 
-          className="bg-slate-900/90 border-t border-slate-800/80 pt-12 pb-8 px-4 sm:px-6 lg:px-8 mt-auto text-slate-400 text-sm relative z-10 backdrop-blur-md"
-          id="global-footer"
-          aria-label="Rodapé do Sistema BuildDreamer"
+      {/* FLOATING UI ELEMENTS (Persistentes para usuários autenticados no Dashboard) */}
+      {!isAuthPage && user && (
+        <div 
+          className="fixed bottom-5 right-5 z-50 flex flex-col items-end space-y-3 pointer-events-none"
+          id="floating-ui-container"
         >
-          <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-8 pb-8 border-b border-slate-800/60">
-            
-            {/* Coluna 1: Branding & Status */}
-            <div className="space-y-4 md:col-span-1">
-              <div className="flex items-center space-x-2.5">
-                <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-purple-600 via-indigo-600 to-cyan-500 p-0.5 shadow-lg shadow-purple-500/20">
-                  <div className="w-full h-full bg-slate-950 rounded-[10px] flex items-center justify-center">
-                    <Sparkles className="w-4 h-4 text-purple-400 animate-pulse" />
-                  </div>
-                </div>
-                <span className="font-bold text-lg text-white tracking-tight">
-                  Build<span className="text-purple-400">Dreamer</span>
-                </span>
-              </div>
-              <p className="text-xs text-slate-400 leading-relaxed">
-                Plataforma de alta precisão para construção, remasterização e gestão inteligente de sites e funis com IA.
-              </p>
-              
-              {/* Badge de Status do Sistema */}
-              <div className="inline-flex items-center space-x-2 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-medium">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                <span>Sistemas Operacionais (v2.5)</span>
-              </div>
-            </div>
+          {/* Botão de WhatsApp Flutuante */}
+          <button
+            onClick={() => setIsWhatsappModalOpen(true)}
+            className="pointer-events-auto p-3.5 rounded-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold shadow-lg shadow-emerald-500/30 hover:shadow-emerald-500/50 hover:scale-105 transition-all duration-200 group relative flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-emerald-400"
+            title="Atendimento e Suporte via WhatsApp"
+            aria-label="Abrir suporte via WhatsApp"
+          >
+            <MessageCircle className="w-6 h-6 fill-slate-950" />
+            <span className="absolute right-full mr-3 px-2.5 py-1 rounded-md bg-slate-900 border border-slate-700 text-slate-200 text-xs whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity shadow-md pointer-events-none">
+              Suporte WhatsApp
+            </span>
+          </button>
 
-            {/* Coluna 2: Navegação Rápida */}
-            <div className="space-y-3">
-              <h4 className="text-xs font-semibold text-slate-200 uppercase tracking-wider">Navegação</h4>
-              <ul className="space-y-2 text-xs">
-                <li>
-                  <button 
-                    onClick={() => onNavigate({ type: 'dashboard', tab: 'general' })}
-                    className="hover:text-purple-400 transition-colors flex items-center gap-1.5"
-                  >
-                    <Zap className="w-3.5 h-3.5 text-purple-400" />
-                    <span>Início / Visão Geral</span>
-                  </button>
-                </li>
-                <li>
-                  <button 
-                    onClick={() => onNavigate({ type: 'dashboard', tab: 'projects' })}
-                    className="hover:text-purple-400 transition-colors flex items-center gap-1.5"
-                  >
-                    <FolderPlus className="w-3.5 h-3.5 text-indigo-400" />
-                    <span>Meus Projetos</span>
-                  </button>
-                </li>
-                <li>
-                  <button 
-                    onClick={() => onNavigate({ type: 'dashboard', tab: 'crm' })}
-                    className="hover:text-purple-400 transition-colors flex items-center gap-1.5"
-                  >
-                    <Layers className="w-3.5 h-3.5 text-cyan-400" />
-                    <span>CRM & Vendas</span>
-                  </button>
-                </li>
-                <li>
-                  <button 
-                    onClick={() => onNavigate({ type: 'dashboard', tab: 'presets' })}
-                    className="hover:text-purple-400 transition-colors flex items-center gap-1.5"
-                  >
-                    <Sliders className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Modelos & Presets</span>
-                  </button>
-                </li>
-              </ul>
-            </div>
-
-            {/* Coluna 3: Gestão & Equipe */}
-            <div className="space-y-3">
-              <h4 className="text-xs font-semibold text-slate-200 uppercase tracking-wider">Gestão</h4>
-              <ul className="space-y-2 text-xs">
-                {user && (
-                  <li>
-                    <button 
-                      onClick={() => onNavigate({ type: 'dashboard', tab: 'users' })}
-                      className="hover:text-purple-400 transition-colors flex items-center gap-1.5"
-                    >
-                      <Users className="w-3.5 h-3.5 text-amber-400" />
-                      <span>Usuários & Equipe</span>
-                    </button>
-                  </li>
-                )}
-                <li>
-                  <button 
-                    onClick={() => onNavigate({ type: 'dashboard', tab: 'settings' })}
-                    className="hover:text-purple-400 transition-colors flex items-center gap-1.5"
-                  >
-                    <ShieldCheck className="w-3.5 h-3.5 text-purple-400" />
-                    <span>Configurações & Integrações</span>
-                  </button>
-                </li>
-                <li>
-                  <button 
-                    onClick={() => setIsChatOpen(true)}
-                    className="hover:text-purple-400 transition-colors flex items-center gap-1.5 text-purple-300 font-medium"
-                  >
-                    <MessageSquare className="w-3.5 h-3.5 text-purple-400" />
-                    <span>Chat da Equipe / Suporte</span>
-                  </button>
-                </li>
-              </ul>
-            </div>
-
-            {/* Coluna 4: Conformidade & Suporte */}
-            <div className="space-y-3">
-              <h4 className="text-xs font-semibold text-slate-200 uppercase tracking-wider">Acessibilidade & Segurança</h4>
-              <p className="text-xs text-slate-400 leading-relaxed">
-                Desenvolvido sob diretrizes WCAG 2.1 AA, garantindo acessibilidade, contraste adequado e navegação por teclado.
-              </p>
-              <div className="flex items-center space-x-3 pt-1">
-                <button 
-                  onClick={() => setIsWhatsappModalOpen(true)}
-                  className="px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-medium transition-all flex items-center gap-1.5"
-                >
-                  <MessageCircle className="w-3.5 h-3.5" />
-                  <span>Suporte WhatsApp</span>
-                </button>
-              </div>
-            </div>
-
-          </div>
-
-          {/* Sub-Rodapé Direitos Autorais */}
-          <div className="max-w-7xl mx-auto pt-6 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 gap-4">
-            <div className="flex items-center space-x-1">
-              <span>© {new Date().getFullYear()} BuildDreamer. Todos os direitos reservados.</span>
-            </div>
-            <div className="flex items-center space-x-4">
-              <span className="hover:text-slate-400 cursor-pointer transition-colors">Termos de Uso</span>
-              <span className="hover:text-slate-400 cursor-pointer transition-colors">Privacidade</span>
-              <span className="hover:text-slate-400 cursor-pointer transition-colors">WCAG 2.1 AA</span>
-            </div>
-          </div>
-        </footer>
-      )}
-
-      {/* FLOATING UI ELEMENTS (Persistentes em toda a aplicação) */}
-      <div 
-        className="fixed bottom-5 right-5 z-50 flex flex-col items-end space-y-3 pointer-events-none"
-        id="floating-ui-container"
-      >
-        
-        {/* Botão de WhatsApp Flutuante */}
-        <button
-          onClick={() => setIsWhatsappModalOpen(true)}
-          className="pointer-events-auto p-3.5 rounded-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold shadow-lg shadow-emerald-500/30 hover:shadow-emerald-500/50 hover:scale-105 transition-all duration-200 group relative flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-emerald-400"
-          title="Atendimento e Suporte via WhatsApp"
-          aria-label="Abrir suporte via WhatsApp"
-        >
-          <MessageCircle className="w-6 h-6 fill-slate-950" />
-          <span className="absolute right-full mr-3 px-2.5 py-1 rounded-md bg-slate-900 border border-slate-700 text-slate-200 text-xs whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity shadow-md pointer-events-none">
-            Suporte WhatsApp
-          </span>
-        </button>
-
-        {/* Botão de Chat Interno da Equipe Flutuante (Apenas para usuários autenticados fora da tela de login) */}
-        {!isAuthPage && user && (
+          {/* Botão de Chat Interno da Equipe Flutuante */}
           <button
             onClick={() => setIsChatOpen(!isChatOpen)}
             className="pointer-events-auto p-3.5 rounded-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold shadow-lg shadow-purple-600/30 hover:shadow-purple-600/50 hover:scale-105 transition-all duration-200 group relative flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-purple-400"
@@ -246,21 +101,20 @@ export const GlobalLayout: React.FC<GlobalLayoutProps> = ({
               Chat da Equipe
             </span>
           </button>
-        )}
 
-        {/* Botão de Voltar ao Topo */}
-        {showScrollTop && !isFullWorkspace && (
-          <button
-            onClick={scrollToTop}
-            className="pointer-events-auto p-3 rounded-full bg-slate-800/90 hover:bg-slate-700 text-slate-200 border border-slate-700/80 shadow-md hover:scale-105 transition-all duration-200 group relative focus:outline-none focus:ring-2 focus:ring-slate-400"
-            title="Voltar ao topo"
-            aria-label="Voltar ao topo da página"
-          >
-            <ChevronUp className="w-5 h-5" />
-          </button>
-        )}
-
-      </div>
+          {/* Botão de Voltar ao Topo */}
+          {showScrollTop && !isFullWorkspace && (
+            <button
+              onClick={scrollToTop}
+              className="pointer-events-auto p-3 rounded-full bg-slate-800/90 hover:bg-slate-700 text-slate-200 border border-slate-700/80 shadow-md hover:scale-105 transition-all duration-200 group relative focus:outline-none focus:ring-2 focus:ring-slate-400"
+              title="Voltar ao topo"
+              aria-label="Voltar ao topo da página"
+            >
+              <ChevronUp className="w-5 h-5" />
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Modal / Panel de Chat da Equipe (Exibido apenas quando o usuário está autenticado) */}
       {!isAuthPage && user && (
